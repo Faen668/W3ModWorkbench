@@ -4,14 +4,14 @@
 
 # W3 Bundle Explorer
 
-[![Release](https://img.shields.io/github/v/release/Faen668/W3BundleExplorer?label=release)](https://github.com/Faen668/W3BundleExplorer/releases/latest)
-[![Downloads](https://img.shields.io/github/downloads/Faen668/W3BundleExplorer/total?label=downloads&color=brightgreen)](https://github.com/Faen668/W3BundleExplorer/releases)
-[![Platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-0078D6)](#-download)
-[![.NET](https://img.shields.io/badge/.NET-9.0-512BD4?logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/)
-[![Game](https://img.shields.io/badge/game-The%20Witcher%203-8B1A1A)](https://www.thewitcher.com/)
-[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-[![Last commit](https://img.shields.io/github/last-commit/Faen668/W3BundleExplorer?color=yellow)](https://github.com/Faen668/W3BundleExplorer/commits)
-[![Stars](https://img.shields.io/github/stars/Faen668/W3BundleExplorer?style=flat)](https://github.com/Faen668/W3BundleExplorer/stargazers)
+[![Release](https://badgen.net/github/tag/Faen668/W3BundleExplorer?label=release)](https://github.com/Faen668/W3BundleExplorer/releases/latest)
+[![Downloads](https://badgen.net/github/assets-dl/Faen668/W3BundleExplorer?label=downloads&color=green)](https://github.com/Faen668/W3BundleExplorer/releases)
+[![Platform](https://badgen.net/badge/platform/Windows%2010%20%7C%2011/0078D6)](#-download)
+[![.NET](https://badgen.net/badge/.NET/9.0/512BD4)](https://dotnet.microsoft.com/)
+[![Game](https://badgen.net/badge/game/The%20Witcher%203/8B1A1A)](https://www.thewitcher.com/)
+[![License](https://badgen.net/badge/license/MIT/green)](LICENSE)
+[![Last commit](https://badgen.net/github/last-commit/Faen668/W3BundleExplorer?color=yellow)](https://github.com/Faen668/W3BundleExplorer/commits)
+[![Stars](https://badgen.net/github/stars/Faen668/W3BundleExplorer)](https://github.com/Faen668/W3BundleExplorer/stargazers)
 
 **Browse and extract The Witcher 3's `.bundle` archives, and turn REDkit compiled scripts (`precompiled.rsblob`) back into readable WitcherScript.**
 
