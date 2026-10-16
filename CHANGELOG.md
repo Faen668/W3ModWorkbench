@@ -2,7 +2,13 @@
 
 ## Unreleased
 
-- Go to definition in script previews: Ctrl+click a name (or press F12) to open where it's declared, in the same archive, any other open archive or the game's scripts. When nothing is found, **Search Now…** offers to look through the loose scripts of installed mods too, for libraries such as Shared Utils that have no archive. Works for functions, events, classes, states, structs, enums and their values, fields, parameters and locals, and follows `a.b` through declared types, return types, casts and `extends` chains.
+- Previews open as tabs in one window instead of a new window each time, and a file that's already open is brought forward instead of opening again. Settings > Preview can put each file in its own window as before.
+- Split view: **Split** (`Ctrl+\`) moves the file you're reading into a second group of tabs beside or below the first, or shows a second view of it when it's the only tab. Drag tabs to reorder them, move them between groups and windows, onto the side of the text to split, or out of the window to give them one of their own. Right-click a tab to close others, move it, or copy its path.
+- Resting the mouse on a name in a script shows its declaration in a popup, coloured like the preview, with its file and line, so you can see where Ctrl+click will go. Can be turned off in Settings.
+- Themes: Settings > Appearance has eight colour themes, Windows plus one for each witcher school and a plain Graphite, each with its own accent and background in light and dark. A sample shows the choice live, and the mode is now a Windows / Light / Dark switch.
+- Ctrl+Alt+click (or Ctrl+F12) opens a definition in the other group. Alt+Left goes back across tabs and windows.
+- Go to definition finds a struct built in place, such as `SU_MenuDescriptor_OptionDescription(id, text)`, and follows `.field` after it. It used to only look for a function of that name.
+- Go to definition in script previews: Ctrl+click a name (or press F12) to open where it's declared, in the same archive, any other open archive or the game's scripts. When nothing is found, **Search Now** looks through the loose scripts of installed mods too, with no second question, for libraries such as Shared Utils that have no archive. Works for functions, events, classes, states, structs, enums and their values, fields, parameters and locals, and follows `a.b` through declared types, return types, casts and `extends` chains.
 - Names that lead somewhere get a faint underline on hover, and become a link while Ctrl is held. When several declarations fit, such as a game method that a mod wraps, a list lets you choose.
 - Clicking a `@wrapMethod` or `@replaceMethod` function's name, or `wrappedMethod`, opens the game's original. Alt+Left or the mouse's back button returns to where you jumped from.
 - Messages in the preview, such as a file that couldn't be saved, now show inside the window instead of as a Windows message box.

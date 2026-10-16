@@ -1,10 +1,13 @@
 using System.IO;
 using System.Reflection;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 using Microsoft.Win32;
 using W3BundleExplorer.Core;
 using W3BundleExplorer.Core.Scripts;
+using W3BundleExplorer.Highlighting;
 
 namespace W3BundleExplorer;
 
@@ -13,6 +16,8 @@ public partial class SettingsWindow : Window, IMessageHost
 {
     private readonly Settings _settings;
     private readonly string _originalTheme;
+    private readonly string _originalPreset;
+    private string _preset;
     private bool _loaded;
 
     public SettingsWindow(Settings settings)
@@ -21,12 +26,18 @@ public partial class SettingsWindow : Window, IMessageHost
         DisabledLook.Apply(this);
         _settings = settings;
         _originalTheme = settings.Theme;
+        _originalPreset = settings.ThemePreset;
+        _preset = Themes.Find(settings.ThemePreset).Name;
+        Sample.SetResourceReference(BackgroundProperty, "ApplicationBackgroundBrush");
 
         (settings.Theme switch { "Light" => ThemeLight, "Dark" => ThemeDark, _ => ThemeSystem }).IsChecked = true;
         OutputBox.Text = settings.OutputFolder;
         KeepStructureCheck.IsChecked = settings.KeepStructure;
         OpenWhenDoneCheck.IsChecked = settings.OpenWhenDone;
         GameFolderBox.Text = settings.GameFolder;
+        (settings.PreviewOpenIn == "Windows" ? OpenInWindows : OpenInTabs).IsChecked = true;
+        (settings.PreviewSplit == "Down" ? SplitDown : SplitRight).IsChecked = true;
+        PeekCheck.IsChecked = settings.PeekDefinitions;
         GameFolderBox.TextChanged += (_, _) => UpdateGameStatus();
         UpdateGameStatus();
 
@@ -34,6 +45,7 @@ public partial class SettingsWindow : Window, IMessageHost
         VersionText.Text = $"Version {assembly.GetName().Version?.ToString(3)}  ·  by Faen90";
         CopyrightText.Text = assembly.GetCustomAttribute<AssemblyCopyrightAttribute>()?.Copyright ?? "Copyright © 2026 Faen90";
         SettingsPathText.Text = $"Settings are saved in {Settings.FilePath}";
+        UpdateAppearance();
         _loaded = true;
     }
 
@@ -41,8 +53,81 @@ public partial class SettingsWindow : Window, IMessageHost
 
     private void Theme_Checked(object sender, RoutedEventArgs e)
     {
-        if (_loaded) App.ApplyTheme(SelectedTheme);
+        if (!_loaded) return;
+        App.ApplyTheme(SelectedTheme, _preset);
+        UpdateAppearance();
     }
+
+    private void Preset_Checked(ThemePreset preset)
+    {
+        if (!_loaded || _preset == preset.Name) return;
+        _preset = preset.Name;
+        App.ApplyTheme(SelectedTheme, _preset);
+        UpdateAppearance();
+    }
+
+    /// <summary>The theme swatches and the sample's code, in the colours of the mode chosen.</summary>
+    private void UpdateAppearance()
+    {
+        bool dark = Themes.IsDark(SelectedTheme);
+        SampleCode.Content = DefinitionPeek.Code(SampleLines, dark ? WitcherScriptColorizer.Palette.Dark : WitcherScriptColorizer.Palette.Light);
+
+        PresetPanel.Children.Clear();
+        foreach (var preset in Themes.Presets)
+        {
+            var button = new RadioButton
+            {
+                Style = (Style)FindResource("Swatch"),
+                GroupName = "Preset",
+                Tag = preset.Name,
+                Content = Swatch(preset, dark),
+                IsChecked = preset.Name == _preset,
+                ToolTip = preset.Accent is null ? "Your Windows accent colour and window background" : $"{preset.Name} school colours",
+            };
+            button.Checked += (_, _) => Preset_Checked(preset);
+            PresetPanel.Children.Add(button);
+        }
+    }
+
+    /// <summary>A small picture of a theme: its background, with a bar in its accent colour and a plain one.</summary>
+    private static Border Swatch(ThemePreset preset, bool dark)
+    {
+        var background = preset.Background(dark) ?? (dark ? Color.FromRgb(0x20, 0x20, 0x20) : Color.FromRgb(0xF3, 0xF3, 0xF3));
+        var accent = preset.Accent is { } a ? Themes.FillShade(a, dark)
+            : dark ? SystemColors.AccentColorLight2 : SystemColors.AccentColorDark1;
+        var plain = dark ? Color.FromArgb(0x2E, 0xFF, 0xFF, 0xFF) : Color.FromArgb(0x1E, 0, 0, 0);
+
+        var face = new Grid();
+        face.Children.Add(new Border
+        {
+            Width = 46, Height = 9, CornerRadius = new CornerRadius(4.5), Background = new SolidColorBrush(accent),
+            HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(0, 15, 12, 0),
+        });
+        face.Children.Add(new Border
+        {
+            Width = 58, Height = 9, CornerRadius = new CornerRadius(4.5), Background = new SolidColorBrush(plain),
+            HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(12, 0, 0, 15),
+        });
+        return new Border
+        {
+            Width = 108,
+            Height = 62,
+            CornerRadius = new CornerRadius(8),
+            BorderThickness = new Thickness(1),
+            Background = new SolidColorBrush(background),
+            BorderBrush = new SolidColorBrush(dark ? Color.FromArgb(0x1A, 0xFF, 0xFF, 0xFF) : Color.FromArgb(0x16, 0, 0, 0)),
+            Child = face,
+        };
+    }
+
+    private static readonly string[] SampleLines =
+    [
+        "@wrapMethod(CR4Player) function OnSpawned(data : SEntitySpawnData)",
+        "{",
+        "    wrappedMethod(data); // keep the original",
+        "    theGame.GetGuiManager().ShowNotification(\"Toss a coin\", 3.0);",
+        "}",
+    ];
 
     private void UpdateGameStatus()
     {
@@ -95,12 +180,17 @@ public partial class SettingsWindow : Window, IMessageHost
     private void Save_Click(object sender, RoutedEventArgs e)
     {
         _settings.Theme = SelectedTheme;
+        _settings.ThemePreset = _preset;
         _settings.OutputFolder = OutputBox.Text.Trim();
         _settings.KeepStructure = KeepStructureCheck.IsChecked == true;
         _settings.OpenWhenDone = OpenWhenDoneCheck.IsChecked == true;
         _settings.GameFolder = GameFolderBox.Text.Trim();
         GameScripts.GameFolder = _settings.GameFolder;
+        _settings.PreviewOpenIn = OpenInWindows.IsChecked == true ? "Windows" : "Tabs";
+        _settings.PreviewSplit = SplitDown.IsChecked == true ? "Down" : "Right";
+        _settings.PeekDefinitions = PeekCheck.IsChecked == true;
         _settings.Save();
+        PreviewWindow.ApplySettings();
         DialogResult = true;
     }
 
@@ -116,7 +206,7 @@ public partial class SettingsWindow : Window, IMessageHost
             : System.Text.Encoding.UTF8.GetBytes("THIRD-PARTY-NOTICES.md is missing from the app folder.\n\n"
                 + "WitcherScript grammar: witcherscript-vscode by webspam (MIT), https://github.com/webspam/witcherscript-vscode\n"
                 + "Code editor: AvalonEdit by AlphaSierraPapa for the SharpDevelop Team (MIT), https://github.com/icsharpcode/AvalonEdit\n");
-        new PreviewWindow("THIRD-PARTY-NOTICES.md", "W3 Bundle Explorer", text) { Owner = this }.Show();
+        PreviewWindow.ShowAlone(new PreviewItem("THIRD-PARTY-NOTICES.md", "W3 Bundle Explorer", text), this);
     }
 
     /// <summary>Shows the LICENSE file shipped next to the exe, or the built-in copy if it is missing.</summary>
@@ -124,7 +214,7 @@ public partial class SettingsWindow : Window, IMessageHost
     {
         string path = Path.Combine(AppContext.BaseDirectory, "LICENSE");
         byte[] text = File.Exists(path) ? File.ReadAllBytes(path) : System.Text.Encoding.UTF8.GetBytes(LicenceText);
-        new PreviewWindow("LICENSE", "W3 Bundle Explorer", text) { Owner = owner }.Show();
+        PreviewWindow.ShowAlone(new PreviewItem("LICENSE", "W3 Bundle Explorer", text), owner);
     }
 
     private const string LicenceText = """
@@ -154,7 +244,7 @@ public partial class SettingsWindow : Window, IMessageHost
     protected override void OnClosed(EventArgs e)
     {
         if (DialogResult != true)
-            App.ApplyTheme(_originalTheme);
+            App.ApplyTheme(_originalTheme, _originalPreset);
         base.OnClosed(e);
     }
 

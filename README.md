@@ -46,9 +46,11 @@
 - **WitcherScript syntax highlighting**, using the grammar from WebSpam's VS Code extension.
 - **Line numbers and search** (Ctrl+F) with match case, whole word and regex, and F3 to jump between matches.
 - **Go to definition**: Ctrl+click (or F12) any function, class, enum value or variable in a script to open where it's declared, in the same mod or in the game's own scripts. A `@wrapMethod` leads to the game's original, and calls the mod wraps offer both. Alt+Left goes back.
+- **Definition popup**: rest the mouse on a name to see its declaration, highlighted, before you jump.
+- **Tabs and split view**: files open as tabs (or separate windows, if you prefer), and `Ctrl+\` splits the preview to read two files, or two parts of one, side by side. Drag tabs between groups and windows.
 
 ### Everything else
-- **Light and dark themes**, or follow Windows.
+- **Light and dark modes**, or follow Windows, with eight colour themes: your Windows accent, one for each witcher school, and a plain Graphite.
 - **A full built-in guide** (F1), including an Advanced section on the file formats and how the decompiler works.
 - **Read-only**: it never changes a bundle, a script or anything in your game folder.
 

@@ -1,0 +1,32 @@
+<UserControl x:Class="W3BundleExplorer.PreviewPane"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- the tabs; dropping a tab anywhere along the strip moves it here -->
+        <Border x:Name="TabBar" Background="Transparent" AllowDrop="True" Margin="0,0,0,6" MinHeight="34"
+                DragOver="TabBar_DragOver" DragLeave="TabBar_DragLeave" Drop="TabBar_Drop">
+            <ScrollViewer x:Name="TabScroller" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled"
+                          PreviewMouseWheel="TabScroller_PreviewMouseWheel">
+                <Grid>
+                    <StackPanel x:Name="TabStrip" Orientation="Horizontal" />
+                    <!-- where a dragged tab will land -->
+                    <Border x:Name="InsertMark" Width="2" HorizontalAlignment="Left" Margin="0,4,0,4" Visibility="Collapsed"
+                            CornerRadius="1" Background="{DynamicResource AccentFillColorDefaultBrush}" />
+                </Grid>
+            </ScrollViewer>
+        </Border>
+
+        <Grid Grid.Row="1" x:Name="Body" AllowDrop="True"
+              PreviewDragOver="Body_PreviewDragOver" PreviewDragLeave="Body_PreviewDragLeave" PreviewDrop="Body_PreviewDrop">
+            <Grid x:Name="DocumentHost" />
+            <!-- shows where a tab dragged over the text will go: this group, or a new one beside it -->
+            <Border x:Name="DropHint" Visibility="Collapsed" IsHitTestVisible="False" CornerRadius="8" BorderThickness="2"
+                    BorderBrush="{DynamicResource AccentFillColorDefaultBrush}" />
+        </Grid>
+    </Grid>
+</UserControl>

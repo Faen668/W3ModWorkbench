@@ -10,6 +10,10 @@ public sealed class Settings
 
     /// <summary>System, Light or Dark.</summary>
     public string Theme { get; set; } = "System";
+
+    /// <summary>The colour theme on top of the light or dark mode: Windows (its own accent), or one of <see cref="Themes.Presets"/>.</summary>
+    public string ThemePreset { get; set; } = "Windows";
+
     public string OutputFolder { get; set; } = "";
     public string LastOpenFolder { get; set; } = "";
     public bool KeepStructure { get; set; } = true;
@@ -17,6 +21,15 @@ public sealed class Settings
 
     /// <summary>The Witcher 3 install whose script sources name enum values in decompiled scripts.</summary>
     public string GameFolder { get; set; } = "";
+
+    /// <summary>Tabs: files open as tabs in one preview window. Windows: each file gets a window of its own.</summary>
+    public string PreviewOpenIn { get; set; } = "Tabs";
+
+    /// <summary>Right or Down: where the second group of tabs goes when a preview is split.</summary>
+    public string PreviewSplit { get; set; } = "Right";
+
+    /// <summary>Show a declaration's code in a popup when the mouse rests on a name in a script.</summary>
+    public bool PeekDefinitions { get; set; } = true;
 
     public static Settings Load()
     {

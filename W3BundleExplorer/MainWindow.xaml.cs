@@ -322,9 +322,9 @@ public partial class MainWindow : Window, IMessageHost
             });
             // scripts can follow names to their definitions in the same archive, the other open ones and the game's scripts
             bool script = Path.GetExtension(entry.Path).Equals(".ws", StringComparison.OrdinalIgnoreCase);
-            new PreviewWindow(entry.Path, item.BundleName, data,
+            PreviewWindow.Show(new PreviewItem(entry.Path, item.BundleName, data,
                 script ? ScriptWorkspace.FileFor(entry) : null,
-                script ? ScriptWorkspace.For(entry.Archive, () => _roots.Select(r => r.Archive)) : null) { Owner = this }.Show();
+                script ? ScriptWorkspace.For(entry.Archive, () => _roots.Select(r => r.Archive)) : null), this);
         }
         catch (Exception ex)
         {

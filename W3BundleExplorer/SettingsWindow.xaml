@@ -30,6 +30,64 @@
             <Setter Property="FontFamily" Value="{StaticResource IconFont}" />
             <Setter Property="VerticalAlignment" Value="Center" />
         </Style>
+        <!-- one part of a row of joined choices -->
+        <Style x:Key="Segment" TargetType="RadioButton">
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="Back" CornerRadius="6" Padding="14,6" Background="Transparent">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock FontFamily="{StaticResource IconFont}" Text="{TemplateBinding Tag}" VerticalAlignment="Center" FontSize="13" />
+                                <ContentPresenter Margin="8,0,0,0" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Back" Property="Background" Value="{DynamicResource SubtleFillColorTertiaryBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Back" Property="Background" Value="{DynamicResource AccentFillColorDefaultBrush}" />
+                                <Setter Property="Foreground" Value="{DynamicResource TextOnAccentFillColorPrimaryBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- a theme to pick: its colours, with a ring when it's the one in use -->
+        <Style x:Key="Swatch" TargetType="RadioButton">
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Margin" Value="0,0,10,10" />
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <StackPanel Background="Transparent">
+                            <Border x:Name="Ring" CornerRadius="11" BorderThickness="2" Padding="2" BorderBrush="Transparent">
+                                <ContentPresenter />
+                            </Border>
+                            <TextBlock x:Name="Label" Text="{TemplateBinding Tag}" HorizontalAlignment="Center" Margin="0,5,0,0" Opacity="0.8" />
+                        </StackPanel>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Ring" Property="BorderBrush" Value="{DynamicResource ControlStrongStrokeColorDefaultBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="Ring" Property="BorderBrush" Value="{DynamicResource ControlStrongStrokeColorDefaultBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Ring" Property="BorderBrush" Value="{DynamicResource AccentFillColorDefaultBrush}" />
+                                <Setter TargetName="Label" Property="Opacity" Value="1" />
+                                <Setter TargetName="Label" Property="FontWeight" Value="SemiBold" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Window.Resources>
 
     <Grid>
@@ -43,13 +101,65 @@
                 <!-- Appearance -->
                 <Border Style="{StaticResource Card}">
                     <StackPanel>
-                        <TextBlock Style="{StaticResource SectionTitle}" Text="Appearance" />
-                        <TextBlock Text="Theme" Margin="0,0,0,6" />
-                        <StackPanel Orientation="Horizontal">
-                            <RadioButton x:Name="ThemeSystem" GroupName="Theme" Content="Use Windows setting" Margin="0,0,20,0" Checked="Theme_Checked" />
-                            <RadioButton x:Name="ThemeLight" GroupName="Theme" Content="Light" Margin="0,0,20,0" Checked="Theme_Checked" />
-                            <RadioButton x:Name="ThemeDark" GroupName="Theme" Content="Dark" Checked="Theme_Checked" />
-                        </StackPanel>
+                        <TextBlock Style="{StaticResource SectionTitle}" Text="Appearance" Margin="0,0,0,2" />
+                        <TextBlock Style="{StaticResource Hint}" Margin="0,0,0,12" Text="Changes show straight away. Cancel puts them back." />
+
+                        <!-- a small preview window in the chosen colours -->
+                        <Border x:Name="Sample" CornerRadius="8" BorderThickness="1" Padding="12,10,12,12"
+                                BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" IsHitTestVisible="False" Focusable="False">
+                            <StackPanel>
+                                <DockPanel Margin="0,0,0,8">
+                                    <Button DockPanel.Dock="Right" Style="{DynamicResource AccentButtonStyle}" Padding="12,3" Focusable="False">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE74E;" FontSize="12" VerticalAlignment="Center" />
+                                            <TextBlock Margin="6,0,0,0" Text="Save as" FontSize="12" />
+                                        </StackPanel>
+                                    </Button>
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                        <Border CornerRadius="6" BorderThickness="1" Padding="8,3"
+                                                Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
+                                                BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}">
+                                            <Grid>
+                                                <TextBlock FontSize="12"><Run FontFamily="{StaticResource IconFont}" Text="&#xE943;" /><Run Text="  r4Player.ws" /></TextBlock>
+                                                <Border Height="3" Width="16" CornerRadius="1.5" VerticalAlignment="Bottom" Margin="0,0,0,-5"
+                                                        Background="{DynamicResource AccentFillColorDefaultBrush}" />
+                                            </Grid>
+                                        </Border>
+                                        <TextBlock FontSize="12" Opacity="0.7" Margin="12,0,0,0" VerticalAlignment="Center">
+                                            <Run FontFamily="{StaticResource IconFont}" Text="&#xE943;" /><Run Text="  playerWitcher.ws" />
+                                        </TextBlock>
+                                    </StackPanel>
+                                </DockPanel>
+                                <Border CornerRadius="6" BorderThickness="1" Padding="10,8"
+                                        Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
+                                        BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}">
+                                    <ContentControl x:Name="SampleCode" Focusable="False" />
+                                </Border>
+                                <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                                    <CheckBox IsChecked="True" Content="Keep folder structure" Focusable="False" />
+                                    <RadioButton IsChecked="True" Content="Tabs" Margin="18,0,0,0" Focusable="False" GroupName="SampleGroup" />
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <TextBlock Text="Mode" Margin="0,16,0,6" />
+                        <Border HorizontalAlignment="Left" CornerRadius="8" BorderThickness="1" Padding="3"
+                                BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+                                Background="{DynamicResource SubtleFillColorSecondaryBrush}">
+                            <StackPanel Orientation="Horizontal">
+                                <RadioButton x:Name="ThemeSystem" GroupName="Theme" Style="{StaticResource Segment}" Checked="Theme_Checked"
+                                             Tag="&#xE770;" Content="Windows setting" />
+                                <RadioButton x:Name="ThemeLight" GroupName="Theme" Style="{StaticResource Segment}" Checked="Theme_Checked"
+                                             Tag="&#xE706;" Content="Light" />
+                                <RadioButton x:Name="ThemeDark" GroupName="Theme" Style="{StaticResource Segment}" Checked="Theme_Checked"
+                                             Tag="&#xE708;" Content="Dark" />
+                            </StackPanel>
+                        </Border>
+
+                        <TextBlock Text="Theme" Margin="0,16,0,2" />
+                        <TextBlock Style="{StaticResource Hint}" Margin="0,0,0,10"
+                                   Text="Accent and background colours. Windows uses your Windows accent colour and see-through window background; the others are named after the witcher schools." />
+                        <WrapPanel x:Name="PresetPanel" />
                     </StackPanel>
                 </Border>
 
@@ -67,6 +177,28 @@
                         </Grid>
                         <CheckBox x:Name="KeepStructureCheck" Content="Keep folder structure" Margin="0,12,0,0" />
                         <CheckBox x:Name="OpenWhenDoneCheck" Content="Open the folder when extraction finishes" Margin="0,4,0,0" />
+                    </StackPanel>
+                </Border>
+
+                <!-- Preview -->
+                <Border Style="{StaticResource Card}">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource SectionTitle}" Text="Preview" />
+                        <TextBlock Text="Open files in" Margin="0,0,0,6" />
+                        <RadioButton x:Name="OpenInTabs" GroupName="OpenIn" Content="Tabs in one preview window" />
+                        <RadioButton x:Name="OpenInWindows" GroupName="OpenIn" Content="A separate window for each file" Margin="0,2,0,0" />
+                        <TextBlock Style="{StaticResource Hint}"
+                                   Text="Go to definition follows the same choice. A file that's already open is brought to the front instead of opening twice." />
+
+                        <TextBlock Text="Split view" Margin="0,14,0,6" />
+                        <StackPanel Orientation="Horizontal">
+                            <RadioButton x:Name="SplitRight" GroupName="Split" Content="Side by side" Margin="0,0,20,0" />
+                            <RadioButton x:Name="SplitDown" GroupName="Split" Content="Top and bottom" />
+                        </StackPanel>
+                        <TextBlock Style="{StaticResource Hint}"
+                                   Text="Split (Ctrl+\) shows a second group of tabs, so you can read two files, or two parts of one, at once. Drag a tab onto the far side of the text to split there, onto another group to move it, or out of the window to give it a window of its own." />
+
+                        <CheckBox x:Name="PeekCheck" Content="Show a name's declaration when the mouse rests on it in a script" Margin="0,14,0,0" />
                     </StackPanel>
                 </Border>
 

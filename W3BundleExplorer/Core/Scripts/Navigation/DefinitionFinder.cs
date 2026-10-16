@@ -80,10 +80,10 @@ public sealed partial class DefinitionFinder
         }
         if (Keywords.Contains(word)) return [];
 
-        // Name( is a call, so only functions and events will do
+        // Name( is a call, so only functions and events will do, or a struct built in place: SMyStruct(a, b)
         int after = NextNonSpace(start + length);
         bool call = after < _code.Length && _code[after] == '(';
-        bool Fits(ScriptSymbol s) => !call || s.Kind is SymbolKind.Function or SymbolKind.Event;
+        bool Fits(ScriptSymbol s) => !call || s.Kind is SymbolKind.Function or SymbolKind.Event or SymbolKind.Struct;
 
         int before = PrevNonSpace(start - 1);
         if (before >= 0 && _code[before] == '.')
@@ -240,6 +240,8 @@ public sealed partial class DefinitionFinder
                 {
                     var own = self is null ? [] : MembersInChain(self, f, includeStateOwner: true);
                     calls = own.Count > 0 ? own : All(f).Where(s => s.IsMember && s.Owner is null);
+                    // SMyStruct(a, b) builds the struct
+                    if (!calls.Any() && All(f).FirstOrDefault(s => s.Kind == SymbolKind.Struct) is { } built) return built.TypeKey;
                 }
                 return calls.FirstOrDefault(s => s.Type is not null)?.Type;
             }

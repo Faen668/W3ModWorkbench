@@ -135,22 +135,31 @@ Text files can be read without extracting them first. That includes decompiled s
 - WitcherScript (`.ws`) files are colour coded, using the same grammar as WebSpam's WitcherScript extension for VS Code. The colours follow the app theme.
 - **Ctrl+F** opens a search bar. **Aa** matches case, **ab** matches whole words only, and **.\*** treats the search as a regular expression. **F3** and **Shift+F3** jump to the next and previous match, and every match is highlighted.
 - **Copy** copies all the text. **Save as** (Ctrl+S) writes the file somewhere, exactly as it came out of the archive.
-- **Esc** closes the search bar first, then the window.
+- **Esc** closes the search bar first, then the window when it shows just one file.
 
-You can open several previews side by side.
+## Tabs and split view
+
+Files open as tabs in one preview window. Opening a file that's already open brings its tab forward instead of opening it twice. If you'd rather have a window for each file, choose **A separate window for each file** in **Settings**.
+
+- **Ctrl+Tab** and **Ctrl+Shift+Tab** move between tabs. **Ctrl+W**, a middle-click or the tab's **×** closes one. Right-click a tab for more: close the others, open it in the other group, move it to a new window, copy its path.
+- **Split** (Ctrl+\) moves the file you're reading into a second group of tabs, so you can read two files at once. When it's the only tab, the second group shows another view of it instead, so you can keep one part of a file in sight while you read another. **Unsplit** puts every tab back in one group. Right-click **Split** to choose side by side or top and bottom; Settings has the same choice. **Ctrl+1** and **Ctrl+2** move between the groups.
+- Drag a tab along the strip to reorder it, onto the other group to move it there, or onto the far side of the text to split the window with it. Drop it outside every preview window and it gets a window of its own. Tabs can be dragged between windows too.
 
 ## Going to a definition
 
 In a script, hold **Ctrl** and click a name to jump to where it's declared, the way code editors do. Names that lead somewhere get a faint underline when you point at them, and become a link while Ctrl is held. **F12** does the same for the name at the cursor, and so does **Go to definition** on the right-click menu.
 
+Rest the mouse on an underlined name for a moment to see its declaration in a popup, coloured like the preview, with the file and line it's on. That way you can tell where a click will take you before you go. When several declarations fit, the popup shows the first few. You can turn the popup off in **Settings**.
+
 - It looks in the script's own archive first, then in every other archive open in the main window, then in the game's scripts, which it finds the same way as for enum names (see **Settings**). Open a library's archive alongside the mod that uses it to jump into the library.
-- Some mods, such as Shared Utils, install as loose scripts with no archive to open. When a name isn't found, click **Search Now…** in the message to search the loose scripts of every mod in the game's `mods` folder. They're then searched for every definition until the explorer is closed. Loose files that replace one of the game's scripts are left out, and so is any mod whose archive is open, since many ship the same scripts both ways.
+- Some mods, such as Shared Utils, install as loose scripts with no archive to open. When a name isn't found, click **Search Now** in the message to search the loose scripts of every mod in the game's `mods` folder. They're then searched for every definition until the explorer is closed. Loose files that replace one of the game's scripts are left out, and so is any mod whose archive is open, since many ship the same scripts both ways.
 - Functions, events, classes, states, structs, enums and their values, member variables, and the function's own parameters and local variables all work.
 - For `a.b`, it follows the declared type of `a` through variables, function return types and casts, and up the class's `extends` chain. `this`, `super`, `parent` and `virtual_parent` work too.
 - Click the name of a `@wrapMethod` or `@replaceMethod` function, or `wrappedMethod`, to see the original: the game's, or the `@addMethod` of the mod that added it. Click a method's own name to see the one it overrides.
 - When several declarations fit, like a game method that the mod wraps, a list lets you pick.
-- A declaration in the same file just moves the view. Another file opens in a new preview, or brings its preview to the front if it's already open.
-- **Alt+Left** or the mouse's back button goes back to where you jumped from in the same window.
+- A declaration in the same file just moves the view. Another file opens in a new tab next to the current one, or selects its tab if it's already open in that group. With **A separate window for each file** set, it opens in a new window instead.
+- **Ctrl+Alt+click**, **Ctrl+F12** or **Open definition to the side** opens it in the other group, splitting the window if it isn't split yet, so the code you came from stays in view.
+- **Alt+Left** or the mouse's back button goes back to where you jumped from, in whichever tab or window that is.
 
 It works from declarations alone, without compiling anything, so a few things can't be followed: engine functions with no script declaration, and names whose type it can't work out, which offer every member with that name instead.
 
@@ -162,7 +171,10 @@ Open **Settings** from the toolbar, or press Ctrl+, (comma).
 
 ## Appearance
 
-Choose **Light**, **Dark**, or **Use Windows setting** to follow whatever Windows is set to. The theme changes as you click, so you can try each one. **Cancel** puts it back.
+- **Mode**: **Light**, **Dark**, or **Windows setting** to follow whatever Windows is set to.
+- **Theme**: the accent and background colours. **Windows** uses your Windows accent colour and the see-through window background. The others, named after the witcher schools (Wolf, Cat, Griffin, Bear, Viper, Manticore, plus a plain Graphite), each have their own accent and a matching background, in both light and dark.
+
+The sample at the top, and every open window, change as you click, so you can try each one. **Cancel** puts it back.
 
 ## Extraction
 
@@ -175,6 +187,12 @@ Where The Witcher 3 is installed. It only affects decompiled scripts, and only h
 **Find automatically** checks your Steam and GOG libraries. Or use the folder button to pick it yourself: the folder that contains `bin` and `content`. A tick under the box means it found the game's scripts.
 
 You can leave it empty if you only open scripts from inside the game's `mods` folder, because those find the game on their own. It matters for scripts opened from anywhere else, like a mod's release folder or a download. A change applies to files you open after saving.
+
+## Preview
+
+- **Open files in**: tabs in one preview window, or a separate window for each file. Go to definition follows the same choice.
+- **Split view**: whether a split puts the second group of tabs beside the first or below it.
+- **Show a name's declaration when the mouse rests on it**: the definition popup in scripts.
 
 ## Where settings live
 
@@ -207,8 +225,13 @@ Everything is saved in `%AppData%\W3BundleExplorer\settings.json`. Delete that f
 - **F3** / **Shift+F3**: next or previous match
 - **Ctrl+S**: save as
 - **Ctrl+click** or **F12**: go to definition (scripts)
+- **Ctrl+Alt+click** or **Ctrl+F12**: open the definition in the other group
 - **Alt+Left**: go back
-- **Esc**: close the search bar, then the window
+- **Ctrl+Tab** / **Ctrl+Shift+Tab**: next or previous tab
+- **Ctrl+W**: close the tab
+- **Ctrl+\**: split or unsplit
+- **Ctrl+1** / **Ctrl+2**: first or second group
+- **Esc**: close the search bar, then the window when it shows one file
 """),
 
         new(Basics, "Troubleshooting", "", """

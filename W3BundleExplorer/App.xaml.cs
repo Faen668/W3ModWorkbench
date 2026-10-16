@@ -6,20 +6,14 @@ public partial class App : Application
 {
     public static Settings Settings { get; } = Settings.Load();
 
-    public static void ApplyTheme(string theme)
-    {
-        Current.ThemeMode = theme switch
-        {
-            "Light" => ThemeMode.Light,
-            "Dark" => ThemeMode.Dark,
-            _ => ThemeMode.System,
-        };
-    }
+    /// <param name="theme">System, Light or Dark.</param>
+    /// <param name="preset">The name of a <see cref="ThemePreset"/>.</param>
+    public static void ApplyTheme(string theme, string preset) => Themes.Apply(theme, preset);
 
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
-        ApplyTheme(Settings.Theme);
+        ApplyTheme(Settings.Theme, Settings.ThemePreset);
 
         // Text boxes give everything inside them the text cursor, their scroll bars included.
         // Answer the cursor query for scroll bars before the text box does; a ScrollBar style here
