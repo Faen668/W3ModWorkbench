@@ -1,0 +1,17 @@
+<Application x:Class="W3BundleExplorer.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             ThemeMode="System">
+    <Application.Resources>
+        <ResourceDictionary>
+            <!-- ThemeMode applies the Fluent theme when the app runs; merging it here as well
+                 lets the Visual Studio designer show the same styles and resources. -->
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/PresentationFramework.Fluent;component/Themes/Fluent.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+
+            <FontFamily x:Key="IconFont">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
+            <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

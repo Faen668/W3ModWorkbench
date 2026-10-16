@@ -1,0 +1,218 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "WitcherScript",
+  "scopeName": "source.witcherscript",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#strings" },
+    { "include": "#function-definitions" },
+    { "include": "#declarations" },
+    { "include": "#names" },
+    { "include": "#annotations" },
+    { "include": "#keywords" },
+    { "include": "#modifiers" },
+    { "include": "#function-calls" },
+    { "include": "#types" },
+    { "include": "#numbers" },
+    { "include": "#operators" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.witcherscript",
+          "match": "//.*$"
+        },
+        {
+          "name": "comment.block.witcherscript",
+          "begin": "/\\*",
+          "end": "\\*/"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.witcherscript",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            {
+              "name": "constant.character.escape.witcherscript",
+              "match": "\\\\."
+            }
+          ]
+        }
+      ]
+    },
+    "names": {
+      "patterns": [
+        {
+          "name": "constant.other.symbol.witcherscript",
+          "begin": "'",
+          "end": "'"
+        }
+      ]
+    },
+    "annotations": {
+      "patterns": [
+        {
+          "match": "(@\\w+)(?:\\(\\s*(\\w+)\\s*\\))?",
+          "captures": {
+            "1": { "name": "meta.attribute.witcherscript" },
+            "2": { "name": "support.type.witcherscript" }
+          }
+        }
+      ]
+    },
+    "function-definitions": {
+      "patterns": [
+        {
+          "match": "\\b(function|event)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*(?=\\()",
+          "captures": {
+            "1": { "name": "storage.type.witcherscript" },
+            "2": { "name": "entity.name.function.witcherscript" }
+          }
+        }
+      ]
+    },
+    "function-calls": {
+      "patterns": [
+        {
+          "name": "entity.name.function.witcherscript",
+          "match": "\\b[A-Za-z_][A-Za-z0-9_]*(?=\\s*\\()"
+        }
+      ]
+    },
+    "declarations": {
+      "patterns": [
+        {
+          "match": "\\b(class|struct)\\s+(\\w+)",
+          "captures": {
+            "1": { "name": "storage.type.witcherscript" },
+            "2": { "name": "entity.name.type.witcherscript" }
+          }
+        },
+        {
+          "match": "\\b(enum)\\s+(\\w+)",
+          "captures": {
+            "1": { "name": "storage.type.witcherscript" },
+            "2": { "name": "entity.name.type.witcherscript" }
+          }
+        },
+        {
+          "match": "\\b(state)\\s+(\\w+)\\s+(in)\\s+(\\w+)",
+          "captures": {
+            "1": { "name": "storage.type.witcherscript" },
+            "2": { "name": "entity.name.type.witcherscript" },
+            "3": { "name": "keyword.other.witcherscript" },
+            "4": { "name": "entity.name.type.witcherscript" }
+          }
+        },
+        {
+          "match": "\\b(extends)\\s+(\\w+)",
+          "captures": {
+            "1": { "name": "keyword.other.witcherscript" },
+            "2": { "name": "entity.name.type.witcherscript" }
+          }
+        },
+        {
+          "match": "\\b(new)\\s+(\\w+)",
+          "captures": {
+            "1": { "name": "keyword.other.witcherscript" },
+            "2": { "name": "entity.name.type.witcherscript" }
+          }
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.witcherscript",
+          "match": "\\b(if|else|switch|case|default|for|foreach|while|do|break|continue|return)\\b"
+        },
+        {
+          "name": "keyword.other.witcherscript",
+          "match": "\\b(new|delete|extends|defaults|in|hint|single)\\b"
+        },
+        {
+          "name": "variable.language.witcherscript",
+          "match": "\\b(this|super|parent|virtual_parent)\\b"
+        },
+        {
+          "name": "constant.language.witcherscript",
+          "match": "\\b(true|false|NULL)\\b"
+        },
+        {
+          "name": "storage.type.witcherscript",
+          "match": "\\b(class|struct|enum|state|function|event|var|autobind)\\b"
+        }
+      ]
+    },
+    "modifiers": {
+      "patterns": [
+        {
+          "name": "storage.modifier.witcherscript",
+          "match": "\\b(public|private|protected|abstract|final|statemachine|static|const|import|editable|saved|exec|latent|optional|out|entry|timer|quest|reward|storyscene|cleanup|inlined)\\b"
+        }
+      ]
+    },
+    "types": {
+      "patterns": [
+        {
+          "match": "\\b(array)\\s*(<)\\s*([\\w.]+)\\s*(>)",
+          "captures": {
+            "1": { "name": "support.type.witcherscript" },
+            "2": { "name": "punctuation.definition.generic.witcherscript" },
+            "3": { "name": "support.type.witcherscript" },
+            "4": { "name": "punctuation.definition.generic.witcherscript" }
+          }
+        },
+        {
+          "name": "support.type.witcherscript",
+          "match": "\\b(void|bool|Bool|int|Int8|Int32|Uint64|float|Float|string|String|name|CName|Byte|byte)\\b"
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.witcherscript",
+          "match": "0[xX][0-9a-fA-F]+"
+        },
+        {
+          "name": "constant.numeric.witcherscript",
+          "match": "([0-9]+\\.[0-9]*|\\.[0-9]+)f?"
+        },
+        {
+          "name": "constant.numeric.witcherscript",
+          "match": "\\b[0-9]+\\b"
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.comparison.witcherscript",
+          "match": "(>=|<=|==|!=|>|<)"
+        },
+        {
+          "name": "keyword.operator.assignment.witcherscript",
+          "match": "(\\+=|-=|\\*=|/=|%=|=)"
+        },
+        {
+          "name": "keyword.operator.arithmetic.witcherscript",
+          "match": "(-|\\+|%|/|\\*)"
+        },
+        {
+          "name": "keyword.operator.logic.witcherscript",
+          "match": "(!|\\|\\||&&)"
+        },
+        {
+          "name": "keyword.operator.bitwise.witcherscript",
+          "match": "(~|\\||\\^|&)"
+        }
+      ]
+    }
+  }
+}

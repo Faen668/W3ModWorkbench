@@ -1,0 +1,52 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>W3BundleExplorer</RootNamespace>
+    <AssemblyName>W3BundleExplorer</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
+    <!-- WPF0001: the Fluent ThemeMode API is marked experimental in .NET 9 -->
+    <NoWarn>$(NoWarn);WPF0001</NoWarn>
+  </PropertyGroup>
+
+  <!-- Shown in the exe's Properties > Details tab and the About section -->
+  <PropertyGroup>
+    <Product>W3 Bundle Explorer</Product>
+    <AssemblyTitle>W3 Bundle Explorer</AssemblyTitle>
+    <Description>Browse and extract The Witcher 3 bundles and decompile REDkit compiled scripts</Description>
+    <Authors>Faen90</Authors>
+    <Company>Faen90</Company>
+    <Copyright>Copyright © 2026 Faen90</Copyright>
+    <Version>1.3.1</Version>
+    <NeutralLanguage>en</NeutralLanguage>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\app.ico" />
+  </ItemGroup>
+
+  <!-- WitcherScript grammar from WebSpam's witcherscript-vscode (MIT), used as-is -->
+  <ItemGroup>
+    <EmbeddedResource Include="Highlighting\witcherscript.tmLanguage.json" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Code editor control for the preview window (MIT) -->
+    <PackageReference Include="AvalonEdit" Version="6.3.1.120" />
+  </ItemGroup>
+
+  <!-- Ship the licence, notices and readme next to the exe -->
+  <ItemGroup>
+    <None Include="..\LICENSE" Link="LICENSE" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\THIRD-PARTY-NOTICES.md" Link="THIRD-PARTY-NOTICES.md" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\README.md" Link="README.md" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\CHANGELOG.md" Link="CHANGELOG.md" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>
