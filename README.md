@@ -45,6 +45,7 @@
 - **Read text files without extracting**: decompiled scripts, plus `.xml`, `.csv`, `.ws`, `.json` and `.txt` files inside bundles.
 - **WitcherScript syntax highlighting**, using the grammar from WebSpam's VS Code extension.
 - **Line numbers and search** (Ctrl+F) with match case, whole word and regex, and F3 to jump between matches.
+- **Go to definition**: Ctrl+click (or F12) any function, class, enum value or variable in a script to open where it's declared, in the same mod or in the game's own scripts. A `@wrapMethod` leads to the game's original, and calls the mod wraps offer both. Alt+Left goes back.
 
 ### Everything else
 - **Light and dark themes**, or follow Windows.

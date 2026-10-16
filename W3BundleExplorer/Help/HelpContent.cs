@@ -139,6 +139,21 @@ Text files can be read without extracting them first. That includes decompiled s
 
 You can open several previews side by side.
 
+## Going to a definition
+
+In a script, hold **Ctrl** and click a name to jump to where it's declared, the way code editors do. Names that lead somewhere get a faint underline when you point at them, and become a link while Ctrl is held. **F12** does the same for the name at the cursor, and so does **Go to definition** on the right-click menu.
+
+- It looks in the script's own archive first, then in every other archive open in the main window, then in the game's scripts, which it finds the same way as for enum names (see **Settings**). Open a library's archive alongside the mod that uses it to jump into the library.
+- Some mods, such as Shared Utils, install as loose scripts with no archive to open. When a name isn't found, click **Search Now…** in the message to search the loose scripts of every mod in the game's `mods` folder. They're then searched for every definition until the explorer is closed. Loose files that replace one of the game's scripts are left out, and so is any mod whose archive is open, since many ship the same scripts both ways.
+- Functions, events, classes, states, structs, enums and their values, member variables, and the function's own parameters and local variables all work.
+- For `a.b`, it follows the declared type of `a` through variables, function return types and casts, and up the class's `extends` chain. `this`, `super`, `parent` and `virtual_parent` work too.
+- Click the name of a `@wrapMethod` or `@replaceMethod` function, or `wrappedMethod`, to see the original: the game's, or the `@addMethod` of the mod that added it. Click a method's own name to see the one it overrides.
+- When several declarations fit, like a game method that the mod wraps, a list lets you pick.
+- A declaration in the same file just moves the view. Another file opens in a new preview, or brings its preview to the front if it's already open.
+- **Alt+Left** or the mouse's back button goes back to where you jumped from in the same window.
+
+It works from declarations alone, without compiling anything, so a few things can't be followed: engine functions with no script declaration, and names whose type it can't work out, which offer every member with that name instead.
+
 Double-clicking anything that isn't text ticks or unticks it instead.
 """),
 
@@ -191,6 +206,8 @@ Everything is saved in `%AppData%\W3BundleExplorer\settings.json`. Delete that f
 - **Ctrl+F**: search
 - **F3** / **Shift+F3**: next or previous match
 - **Ctrl+S**: save as
+- **Ctrl+click** or **F12**: go to definition (scripts)
+- **Alt+Left**: go back
 - **Esc**: close the search bar, then the window
 """),
 

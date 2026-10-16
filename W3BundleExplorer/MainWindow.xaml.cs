@@ -11,11 +11,12 @@ using System.Windows.Threading;
 using Microsoft.Win32;
 using W3BundleExplorer.Core;
 using W3BundleExplorer.Core.Scripts;
+using W3BundleExplorer.Core.Scripts.Navigation;
 using W3BundleExplorer.ViewModels;
 
 namespace W3BundleExplorer;
 
-public partial class MainWindow : Window
+public partial class MainWindow : Window, IMessageHost
 {
     private readonly ObservableCollection<FolderNode> _roots = [];
     private readonly DispatcherTimer _searchTimer;
@@ -319,7 +320,11 @@ public partial class MainWindow : Window
                 using var fs = new FileStream(entry.Archive.FilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
                 return entry.Read(fs);
             });
-            new PreviewWindow(entry.Path, item.BundleName, data) { Owner = this }.Show();
+            // scripts can follow names to their definitions in the same archive, the other open ones and the game's scripts
+            bool script = Path.GetExtension(entry.Path).Equals(".ws", StringComparison.OrdinalIgnoreCase);
+            new PreviewWindow(entry.Path, item.BundleName, data,
+                script ? ScriptWorkspace.FileFor(entry) : null,
+                script ? ScriptWorkspace.For(entry.Archive, () => _roots.Select(r => r.Archive)) : null) { Owner = this }.Show();
         }
         catch (Exception ex)
         {
@@ -463,6 +468,7 @@ public partial class MainWindow : Window
 
     private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
     {
+        if (Message.IsOpen) return; // a message is up: it takes the keys, and Esc closes it
         bool ctrl = Keyboard.Modifiers == ModifierKeys.Control;
         if (e.Key == Key.F1 && Keyboard.Modifiers == ModifierKeys.None)
         {
@@ -552,8 +558,16 @@ public partial class MainWindow : Window
 
     private void SetStatus(string text) => StatusText.Text = text;
 
-    private void ShowError(string message) =>
-        MessageBox.Show(this, message, "W3 Bundle Explorer", MessageBoxButton.OK, MessageBoxImage.Warning);
+    /// <summary>A warning; its first paragraph, when there's more than one, is its title.</summary>
+    private void ShowError(string message)
+    {
+        var parts = message.Split("\n\n", 2);
+        _ = parts.Length == 2
+            ? ShowMessage(parts[0], parts[1], MessageKind.Warning)
+            : ShowMessage(null, message, MessageKind.Warning);
+    }
+
+    public Task ShowMessage(string? title, string message, MessageKind kind) => Message.Show(title, message, kind, primary: "OK");
 
     private static T? FindParent<T>(DependencyObject? child) where T : DependencyObject
     {

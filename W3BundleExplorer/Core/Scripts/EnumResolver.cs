@@ -18,7 +18,7 @@ public sealed partial class EnumResolver
 
     public EnumResolver(ScriptBlob blob)
     {
-        string? dir = FindGameScripts(blob.FilePath);
+        string? dir = GameScripts.FindFolder(blob.FilePath);
         _vanilla = dir is null ? [] : LoadVanilla(dir);
         foreach (var e in blob.Enums)
             _local[e.Name] = Number(e, _vanilla.GetValueOrDefault(e.Name));
@@ -46,32 +46,12 @@ public sealed partial class EnumResolver
     public bool IsExtension(ScriptEnum e) =>
         _vanilla.TryGetValue(e.Name, out var v) && v.Count > 0 && !v.Values.All(n => e.Members.Any(m => m.Name == n));
 
-    /// <summary>A game install to fall back on when the blob is not inside one (set from Settings).</summary>
-    public static string? GameFolder { get; set; }
-
     public bool HasGameScripts => _vanilla.Count > 0;
 
     public string? Find(string enumType, long value)
     {
         if (_local.TryGetValue(enumType, out var map) && map.TryGetValue(value, out var n)) return n;
         if (_vanilla.TryGetValue(enumType, out map) && map.TryGetValue(value, out n)) return n;
-        return null;
-    }
-
-    /// <summary>mods\X\content\precompiled.rsblob → content\content0\scripts of the same game install.</summary>
-    private static string? FindGameScripts(string blobPath)
-    {
-        var dir = new DirectoryInfo(Path.GetDirectoryName(Path.GetFullPath(blobPath)) ?? "");
-        for (int up = 0; up < 6 && dir is not null; up++, dir = dir.Parent)
-        {
-            string candidate = Path.Combine(dir.FullName, "content", "content0", "scripts");
-            if (Directory.Exists(candidate)) return candidate;
-        }
-        if (!string.IsNullOrWhiteSpace(GameFolder))
-        {
-            string fallback = Path.Combine(GameFolder, "content", "content0", "scripts");
-            if (Directory.Exists(fallback)) return fallback;
-        }
         return null;
     }
 

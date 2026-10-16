@@ -9,7 +9,7 @@ using W3BundleExplorer.Core.Scripts;
 namespace W3BundleExplorer;
 
 /// <summary>Edits <see cref="App.Settings"/>. The theme previews live; Cancel puts it back.</summary>
-public partial class SettingsWindow : Window
+public partial class SettingsWindow : Window, IMessageHost
 {
     private readonly Settings _settings;
     private readonly string _originalTheme;
@@ -72,8 +72,8 @@ public partial class SettingsWindow : Window
         if (GameLocator.Find() is { } found)
             GameFolderBox.Text = found;
         else
-            MessageBox.Show(this, "The Witcher 3 wasn't found in your Steam or GOG libraries. Use the folder button to pick it yourself.",
-                "Find game folder", MessageBoxButton.OK, MessageBoxImage.Information);
+            _ = ShowMessage("The Witcher 3 wasn't found",
+                "It isn't in your Steam or GOG libraries. Use the folder button to pick it yourself.", MessageKind.Info);
     }
 
     private void BrowseOutput_Click(object sender, RoutedEventArgs e)
@@ -99,7 +99,7 @@ public partial class SettingsWindow : Window
         _settings.KeepStructure = KeepStructureCheck.IsChecked == true;
         _settings.OpenWhenDone = OpenWhenDoneCheck.IsChecked == true;
         _settings.GameFolder = GameFolderBox.Text.Trim();
-        EnumResolver.GameFolder = _settings.GameFolder;
+        GameScripts.GameFolder = _settings.GameFolder;
         _settings.Save();
         DialogResult = true;
     }
@@ -158,8 +158,11 @@ public partial class SettingsWindow : Window
         base.OnClosed(e);
     }
 
+    public Task ShowMessage(string? title, string message, MessageKind kind) => Message.Show(title, message, kind, primary: "OK");
+
     private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
     {
+        if (Message.IsOpen) return; // Esc closes the message, not the window
         if (e.Key == Key.Escape)
         {
             DialogResult = false;

@@ -30,16 +30,27 @@ public partial class App : Application
                 args.Cursor = System.Windows.Input.Cursors.Arrow;
                 args.Handled = true;
             }));
-        Core.Scripts.EnumResolver.GameFolder = Settings.GameFolder;
+        Core.Scripts.GameScripts.GameFolder = Settings.GameFolder;
         bool reporting = false;
-        DispatcherUnhandledException += (_, args) =>
+        DispatcherUnhandledException += async (_, args) =>
         {
             args.Handled = true;
-            // the message box keeps the UI running, which can hit the same error again: report it once
+            // the UI keeps running while the error shows, and can hit the same error again: report it once
             if (reporting) return;
             reporting = true;
-            MessageBox.Show(args.Exception.Message, "W3 Bundle Explorer", MessageBoxButton.OK, MessageBoxImage.Error);
-            reporting = false;
+            try
+            {
+                // in the window in use; a native box only when there's none to show it in
+                var window = Windows.OfType<Window>().FirstOrDefault(w => w.IsActive) ?? MainWindow;
+                if (window is IMessageHost host && window.IsLoaded && window.IsVisible)
+                    await host.ShowMessage("Something went wrong", args.Exception.Message, MessageKind.Error);
+                else
+                    MessageBox.Show(args.Exception.Message, "W3 Bundle Explorer", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                reporting = false;
+            }
         };
         new MainWindow(e.Args).Show();
     }
