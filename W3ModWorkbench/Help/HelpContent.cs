@@ -174,7 +174,9 @@ Double-clicking anything that isn't text ticks or unticks it instead.
 
 ## Finding your way around a script
 
-- The bar above a script shows the class and function the cursor is in. Click either one for a list of the others in the file. **Outline**, or **Ctrl+Shift+O**, lists everything the file declares, to type a name and go to it.
+- The bar above a script shows the class and function the cursor is in. Click either one for a list of the others in the file.
+- **Outline**, or **Ctrl+Shift+O**, shows or hides the outline beside the text: everything the file declares, as a tree with each class's variables, functions and events under it, and each enum's values. Click a name, or pick it and press Enter, to go there. The declaration the cursor is in is picked out as you move, the filter box narrows the tree to matching names, and the outline keeps up as you edit. Drag its edge to make it wider; it stays open, at that width, for every script until you hide it.
+- **Go to symbol in file**, on the right-click menu, lists the same declarations to type a name and go to it.
 - **Ctrl+T** goes to any class, function, variable or enum value in everything that's searched: type part of the name, or `Class.name`, or just some of its letters in order.
 - When the cursor is inside a call's brackets, a strip over the line shows the function's parameters, with the one the cursor is on in bold. It follows the same setting as the definition popup.
 
@@ -264,6 +266,64 @@ When a mod updates, its translation doesn't have to be done again. Open the new 
 Files from before the next-gen update, which kept their text as UTF-16, open too. They're saved in the next-gen format.
 """),
 
+        new(Basics, "Searching the game's strings", "", """
+Before adding a line of text to your mod, check whether the game already says it. **Tools > Search game strings** (Ctrl+Shift+G), or **Game strings** in the strings editor, searches every string the game would load, in the language you pick.
+
+## What it reads
+
+The base game's `content\content*\<language>.w3strings`, and, with **Include DLC and mods** ticked, the files in `dlc\*\content` and `mods\*\content`. The **From** column says which one each result comes from. It needs the game folder (Settings finds it, or it's picked up from the file you're working on).
+
+## Searching
+
+- Type words and every one has to appear in the text, whatever the case: `swallow potion`. **Whole words** stops `ale` from finding `scale`.
+- Type a number to find an ID, or the start of one: `2115940`.
+- Type a key's name (`panel_Mods`) or its hash in hex (`4d5f8b0c`) to find the strings that use that key.
+
+Results show the ID, the key hash and the text, from the first 2,000 matches. Double-click a row to copy its ID; right-click to copy the text, `GetLocStringById(id)` for a script, or a line ready to paste into a strings CSV.
+
+## Checking your own IDs
+
+In the strings editor, **Check IDs** compares every ID with the game's, the DLC's and the other installed mods'. Clashes are marked with a warning sign that says where the ID is used and what its text is there. Two strings with one ID show each other's text, which is how a mod ends up showing the wrong words in game. The check also suggests a block of 1,000 IDs that nothing uses.
+"""),
+
+        new(Basics, "XML files and the mod menu builder", "", """
+XML files open in an editor of their own, like strings. Double-click one in the file list, drop it on the window, or use **Tools > Open an XML file**. XML inside a bundle opens as a copy that **Save as** writes out.
+
+## The editor
+
+- Tags, names, attribute values, comments and entities are coloured, in both light and dark.
+- Elements fold from the margin, and the bar under the text says whether the XML is well-formed, or where it isn't. Click the message to jump to the line.
+- **Format** indents the XML with tabs, one element a line.
+- Files keep the encoding they came in with (UTF-8, UTF-8 with BOM or UTF-16). A file that says `encoding="utf-16"` is saved as UTF-16.
+
+## The mod menu builder
+
+A mod's in-game options live in an XML file in `bin\config\r4game\user_config_matrix\pc`. **Menu builder** (Ctrl+B) edits one with forms, and writes the XML beside them as you go. **Tools > New mod menu** starts a new one from a small example.
+
+- **Pages** are the groups of the menu, **Settings** are what's on a page: a toggle, a slider (min, max and steps), a list of options, or a separator.
+- **Details** edits what you pick. A setting's text key follows its id while the two are the same, as most mods name them.
+- **Presets** are named sets of values. The first one gives the settings their starting values, which you type as each setting's default.
+- **Strings** lists every key the menu needs text for, named as the game expects (`panel_`, `option_`, `preset_`, `preset_value_`). Type the texts, then **Add to CSV** writes the missing ones with new IDs into a strings CSV, ready for the strings editor. If a strings CSV is next to the menu, its texts and IDs are picked up. **Find a free block** picks IDs nothing else uses.
+- **Script** gives WitcherScript that reads every setting into a variable of the right type.
+- **Problems** lists mistakes: ids used twice, a default outside a slider's range, a preset setting something that isn't on the page, and so on. Double-click one to go to it.
+
+> The builder writes the XML itself, so it drops what it can't keep, such as comments. It says so before it does, and the code view undoes it. Parts of the file it doesn't know are listed in that message.
+"""),
+
+        new(Basics, "Stub generator", "", """
+Wrapping or replacing one of the game's functions starts the same way every time: the annotation, the exact signature, and a call to the original. **Tools > Stub generator** (Ctrl+Shift+W) writes that for you from the game's own scripts. In a script preview, **Create a wrap or replace stub** on the right-click menu opens it on the function under the caret.
+
+## Picking
+
+Search by class, function or both: `W3PlayerWitcher OnSpawned`. Each result shows the function's parameters. Choose what to write:
+
+- **Wrap**: `@wrapMethod`, with a call to `wrappedMethod` with the right arguments, and room before and after. A function that returns a value keeps it in `result`.
+- **Replace**: `@replaceMethod`, starting from the original's code so you can change it. Untick **Replace: start from the original code** for an empty body.
+- **Add method** and **Add field**: `@addMethod` or `@addField` on a class you search for, with the name (and the type, for a field) filled in.
+
+Events keep `event`, and states are named the way the compiler does, as in `CR4PlayerStateIdle`. **Note where it's from** adds the game's file and line as a comment. **Copy** puts it on the clipboard.
+"""),
+
         new(Basics, "Settings", "", """
 Open **Settings** from the toolbar, or press Ctrl+, (comma).
 
@@ -301,12 +361,47 @@ REDkit's `wcc_lite.exe`, which **Compile** uses to build a script project into a
 Everything is saved in `%AppData%\W3ModWorkbench\settings.json`. Delete that file to reset everything to the defaults.
 """),
 
+        new(Basics, "Source inspector", "", """
+Mods get copied, renamed and re-released. **Tools > Source inspector** (Ctrl+Shift+I) compares two mods and reports how much of one is in the other, so you can see what was reused instead of guessing. Everything is read on your PC; nothing is changed or uploaded.
+
+## Choosing the two mods
+
+Pick the **Original** (the mod you believe came first) and the **Suspect** (the one you want to check) with Browse, by pasting a path, or by dropping a folder on each box. A source can be a folder of loose files, a folder with `.bundle` and `.rsblob` files, a single bundle or compiled script, or a mix. The arrows swap the two. Then **Analyse** (Ctrl+Enter).
+
+**Ignore the game's own scripts** sets aside code the game already has. A mod that wraps or replaces a game function starts from that code, so without this two honest mods look alike. It needs the game folder from Settings.
+
+## What is compared
+
+- **Scripts**: loose `.ws` files, and `.rsblob` files after decompiling. Comments, spacing and letter case are ignored. The code is compared as written, and as a *shape* with every name and value replaced, so renaming variables and functions doesn't hide a copy.
+- **Menus and XML**: every element with its attributes and text, whatever the layout or attribute order.
+- **Text and strings**: CSV, ini, text and similar files, line by line.
+- **Bundle contents and other files**: every file inside every bundle is unpacked and fingerprinted with SHA-256. Identical files are found under any name or path.
+- **Coding style**: indentation, braces, spacing, naming habits, comment density and function size. Habits survive renaming, but many coders share them, so it only supports the rest.
+
+## Reading the result
+
+- **Summary**: the headline percentage (the stronger of the two directions), what it means, key findings, and a breakdown by kind of content. *Original found in the suspect* is how much of the original's content turns up in the suspect; *Suspect made of the original* is the other way round. A small mod built almost wholly from a big one scores high on the second and low on the first.
+- **Matching files**: each file pair with how strong the match is: *Identical*, *Renamed copy* (same structure, new names), *Near copy*, *Large overlap* or *Partial overlap*. Click one to see both files side by side, with the shared lines in green or the differences marked.
+- **Shared details**: comments, messages, class and function names and menu keys found in both, functions copied whole, and functions copied with new names. A distinctive comment that appears twice is hard to put down to chance.
+- **Coding style**: the habits side by side.
+- **Sources**: what was read from each, file dates, and files that couldn't be read.
+
+**Save report** writes everything as a web page or Markdown file you can keep or send.
+
+## Be fair
+
+Similarity is evidence, not proof. Mods for one game share its code and common frameworks (a mod menu library, say), and file dates can be changed. Read the matches and shared details, and talk to the authors before drawing a conclusion.
+"""),
+
         new(Basics, "Keyboard shortcuts", "", """
 ## Anywhere
 
 - **Ctrl+O**: open files
 - **Ctrl+F**: jump to the search box
 - **Ctrl+E**: extract checked files
+- **Ctrl+Shift+G**: search the game's strings
+- **Ctrl+Shift+W**: stub generator
+- **Ctrl+Shift+I**: source inspector
 - **Ctrl+,**: settings
 - **F1**: this help
 
@@ -316,6 +411,12 @@ Everything is saved in `%AppData%\W3ModWorkbench\settings.json`. Delete that fil
 - **Enter**: preview the highlighted text file
 - **Ctrl+C**: copy the highlighted files' paths
 - **Ctrl+A**: highlight every row
+
+## In the XML editor
+
+- **Ctrl+S** / **Ctrl+Shift+S**: save or save as
+- **Ctrl+B**: show or hide the menu builder
+- **Ctrl+F**: search
 
 ## In the search box
 
@@ -335,7 +436,7 @@ Everything is saved in `%AppData%\W3ModWorkbench\settings.json`. Delete that fil
 - **Ctrl+Shift+F12**: who else changes this
 - **Shift+Alt+H**: type hierarchy
 - **Ctrl+T**: go to any symbol
-- **Ctrl+Shift+O**: go to a symbol in this file
+- **Ctrl+Shift+O**: show or hide the outline
 - **Ctrl+Shift+F**: find in files
 - **F4** / **Shift+F4**: next or previous result in the list
 - **F8** / **Shift+F8**: next or previous difference when comparing
@@ -393,7 +494,7 @@ W3 Mod Workbench is made by **Faen90** and is free to use.
 
 ## Licence
 
-The tool is open source under the MIT Licence. In plain terms: you can use it, share it, change it and build on it, including in your own projects, as long as the copyright notice and licence text stay with it. It comes with no warranty. The full text is in the `LICENSE` file next to the exe, and in Settings under About.
+The tool is open source under the MIT Licence. In plain terms: you can use it, share it, change it and build on it, including in your own projects, as long as the copyright notice and licence text stay with it. It comes with no warranty. The full text is in the `LICENSE` file next to the exe, and under About (the i button at the top right of the main window).
 
 Copyright © 2026 Faen90.
 
@@ -417,7 +518,7 @@ Nothing was taken on trust. The format work was checked against mods whose origi
 - **AvalonEdit** by the SharpDevelop team: the code view in the preview window.
 - **Aelto**: his own decompiler project, tw3-cahirb (github.com/Aelto/tw3-cahirb), filled real gaps in this one. The full list of the script engine's built-in operators, several rarely used instructions, and a sample from an older REDkit build that showed up property hints, array defaults and `do`/`while` loops all came from comparing notes with his work.
 
-WebSpam's grammar and AvalonEdit are MIT licensed, and their full licence texts are in `THIRD-PARTY-NOTICES.md` next to the exe, and in Settings under About. No code was copied from tw3-cahirb, only facts about the file format.
+WebSpam's grammar and AvalonEdit are MIT licensed, and their full licence texts are in `THIRD-PARTY-NOTICES.md` next to the exe, and under About (the i button at the top right of the main window). No code was copied from tw3-cahirb, only facts about the file format.
 
 The bundle reader, the LZ4 and Snappy decoders and the script decompiler are all written for this tool. Compiling uses REDkit's own `wcc_lite.exe` from your REDkit install; nothing of REDkit's is shipped with the tool.
 """),

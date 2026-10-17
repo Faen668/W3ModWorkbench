@@ -26,6 +26,11 @@ public sealed class Settings
     /// <summary>The Witcher 3 install whose script sources name enum values in decompiled scripts.</summary>
     public string GameFolder { get; set; } = "";
 
+    /// <summary>The source inspector's two folders, and whether it sets the game's own scripts aside.</summary>
+    public string InspectorOriginal { get; set; } = "";
+    public string InspectorSuspect { get; set; } = "";
+    public bool InspectorIgnoreGame { get; set; } = true;
+
     /// <summary>Tabs: files open as tabs in one preview window. Windows: each file gets a window of its own.</summary>
     public string PreviewOpenIn { get; set; } = "Tabs";
 
@@ -34,6 +39,12 @@ public sealed class Settings
 
     /// <summary>Show a declaration's code in a popup when the mouse rests on a name in a script.</summary>
     public bool PeekDefinitions { get; set; } = true;
+
+    /// <summary>Show the outline side bar beside scripts.</summary>
+    public bool ShowOutline { get; set; } = true;
+
+    /// <summary>The outline side bar's width.</summary>
+    public double OutlineWidth { get; set; } = 270;
 
     /// <summary>REDkit's wcc_lite.exe, which compiles a script project into a .rsblob. Compiling is off while it's empty.</summary>
     public string WccLitePath { get; set; } = "";

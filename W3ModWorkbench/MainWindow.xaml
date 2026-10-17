@@ -92,8 +92,20 @@
                         <TextBlock Margin="8,0,0,0" Text="Close all" />
                     </StackPanel>
                 </Button>
+                <Button x:Name="ToolsButton" Margin="6,0,0,0" Click="Tools_Click"
+                        ToolTip="Search the game's strings, generate wrap and replace stubs, build a mod menu, compare two mods for copied work">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Style="{StaticResource IconText}" Text="&#xE90F;" />
+                        <TextBlock Margin="8,0,0,0" Text="Tools" />
+                        <TextBlock Style="{StaticResource IconText}" Text="&#xE70D;" FontSize="9" Margin="8,2,0,0" />
+                    </StackPanel>
+                </Button>
             </StackPanel>
 
+            <Button x:Name="AboutButton" DockPanel.Dock="Right" Margin="6,0,0,0" Padding="10,6" Click="About_Click"
+                    MouseLeave="About_MouseLeave" ToolTip="About W3 Mod Workbench">
+                <TextBlock Style="{StaticResource IconText}" Text="&#xE946;" />
+            </Button>
             <Button DockPanel.Dock="Right" Margin="6,0,0,0" Click="Help_Click" ToolTip="How everything works (F1)">
                 <StackPanel Orientation="Horizontal">
                     <TextBlock Style="{StaticResource IconText}" Text="&#xE897;" />
@@ -240,11 +252,11 @@
 
             <!-- Empty state -->
             <Border x:Name="EmptyState" Style="{StaticResource Card}">
-                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="440">
+                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="600">
                     <TextBlock Style="{StaticResource IconText}" Text="&#xE7B8;" FontSize="52" HorizontalAlignment="Center" Opacity="0.85" />
-                    <TextBlock Text="Open Witcher 3 bundles, scripts or strings" FontSize="22" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,18,0,6" />
+                    <TextBlock Text="Open Witcher 3 bundles, scripts, strings or XML" FontSize="22" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,18,0,6" />
                     <TextBlock TextWrapping="Wrap" TextAlignment="Center" Opacity="0.7" Margin="0,0,0,4"
-                               Text="Drop .bundle, .rsblob or .w3strings files, or a folder, anywhere on this window. Compiled scripts (precompiled.rsblob) open as decompiled WitcherScript, and strings (.w3strings, or a strings .csv) open in an editor you can save from. Opening a folder loads everything inside it, such as the game's content or a mod." />
+                               Text="Drop .bundle, .rsblob, .w3strings or .xml files, or a folder, anywhere on this window. Compiled scripts (precompiled.rsblob) open as decompiled WitcherScript, and strings (.w3strings, or a strings .csv) open in an editor you can save from, as do XML files (with a builder for mod menus). Tools has a search of the game's own strings and a stub generator. Opening a folder loads everything inside it, such as the game's content or a mod." />
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,22,0,0">
                         <Button Click="OpenBundles_Click" Padding="16,7" Style="{DynamicResource AccentButtonStyle}">
                             <StackPanel Orientation="Horizontal">
@@ -329,6 +341,56 @@
                 <Button Margin="10,0,0,0" Padding="10,2" Click="Cancel_Click" Content="Cancel" />
             </StackPanel>
         </Grid>
+
+        <!-- About: opens from the i button, under it, and closes once the mouse leaves both -->
+        <Popup x:Name="AboutPopup" PlacementTarget="{Binding ElementName=AboutButton}" Placement="Relative"
+               AllowsTransparency="True" StaysOpen="False" PopupAnimation="Fade" Focusable="False" Closed="AboutPopup_Closed">
+            <Border Margin="12,0,12,12" MouseLeave="About_MouseLeave">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="18" ShadowDepth="4" Direction="270" Opacity="0.35" />
+                </Border.Effect>
+                <Border x:Name="AboutCard" Width="460" Padding="20,18" CornerRadius="8" BorderThickness="1"
+                        Background="{DynamicResource SolidBackgroundFillColorBaseBrush}" BorderBrush="{DynamicResource SurfaceStrokeColorFlyoutBrush}"
+                        TextElement.Foreground="{DynamicResource TextFillColorPrimaryBrush}">
+                    <Border.Resources>
+                        <Style x:Key="AboutHint" TargetType="TextBlock">
+                            <Setter Property="Opacity" Value="0.7" />
+                            <Setter Property="TextWrapping" Value="Wrap" />
+                            <Setter Property="FontSize" Value="12" />
+                            <Setter Property="Margin" Value="0,8,0,0" />
+                        </Style>
+                    </Border.Resources>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Image Source="pack://application:,,,/W3ModWorkbench;component/Assets/icon.png" Width="64" Height="64"
+                               VerticalAlignment="Top" Margin="0,0,16,0" RenderOptions.BitmapScalingMode="HighQuality" />
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Text="W3 Mod Workbench" FontSize="16" FontWeight="SemiBold" />
+                            <TextBlock x:Name="AboutVersionText" Opacity="0.7" Margin="0,2,0,0" />
+                            <TextBlock TextWrapping="Wrap" Margin="0,8,0,0" Opacity="0.85"
+                                       Text="Browse and extract Witcher 3 .bundle archives, open REDkit precompiled.rsblob files as decompiled WitcherScript, edit and compile script projects, and edit strings." />
+                            <TextBlock x:Name="AboutCopyrightText" Margin="0,12,0,0" />
+                            <TextBlock Margin="0,2,0,0" TextWrapping="Wrap">
+                                <Run Text="Free and open source under the MIT Licence." />
+                                <Hyperlink Click="AboutLicence_Click">View licence</Hyperlink>
+                            </TextBlock>
+                            <TextBlock Style="{StaticResource AboutHint}"
+                                       Text="Developed with AI assistance (Claude, by Anthropic), most of all in reverse-engineering the compiled script format and building the decompiler. The results were checked against real mods and their original source." />
+                            <TextBlock Style="{StaticResource AboutHint}">
+                                <Run Text="WitcherScript syntax highlighting by WebSpam, from his witcherscript-vscode extension, used with permission. Code view by AvalonEdit. Decompiler gaps filled with help from Aelto's tw3-cahirb." />
+                                <Hyperlink Click="AboutNotices_Click">Third-party notices</Hyperlink>
+                            </TextBlock>
+                            <TextBlock Style="{StaticResource AboutHint}"
+                                       Text="An unofficial fan-made tool, not affiliated with or endorsed by CD PROJEKT RED. The Witcher, REDkit and REDengine are trademarks of CD PROJEKT S.A." />
+                            <TextBlock x:Name="AboutSettingsText" Style="{StaticResource AboutHint}" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </Border>
+        </Popup>
 
         <local:MessageCard x:Name="Message" Grid.RowSpan="4" IsModal="True" />
     </Grid>

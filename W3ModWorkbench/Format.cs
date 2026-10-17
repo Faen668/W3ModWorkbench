@@ -17,4 +17,6 @@ public static class Format
     }
 
     public static string Count(int n, string noun) => $"{n:N0} {noun}{(n == 1 ? "" : "s")}";
+
+    public static string Count(int n, string noun, string plural) => $"{n:N0} {(n == 1 ? noun : plural)}";
 }

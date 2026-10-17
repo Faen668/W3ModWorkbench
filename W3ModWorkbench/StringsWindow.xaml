@@ -72,6 +72,20 @@
             <!-- the file, and what can be done with it -->
             <DockPanel Margin="0,0,0,10" LastChildFill="True">
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button Margin="0,0,6,0" Click="GameStrings_Click"
+                            ToolTip="Search the text of the game's own strings, and the DLC's and mods', to find an ID or key that already exists">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Style="{StaticResource IconText}" Text="&#xE721;" />
+                            <TextBlock Margin="8,0,0,0" Text="Game strings" />
+                        </StackPanel>
+                    </Button>
+                    <Button Margin="0,0,6,0" Click="CheckIds_Click"
+                            ToolTip="Look for IDs these strings share with the game, its DLC or other mods, and suggest a free block of IDs">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Style="{StaticResource IconText}" Text="&#xE9D9;" />
+                            <TextBlock Margin="8,0,0,0" Text="Check IDs" />
+                        </StackPanel>
+                    </Button>
                     <Button Margin="0,0,6,0" Click="LoadTranslation_Click"
                             ToolTip="For a mod's update: load the old translation (.csv or .w3strings) over these strings. Each string takes its translated text, matched by key, or by ID when it has none, and the ones it doesn't have are marked new">
                         <StackPanel Orientation="Horizontal">

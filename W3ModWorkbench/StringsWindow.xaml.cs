@@ -387,6 +387,76 @@ public partial class StringsWindow : Window, IMessageHost
         _ = ShowMessage("Translation loaded", string.Join("\n\n", lines), MessageKind.Info);
     }
 
+    // ---------------------------------------------------------------- the game's strings
+
+    private readonly Dictionary<uint, string> _clashes = [];
+
+    private string? GameFolder() => GameLocator.Resolve(_path ?? _sourcePath);
+
+    private void GameStrings_Click(object sender, RoutedEventArgs e)
+    {
+        if (GameFolder() is not { } folder)
+        {
+            _ = ShowMessage("The game folder isn't set", "Searching the game's strings needs The Witcher 3's folder. Set it in Settings.", MessageKind.Info);
+            return;
+        }
+        GameStringsWindow.Open(this, folder, StringsLanguage.Handle);
+    }
+
+    /// <summary>
+    /// Marks the IDs that the game, a DLC or another installed mod already uses, since two strings with one ID
+    /// show each other's text. The file being edited is left out when it is itself one of the installed ones.
+    /// </summary>
+    private async void CheckIds_Click(object sender, RoutedEventArgs e)
+    {
+        Grid.CommitEdit(DataGridEditingUnit.Row, true);
+        if (GameFolder() is not { } folder)
+        {
+            _ = ShowMessage("The game folder isn't set", "Checking IDs needs The Witcher 3's folder to compare with. Set it in Settings.", MessageKind.Info);
+            return;
+        }
+        _ = Message.Show(null, "Reading the game's strings…", MessageKind.Busy);
+        GameStringIndex index;
+        try
+        {
+            index = await GameStringIndex.GetAsync(folder, StringsLanguage);
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
+        {
+            await ShowMessage("The game's strings could not be read", ex.Message, MessageKind.Error);
+            return;
+        }
+
+        string? own = _path is null ? null : Path.GetFullPath(_path);
+        _clashes.Clear();
+        var examples = new List<string>();
+        foreach (var row in _rows)
+        {
+            if (!row.TryId(out uint id)) continue;
+            var others = index.WithId(id)
+                .Where(s => own is null || !Path.GetFullPath(Path.Combine(folder, s.File)).Equals(own, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            if (others.Count == 0) continue;
+            var first = others[0];
+            string shown = first.Text.ReplaceLineEndings(" ");
+            if (shown.Length > 60) shown = shown[..60] + "…";
+            _clashes[id] = $"Also used by {first.Source} ({first.File}): \"{shown}\"" + (others.Count > 1 ? $" and {others.Count - 1} more" : "");
+            if (examples.Count < 5) examples.Add($"{id}  →  {first.Source}");
+        }
+        Validate();
+        Message.Close(false);
+
+        string free = $"{index.FreeBlock():0}";
+        string range = $"{free} to {uint.Parse(free) + 999}";
+        string text = _clashes.Count == 0
+            ? $"None of these IDs is used by the game, its DLC or the other installed mods.\n\nIf you need a fresh block of IDs, {range} is free."
+            : $"{Format.Count(_clashes.Count, "ID")} {(_clashes.Count == 1 ? "is" : "are")} also used elsewhere, and marked with a warning sign:\n\n{string.Join("\n", examples)}"
+              + (_clashes.Count > examples.Count ? $"\n…and {_clashes.Count - examples.Count} more." : "")
+              + $"\n\nA block nothing uses: {range}.";
+        await ShowMessage(_clashes.Count == 0 ? "No clashes" : "IDs in use elsewhere", text,
+            _clashes.Count == 0 ? MessageKind.Info : MessageKind.Warning);
+    }
+
     private void ShowBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (!IsLoaded) return;
@@ -435,7 +505,7 @@ public partial class StringsWindow : Window, IMessageHost
         var keys = new Dictionary<string, int>();
         foreach (var row in _rows.Where(r => r.HashText.Length > 0)) keys[row.HashText] = keys.GetValueOrDefault(row.HashText) + 1;
 
-        int errors = 0, outside = 0, sharedKeys = 0;
+        int errors = 0, outside = 0, sharedKeys = 0, clashing = 0;
         foreach (var row in _rows)
         {
             string? problem = null;
@@ -443,6 +513,11 @@ public partial class StringsWindow : Window, IMessageHost
             else if (seen[id] > 1) problem = "Another string has this ID.";
             else if (!row.TryHash(out _)) problem = "The key hash has to be eight hex digits.";
             if (problem is not null) errors++;
+            else if (_clashes.TryGetValue(id, out var clash))
+            {
+                clashing++;
+                problem = clash;
+            }
             else if (!W3Strings.InModIdSpace(id))
             {
                 outside++;
@@ -462,6 +537,7 @@ public partial class StringsWindow : Window, IMessageHost
                           + (SearchBox.Text.Length > 0 || _translationLoaded && ShowBox.SelectedIndex > 0 ? $"  ·  {_view.Cast<object>().Count()} shown" : "");
         var parts = new List<string>();
         if (errors > 0) parts.Add($"{Format.Count(errors, "string")} can't be saved until fixed");
+        if (clashing > 0) parts.Add($"{clashing} with an ID the game or another mod uses");
         if (outside > 0) parts.Add($"{outside} outside the mod ID range");
         if (sharedKeys > 0) parts.Add($"{sharedKeys} with a key another string has");
         ProblemText.Text = string.Join("  ·  ", parts);

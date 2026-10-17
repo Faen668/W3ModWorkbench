@@ -134,6 +134,9 @@ public partial class PreviewDocument : UserControl
         if (item.Script is not null && item.IsScript)
         {
             OutlineBar.Visibility = Visibility.Visible;
+            Outline.Picked += GoToOwn;
+            Outline.CloseRequested += () => SetOutlineShown(false);
+            ApplyOutline();
             Editor.TextArea.Caret.PositionChanged += (_, _) =>
             {
                 // while typing, the outline waits until the typing stops
@@ -195,6 +198,8 @@ public partial class PreviewDocument : UserControl
         // WitcherScript is coloured with the grammar from WebSpam's witcherscript-vscode extension
         if (Item.IsScript)
             Editor.TextArea.TextView.LineTransformers.Insert(0, new WitcherScriptColorizer(Editor.Document, _dark) { View = Editor.TextArea.TextView });
+        else if (IsXml(Item.Path))
+            Editor.TextArea.TextView.LineTransformers.Insert(0, new XmlColorizer(Editor.Document, _dark) { View = Editor.TextArea.TextView });
 
         _link.Brush = TryFindResource("AccentTextFillColorPrimaryBrush") as Brush;
         if (_link.Brush is SolidColorBrush link)
@@ -211,6 +216,11 @@ public partial class PreviewDocument : UserControl
             _link.Faint = underline;
         }
     }
+
+    /// <summary>Whether a file is XML, by its extension, and so coloured as XML.</summary>
+    public static bool IsXml(string path) =>
+        System.IO.Path.GetExtension(path) is { } ext && (ext.Equals(".xml", StringComparison.OrdinalIgnoreCase)
+            || ext.Equals(".xsd", StringComparison.OrdinalIgnoreCase) || ext.Equals(".config", StringComparison.OrdinalIgnoreCase));
 
     /// <summary>Whether the window ended up with a dark theme, judged by how bright its text colour is.</summary>
     private bool IsDarkTheme() =>
@@ -260,6 +270,7 @@ public partial class PreviewDocument : UserControl
         _finderLayers = [];
         _lines = null;
         ClearLink();
+        _outlineStale = true;
         if (OutlineBar.Visibility == Visibility.Visible)
         {
             _reparseTimer.Stop();
@@ -390,7 +401,7 @@ public partial class PreviewDocument : UserControl
         else if (scripts && key == Key.H && mods == (ModifierKeys.Shift | ModifierKeys.Alt))
             _ = ShowHierarchyAsync();
         else if (key == Key.O && mods == (ModifierKeys.Control | ModifierKeys.Shift) && OutlineBar.Visibility == Visibility.Visible)
-            ShowOutlinePicker();
+            ToggleOutline();
         else if (key == Key.F8 && mods is ModifierKeys.None or ModifierKeys.Shift && HasDiff)
             GoToDifference(mods == ModifierKeys.Shift ? -1 : 1);
         else
@@ -855,11 +866,23 @@ public partial class PreviewDocument : UserControl
 
     // ---------------------------------------------------------------- outline
 
-    /// <summary>The class and function the caret is in, each opening a menu of the others in the file.</summary>
+    /// <summary>
+    /// The class and function the caret is in, each opening a menu of the others in the file, and in the outline
+    /// side bar when it's shown, the declaration the caret is in.
+    /// </summary>
     private void UpdateOutline()
     {
         if (OutlineBar.Visibility != Visibility.Visible) return;
         int offset = Editor.CaretOffset;
+        if (OutlineHost.Visibility == Visibility.Visible)
+        {
+            if (_outlineStale)
+            {
+                _outlineStale = false;
+                Outline.Update(Parsed);
+            }
+            Outline.Reveal(offset);
+        }
         var type = Parsed.TypeAt(offset);
         var function = Parsed.FunctionAt(offset);
         if (type == _crumbType && function == _crumbFunction && Crumbs.Children.Count > 0) return;
@@ -877,6 +900,55 @@ public partial class PreviewDocument : UserControl
 
     private TypeScope? _crumbType;
     private FunctionScope? _crumbFunction;
+    private bool _outlineStale = true;
+
+    /// <summary>
+    /// Ctrl+Shift+O and the Outline button: shows or hides the outline side bar. It's one setting for every
+    /// script, so the other open ones follow. Showing it puts the keyboard in its filter.
+    /// </summary>
+    public void ToggleOutline()
+    {
+        bool show = OutlineHost.Visibility != Visibility.Visible;
+        SetOutlineShown(show);
+        if (show) Outline.FocusFilter();
+        else Editor.TextArea.Focus();
+    }
+
+    private static void SetOutlineShown(bool show)
+    {
+        App.Settings.ShowOutline = show;
+        App.Settings.Save();
+        PreviewWindow.ApplyOutlineSetting();
+    }
+
+    /// <summary>Shows or hides the outline side bar as Settings says, for a script.</summary>
+    public void ApplyOutline()
+    {
+        bool show = OutlineBar.Visibility == Visibility.Visible && App.Settings.ShowOutline;
+        OutlineToggle.IsChecked = show;
+        if (show == (OutlineHost.Visibility == Visibility.Visible))
+        {
+            if (show) OutlineColumn.Width = new GridLength(App.Settings.OutlineWidth);
+            return;
+        }
+        OutlineHost.Visibility = OutlineSplitter.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+        OutlineSplitterColumn.Width = new GridLength(show ? 6 : 0);
+        OutlineColumn.Width = new GridLength(show ? App.Settings.OutlineWidth : 0);
+        OutlineColumn.MinWidth = show ? 160 : 0;
+        if (show)
+        {
+            _outlineStale = true;
+            UpdateOutline();
+        }
+    }
+
+    /// <summary>The side bar's width is kept for every script.</summary>
+    private void OutlineSplitter_DragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e)
+    {
+        App.Settings.OutlineWidth = Math.Round(OutlineColumn.ActualWidth);
+        App.Settings.Save();
+        PreviewWindow.ApplyOutlineSetting();
+    }
 
     private static string TypeTitle(ScriptSymbol s) => s.Kind == SymbolKind.State ? $"{s.Owner}.{s.Name}" : s.Name;
 
@@ -1149,9 +1221,25 @@ public partial class PreviewDocument : UserControl
 
     private void Hierarchy_Click(object sender, RoutedEventArgs e) => _ = ShowHierarchyAsync();
 
+    /// <summary>Opens the stub generator on the function (or class) under the caret.</summary>
+    private void Stub_Click(object sender, RoutedEventArgs e)
+    {
+        string? query = null;
+        if (Finder() is { } finder && finder.WordAt(Editor.CaretOffset) is { } word)
+        {
+            var found = finder.Find(word.Start, word.Length);
+            var function = found.FirstOrDefault(s => s.Kind is SymbolKind.Function or SymbolKind.Event && s.Owner is not null);
+            query = function is not null ? $"{function.Owner}.{function.Name}" : Editor.Document.GetText(word.Start, word.Length);
+        }
+        string? game = _workspace?.GameScriptsFolder is { } scripts ? System.IO.Path.GetFullPath(System.IO.Path.Combine(scripts, "..", "..", "..")) : null;
+        StubWindow.Open(Window.GetWindow(this) ?? Application.Current.MainWindow, game ?? GameLocator.Resolve(Item.Script?.DiskPath), query);
+    }
+
     private void Forward_Click(object sender, RoutedEventArgs e) => Host?.GoForward();
 
-    private void Outline_Click(object sender, RoutedEventArgs e) => ShowOutlinePicker();
+    private void Outline_Click(object sender, RoutedEventArgs e) => ToggleOutline();
+
+    private void GoToSymbolInFile_Click(object sender, RoutedEventArgs e) => ShowOutlinePicker();
 
     private void CompareGame_Click(object sender, RoutedEventArgs e)
     {

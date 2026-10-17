@@ -1,4 +1,4 @@
-﻿using System.Collections.ObjectModel;
+using System.Collections.ObjectModel;
 using System.Reflection;
 using System.Diagnostics;
 using System.IO;
@@ -55,9 +55,9 @@ public partial class MainWindow : Window, IMessageHost
         var dialog = new OpenFileDialog
         {
             Title = "Open bundles, scripts or strings",
-            Filter = "Bundles, scripts and strings (*.bundle;*.rsblob;*.ws;*.w3strings;*.csv)|*.bundle;*.rsblob;*.ws;*.w3strings;*.csv|"
+            Filter = "Bundles, scripts, strings and XML (*.bundle;*.rsblob;*.ws;*.w3strings;*.csv;*.xml)|*.bundle;*.rsblob;*.ws;*.w3strings;*.csv;*.xml|"
                    + "Bundles (*.bundle)|*.bundle|Compiled scripts (*.rsblob)|*.rsblob|Scripts, opened with their project (*.ws)|*.ws|"
-                   + "Strings (*.w3strings;*.csv)|*.w3strings;*.csv|All files (*.*)|*.*",
+                   + "Strings (*.w3strings;*.csv)|*.w3strings;*.csv|XML, opened in the XML editor (*.xml)|*.xml|All files (*.*)|*.*",
             Multiselect = true,
             InitialDirectory = Directory.Exists(_settings.LastOpenFolder) ? _settings.LastOpenFolder : "",
         };
@@ -96,7 +96,11 @@ public partial class MainWindow : Window, IMessageHost
         var strings = paths.Where(p => File.Exists(p) && StringsWindow.CanOpen(p)).ToList();
         foreach (string path in strings) StringsWindow.Open(path, this);
         paths = [.. paths.Except(strings)];
-        if (strings.Count > 0 && !paths.Any()) return;
+        // so do XML files, which open in the XML editor
+        var xml = paths.Where(p => File.Exists(p) && XmlWindow.CanOpen(p)).ToList();
+        foreach (string path in xml) XmlWindow.Open(path, this);
+        paths = [.. paths.Except(xml)];
+        if ((strings.Count > 0 || xml.Count > 0) && !paths.Any()) return;
 
         var files = new List<string>();
         foreach (var path in paths)
@@ -347,6 +351,8 @@ public partial class MainWindow : Window, IMessageHost
         if (FindParent<DataGridRow>(e.OriginalSource as DependencyObject)?.Item is not EntryItem item) return;
         if (item.Entry is StringsEntry strings)
             StringsWindow.Open(strings.FullPath, this);
+        else if (XmlWindow.CanOpen(item.Name))
+            _ = OpenXmlAsync(item);
         else if (item.IsPreviewable)
             _ = PreviewAsync(item);
         else
@@ -403,6 +409,74 @@ public partial class MainWindow : Window, IMessageHost
         if (copies > 0)
             SetStatus(copies == 1 ? $"Opened a read-only copy of {copied}: files inside archives can't be changed in place"
                 : $"Opened read-only copies of {copies} files: files inside archives can't be changed in place");
+    }
+
+    /// <summary>Opens an XML file from a bundle (or a loose one in a project) in the XML editor.</summary>
+    private async Task OpenXmlAsync(EntryItem item)
+    {
+        try
+        {
+            var entry = item.Entry;
+            if (entry is LooseScriptEntry loose)
+            {
+                XmlWindow.Open(loose.FullPath, this);
+                return;
+            }
+            byte[] data = await Task.Run(() =>
+            {
+                if (!entry.Archive.ReadsFromDisk) return entry.Read(null);
+                using var fs = new FileStream(entry.Archive.FilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                return entry.Read(fs);
+            });
+            XmlWindow.OpenData(item.Name, $"{item.BundleName}  ·  {entry.Path}", data, this);
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
+        {
+            ShowError($"{item.Name} could not be opened.\n\n{ex.Message}");
+        }
+    }
+
+    // ---------------------------------------------------------------- tools
+
+    private void Tools_Click(object sender, RoutedEventArgs e)
+    {
+        var menu = new ContextMenu { PlacementTarget = ToolsButton, Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom };
+        MenuItem Add(string header, string gesture, Action action)
+        {
+            var item = new MenuItem { Header = header, InputGestureText = gesture };
+            item.Click += (_, _) => action();
+            menu.Items.Add(item);
+            return item;
+        }
+        Add("Search game strings…", "Ctrl+Shift+G", OpenGameStrings);
+        Add("Stub generator…", "Ctrl+Shift+W", OpenStubGenerator);
+        Add("Source inspector…", "Ctrl+Shift+I", () => SourceInspectorWindow.Open(this));
+        menu.Items.Add(new Separator());
+        Add("New mod menu…", "", () => XmlWindow.OpenNewMenu(this));
+        Add("Open an XML file…", "", OpenXmlFile);
+        menu.IsOpen = true;
+    }
+
+    private void OpenGameStrings()
+    {
+        if (GameLocator.Resolve(null) is { } folder) GameStringsWindow.Open(this, folder);
+        else ShowError("The game folder isn't set.\n\nSearching the game's strings needs The Witcher 3's folder. Set it in Settings.");
+    }
+
+    private void OpenStubGenerator() => StubWindow.Open(this, GameLocator.Resolve(null));
+
+    private void OpenXmlFile()
+    {
+        var dialog = new OpenFileDialog
+        {
+            Title = "Open an XML file",
+            Filter = "XML (*.xml)|*.xml|All files (*.*)|*.*",
+            Multiselect = true,
+            InitialDirectory = Directory.Exists(_settings.LastOpenFolder) ? _settings.LastOpenFolder : "",
+        };
+        if (dialog.ShowDialog(this) != true) return;
+        _settings.LastOpenFolder = Path.GetDirectoryName(dialog.FileNames[0]) ?? "";
+        foreach (string path in dialog.FileNames) XmlWindow.Open(path, this);
     }
 
     private async Task PreviewAsync(EntryItem item)
@@ -584,6 +658,21 @@ public partial class MainWindow : Window, IMessageHost
             Settings_Click(sender, e);
             e.Handled = true;
         }
+        else if (Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && e.Key == Key.G)
+        {
+            OpenGameStrings();
+            e.Handled = true;
+        }
+        else if (Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && e.Key == Key.I)
+        {
+            SourceInspectorWindow.Open(this);
+            e.Handled = true;
+        }
+        else if (Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && e.Key == Key.W)
+        {
+            OpenStubGenerator();
+            e.Handled = true;
+        }
         else if (ctrl && e.Key == Key.O)
         {
             OpenBundles_Click(sender, e);
@@ -634,6 +723,64 @@ public partial class MainWindow : Window, IMessageHost
     }
 
     private void Help_Click(object sender, RoutedEventArgs e) => Help.HelpWindow.ShowHelp(this);
+
+    // ---------------------------------------------------------------- about
+
+    private DispatcherTimer? _aboutCloseTimer;
+    private DateTime _aboutClosedAt;
+
+    /// <summary>Opens the About card under the i button, its right edge in line with the button's. Clicking it again closes it.</summary>
+    private void About_Click(object sender, RoutedEventArgs e)
+    {
+        // a click on the button closes the open card as the mouse goes down, before the click arrives
+        if (AboutPopup.IsOpen || DateTime.UtcNow - _aboutClosedAt < TimeSpan.FromMilliseconds(300))
+        {
+            AboutPopup.IsOpen = false;
+            return;
+        }
+        var assembly = Assembly.GetExecutingAssembly();
+        AboutVersionText.Text = $"Version {assembly.GetName().Version?.ToString(3)}  ·  by Faen90";
+        AboutCopyrightText.Text = assembly.GetCustomAttribute<AssemblyCopyrightAttribute>()?.Copyright ?? "Copyright © 2026 Faen90";
+        AboutSettingsText.Text = $"Settings are saved in {Settings.FilePath}";
+        // the card sits inside a 12px margin that leaves room for its shadow
+        AboutPopup.HorizontalOffset = AboutButton.ActualWidth - AboutCard.Width - 12;
+        AboutPopup.VerticalOffset = AboutButton.ActualHeight + 2;
+        AboutPopup.IsOpen = true;
+    }
+
+    /// <summary>
+    /// The mouse left the button or the card: the card closes unless the mouse is over one of them a moment
+    /// later, which leaves time to cross the gap between them.
+    /// </summary>
+    private void About_MouseLeave(object sender, MouseEventArgs e)
+    {
+        if (!AboutPopup.IsOpen) return;
+        if (_aboutCloseTimer is null)
+        {
+            _aboutCloseTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(350) };
+            _aboutCloseTimer.Tick += (_, _) =>
+            {
+                _aboutCloseTimer.Stop();
+                if (!AboutButton.IsMouseOver && !AboutCard.IsMouseOver) AboutPopup.IsOpen = false;
+            };
+        }
+        _aboutCloseTimer.Stop();
+        _aboutCloseTimer.Start();
+    }
+
+    private void AboutPopup_Closed(object? sender, EventArgs e) => _aboutClosedAt = AboutButton.IsMouseOver ? DateTime.UtcNow : default;
+
+    private void AboutLicence_Click(object sender, RoutedEventArgs e)
+    {
+        AboutPopup.IsOpen = false;
+        SettingsWindow.ShowLicence(this);
+    }
+
+    private void AboutNotices_Click(object sender, RoutedEventArgs e)
+    {
+        AboutPopup.IsOpen = false;
+        SettingsWindow.ShowNotices(this);
+    }
 
     private void Settings_Click(object sender, RoutedEventArgs e)
     {

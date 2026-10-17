@@ -10,6 +10,30 @@ public static partial class GameLocator
     public static bool IsGameFolder(string folder) =>
         folder.Length > 0 && Directory.Exists(Path.Combine(folder, "content", "content0", "scripts"));
 
+    /// <summary>
+    /// The game folder a file belongs to when it's inside one (mods\X\content\...), otherwise the one set in
+    /// Settings, otherwise whatever <see cref="Find"/> turns up.
+    /// </summary>
+    public static string? Resolve(string? nearPath)
+    {
+        if (!string.IsNullOrEmpty(nearPath))
+        {
+            try
+            {
+                var dir = new DirectoryInfo(Path.GetDirectoryName(Path.GetFullPath(nearPath)) ?? "");
+                for (int up = 0; up < 8 && dir is not null; up++, dir = dir.Parent)
+                    if (IsGameFolder(dir.FullName)) return dir.FullName;
+            }
+            catch (Exception ex) when (ex is ArgumentException or IOException or NotSupportedException)
+            {
+                // not a path worth walking
+            }
+        }
+        if (!string.IsNullOrWhiteSpace(Scripts.GameScripts.GameFolder) && IsGameFolder(Scripts.GameScripts.GameFolder))
+            return Scripts.GameScripts.GameFolder;
+        return Find();
+    }
+
     public static string? Find() => Candidates().FirstOrDefault(IsGameFolder);
 
     private static IEnumerable<string> Candidates()

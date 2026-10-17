@@ -74,53 +74,71 @@
                 </Grid.RowDefinitions>
 
                 <!-- where the caret is: its class and function, each a menu of the others in the file -->
-                <Border x:Name="OutlineBar" Visibility="Collapsed" Padding="10,0,10,4" Margin="0,-2,0,4" BorderThickness="0,0,0,1"
+                <Border x:Name="OutlineBar" Visibility="Visible" Padding="10,0,10,4" Margin="0,-2,0,4" BorderThickness="0,0,0,1"
                         BorderBrush="{DynamicResource DividerStrokeColorDefaultBrush}">
                     <DockPanel>
-                        <Button DockPanel.Dock="Right" Padding="8,2" MinHeight="0" Background="Transparent" BorderThickness="0" Focusable="False"
-                                ToolTip="Everything declared in this file (Ctrl+Shift+O)" Click="Outline_Click">
+                        <ToggleButton x:Name="OutlineToggle" DockPanel.Dock="Right" Padding="8,2" MinHeight="0" BorderThickness="0" Focusable="False"
+                                      ToolTip="Show or hide the outline beside the text (Ctrl+Shift+O)" Click="Outline_Click">
                             <StackPanel Orientation="Horizontal">
-                                <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE8FD;" FontSize="12" VerticalAlignment="Center" />
+                                <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE8FD;" FontSize="12" VerticalAlignment="Center" Margin="0,3,0,0" />
                                 <TextBlock Text="Outline" Margin="6,0,0,0" FontSize="12.5" VerticalAlignment="Center" />
                             </StackPanel>
-                        </Button>
+                        </ToggleButton>
                         <StackPanel x:Name="Crumbs" Orientation="Horizontal" VerticalAlignment="Center" />
                     </DockPanel>
                 </Border>
 
-                <avalonEdit:TextEditor x:Name="Editor" Grid.Row="1" IsReadOnly="True" ShowLineNumbers="True"
-                                       FontFamily="Cascadia Mono, Consolas, Courier New" FontSize="13"
-                                       HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"
-                                       Background="Transparent" Foreground="{DynamicResource TextFillColorPrimaryBrush}"
-                                       LineNumbersForeground="{DynamicResource TextFillColorTertiaryBrush}">
-                    <!-- only scripts keep this menu: other files get none -->
-                    <avalonEdit:TextEditor.ContextMenu>
-                        <ContextMenu Opened="ContextMenu_Opened">
-                            <MenuItem Header="Go to definition" InputGestureText="F12" Click="GoToDefinition_Click" />
-                            <MenuItem Header="Open definition to the side" InputGestureText="Ctrl+F12" Click="GoToDefinitionSide_Click" />
-                            <MenuItem Header="Find all references" InputGestureText="Shift+F12" Click="FindReferences_Click" />
-                            <MenuItem Header="Who else changes this" InputGestureText="Ctrl+Shift+F12" Click="Changes_Click"
-                                      ToolTip="The mods that wrap, replace or override a function, or add to a class" />
-                            <MenuItem Header="Show type hierarchy" InputGestureText="Shift+Alt+H" Click="Hierarchy_Click" />
-                            <Separator />
-                            <MenuItem x:Name="BackMenuItem" Header="Back" InputGestureText="Alt+Left" Click="Back_Click" />
-                            <MenuItem x:Name="ForwardMenuItem" Header="Forward" InputGestureText="Alt+Right" Click="Forward_Click" />
-                            <MenuItem Header="Go to symbol in file…" InputGestureText="Ctrl+Shift+O" Click="Outline_Click" />
-                            <Separator />
-                            <MenuItem x:Name="CompareGameMenuItem" Header="Compare with game version" Click="CompareGame_Click" />
-                            <MenuItem x:Name="CompareOpenMenuItem" Header="Compare with an open file…" Click="CompareOpen_Click" />
-                            <MenuItem x:Name="NextDiffMenuItem" Header="Next difference" InputGestureText="F8" Click="NextDiff_Click" />
-                            <MenuItem x:Name="ClearDiffMenuItem" Header="Stop comparing" Click="ClearDiff_Click" />
-                            <Separator />
-                            <MenuItem Header="Copy" Command="ApplicationCommands.Copy" />
-                        </ContextMenu>
-                    </avalonEdit:TextEditor.ContextMenu>
-                </avalonEdit:TextEditor>
+                <!-- the text, and the outline beside it for scripts -->
+                <Grid Grid.Row="1">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" MinWidth="200" />
+                        <ColumnDefinition x:Name="OutlineSplitterColumn" Width="0" />
+                        <ColumnDefinition x:Name="OutlineColumn" Width="0" />
+                    </Grid.ColumnDefinitions>
+                    <avalonEdit:TextEditor x:Name="Editor" IsReadOnly="True" ShowLineNumbers="True"
+                                           FontFamily="Cascadia Mono, Consolas, Courier New" FontSize="13"
+                                           HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"
+                                           Background="Transparent" Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                                           LineNumbersForeground="{DynamicResource TextFillColorTertiaryBrush}">
+                        <!-- only scripts keep this menu: other files get none -->
+                        <avalonEdit:TextEditor.ContextMenu>
+                            <ContextMenu Opened="ContextMenu_Opened">
+                                <MenuItem Header="Go to definition" InputGestureText="F12" Click="GoToDefinition_Click" />
+                                <MenuItem Header="Open definition to the side" InputGestureText="Ctrl+F12" Click="GoToDefinitionSide_Click" />
+                                <MenuItem Header="Find all references" InputGestureText="Shift+F12" Click="FindReferences_Click" />
+                                <MenuItem Header="Who else changes this" InputGestureText="Ctrl+Shift+F12" Click="Changes_Click"
+                                          ToolTip="The mods that wrap, replace or override a function, or add to a class" />
+                                <MenuItem Header="Show type hierarchy" InputGestureText="Shift+Alt+H" Click="Hierarchy_Click" />
+                                <MenuItem Header="Create a wrap or replace stub…" Click="Stub_Click"
+                                          ToolTip="Opens the stub generator on the function under the caret, to wrap or replace it in your own mod" />
+                                <Separator />
+                                <MenuItem x:Name="BackMenuItem" Header="Back" InputGestureText="Alt+Left" Click="Back_Click" />
+                                <MenuItem x:Name="ForwardMenuItem" Header="Forward" InputGestureText="Alt+Right" Click="Forward_Click" />
+                                <MenuItem Header="Go to symbol in file…" Click="GoToSymbolInFile_Click" />
+                                <Separator />
+                                <MenuItem x:Name="CompareGameMenuItem" Header="Compare with game version" Click="CompareGame_Click" />
+                                <MenuItem x:Name="CompareOpenMenuItem" Header="Compare with an open file…" Click="CompareOpen_Click" />
+                                <MenuItem x:Name="NextDiffMenuItem" Header="Next difference" InputGestureText="F8" Click="NextDiff_Click" />
+                                <MenuItem x:Name="ClearDiffMenuItem" Header="Stop comparing" Click="ClearDiff_Click" />
+                                <Separator />
+                                <MenuItem Header="Copy" Command="ApplicationCommands.Copy" />
+                            </ContextMenu>
+                        </avalonEdit:TextEditor.ContextMenu>
+                    </avalonEdit:TextEditor>
 
-                <!-- messages and questions, shown over the text next to the name they're about -->
-                <Canvas x:Name="CardLayer" Grid.Row="1">
-                    <local:MessageCard x:Name="Card" />
-                </Canvas>
+                    <!-- messages and questions, shown over the text next to the name they're about -->
+                    <Canvas x:Name="CardLayer">
+                        <local:MessageCard x:Name="Card" />
+                    </Canvas>
+
+                    <GridSplitter x:Name="OutlineSplitter" Grid.Column="1" HorizontalAlignment="Stretch" Background="Transparent"
+                                  ResizeDirection="Columns" ResizeBehavior="PreviousAndNext" Focusable="False" Visibility="Collapsed"
+                                  DragCompleted="OutlineSplitter_DragCompleted" />
+                    <Border x:Name="OutlineHost" Grid.Column="2" Visibility="Collapsed" BorderThickness="1,0,0,0" Padding="0,2,0,0"
+                            BorderBrush="{DynamicResource DividerStrokeColorDefaultBrush}">
+                        <local:OutlinePanel x:Name="Outline" />
+                    </Border>
+                </Grid>
 
                 <!-- the declaration of the name under the mouse -->
                 <Popup x:Name="PeekPopup" AllowsTransparency="True" Placement="Bottom" StaysOpen="True"

@@ -127,6 +127,13 @@ public partial class PreviewWindow : Window, IMessageHost
     }
 
     /// <summary>Lays the open windows out again after Settings changed the split direction.</summary>
+    /// <summary>Every open script shows or hides its outline side bar, at its width, as Settings now says.</summary>
+    public static void ApplyOutlineSetting()
+    {
+        foreach (var window in OpenWindows)
+            foreach (var doc in window.AllDocuments) doc.ApplyOutline();
+    }
+
     public static void ApplySettings()
     {
         foreach (var window in OpenWindows)

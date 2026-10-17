@@ -30,6 +30,7 @@
 
   <ItemGroup>
     <Resource Include="Assets\app.ico" />
+    <Resource Include="Assets\icon.png" />
   </ItemGroup>
 
   <!-- WitcherScript grammar from WebSpam's witcherscript-vscode (MIT), used as-is -->

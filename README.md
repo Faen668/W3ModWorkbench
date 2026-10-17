@@ -60,6 +60,20 @@
 - **Read and edit `.w3strings` files**, or a strings `.csv`, and save them as `.w3strings` the game reads, optionally copied to every language, or export them as CSV. Key names come back from a strings CSV beside the file.
 - **Update a translation in minutes**: when a mod updates, open its new strings and *Load translation* with the old one. Every string it already had is filled in, matched by key or ID, and only the new ones are left, marked **NEW**, with the original text beside them and a filter to show just those.
 
+### Strings tools
+- **Search the game's strings**: every string the game, its DLC and your installed mods would load, found by words in the text, an ID, or a key. Copy an ID or a ready-made `GetLocStringById(...)`. Reuse a line the game already has instead of writing a new one.
+- **Check IDs**: finds IDs your strings share with the game or another mod, which would show each other's text in game, and suggests a free block of IDs.
+
+### XML and mod menus
+- **An XML editor** for any `.xml`, with syntax colouring, folding, a live well-formed check, Format, and encoding-safe saving (including UTF-16).
+- **A mod menu builder** for `user_config_matrix` menus: pages, toggles, sliders, option lists, separators and presets, edited with forms while the XML is written beside them. It lists the text keys the menu needs and adds them to a strings CSV with fresh IDs, writes the WitcherScript that reads each setting, and checks for mistakes.
+
+### Stub generator
+- Pick a game function and get the `@wrapMethod` (with the right `wrappedMethod(...)` call), `@replaceMethod` (starting from the original code), `@addMethod` or `@addField` code, with its exact signature, from the game's own scripts. Also on a script's right-click menu.
+
+### Source inspector
+- Compare two mods (loose files, bundles, compiled scripts) to see how much of one was taken from the other: scripts by code and shape (renamed copies still match), menus by element, bundle contents by SHA-256, shared comments and names, and coding style. Set the game's own code aside, view matches side by side, and save a report.
+
 ### Everything else
 - **Light and dark modes**, or follow Windows, with eight colour themes: your Windows accent, one for each witcher school, and a plain Graphite.
 - **A full built-in guide** (F1), including an Advanced section on the file formats and how the decompiler works.
@@ -106,6 +120,9 @@ Double-click any text file or decompiled script to preview it. To edit scripts, 
 | `Space` | Tick or untick the highlighted rows |
 | `Enter` | Preview the highlighted text file |
 | `Ctrl+,` | Settings |
+| `Ctrl+Shift+G` | Search the game's strings |
+| `Ctrl+Shift+W` | Stub generator |
+| `Ctrl+Shift+I` | Source inspector |
 | `F1` | Help |
 
 ## 📝 About decompiled scripts
@@ -140,7 +157,9 @@ The only NuGet package is [AvalonEdit](https://github.com/icsharpcode/AvalonEdit
 |---|---|
 | `Core/` | Bundle reader, LZ4 and Snappy decoders, extraction, game folder detection |
 | `Core/Scripts/` | The `.rsblob` reader, bytecode decoder, operator table, decompiler and WitcherScript writer; script projects and the wcc_lite compile runner |
-| `Highlighting/` | WebSpam's WitcherScript grammar and the engine that colours the preview with it |
+| `Core/Strings/` | The .w3strings reader and writer, and the index of the game's strings |
+| `Core/Menu/` | The mod menu model: reading and writing the XML, checks, keys and script |
+| `Highlighting/` | WebSpam's WitcherScript grammar, and the XML colouring |
 | `Help/` | The in-app guide (`HelpContent.cs` holds the text) |
 | `ViewModels/` | The tree and list items behind the main window |
 

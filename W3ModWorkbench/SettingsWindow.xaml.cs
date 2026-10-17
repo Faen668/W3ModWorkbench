@@ -44,11 +44,6 @@ public partial class SettingsWindow : Window, IMessageHost
         WccBox.Text = settings.WccLitePath;
         WccBox.TextChanged += (_, _) => UpdateWccStatus();
         UpdateWccStatus();
-
-        var assembly = Assembly.GetExecutingAssembly();
-        VersionText.Text = $"Version {assembly.GetName().Version?.ToString(3)}  ·  by Faen90";
-        CopyrightText.Text = assembly.GetCustomAttribute<AssemblyCopyrightAttribute>()?.Copyright ?? "Copyright © 2026 Faen90";
-        SettingsPathText.Text = $"Settings are saved in {Settings.FilePath}";
         UpdateAppearance();
         _loaded = true;
     }
@@ -258,9 +253,8 @@ public partial class SettingsWindow : Window, IMessageHost
 
     private void Cancel_Click(object sender, RoutedEventArgs e) => DialogResult = false;
 
-    private void ViewLicence_Click(object sender, RoutedEventArgs e) => ShowLicence(this);
-
-    private void ViewNotices_Click(object sender, RoutedEventArgs e)
+    /// <summary>Shows THIRD-PARTY-NOTICES.md from the app folder, or a short built-in list if it is missing.</summary>
+    public static void ShowNotices(Window owner)
     {
         string path = Path.Combine(AppContext.BaseDirectory, "THIRD-PARTY-NOTICES.md");
         byte[] text = File.Exists(path)
@@ -268,7 +262,7 @@ public partial class SettingsWindow : Window, IMessageHost
             : System.Text.Encoding.UTF8.GetBytes("THIRD-PARTY-NOTICES.md is missing from the app folder.\n\n"
                 + "WitcherScript grammar: witcherscript-vscode by webspam (MIT), https://github.com/webspam/witcherscript-vscode\n"
                 + "Code editor: AvalonEdit by AlphaSierraPapa for the SharpDevelop Team (MIT), https://github.com/icsharpcode/AvalonEdit\n");
-        PreviewWindow.ShowAlone(new PreviewItem("THIRD-PARTY-NOTICES.md", "W3 Mod Workbench", text), this);
+        PreviewWindow.ShowAlone(new PreviewItem("THIRD-PARTY-NOTICES.md", "W3 Mod Workbench", text), owner);
     }
 
     /// <summary>Shows the LICENSE file shipped next to the exe, or the built-in copy if it is missing.</summary>

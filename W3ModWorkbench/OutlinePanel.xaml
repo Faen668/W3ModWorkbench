@@ -1,0 +1,73 @@
+<UserControl x:Class="W3ModWorkbench.OutlinePanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:W3ModWorkbench">
+    <UserControl.Resources>
+        <Style x:Key="HeaderButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Padding" Value="6,3" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="Margin" Value="2,0,0,0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Focusable" Value="False" />
+        </Style>
+    </UserControl.Resources>
+
+    <DockPanel>
+        <!-- title, collapse all and close -->
+        <DockPanel DockPanel.Dock="Top" Margin="10,0,6,6">
+            <Button DockPanel.Dock="Right" Style="{StaticResource HeaderButton}" Click="Close_Click" ToolTip="Hide the outline (Ctrl+Shift+O)">
+                <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE711;" FontSize="10" />
+            </Button>
+            <Button DockPanel.Dock="Right" Style="{StaticResource HeaderButton}" Click="CollapseAll_Click" ToolTip="Collapse all">
+                <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE70E;" FontSize="11" />
+            </Button>
+            <Button DockPanel.Dock="Right" Style="{StaticResource HeaderButton}" Click="ExpandAll_Click" ToolTip="Expand all">
+                <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE70D;" FontSize="11" />
+            </Button>
+            <TextBlock Text="OUTLINE" FontSize="11" FontWeight="SemiBold" Opacity="0.7" VerticalAlignment="Center" />
+        </DockPanel>
+
+        <!-- narrows the tree to names containing the text, keeping the classes they're in -->
+        <Grid DockPanel.Dock="Top" Margin="8,0,8,6">
+            <TextBox x:Name="FilterBox" Padding="28,4,8,4" MinHeight="0" VerticalContentAlignment="Center" TextChanged="FilterBox_TextChanged"
+                     PreviewKeyDown="FilterBox_PreviewKeyDown" />
+            <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE71C;" FontSize="11" Margin="10,0,0,0" Opacity="0.6"
+                       HorizontalAlignment="Left" VerticalAlignment="Center" IsHitTestVisible="False" />
+            <TextBlock x:Name="FilterPlaceholder" Text="Filter" Margin="29,0,0,0" Opacity="0.5" FontSize="12.5"
+                       VerticalAlignment="Center" IsHitTestVisible="False" />
+        </Grid>
+
+        <Grid>
+            <TreeView x:Name="Tree" BorderThickness="0" Background="Transparent" Padding="0,0,0,6"
+                      VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling"
+                      PreviewMouseLeftButtonUp="Tree_PreviewMouseLeftButtonUp" PreviewKeyDown="Tree_PreviewKeyDown">
+                <TreeView.ItemContainerStyle>
+                    <Style TargetType="TreeViewItem" BasedOn="{StaticResource {x:Type TreeViewItem}}">
+                        <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
+                        <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}" />
+                        <Setter Property="ToolTip" Value="{Binding ToolTip}" />
+                        <Setter Property="MinHeight" Value="26" />
+                    </Style>
+                </TreeView.ItemContainerStyle>
+                <TreeView.ItemTemplate>
+                    <HierarchicalDataTemplate DataType="{x:Type local:OutlineNode}" ItemsSource="{Binding Shown}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{Binding Glyph}" FontFamily="{StaticResource IconFont}" FontSize="12" Margin="0,0,7,0"
+                                       VerticalAlignment="Center" Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}" />
+                            <TextBlock x:Name="Label" Text="{Binding Label}" FontSize="12.5" VerticalAlignment="Center" />
+                            <TextBlock Text="{Binding Detail}" FontSize="12" Opacity="0.55" Margin="6,0,0,0" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <HierarchicalDataTemplate.Triggers>
+                            <DataTrigger Binding="{Binding IsType}" Value="True">
+                                <Setter TargetName="Label" Property="FontWeight" Value="SemiBold" />
+                            </DataTrigger>
+                        </HierarchicalDataTemplate.Triggers>
+                    </HierarchicalDataTemplate>
+                </TreeView.ItemTemplate>
+            </TreeView>
+            <TextBlock x:Name="EmptyText" Text="Nothing declared in this file." Opacity="0.55" FontSize="12.5" TextWrapping="Wrap"
+                       Margin="14,6" Visibility="Collapsed" IsHitTestVisible="False" />
+        </Grid>
+    </DockPanel>
+</UserControl>
