@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **Show usage graph** on the script right-click menu: right-click a function, event, variable or type and get a graph of how it's used. The thing itself is on the right, the functions that use it are to its left, and the functions that use those further left, up to six levels out. Click a box to light up its chain of calls down to the target, double-click it to open it (Ctrl for the other side), and hover or click the label on a line to see the lines of code that make the call. Right-click a box to start a new graph from it. Drag with either mouse button to pan and Ctrl+wheel to zoom; **Fit** shows the whole graph and **Stretch** fills the window. Steps with many callers wrap into several columns. It offers to search the installed mods' loose and compiled scripts when they aren't included yet, so callers in other mods show up too.
+
 ## 1.5.2
 
 - **Find in files** (Tools, Ctrl+Shift+F): searches the text of files in folders with nothing open, like Notepad++. Pick where to look (the game's scripts, the installed mods, REDkit's scripts, the open projects or any folder), filter file names (`*.ws; *.xml`, `!*.bak`), and match case, whole words or a regular expression. Matches are listed by file, a click opens the file at the match, and F4 / Shift+F4 step through them.

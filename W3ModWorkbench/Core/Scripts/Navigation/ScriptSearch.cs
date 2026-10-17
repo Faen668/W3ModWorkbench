@@ -21,7 +21,15 @@ public static class ScriptSearch
     /// </summary>
     /// <param name="current">The file the search started in, parsed already.</param>
     public static List<ScriptHit> References(IReadOnlyList<ScriptSymbol> targets, ParsedScript current, IReadOnlyList<ScriptIndex> layers,
-        CancellationToken cancel)
+        CancellationToken cancel) =>
+        [.. Scan(targets, current, layers, cancel).Select(h => h.Hit)];
+
+    /// <summary>
+    /// The same search as <see cref="References"/>, with each hit's file parsed, for work that needs to know
+    /// which function or type a hit is in (the usage graph).
+    /// </summary>
+    internal static List<(ScriptHit Hit, ParsedScript Parsed)> Scan(IReadOnlyList<ScriptSymbol> targets, ParsedScript current,
+        IReadOnlyList<ScriptIndex> layers, CancellationToken cancel)
     {
         if (targets.Count == 0) return [];
         string name = targets[0].Name;
@@ -29,7 +37,7 @@ public static class ScriptSearch
         bool local = targets.All(t => t.Kind is SymbolKind.Local or SymbolKind.Parameter);
         var files = local ? [current.File] : FilesOf(current.File, layers);
 
-        var hits = new ConcurrentBag<(int Order, ScriptHit Hit)>();
+        var hits = new ConcurrentBag<(int Order, ScriptHit Hit, ParsedScript Parsed)>();
         int count = 0;
         Parallel.For(0, files.Count, new ParallelOptions { CancellationToken = cancel }, (i, loop) =>
         {
@@ -59,11 +67,11 @@ public static class ScriptSearch
                     // several fit and this is only one of them: the type before the dot couldn't be worked out
                     if (found.Count > 1) label = "maybe";
                 }
-                hits.Add((i, Hit(file, parsed, text, offset, name.Length, label)));
+                hits.Add((i, Hit(file, parsed, text, offset, name.Length, label), parsed));
                 Interlocked.Increment(ref count);
             }
         });
-        return [.. hits.OrderBy(h => h.Order).ThenBy(h => h.Hit.Offset).Select(h => h.Hit)];
+        return [.. hits.OrderBy(h => h.Order).ThenBy(h => h.Hit.Offset).Select(h => (h.Hit, h.Parsed))];
     }
 
     /// <summary>

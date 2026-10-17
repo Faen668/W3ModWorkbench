@@ -109,6 +109,8 @@
                                 <MenuItem Header="Who else changes this" InputGestureText="Ctrl+Shift+F12" Click="Changes_Click"
                                           ToolTip="The mods that wrap, replace or override a function, or add to a class" />
                                 <MenuItem Header="Show type hierarchy" InputGestureText="Shift+Alt+H" Click="Hierarchy_Click" />
+                                <MenuItem Header="Show usage graph" Click="UsageGraph_Click"
+                                          ToolTip="A graph of what uses this function, variable or type, and what uses those in turn" />
                                 <MenuItem Header="Create a wrap or replace stub…" Click="Stub_Click"
                                           ToolTip="Opens the stub generator on the function under the caret, to wrap or replace it in your own mod" />
                                 <Separator />

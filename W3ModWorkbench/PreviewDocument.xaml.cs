@@ -642,6 +642,35 @@ public partial class PreviewDocument : UserControl
     }
 
     /// <summary>
+    /// Offers the next of the installed mods' scripts to search, as go to definition does when nothing declares a
+    /// name, and reads them if asked. True when some were added; false when there are none left to add; null when
+    /// the offer was turned down.
+    /// </summary>
+    private async Task<bool?> OfferModsAsync(string text, int offset)
+    {
+        var workspace = _workspace!;
+        if (workspace.ModsFolder is null) return false;
+        bool loose = !workspace.IncludesLooseMods;
+        if (!loose && workspace.IncludesCompiledMods) return false;
+
+        string searched = loose ? "the open archives or the game's scripts" : "the open archives, the game's scripts or the mods' loose scripts";
+        string question = loose
+            ? "Search the loose scripts of the mods in the game's mods folder too?"
+            : "Search inside the compiled scripts of every mod in the game's mods folder too? They're decompiled first, which can take a little while.";
+        if (!await ShowCard($"No definition found for '{text}'",
+                $"It isn't declared in {searched}. {question} Once read, they're searched for every definition until the explorer is closed.",
+                MessageKind.Info, primary: "Search Now", secondary: "Close", anchor: offset))
+            return null;
+
+        _ = ShowCard(null, loose ? "Reading the mods' loose scripts…" : "Decompiling the mods' scripts…", MessageKind.Busy, anchor: offset);
+        Cursor = Cursors.AppStarting;
+        await (loose ? workspace.IncludeLooseModsAsync() : workspace.IncludeCompiledModsAsync());
+        ClearValue(CursorProperty);
+        CloseCard(false);
+        return true;
+    }
+
+    /// <summary>
     /// Nothing declares the word anywhere searched. A type by then is often one the game declares in its
     /// engine, though it could also come from a blob that isn't installed or open, so suggest both.
     /// </summary>
@@ -772,7 +801,7 @@ public partial class PreviewDocument : UserControl
     /// What the name at an offset stands for. On a declaration it's that declaration, except on a @wrapMethod or
     /// @replaceMethod, where it's the function being changed; elsewhere it's what go to definition would open.
     /// </summary>
-    private async Task<(DefinitionFinder Finder, IReadOnlyList<ScriptSymbol> Targets, string Word, int Start)?> TargetsAtCaretAsync(int offset)
+    private async Task<(DefinitionFinder Finder, IReadOnlyList<ScriptSymbol> Targets, string Word, int Start)?> TargetsAtCaretAsync(int offset, bool quiet = false)
     {
         if (await FinderAsync() is not { } finder || finder.WordAt(offset) is not { } word) return null;
         string text = Editor.Document.GetText(word.Start, word.Length);
@@ -780,7 +809,7 @@ public partial class PreviewDocument : UserControl
         IReadOnlyList<ScriptSymbol> targets = declared is null or { Annotation: "wrapMethod" or "replaceMethod" }
             ? finder.Find(word.Start, word.Length)
             : [declared];
-        if (targets.Count == 0)
+        if (targets.Count == 0 && !quiet)
             _ = ShowCard(null, $"'{text}' doesn't lead to a declaration in the scripts searched.", MessageKind.Info, anchor: word.Start, autoClose: true);
         return targets.Count == 0 ? null : (finder, targets, text, word.Start);
     }
@@ -888,6 +917,40 @@ public partial class PreviewDocument : UserControl
             int subtypes = related.Count(r => r.Group is "Subtypes" or "Overridden by");
             return (rows, $"{related.Count(r => r.Group is "Base types" or "Overrides")} above, {subtypes} below");
         }, "", IncludeModsActions(() => ShowHierarchyAsync(offset)));
+    }
+
+    /// <summary>A graph of what uses the name at the caret, what uses those, and so on, with the name itself at the end.</summary>
+    private async Task ShowUsageGraphAsync(int? at = null)
+    {
+        int offset = at ?? Editor.CaretOffset;
+        if (Host is null) return;
+        // a name nothing searched declares may be in the mods' scripts: offer them one kind at a time, as go to definition does
+        (DefinitionFinder Finder, IReadOnlyList<ScriptSymbol> Targets, string Word, int Start)? result;
+        while ((result = await TargetsAtCaretAsync(offset, quiet: true)) is null)
+        {
+            if (await FinderAsync() is not { } own || own.WordAt(offset) is not { } at2) return;
+            string name = Editor.Document.GetText(at2.Start, at2.Length);
+            if (await OfferModsAsync(name, at2.Start) is not bool added) return;
+            if (!added)
+            {
+                _ = ShowCard(null, $"'{name}' doesn't lead to a declaration in the scripts searched.", MessageKind.Info, anchor: at2.Start, autoClose: true);
+                return;
+            }
+        }
+        var found = result.Value;
+        var targets = found.Targets.Where(t => t.Kind is not (SymbolKind.Local or SymbolKind.Parameter)).ToList();
+        if (targets.Count == 0)
+        {
+            _ = ShowCard(null, "The usage graph works on functions, events, variables and types, not on locals and parameters.", MessageKind.Info,
+                anchor: found.Start, autoClose: true);
+            return;
+        }
+        // a wrap or replace stands for the function it changes, as calls are written against that one
+        var shown = targets[0].Kind is SymbolKind.Function or SymbolKind.Event
+            ? UsageGraphBuilder.Targets(targets[0], Parsed, found.Finder.Layers)
+            : targets;
+        UsageGraphWindow.Open(Host, this, shown, Parsed, found.Finder.Layers,
+            async () => (await FinderAsync())?.Layers, IncludeModsActions);
     }
 
     // ---------------------------------------------------------------- outline
@@ -1283,6 +1346,8 @@ public partial class PreviewDocument : UserControl
     private void Changes_Click(object sender, RoutedEventArgs e) => _ = ShowChangesAsync();
 
     private void Hierarchy_Click(object sender, RoutedEventArgs e) => _ = ShowHierarchyAsync();
+
+    private void UsageGraph_Click(object sender, RoutedEventArgs e) => _ = ShowUsageGraphAsync();
 
     /// <summary>Opens the stub generator on the function (or class) under the caret.</summary>
     private void Stub_Click(object sender, RoutedEventArgs e)
