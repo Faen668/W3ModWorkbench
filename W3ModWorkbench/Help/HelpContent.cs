@@ -372,7 +372,7 @@ Pick the **Original** (the mod you believe came first) and the **Suspect** (the 
 
 ## What is compared
 
-- **Scripts**: loose `.ws` files, and `.rsblob` files after decompiling. Comments, spacing and letter case are ignored. The code is compared as written, and as a *shape* with every name and value replaced, so renaming variables and functions doesn't hide a copy.
+- **Scripts**: loose `.ws` files, and `.rsblob` files after decompiling. Comments, spacing and letter case are ignored. The code is compared as written, and as a shape with every name and value replaced, so renaming variables and functions doesn't hide a copy.
 - **Menus and XML**: every element with its attributes and text, whatever the layout or attribute order.
 - **Text and strings**: CSV, ini, text and similar files, line by line.
 - **Bundle contents and other files**: every file inside every bundle is unpacked and fingerprinted with SHA-256. Identical files are found under any name or path.
@@ -380,8 +380,8 @@ Pick the **Original** (the mod you believe came first) and the **Suspect** (the 
 
 ## Reading the result
 
-- **Summary**: the headline percentage (the stronger of the two directions), what it means, key findings, and a breakdown by kind of content. *Original found in the suspect* is how much of the original's content turns up in the suspect; *Suspect made of the original* is the other way round. A small mod built almost wholly from a big one scores high on the second and low on the first.
-- **Matching files**: each file pair with how strong the match is: *Identical*, *Renamed copy* (same structure, new names), *Near copy*, *Large overlap* or *Partial overlap*. Click one to see both files side by side, with the shared lines in green or the differences marked.
+- **Summary**: the headline percentage (the stronger of the two directions), what it means, key findings, and a breakdown by kind of content. Original found in the suspect is how much of the original's content turns up in the suspect; Suspect made of the original is the other way round. A small mod built almost wholly from a big one scores high on the second and low on the first.
+- **Matching files**: each file pair with how strong the match is: **Identical**, **Renamed copy** (same structure, new names), **Near copy**, **Large overlap** or **Partial overlap**. Click one to see both files side by side, with the shared lines in green or the differences marked.
 - **Shared details**: comments, messages, class and function names and menu keys found in both, functions copied whole, and functions copied with new names. A distinctive comment that appears twice is hard to put down to chance.
 - **Coding style**: the habits side by side.
 - **Sources**: what was read from each, file dates, and files that couldn't be read.

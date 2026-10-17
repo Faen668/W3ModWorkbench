@@ -647,6 +647,12 @@ public partial class MainWindow : Window, IMessageHost
     private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
     {
         if (Message.IsOpen) return; // a message is up: it takes the keys, and Esc closes it
+        if (e.Key == Key.Escape && AboutPopup.IsOpen)
+        {
+            AboutPopup.IsOpen = false;
+            e.Handled = true;
+            return;
+        }
         bool ctrl = Keyboard.Modifiers == ModifierKeys.Control;
         if (e.Key == Key.F1 && Keyboard.Modifiers == ModifierKeys.None)
         {
@@ -726,14 +732,10 @@ public partial class MainWindow : Window, IMessageHost
 
     // ---------------------------------------------------------------- about
 
-    private DispatcherTimer? _aboutCloseTimer;
-    private DateTime _aboutClosedAt;
-
-    /// <summary>Opens the About card under the i button, its right edge in line with the button's. Clicking it again closes it.</summary>
+    /// <summary>Opens the About card under the i button, its right edge in line with the button's. It stays until you click elsewhere, press Esc, or click the button again.</summary>
     private void About_Click(object sender, RoutedEventArgs e)
     {
-        // a click on the button closes the open card as the mouse goes down, before the click arrives
-        if (AboutPopup.IsOpen || DateTime.UtcNow - _aboutClosedAt < TimeSpan.FromMilliseconds(300))
+        if (AboutPopup.IsOpen)
         {
             AboutPopup.IsOpen = false;
             return;
@@ -748,27 +750,13 @@ public partial class MainWindow : Window, IMessageHost
         AboutPopup.IsOpen = true;
     }
 
-    /// <summary>
-    /// The mouse left the button or the card: the card closes unless the mouse is over one of them a moment
-    /// later, which leaves time to cross the gap between them.
-    /// </summary>
-    private void About_MouseLeave(object sender, MouseEventArgs e)
+    /// <summary>A click anywhere but the card or its button closes the card. The click carries on to whatever it landed on.</summary>
+    private void Window_PreviewMouseDown(object sender, MouseButtonEventArgs e)
     {
-        if (!AboutPopup.IsOpen) return;
-        if (_aboutCloseTimer is null)
-        {
-            _aboutCloseTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(350) };
-            _aboutCloseTimer.Tick += (_, _) =>
-            {
-                _aboutCloseTimer.Stop();
-                if (!AboutButton.IsMouseOver && !AboutCard.IsMouseOver) AboutPopup.IsOpen = false;
-            };
-        }
-        _aboutCloseTimer.Stop();
-        _aboutCloseTimer.Start();
+        if (AboutPopup.IsOpen && !AboutCard.IsMouseOver && !AboutButton.IsMouseOver) AboutPopup.IsOpen = false;
     }
 
-    private void AboutPopup_Closed(object? sender, EventArgs e) => _aboutClosedAt = AboutButton.IsMouseOver ? DateTime.UtcNow : default;
+    private void Window_Deactivated(object? sender, EventArgs e) => AboutPopup.IsOpen = false;
 
     private void AboutLicence_Click(object sender, RoutedEventArgs e)
     {

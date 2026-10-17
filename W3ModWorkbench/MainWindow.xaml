@@ -8,7 +8,7 @@
         Width="1240" Height="780" MinWidth="860" MinHeight="500"
         WindowStartupLocation="CenterScreen"
         AllowDrop="True" DragOver="Window_DragOver" Drop="Window_Drop"
-        PreviewKeyDown="Window_PreviewKeyDown" Closing="Window_Closing">
+        PreviewKeyDown="Window_PreviewKeyDown" PreviewMouseDown="Window_PreviewMouseDown" Deactivated="Window_Deactivated" Closing="Window_Closing">
 
     <Window.Resources>
         <Style x:Key="IconText" TargetType="TextBlock">
@@ -103,7 +103,7 @@
             </StackPanel>
 
             <Button x:Name="AboutButton" DockPanel.Dock="Right" Margin="6,0,0,0" Padding="10,6" Click="About_Click"
-                    MouseLeave="About_MouseLeave" ToolTip="About W3 Mod Workbench">
+                    ToolTip="About W3 Mod Workbench">
                 <TextBlock Style="{StaticResource IconText}" Text="&#xE946;" />
             </Button>
             <Button DockPanel.Dock="Right" Margin="6,0,0,0" Click="Help_Click" ToolTip="How everything works (F1)">
@@ -342,10 +342,10 @@
             </StackPanel>
         </Grid>
 
-        <!-- About: opens from the i button, under it, and closes once the mouse leaves both -->
+        <!-- About: opens from the i button, under it, and stays until you click elsewhere, press Esc or click the button again -->
         <Popup x:Name="AboutPopup" PlacementTarget="{Binding ElementName=AboutButton}" Placement="Relative"
-               AllowsTransparency="True" StaysOpen="False" PopupAnimation="Fade" Focusable="False" Closed="AboutPopup_Closed">
-            <Border Margin="12,0,12,12" MouseLeave="About_MouseLeave">
+               AllowsTransparency="True" StaysOpen="True" PopupAnimation="Fade" Focusable="False">
+            <Border Margin="12,0,12,12">
                 <Border.Effect>
                     <DropShadowEffect BlurRadius="18" ShadowDepth="4" Direction="270" Opacity="0.35" />
                 </Border.Effect>

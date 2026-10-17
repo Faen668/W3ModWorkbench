@@ -4,22 +4,34 @@
 
 # W3 Mod Workbench
 
-[![Release](https://badgen.net/github/tag/Faen668/W3ModWorkbench?label=release)](https://github.com/Faen668/W3ModWorkbench/releases/latest)
-[![Downloads](https://badgen.net/github/assets-dl/Faen668/W3ModWorkbench?label=downloads&color=green)](https://github.com/Faen668/W3ModWorkbench/releases)
+[![Release](https://img.shields.io/github/v/release/Faen668/W3ModWorkbench?label=release&color=blue)](https://github.com/Faen668/W3ModWorkbench/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/Faen668/W3ModWorkbench/total?label=downloads&color=green)](https://github.com/Faen668/W3ModWorkbench/releases)
 [![Platform](https://badgen.net/badge/platform/Windows%2010%20%7C%2011/0078D6)](#-download)
 [![.NET](https://badgen.net/badge/.NET/9.0/512BD4)](https://dotnet.microsoft.com/)
 [![Game](https://badgen.net/badge/game/The%20Witcher%203/8B1A1A)](https://www.thewitcher.com/)
 [![License](https://badgen.net/badge/license/MIT/green)](LICENSE)
-[![Last commit](https://badgen.net/github/last-commit/Faen668/W3ModWorkbench?color=yellow)](https://github.com/Faen668/W3ModWorkbench/commits)
-[![Stars](https://badgen.net/github/stars/Faen668/W3ModWorkbench)](https://github.com/Faen668/W3ModWorkbench/stargazers)
+[![Last commit](https://img.shields.io/github/last-commit/Faen668/W3ModWorkbench?color=yellow)](https://github.com/Faen668/W3ModWorkbench/commits)
+[![Stars](https://img.shields.io/github/stars/Faen668/W3ModWorkbench)](https://github.com/Faen668/W3ModWorkbench/stargazers)
 
-**Browse and extract The Witcher 3's `.bundle` archives, turn REDkit compiled scripts (`precompiled.rsblob`) back into readable WitcherScript, and edit and compile scripts with REDkit's own compiler.**
+**The all-in-one toolbox for The Witcher 3 modders.** Browse and extract `.bundle` archives, turn REDkit compiled scripts back into readable WitcherScript, edit and compile scripts, search the game's strings, build mod menus, generate wrap and replace stubs, and check whether a mod was copied from another.
 
 <img src="docs/images/main-window.png" alt="W3 Mod Workbench main window" width="860" />
 
 </div>
 
 ---
+
+## 🧭 What's inside
+
+| | Tool | What it does |
+|---|---|---|
+| 📦 | **Bundle explorer** | Opens the whole game or any mod, browse, search and extract. |
+| 🧩 | **Script decompiler** | `precompiled.rsblob` back into tidy, readable WitcherScript. |
+| ✏️ | **Script editor** | Edit script projects with go to definition, an outline and highlighting, and compile with REDkit's own compiler. |
+| 🔤 | **Strings** | Read and edit `.w3strings`, update translations in minutes, search every string the game has. |
+| 🗂️ | **Mod menu builder** | Build `user_config_matrix` menus with forms, with the strings and the script that reads them. |
+| 🪄 | **Stub generator** | Exact `@wrapMethod`, `@replaceMethod`, `@addMethod` and `@addField` code from the game's scripts. |
+| 🕵️ | **Source inspector** | Compare two mods and see how much of one was copied from the other, even with everything renamed. |
 
 ## ✨ Features
 
@@ -72,7 +84,17 @@
 - Pick a game function and get the `@wrapMethod` (with the right `wrappedMethod(...)` call), `@replaceMethod` (starting from the original code), `@addMethod` or `@addField` code, with its exact signature, from the game's own scripts. Also on a script's right-click menu.
 
 ### Source inspector
-- Compare two mods (loose files, bundles, compiled scripts) to see how much of one was taken from the other: scripts by code and shape (renamed copies still match), menus by element, bundle contents by SHA-256, shared comments and names, and coding style. Set the game's own code aside, view matches side by side, and save a report.
+Tools > Source inspector (`Ctrl+Shift+I`) compares two mods and reports how much of one is in the other, so a re-upload or a rewritten copy can be told apart from honest overlap. Each source can be a folder of loose files, a folder of bundles and compiled scripts, or a mix.
+
+- **Scripts are compared by their code, not their text.** Comments, spacing and letter case are ignored, and the code is also compared as a *shape* with every name and value replaced, so renamed variables, functions and classes still match. Compiled `.rsblob` files are decompiled first.
+- **Menus and XML** are compared element by element, however the file is laid out; text and strings line by line.
+- **Bundle contents** are unpacked and fingerprinted with SHA-256, so identical models, textures and data are found under any name or path.
+- **Telltale details**: distinctive comments, messages, class and function names and menu keys found in both, functions copied whole, and functions copied with new names.
+- **Coding style**: indentation, brace placement, spacing, naming habits, comment density and function size make a fingerprint that survives renaming.
+- **Fair to honest mods**: the game's own scripts can be set aside, so two mods that wrap the same function aren't called copies.
+- **Easy to read**: a verdict and key findings, a breakdown by kind of content, every matching file with a side-by-side view that marks the shared lines, and a report you can save as a web page or Markdown to share.
+
+Similarity is evidence, not proof: mods for one game share its code and common frameworks. Read the matches before drawing a conclusion.
 
 ### Everything else
 - **Light and dark modes**, or follow Windows, with eight colour themes: your Windows accent, one for each witcher school, and a plain Graphite.
@@ -83,11 +105,33 @@
 
 <div align="center">
 
-| Decompiled script with syntax highlighting | Built-in guide |
-|:---:|:---:|
-| <img src="docs/images/script-preview.png" alt="Script preview" width="420" /> | <img src="docs/images/help.png" alt="Help window" width="420" /> |
+**Source inspector**: how much was reused, and what
 
-<img src="docs/images/settings.png" alt="Settings window" width="380" />
+<img src="docs/images/source-inspector-summary.png" alt="Source inspector summary" width="860" />
+
+| Matching files, side by side | Coding style |
+|:---:|:---:|
+| <img src="docs/images/source-inspector-matches.png" alt="Source inspector matches" width="420" /> | <img src="docs/images/source-inspector-style.png" alt="Source inspector coding style" width="420" /> |
+
+**Search the game's strings and generate stubs**
+
+| Game strings | Stub generator |
+|:---:|:---:|
+| <img src="docs/images/game-strings.png" alt="Game strings search" width="420" /> | <img src="docs/images/stub-generator.png" alt="Stub generator" width="420" /> |
+
+**Mod menu builder**
+
+<img src="docs/images/menu-builder.png" alt="Mod menu builder" width="760" />
+
+**Decompiled scripts, with search and go to definition**
+
+<img src="docs/images/script-preview.png" alt="Script preview" width="620" />
+
+**Built-in guide and settings**
+
+| Help | Settings |
+|:---:|:---:|
+| <img src="docs/images/help.png" alt="Help window" width="420" /> | <img src="docs/images/settings.png" alt="Settings window" width="300" /> |
 
 </div>
 
@@ -157,6 +201,7 @@ The only NuGet package is [AvalonEdit](https://github.com/icsharpcode/AvalonEdit
 |---|---|
 | `Core/` | Bundle reader, LZ4 and Snappy decoders, extraction, game folder detection |
 | `Core/Scripts/` | The `.rsblob` reader, bytecode decoder, operator table, decompiler and WitcherScript writer; script projects and the wcc_lite compile runner |
+| `Core/Inspector/` | The source inspector: scanner, script and XML analysers, matching and scoring, coding style, and the report writer |
 | `Core/Strings/` | The .w3strings reader and writer, and the index of the game's strings |
 | `Core/Menu/` | The mod menu model: reading and writing the XML, checks, keys and script |
 | `Highlighting/` | WebSpam's WitcherScript grammar, and the XML colouring |

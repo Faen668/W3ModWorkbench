@@ -1,8 +1,9 @@
 # Changelog
 
-## Unreleased
+## 1.5.0
 
 - **Source inspector** (Tools, Ctrl+Shift+I): compares two mods, as folders of loose files, bundles or compiled scripts, and reports how much of one is in the other. Scripts are compared by their code and by their shape, so renamed variables and functions still match; menus by element; text by line; every file inside every bundle by SHA-256. It also lists the comments, messages, names and menu keys both share, functions copied whole or renamed, and compares coding style (indentation, braces, spacing, naming habits, comment density). The game's own scripts can be set aside so shared game code isn't counted. Matches open side by side with the shared lines marked, and the report saves as a web page or Markdown.
+- The **About** card (the **i** button) now stays open until you click elsewhere, press Esc or click the button again, instead of closing when the mouse moved.
 - **Search game strings** (Tools, Ctrl+Shift+G): finds the ID, key and text of any string the game, its DLC or your installed mods would load, in any language. Search by words in the text, an ID, or a key's name or hash; copy an ID, the text, a `GetLocStringById(...)` call or a strings CSV line. All 100,000 or so strings are searched as you type.
 - Strings editor: **Check IDs** looks for IDs your strings share with the game, its DLC or other installed mods, marks them with where they're used, and suggests a free block of IDs. **Game strings** opens the search from the editor.
 - **XML editor**: XML files open in a window of their own, like strings (double-click one, drop it, or Tools > Open an XML file). Coloured in light and dark, with folding, a live well-formed check that jumps to the error, **Format**, and saving that keeps the file's encoding. XML inside a bundle opens as a copy to Save as. XML previews are coloured too.
@@ -11,7 +12,7 @@
 - Help: new pages for all of the above.
 - New app icon: the wolf over a gear, with a wrench and screwdriver.
 - Script previews: the **outline** is now a side bar beside the text, a tree of the file's classes, structs and enums with their members under them. Click a name to go there; the one the cursor is in is picked out as you move, a filter narrows it, and it keeps up as you edit. Outline or Ctrl+Shift+O shows and hides it, and its width is remembered. The type-to-search list moves to *Go to symbol in file* on the right-click menu.
-- About moves out of Settings to an **i** button at the top right of the main window. It opens a card with the version, licence and credits, which closes when the mouse moves away.
+- About moves out of Settings to an **i** button at the top right of the main window. It opens a card with the version, licence and credits, which stays open until you click elsewhere, press Esc or click the button again.
 - **Open in external editor**: right-click a text file in the file list, or a preview tab, to open it in the app Windows uses for its type (or Open with, when there's none). A project's file opens itself; a file inside a bundle or compiled scripts opens as a read-only copy in the temp folder.
 - Strings editor: **Load translation** puts an old translation (`.csv` or `.w3strings`) over a mod's new strings, matched by key, or by ID for strings without one. Strings it doesn't have get a **NEW** badge, the text they had stays in an **Original** column to translate from, and **Show** lists only what's still to translate, what's been translated, or what came from the old file.
 - Script projects stand out: a **PROJECT** badge, the accent colour and a bold name in the tree, and a badge with the project's name beside the file name in the preview.
