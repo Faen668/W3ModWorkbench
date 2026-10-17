@@ -361,7 +361,7 @@ REDkit's `wcc_lite.exe`, which **Compile** uses to build a script project into a
 Everything is saved in `%AppData%\W3ModWorkbench\settings.json`. Delete that file to reset everything to the defaults.
 """),
 
-        new(Basics, "Source inspector", "E9D9", """
+        new(Basics, "Source inspector", "", """
 Mods get copied, renamed and re-released. **Tools > Source inspector** (Ctrl+Shift+I) compares two mods and reports how much of one is in the other, so you can see what was reused instead of guessing. Everything is read on your PC; nothing is changed or uploaded.
 
 ## Choosing the two mods
