@@ -70,7 +70,13 @@
                 </Button>
             </StackPanel>
             <StackPanel VerticalAlignment="Center" Margin="0,0,12,0">
-                <TextBlock x:Name="FileNameText" FontSize="16" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                <DockPanel>
+                    <Border x:Name="ProjectBadge" DockPanel.Dock="Left" Visibility="Collapsed" CornerRadius="3" Padding="6,1,6,2" Margin="0,0,8,0"
+                            VerticalAlignment="Center" Background="{DynamicResource AccentFillColorDefaultBrush}">
+                        <TextBlock x:Name="ProjectBadgeText" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource TextOnAccentFillColorPrimaryBrush}" />
+                    </Border>
+                    <TextBlock x:Name="FileNameText" FontSize="16" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                </DockPanel>
                 <TextBlock x:Name="DetailText" Opacity="0.65" TextTrimming="CharacterEllipsis" Margin="0,2,0,0" />
             </StackPanel>
         </DockPanel>

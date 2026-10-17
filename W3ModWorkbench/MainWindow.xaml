@@ -144,11 +144,23 @@
                         <TreeView.ItemTemplate>
                             <HierarchicalDataTemplate DataType="{x:Type vm:FolderNode}" ItemsSource="{Binding Children}">
                                 <StackPanel Orientation="Horizontal">
-                                    <TextBlock Style="{StaticResource IconText}" Text="{Binding Glyph}" Margin="0,0,8,0" />
-                                    <TextBlock Text="{Binding Name}" VerticalAlignment="Center" />
+                                    <TextBlock x:Name="Icon" Style="{StaticResource IconText}" Text="{Binding Glyph}" Margin="0,0,8,0" />
+                                    <!-- script projects carry a badge and the accent colour, so they stand apart from the read-only archives -->
+                                    <Border x:Name="ProjectBadge" Visibility="Collapsed" CornerRadius="3" Padding="5,0,5,1" Margin="0,0,7,0"
+                                            VerticalAlignment="Center" Background="{DynamicResource AccentFillColorDefaultBrush}">
+                                        <TextBlock Text="PROJECT" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource TextOnAccentFillColorPrimaryBrush}" />
+                                    </Border>
+                                    <TextBlock x:Name="NameText" Text="{Binding Name}" VerticalAlignment="Center" />
                                     <TextBlock Text="{Binding Detail, StringFormat='  {0}'}" Opacity="0.65" VerticalAlignment="Center" />
                                     <TextBlock Text="{Binding TotalFiles, StringFormat='  {0:N0}'}" Opacity="0.5" VerticalAlignment="Center" />
                                 </StackPanel>
+                                <HierarchicalDataTemplate.Triggers>
+                                    <DataTrigger Binding="{Binding IsProject}" Value="True">
+                                        <Setter TargetName="ProjectBadge" Property="Visibility" Value="Visible" />
+                                        <Setter TargetName="Icon" Property="Foreground" Value="{DynamicResource AccentTextFillColorPrimaryBrush}" />
+                                        <Setter TargetName="NameText" Property="FontWeight" Value="SemiBold" />
+                                    </DataTrigger>
+                                </HierarchicalDataTemplate.Triggers>
                             </HierarchicalDataTemplate>
                         </TreeView.ItemTemplate>
                         <TreeView.ContextMenu>
@@ -177,7 +189,7 @@
                               EnableRowVirtualization="True" EnableColumnVirtualization="True"
                               VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling"
                               CellStyle="{StaticResource FileGridCell}"
-                              MouseDoubleClick="FileGrid_MouseDoubleClick">
+                              MouseDoubleClick="FileGrid_MouseDoubleClick" ContextMenuOpening="FileGrid_ContextMenuOpening">
                         <DataGrid.Columns>
                             <DataGridTemplateColumn Width="44" CanUserResize="False" CanUserSort="False">
                                 <DataGridTemplateColumn.Header>
@@ -202,6 +214,9 @@
                             <ContextMenu>
                                 <MenuItem Header="Preview" InputGestureText="Enter" Click="GridPreview_Click">
                                     <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE8A1;" /></MenuItem.Icon>
+                                </MenuItem>
+                                <MenuItem x:Name="GridExternalItem" Header="Open in external editor" Click="GridExternal_Click">
+                                    <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE8A7;" /></MenuItem.Icon>
                                 </MenuItem>
                                 <MenuItem Header="Extract highlighted" Click="GridExtract_Click">
                                     <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE896;" /></MenuItem.Icon>

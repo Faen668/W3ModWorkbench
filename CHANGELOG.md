@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- New app icon: the wolf over a gear, with a wrench and screwdriver.
+- **Open in external editor**: right-click a text file in the file list, or a preview tab, to open it in the app Windows uses for its type (or Open with, when there's none). A project's file opens itself; a file inside a bundle or compiled scripts opens as a read-only copy in the temp folder.
+- Strings editor: **Load translation** puts an old translation (`.csv` or `.w3strings`) over a mod's new strings, matched by key, or by ID for strings without one. Strings it doesn't have get a **NEW** badge, the text they had stays in an **Original** column to translate from, and **Show** lists only what's still to translate, what's been translated, or what came from the old file.
+- Script projects stand out: a **PROJECT** badge, the accent colour and a bold name in the tree, and a badge with the project's name beside the file name in the preview.
+
 ## 1.4.1
 
 - Script editor: a folder of `.ws` files opens as a **script project** (Open folder, or open or drop a `.ws` file), and its files can be edited in the preview, with go to definition, the popup, the outline and highlighting following your edits. Ctrl+S saves (in the file's own encoding), Ctrl+Shift+S saves every file. Tabs show a dot for unsaved changes, and closing a tab, a window or the app asks first.

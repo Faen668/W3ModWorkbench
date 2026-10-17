@@ -12,6 +12,22 @@ using W3ModWorkbench.Core.Strings;
 
 namespace W3ModWorkbench;
 
+/// <summary>Where a row's text stands once an old translation is loaded over the strings.</summary>
+public enum TranslationState
+{
+    /// <summary>No translation loaded.</summary>
+    None,
+
+    /// <summary>Found in the old translation, and its text taken from there.</summary>
+    Kept,
+
+    /// <summary>Not in the old translation: new in this version, still in the original's language.</summary>
+    New,
+
+    /// <summary>Was new, and its text has been changed since.</summary>
+    Translated,
+}
+
 /// <summary>
 /// A string in the editor, as typed: the ID and hash stay text until they're saved, so a half-typed value
 /// can be shown and marked rather than refused.
@@ -23,6 +39,8 @@ public sealed class StringRow : INotifyPropertyChanged
     private string _hash = "";
     private string _text = "";
     private string? _problem;
+    private string? _original;
+    private TranslationState _state;
 
     public string IdText { get => _id; set => Set(ref _id, value.Trim()); }
 
@@ -54,7 +72,44 @@ public sealed class StringRow : INotifyPropertyChanged
         }
     }
 
-    public string Text { get => _text; set => Set(ref _text, value); }
+    /// <summary>The text. Changing a new string's text counts it as translated.</summary>
+    public string Text
+    {
+        get => _text;
+        set
+        {
+            if (value == _text) return;
+            Set(ref _text, value);
+            if (_state == TranslationState.New) State = TranslationState.Translated;
+        }
+    }
+
+    /// <summary>The text the file had before a translation was loaded over it, to translate from.</summary>
+    public string? Original
+    {
+        get => _original;
+        set { if (_original != value) { _original = value; OnChanged(nameof(Original)); } }
+    }
+
+    public TranslationState State
+    {
+        get => _state;
+        set
+        {
+            if (_state == value) return;
+            _state = value;
+            OnChanged(nameof(State));
+            OnChanged(nameof(StateTip));
+        }
+    }
+
+    public string? StateTip => _state switch
+    {
+        TranslationState.Kept => "Taken from the old translation",
+        TranslationState.New => "Not in the old translation: new in this version, and still needs translating",
+        TranslationState.Translated => "New in this version, and translated since",
+        _ => null,
+    };
 
     public string? Problem
     {
@@ -223,6 +278,123 @@ public partial class StringsWindow : Window, IMessageHost
         return names;
     }
 
+    // ---------------------------------------------------------------- loading a translation over the strings
+
+    private bool _translationLoaded;
+
+    private void LoadTranslation_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new OpenFileDialog
+        {
+            Title = "Load an old translation over these strings",
+            Filter = "Strings (*.csv;*.w3strings)|*.csv;*.w3strings|Strings CSV (*.csv)|*.csv|Witcher 3 strings (*.w3strings)|*.w3strings",
+            InitialDirectory = Path.GetDirectoryName(_path ?? _sourcePath) ?? "",
+        };
+        if (dialog.ShowDialog(this) == true) LoadTranslation(dialog.FileName);
+    }
+
+    /// <summary>
+    /// For a mod's update: takes the text of each string from an older translation, matched by key, or by ID for
+    /// strings without one. The text there was is kept as the original to translate from, and strings the old
+    /// translation doesn't have are marked new, so only those are left to do.
+    /// </summary>
+    private void LoadTranslation(string path)
+    {
+        Grid.CommitEdit(DataGridEditingUnit.Row, true);
+        W3Language? language;
+        List<W3String> old;
+        int skipped = 0;
+        try
+        {
+            if (path.EndsWith(".w3strings", StringComparison.OrdinalIgnoreCase))
+            {
+                // only key hashes in here, but they match just as well
+                var file = W3Strings.Read(File.ReadAllBytes(path), path);
+                (language, old) = (file.Language, file.Strings);
+            }
+            else
+            {
+                var csv = W3Strings.FromCsv(File.ReadAllText(path, Encoding.UTF8));
+                (language, old, skipped) = (csv.Language ?? W3Strings.LanguageFromName(path), csv.Strings, csv.Problems.Count);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
+        {
+            _ = ShowMessage($"{Path.GetFileName(path)} could not be read", ex.Message, MessageKind.Error);
+            return;
+        }
+
+        var byHash = new Dictionary<uint, W3String>();
+        var byId = new Dictionary<uint, W3String>();
+        foreach (var s in old)
+        {
+            if (s.KeyHash != 0) byHash.TryAdd(s.KeyHash, s);
+            byId.TryAdd(s.Id, s);
+        }
+
+        var used = new HashSet<W3String>(ReferenceEqualityComparer.Instance);
+        int kept = 0, fresh = 0;
+        foreach (var row in _rows)
+        {
+            // loading another translation starts again from the original, without counting that as translating,
+            // apart from strings translated here, which are kept when it doesn't have them either
+            var before = row.State;
+            row.State = TranslationState.None;
+            row.Original ??= row.Text;
+            row.TryId(out uint id);
+            bool keyed = row.TryHash(out uint hash) && hash != 0;
+            // by key when both have one, which survives a string's ID changing; by ID when either has none
+            W3String? match = keyed && byHash.TryGetValue(hash, out var k) ? k
+                : byId.TryGetValue(id, out var i) && (!keyed || i.KeyHash == 0) ? i
+                : null;
+            if (match is not null)
+            {
+                row.Text = match.Text;
+                row.State = TranslationState.Kept;
+                used.Add(match);
+                kept++;
+            }
+            else if (before == TranslationState.Translated)
+                row.State = TranslationState.Translated;
+            else
+            {
+                row.Text = row.Original;
+                row.State = TranslationState.New;
+                fresh++;
+            }
+        }
+
+        _translationLoaded = true;
+        OriginalColumn.Visibility = Visibility.Visible;
+        StateColumn.Visibility = Visibility.Visible;
+        ShowBox.Visibility = Visibility.Visible;
+        if (language is not null && !Equals(LanguageBox.SelectedItem, language)) LanguageBox.SelectedItem = language;
+        ShowBox.SelectedIndex = fresh > 0 ? 1 : 0;
+        OnEdited();
+        _view.Refresh();
+        Validate();
+
+        int unused = old.Count - used.Count;
+        var lines = new List<string>
+        {
+            $"{Format.Count(kept, "string")} took {(kept == 1 ? "its" : "their")} text from {Path.GetFileName(path)}.",
+            fresh == 0 ? "Every string was found, so there's nothing new to translate."
+                : $"{Format.Count(fresh, "string")} {(fresh == 1 ? "isn't" : "aren't")} in it: new in this version, marked and shown first, with the original text to translate from.",
+        };
+        if (unused > 0) lines.Add($"{Format.Count(unused, "string")} in the old translation {(unused == 1 ? "isn't" : "aren't")} in these strings any more, and {(unused == 1 ? "was" : "were")} left out.");
+        if (skipped > 0) lines.Add($"{Format.Count(skipped, "line")} of the CSV couldn't be read and {(skipped == 1 ? "was" : "were")} skipped.");
+        if (language is not null) lines.Add($"The language is set to {language.Handle}, the translation's.");
+        _ = ShowMessage("Translation loaded", string.Join("\n\n", lines), MessageKind.Info);
+    }
+
+    private void ShowBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!IsLoaded) return;
+        Grid.CommitEdit(DataGridEditingUnit.Row, true);
+        _view.Refresh();
+        Validate();
+    }
+
     private void Add(StringRow row, int index = -1)
     {
         row.Edited += OnEdited;
@@ -284,8 +456,10 @@ public partial class StringsWindow : Window, IMessageHost
             row.Problem = problem;
         }
 
+        int untranslated = _rows.Count(r => r.State == TranslationState.New);
         StatusText.Text = $"{Format.Count(_rows.Count, "string")}  ·  {Format.Count(_rows.Count(r => r.HashText.Length > 0), "key")}"
-                          + (_view.Filter is not null && SearchBox.Text.Length > 0 ? $"  ·  {_view.Cast<object>().Count()} shown" : "");
+                          + (_translationLoaded ? $"  ·  {untranslated:N0} to translate" : "")
+                          + (SearchBox.Text.Length > 0 || _translationLoaded && ShowBox.SelectedIndex > 0 ? $"  ·  {_view.Cast<object>().Count()} shown" : "");
         var parts = new List<string>();
         if (errors > 0) parts.Add($"{Format.Count(errors, "string")} can't be saved until fixed");
         if (outside > 0) parts.Add($"{outside} outside the mod ID range");
@@ -302,13 +476,24 @@ public partial class StringsWindow : Window, IMessageHost
 
     private bool Matches(object item)
     {
+        if (item is not StringRow row) return true;
+        if (_translationLoaded && ShowBox.SelectedIndex > 0 && row.State != ShownState) return false;
         string query = SearchBox?.Text.Trim() ?? "";
-        if (query.Length == 0 || item is not StringRow row) return true;
+        if (query.Length == 0) return true;
         return row.IdText.Contains(query, StringComparison.OrdinalIgnoreCase)
             || row.KeyName.Contains(query, StringComparison.OrdinalIgnoreCase)
             || row.HashText.Contains(query, StringComparison.OrdinalIgnoreCase)
-            || row.Text.Contains(query, StringComparison.OrdinalIgnoreCase);
+            || row.Text.Contains(query, StringComparison.OrdinalIgnoreCase)
+            || row.Original?.Contains(query, StringComparison.OrdinalIgnoreCase) == true;
     }
+
+    /// <summary>The rows the Show list picks, in its order after All.</summary>
+    private TranslationState ShownState => ShowBox.SelectedIndex switch
+    {
+        1 => TranslationState.New,
+        2 => TranslationState.Translated,
+        _ => TranslationState.Kept,
+    };
 
     private void SearchBox_TextChanged(object sender, TextChangedEventArgs e)
     {

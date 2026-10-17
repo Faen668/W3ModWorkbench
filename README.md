@@ -4,14 +4,14 @@
 
 # W3 Mod Workbench
 
-[![Release](https://badgen.net/github/tag/Faen668/W3BundleExplorer?label=release)](https://github.com/Faen668/W3BundleExplorer/releases/latest)
-[![Downloads](https://badgen.net/github/assets-dl/Faen668/W3BundleExplorer?label=downloads&color=green)](https://github.com/Faen668/W3BundleExplorer/releases)
+[![Release](https://badgen.net/github/tag/Faen668/W3ModWorkbench?label=release)](https://github.com/Faen668/W3ModWorkbench/releases/latest)
+[![Downloads](https://badgen.net/github/assets-dl/Faen668/W3ModWorkbench?label=downloads&color=green)](https://github.com/Faen668/W3ModWorkbench/releases)
 [![Platform](https://badgen.net/badge/platform/Windows%2010%20%7C%2011/0078D6)](#-download)
 [![.NET](https://badgen.net/badge/.NET/9.0/512BD4)](https://dotnet.microsoft.com/)
 [![Game](https://badgen.net/badge/game/The%20Witcher%203/8B1A1A)](https://www.thewitcher.com/)
 [![License](https://badgen.net/badge/license/MIT/green)](LICENSE)
-[![Last commit](https://badgen.net/github/last-commit/Faen668/W3BundleExplorer?color=yellow)](https://github.com/Faen668/W3BundleExplorer/commits)
-[![Stars](https://badgen.net/github/stars/Faen668/W3BundleExplorer)](https://github.com/Faen668/W3BundleExplorer/stargazers)
+[![Last commit](https://badgen.net/github/last-commit/Faen668/W3ModWorkbench?color=yellow)](https://github.com/Faen668/W3ModWorkbench/commits)
+[![Stars](https://badgen.net/github/stars/Faen668/W3ModWorkbench)](https://github.com/Faen668/W3ModWorkbench/stargazers)
 
 **Browse and extract The Witcher 3's `.bundle` archives, turn REDkit compiled scripts (`precompiled.rsblob`) back into readable WitcherScript, and edit and compile scripts with REDkit's own compiler.**
 
@@ -53,6 +53,12 @@
 - **Script projects**: open a folder of `.ws` files (a REDkit project's `workspace\scripts`, say) and edit its scripts with highlighting, go to definition and the definition popup, all following your edits. Unsaved files are marked and nothing closes without asking.
 - **Edit decompiled mods**: *Edit as project* saves a compiled mod's decompiled scripts to a folder and opens them for editing.
 - **Compile**: builds a project into a `.rsblob` with REDkit's own `wcc_lite.exe` (Ctrl+Shift+B), with its errors listed and linked to their lines. Needs REDkit, which is free for owners of the game; point Settings at `wcc_lite.exe` or let it find it.
+- **Projects stand out**: script projects carry a **PROJECT** badge in the tree and beside the file name in the preview, so you can tell what you can edit from what's read-only.
+- **Open in external editor**: right-click a text file or a preview tab to open it in your usual editor. A project's file opens itself; a file inside a bundle opens as a read-only copy.
+
+### Strings
+- **Read and edit `.w3strings` files**, or a strings `.csv`, and save them as `.w3strings` the game reads, optionally copied to every language, or export them as CSV. Key names come back from a strings CSV beside the file.
+- **Update a translation in minutes**: when a mod updates, open its new strings and *Load translation* with the old one. Every string it already had is filled in, matched by key or ID, and only the new ones are left, marked **NEW**, with the original text beside them and a filter to show just those.
 
 ### Everything else
 - **Light and dark modes**, or follow Windows, with eight colour themes: your Windows accent, one for each witcher school, and a plain Graphite.
@@ -73,7 +79,7 @@
 
 ## 📥 Download
 
-1. Grab the latest `W3ModWorkbench-v<version>-win-x64.zip` from **[Releases](https://github.com/Faen668/W3BundleExplorer/releases/latest)**.
+1. Grab the latest `W3ModWorkbench-v<version>-win-x64.zip` from **[Releases](https://github.com/Faen668/W3ModWorkbench/releases/latest)**.
 2. Unzip it anywhere.
 3. Run `W3ModWorkbench.exe`.
 

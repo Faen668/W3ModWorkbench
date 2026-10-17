@@ -27,9 +27,12 @@ public sealed class FolderNode : INotifyPropertyChanged
     public List<FolderNode> Children { get; private set; } = [];
     public List<EntryItem> Files { get; } = [];
     public int TotalFiles { get; private set; }
+    /// <summary>A script project: loose scripts that can be edited and compiled, marked out in the tree from the read-only archives.</summary>
+    public bool IsProject => IsBundle && Archive is ScriptFolder;
     public string Detail => IsBundle ? Archive.Name : "";
-    public string Glyph => !IsBundle ? "\uE8B7" : Archive is ScriptArchive ? "\uE943" : Archive is StringsFolder ? "\uE8D2" : "\uE7B8";
-    public string ToolTip => IsBundle ? Archive.FilePath : FullPath;
+    public string Glyph => !IsBundle ? "\uE8B7" : IsProject ? "\uE821" : Archive is ScriptArchive ? "\uE943" : Archive is StringsFolder ? "\uE8D2" : "\uE7B8";
+    public string ToolTip => IsProject ? $"Script project: its files can be edited, saved and compiled\n{Archive.FilePath}"
+        : IsBundle ? Archive.FilePath : FullPath;
 
     public string FullPath => Parent is null || Parent.IsBundle ? Name : Parent.FullPath + "\\" + Name;
 

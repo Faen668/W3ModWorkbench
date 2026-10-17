@@ -510,8 +510,33 @@ public partial class PreviewWindow : Window, IMessageHost
         Add("Move to a new window", () => MoveToNewWindow(doc), AllDocuments.Count() > 1);
         menu.Items.Add(new Separator());
         Add("Copy path", () => Clipboard.SetText(doc.Item.Path));
+        Add("Open in external editor", () => OpenExternally(doc));
         if (doc.IsEditable) Add("Save", () => doc.Save(), doc.IsDirty, "Ctrl+S");
         Add("Save as…", () => doc.SaveAs());
+    }
+
+    /// <summary>
+    /// Opens the file in the app Windows uses for its type: a project's file itself, anything else as a read-only copy.
+    /// A project's file with changes not saved here opens as it is on disk, so that's said.
+    /// </summary>
+    private static void OpenExternally(PreviewDocument doc)
+    {
+        try
+        {
+            if (doc.Item.DiskPath is { } disk)
+            {
+                ExternalEditor.Open(disk);
+                if (doc.IsDirty)
+                    _ = doc.ShowCard("Opened the saved file", $"The changes to {doc.FileName} here aren't saved yet, so the other editor shows the file as it was last saved.",
+                        MessageKind.Info, primary: "OK");
+            }
+            else
+                ExternalEditor.OpenCopy(doc.Item.Source, doc.Item.Path, doc.Item.Data);
+        }
+        catch (Exception ex)
+        {
+            _ = doc.ShowCard($"{doc.FileName} could not be opened in an external editor", ex.Message, MessageKind.Warning, primary: "OK");
+        }
     }
 
     // ---------------------------------------------------------------- go to definition and history
@@ -954,7 +979,12 @@ public partial class PreviewWindow : Window, IMessageHost
             : "No changes to save";
         EditButton.Visibility = CanEditAsProject(doc) ? Visibility.Visible : Visibility.Collapsed;
 
-        bool project = ProjectOf(doc) is not null;
+        // a project's file says so, with the project's name, beside the file name
+        var owner = ProjectOf(doc);
+        bool project = owner is not null;
+        ProjectBadge.Visibility = project ? Visibility.Visible : Visibility.Collapsed;
+        ProjectBadgeText.Text = owner is null ? "" : $"PROJECT · {owner.Owner.ToUpperInvariant()}";
+        ProjectBadge.ToolTip = owner is null ? null : $"In the script project {owner.Owner}: its files can be edited, saved and compiled\n{owner.FilePath}";
         CompileButton.Visibility = project ? Visibility.Visible : Visibility.Collapsed;
         bool wcc = ScriptCompiler.IsWccLite(App.Settings.WccLitePath);
         CompileButton.IsEnabled = project && wcc && _compile is null;

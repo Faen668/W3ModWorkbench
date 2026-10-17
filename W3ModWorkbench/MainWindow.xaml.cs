@@ -1,4 +1,4 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using System.Reflection;
 using System.Diagnostics;
 using System.IO;
@@ -360,6 +360,49 @@ public partial class MainWindow : Window, IMessageHost
         if (Highlighted().FirstOrDefault(i => i.IsPreviewable || i.Entry is StringsEntry) is not { } item) return;
         if (item.Entry is StringsEntry strings) StringsWindow.Open(strings.FullPath, this);
         else _ = PreviewAsync(item);
+    }
+
+    private void FileGrid_ContextMenuOpening(object sender, ContextMenuEventArgs e) =>
+        GridExternalItem.IsEnabled = Highlighted().Any(i => i.IsPreviewable);
+
+    /// <summary>
+    /// Opens the highlighted text files in the app Windows uses for their type: a project's file itself, or a
+    /// read-only copy of one inside a bundle or compiled scripts.
+    /// </summary>
+    private async void GridExternal_Click(object sender, RoutedEventArgs e)
+    {
+        var items = Highlighted().Where(i => i.IsPreviewable).Take(20).ToList();
+        int copies = 0;
+        string copied = "";
+        foreach (var item in items)
+        {
+            try
+            {
+                if (item.Entry is LooseScriptEntry loose)
+                {
+                    ExternalEditor.Open(loose.FullPath);
+                    continue;
+                }
+                var entry = item.Entry;
+                byte[] data = await Task.Run(() =>
+                {
+                    if (!entry.Archive.ReadsFromDisk) return entry.Read(null);
+                    using var fs = new FileStream(entry.Archive.FilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                    return entry.Read(fs);
+                });
+                ExternalEditor.OpenCopy(item.BundleName, entry.Path, data);
+                copies++;
+                copied = item.Name;
+            }
+            catch (Exception ex)
+            {
+                ShowError($"{item.Name} could not be opened in an external editor.\n\n{ex.Message}");
+                return;
+            }
+        }
+        if (copies > 0)
+            SetStatus(copies == 1 ? $"Opened a read-only copy of {copied}: files inside archives can't be changed in place"
+                : $"Opened read-only copies of {copies} files: files inside archives can't be changed in place");
     }
 
     private async Task PreviewAsync(EntryItem item)

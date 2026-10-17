@@ -252,6 +252,15 @@ A warning sign marks a string with a problem; rest the mouse on it to see what. 
 - **Language** is the language the file is saved as. Each one scrambles its text differently, and the game reads whichever the file says.
 - **Export CSV** saves the strings as a `.csv` for the modding tools or a translator, with key names where they're known.
 
+## Updating a translation
+
+When a mod updates, its translation doesn't have to be done again. Open the new version's strings, then **Load translation** and pick the old translation, a `.csv` or a `.w3strings` file.
+
+- Each string takes its text from the old translation, matched by key, or by ID for strings without a key.
+- Strings the old translation doesn't have are new in this version. They keep their text, get a **NEW** badge, and are shown first. The **Original** column keeps the text the file had, to translate from.
+- Changing a new string's text gives it a tick. **Show** picks which strings are listed: all, the ones still to translate, the ones translated here, or the ones from the old translation.
+- The language is set to the translation's, so **Save** writes the file in it. The message after loading says how many strings were found, how many are new, and how many in the old translation aren't in the mod any more.
+
 Files from before the next-gen update, which kept their text as UTF-16, open too. They're saved in the next-gen format.
 """),
 
