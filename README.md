@@ -31,6 +31,7 @@
 | 🗂️ | **Mod menu builder** | Build `user_config_matrix` menus with forms, with the strings and the script that reads them. |
 | 🪄 | **Stub generator** | Exact `@wrapMethod`, `@replaceMethod`, `@addMethod` and `@addField` code from the game's scripts. |
 | 🕵️ | **Source inspector** | Compare two mods and see how much of one was copied from the other, even with everything renamed. |
+| 🧭 | **Load order analyser** | Reads every installed mod and checks the load order: collisions, missing targets, missing or mis-ordered dependencies. |
 
 ## ✨ Features
 
@@ -94,6 +95,16 @@ Tools > Source inspector (`Ctrl+Shift+I`) compares two mods and reports how much
 - **Easy to read**: a verdict and key findings, a breakdown by kind of content, every matching file with a side-by-side view that marks the shared lines, and a report you can save as a web page or Markdown to share.
 
 Similarity is evidence, not proof: mods for one game share its code and common frameworks. Read the matches before drawing a conclusion.
+
+### Load order analyser
+Tools > Load order analyser (`Ctrl+Shift+L`) reads every installed mod and DLC at once and checks the order they load in, using the priorities in `mods.settings`.
+
+- **Decompiles and parses everything**: `.rsblob` files are decompiled to the classes, functions and annotations they declare and use; loose scripts are parsed the same way; bundles and strings are listed.
+- **Finds collisions**: the same script file in two mods, the same function replaced or added twice, wraps stacking, classes, global functions and enum values declared twice, bundle files and string IDs that differ.
+- **Finds breakages**: annotations that point at a class or function that doesn't exist (a mod made for another game version), and mods that use something nothing installed provides.
+- **Checks dependencies and order**: scripts compile in reverse load order, so a dependency such as Shared Utils has to load *after* the mods that use it. A dependency that is missing, disabled, loads first, or has a priority when the mod using it doesn't, is flagged, with the fix.
+- **Shows who wins**: every clash with a clear outcome names the winning mod, with a star on its entry.
+- **Script Merger**: set the path to [Script Merger Remastered](https://www.nexusmods.com/witcher3/mods/13076) (by relapse12) in Settings and the analyser suggests it for clashes and opens it from a button.
 
 ### Everything else
 - **Light and dark modes**, or follow Windows, with eight colour themes: your Windows accent, one for each witcher school, and a plain Graphite.
@@ -166,6 +177,7 @@ Double-click any text file or decompiled script to preview it. To edit scripts, 
 | `Ctrl+Shift+G` | Search the game's strings |
 | `Ctrl+Shift+W` | Stub generator |
 | `Ctrl+Shift+I` | Source inspector |
+| `Ctrl+Shift+L` | Load order analyser |
 | `F1` | Help |
 
 ## 📝 About decompiled scripts
@@ -213,6 +225,7 @@ The only NuGet package is [AvalonEdit](https://github.com/icsharpcode/AvalonEdit
 
 - **[WebSpam](https://github.com/webspam)**: the WitcherScript syntax highlighting comes from his VS Code extension, [witcherscript-vscode](https://github.com/webspam/witcherscript-vscode), used with his permission. Well worth installing if you write WitcherScript in VS Code.
 - **[Aelto](https://github.com/Aelto)**: his decompiler project [tw3-cahirb](https://github.com/Aelto/tw3-cahirb) filled real gaps in this one. That covers the full list of the engine's built-in operators, several rarely used instructions, and a test blob from an older REDkit build. No code was copied, only facts about the format.
+- **[relapse12](https://www.nexusmods.com/witcher3/mods/13076)**: author of Script Merger Remastered, which the load order analyser suggests for clashes it can't settle. It's a separate download; this tool only starts it.
 - **[AvalonEdit](https://github.com/icsharpcode/AvalonEdit)** by the SharpDevelop team: the code view in the preview window.
 
 Licence texts for the third-party parts are in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).

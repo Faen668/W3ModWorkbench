@@ -294,6 +294,43 @@
                     </StackPanel>
                 </Border>
 
+
+                <!-- Script merger -->
+                <Border Style="{StaticResource Card}">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource SectionTitle}">
+                            <Run Text="Script merger" />
+                            <Run Text="(optional)" FontWeight="Normal" FontSize="13" />
+                        </TextBlock>
+                        <TextBlock TextWrapping="Wrap"
+                                   Text="Script Merger Remastered by relapse12, which merges mods that change the same scripts or files. The load order analyser suggests it for clashes and opens it from a button." />
+                        <Grid Margin="0,10,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBox x:Name="MergerBox" VerticalContentAlignment="Center" Padding="8,6,40,6" />
+                            <Button HorizontalAlignment="Right" Margin="0,0,4,0" Padding="6,3" Background="Transparent" BorderThickness="0"
+                                    Click="BrowseMerger_Click" ToolTip="Choose the Script Merger program">
+                                <TextBlock Style="{StaticResource Icon}" Text="&#xE8DA;" />
+                            </Button>
+                            <Button Grid.Column="1" Margin="8,0,0,0" Padding="12,6" Click="DetectMerger_Click"
+                                    ToolTip="Look in the game folder, Documents and Downloads">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Style="{StaticResource Icon}" Text="&#xE721;" />
+                                    <TextBlock Margin="8,0,0,0" Text="Find automatically" />
+                                </StackPanel>
+                            </Button>
+                        </Grid>
+                        <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                            <TextBlock x:Name="MergerIcon" Style="{StaticResource Icon}" Margin="0,0,8,0" />
+                            <TextBlock x:Name="MergerStatus" TextWrapping="Wrap" />
+                        </StackPanel>
+                        <TextBlock Style="{StaticResource Hint}" Margin="0,10,0,0"
+                                   Text="It's a separate download (nexusmods.com/witcher3/mods/13076). This app only starts it; it doesn't bundle or change it." />
+                    </StackPanel>
+                </Border>
+
             </StackPanel>
         </ScrollViewer>
 

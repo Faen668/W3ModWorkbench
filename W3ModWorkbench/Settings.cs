@@ -31,6 +31,10 @@ public sealed class Settings
     public string InspectorSuspect { get; set; } = "";
     public bool InspectorIgnoreGame { get; set; } = true;
 
+    /// <summary>The load order analyser's mods folder, and whether it counts the DLC folder.</summary>
+    public string LoadOrderModsFolder { get; set; } = "";
+    public bool LoadOrderIncludeDlc { get; set; } = true;
+
     /// <summary>Tabs: files open as tabs in one preview window. Windows: each file gets a window of its own.</summary>
     public string PreviewOpenIn { get; set; } = "Tabs";
 
@@ -48,6 +52,9 @@ public sealed class Settings
 
     /// <summary>REDkit's wcc_lite.exe, which compiles a script project into a .rsblob. Compiling is off while it's empty.</summary>
     public string WccLitePath { get; set; } = "";
+
+    /// <summary>Script Merger Remastered's exe, opened from the load order analyser to merge clashing scripts and bundle files. Empty when not set.</summary>
+    public string ScriptMergerPath { get; set; } = "";
 
     /// <summary>Where each script project's compiled blob was last saved, keyed by the project's scripts folder.</summary>
     public Dictionary<string, string> CompileOutputs { get; set; } = new(StringComparer.OrdinalIgnoreCase);

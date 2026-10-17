@@ -451,6 +451,7 @@ public partial class MainWindow : Window, IMessageHost
         Add("Search game strings…", "Ctrl+Shift+G", OpenGameStrings);
         Add("Stub generator…", "Ctrl+Shift+W", OpenStubGenerator);
         Add("Source inspector…", "Ctrl+Shift+I", () => SourceInspectorWindow.Open(this));
+        Add("Load order analyser…", "Ctrl+Shift+L", () => LoadOrderWindow.Open(this));
         menu.Items.Add(new Separator());
         Add("New mod menu…", "", () => XmlWindow.OpenNewMenu(this));
         Add("Open an XML file…", "", OpenXmlFile);
@@ -672,6 +673,11 @@ public partial class MainWindow : Window, IMessageHost
         else if (Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && e.Key == Key.I)
         {
             SourceInspectorWindow.Open(this);
+            e.Handled = true;
+        }
+        else if (Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && e.Key == Key.L)
+        {
+            LoadOrderWindow.Open(this);
             e.Handled = true;
         }
         else if (Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && e.Key == Key.W)

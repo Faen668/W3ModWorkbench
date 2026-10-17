@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.5.1
+
+- **Load order analyser** (Tools, Ctrl+Shift+L): reads every installed mod and DLC and checks the load order. Compiled scripts are decompiled to what they declare and use, loose scripts parsed, bundle tables and strings listed, and priorities come from `mods.settings` (DLC first, then mods by priority, then unlisted mods by folder name).
+  - **Collisions**: loose scripts at the same path, `@replaceMethod`, `@addMethod` and `@addField` used twice, replaces mixed with wraps, wraps stacking, classes, global functions and enum values declared twice, bundle files with different content, and string IDs with different text.
+  - **Breakages**: annotations whose class or function the game and the other mods don't have (usually a mod made for another game version), and mods that use something no installed mod provides.
+  - **Dependencies and order**: a mod that needs another mod that is missing or disabled; and, because scripts compile in reverse load order, a dependency such as Shared Utils that loads *before* the mods using it, or has a priority when they don't (or the other way round). Dependencies declared in `info.json` are checked too. Leftover `mods.settings` entries for removed mods are flagged.
+  - **Who wins**: clashes with a clear outcome show a ★ winner on the row and in a WINNER box, and the winner is starred in the file lists. A merged-files mod that loads first is treated as the answer to the clashes it covers.
+  - Pick a mod to see only its findings; filter by Problems, Warnings and Notes; **Save report** writes Markdown.
+- **Script merger** setting (Settings): the path to Script Merger Remastered by relapse12. The analyser suggests it for script and bundle clashes and has an **Open Script Merger** button. The merger is a separate download and is only started, never bundled.
+- Help: a new **Load order analyser** page, and the Settings and shortcuts pages cover the new setting and Ctrl+Shift+L.
+
 ## 1.5.0
 
 - **Source inspector** (Tools, Ctrl+Shift+I): compares two mods, as folders of loose files, bundles or compiled scripts, and reports how much of one is in the other. Scripts are compared by their code and by their shape, so renamed variables and functions still match; menus by element; text by line; every file inside every bundle by SHA-256. It also lists the comments, messages, names and menu keys both share, functions copied whole or renamed, and compares coding style (indentation, braces, spacing, naming habits, comment density). The game's own scripts can be set aside so shared game code isn't counted. Matches open side by side with the shared lines marked, and the report saves as a web page or Markdown.

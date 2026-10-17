@@ -7,6 +7,7 @@ using System.Windows.Media;
 using System.Windows.Threading;
 using Microsoft.Win32;
 using W3ModWorkbench.Core;
+using W3ModWorkbench.Core.LoadOrder;
 using W3ModWorkbench.Core.Scripts;
 using W3ModWorkbench.Highlighting;
 
@@ -44,6 +45,9 @@ public partial class SettingsWindow : Window, IMessageHost
         WccBox.Text = settings.WccLitePath;
         WccBox.TextChanged += (_, _) => UpdateWccStatus();
         UpdateWccStatus();
+        MergerBox.Text = settings.ScriptMergerPath;
+        MergerBox.TextChanged += (_, _) => UpdateMergerStatus();
+        UpdateMergerStatus();
         UpdateAppearance();
         _loaded = true;
     }
@@ -162,6 +166,49 @@ public partial class SettingsWindow : Window, IMessageHost
         }
     }
 
+    private void UpdateMergerStatus()
+    {
+        string path = MergerBox.Text.Trim().Trim('"');
+        if (path.Length == 0)
+        {
+            MergerIcon.Text = "\uE946"; // info
+            MergerIcon.ClearValue(ForegroundProperty);
+            MergerStatus.Text = "Not set. The load order analyser still works; it just can't open the merger for you.";
+        }
+        else if (File.Exists(path) && path.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+        {
+            MergerIcon.Text = "\uE73E"; // check mark
+            MergerIcon.SetResourceReference(ForegroundProperty, "SystemFillColorSuccessBrush");
+            MergerStatus.Text = $"Found {Path.GetFileName(path)}.";
+        }
+        else
+        {
+            MergerIcon.Text = "\uE7BA"; // warning
+            MergerIcon.SetResourceReference(ForegroundProperty, "SystemFillColorCautionBrush");
+            MergerStatus.Text = "That isn't a program. Choose the merger's .exe.";
+        }
+    }
+
+    private void DetectMerger_Click(object sender, RoutedEventArgs e)
+    {
+        if (ScriptMerger.Find(GameFolderBox.Text.Trim().Trim('"')) is { } found) MergerBox.Text = found;
+        else
+            _ = ShowMessage("Script Merger wasn't found",
+                "It isn't in the game folder, Documents or Downloads. Use the folder button to pick its .exe yourself.", MessageKind.Info);
+    }
+
+    private void BrowseMerger_Click(object sender, RoutedEventArgs e)
+    {
+        string current = MergerBox.Text.Trim().Trim('"');
+        var dialog = new OpenFileDialog
+        {
+            Title = "Choose Script Merger",
+            Filter = "Programs (*.exe)|*.exe",
+            InitialDirectory = File.Exists(current) ? Path.GetDirectoryName(current) : "",
+        };
+        if (dialog.ShowDialog(this) == true) MergerBox.Text = dialog.FileName;
+    }
+
     private void UpdateWccStatus()
     {
         string path = WccBox.Text.Trim().Trim('"');
@@ -246,6 +293,7 @@ public partial class SettingsWindow : Window, IMessageHost
         _settings.PreviewSplit = SplitDown.IsChecked == true ? "Down" : "Right";
         _settings.PeekDefinitions = PeekCheck.IsChecked == true;
         _settings.WccLitePath = WccBox.Text.Trim().Trim('"');
+        _settings.ScriptMergerPath = MergerBox.Text.Trim().Trim('"');
         _settings.Save();
         PreviewWindow.ApplySettings();
         DialogResult = true;

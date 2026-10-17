@@ -350,6 +350,10 @@ You can leave it empty if you only open scripts from inside the game's `mods` fo
 
 REDkit's `wcc_lite.exe`, which **Compile** uses to build a script project into a `.rsblob`. It's in REDkit's `bin\x64_RedKit` folder. **Find automatically** looks for REDkit in your Steam and GOG libraries, or use the folder button to pick it. A tick under the box means it found wcc_lite and the game scripts REDkit compiles against (`r4data\scripts`). Leave it empty and **Compile** stays off; editing and saving scripts work either way.
 
+## Script merger (optional)
+
+The path to **Script Merger Remastered** by relapse12, a separate download on Nexus Mods that merges mods changing the same scripts or files. **Find automatically** looks in the game folder, Documents and Downloads. With it set, the load order analyser has an **Open Script Merger** button and suggests the merger where a clash can be merged. This tool only starts it; nothing of the merger is shipped or changed.
+
 ## Preview
 
 - **Open files in**: tabs in one preview window, or a separate window for each file. Go to definition follows the same choice.
@@ -393,6 +397,45 @@ Pick the **Original** (the mod you believe came first) and the **Suspect** (the 
 Similarity is evidence, not proof. Mods for one game share its code and common frameworks (a mod menu library, say), and file dates can be changed. Read the matches and shared details, and talk to the authors before drawing a conclusion.
 """),
 
+        new(Basics, "Load order analyser", "", """
+**Tools > Load order analyser** (Ctrl+Shift+L) looks over every mod you have installed at once and reports what will break, what collides and what is in the wrong order. Everything is read on your PC; nothing is changed.
+
+## What it reads
+
+Point it at the game's `mods` folder (it fills that in when it finds the game). Each mod and, if **Include DLC** is on, each DLC is read:
+
+- **Compiled scripts** (`precompiled.rsblob`) are decompiled to what they declare: classes, structs, enums, global functions, and every `@wrapMethod`, `@replaceMethod`, `@addMethod` and `@addField`, plus every class, function and field their code links to.
+- **Loose scripts** (`content\scripts\...`) are parsed the same way. A mod whose `info.json` says `useLooseScripts: false` and that has a compiled blob keeps its sources loose; those are ignored.
+- **Bundles**: the list of files inside, with size and checksum.
+- **Strings**: the IDs in one language file.
+- The game's own scripts, to check against.
+
+## The load order
+
+The list on the left is the order the analyser assumes: DLC first, then mods by the **Priority** in `Documents\The Witcher 3\mods.settings` (lowest number first), then mods that file doesn't list, by folder name. The mod at the top has the highest priority, and wins a file clash; for scripts the game compiles from the bottom up. Mods switched off in `mods.settings` are left out of every check except dependencies.
+
+> The game's exact rules for clashes between compiled scripts aren't published. The analyser treats the lowest priority number as the winner, as the Witcher 3 mod manager does, and says plainly when the outcome depends on order.
+
+## What it finds
+
+- **Script file**: two mods ship a different `.ws` file at the same path (only one is used); a mod replaces a game script or class whole.
+- **Same function**: two mods `@replaceMethod` or `@addMethod`/`@addField` the same thing (one is lost, or one fails), a replace together with wraps, and several mods wrapping one function (they stack, so this is a note).
+- **Type defined twice**, **Function defined twice** and **Enum value**: two mods declare the same class, struct or global function, or use an enum value name or number differently.
+- **Missing target**: an annotation names a class or function that neither the game nor any enabled mod has, which means the mod was made for another game version. Also a mod whose copy of a game class lacks a function another mod wraps.
+- **Dependency** and **Load order**: a mod uses classes, functions or members only another mod provides, and that mod is missing, disabled, or loads *before* it. Scripts compile in reverse load order, so a dependency such as Shared Utils has to load after the mods that use it (a higher priority number, or a folder name that sorts last like `modzzz_...`). The other way round ends in errors such as "Unknown base class". If only one of the two has a priority it is flagged too: give both one, or neither. Dependencies in `info.json` are checked the same way.
+- **Bundle file**: the same path is in two mods' bundles with different content. A merge such as `mod0000_MergedFiles` that loads first is treated as the answer.
+- **Strings**: the same string ID with different text in two mods.
+- **Build**: compiled scripts for a different platform than the rest.
+
+## Using the result
+
+Problems will break something, warnings might, notes are only worth knowing. Pick a mod in the list to see just its findings. Pick a finding to read what it means, the files or functions involved, and what to do. **Save report** writes it all as Markdown. **F5** analyses again.
+
+**Script Merger**: many of the clashes above can be settled by merging the mods. Set the path to Script Merger Remastered (by relapse12, a separate download on Nexus Mods) under Settings > Script merger, and **Open Script Merger** starts it from the analyser. This app only launches it.
+
+To change the order, set the priority numbers in the game's mod manager (or in `mods.settings`), then analyse again.
+"""),
+
         new(Basics, "Keyboard shortcuts", "", """
 ## Anywhere
 
@@ -402,6 +445,7 @@ Similarity is evidence, not proof. Mods for one game share its code and common f
 - **Ctrl+Shift+G**: search the game's strings
 - **Ctrl+Shift+W**: stub generator
 - **Ctrl+Shift+I**: source inspector
+- **Ctrl+Shift+L**: load order analyser
 - **Ctrl+,**: settings
 - **F1**: this help
 
@@ -505,12 +549,6 @@ The licence covers the tool itself, not the files you open with it. Game files b
 ## Not an official tool
 
 W3 Mod Workbench is an unofficial fan-made tool. It is not affiliated with, endorsed by or supported by CD PROJEKT RED. The Witcher, REDkit and REDengine are trademarks of CD PROJEKT S.A., mentioned only to describe what the tool works with.
-
-## How it was made
-
-W3 Mod Workbench was developed by myself with the help of an AI assistant (Claude, by Anthropic). The AI did a lot of the heavy lifting on the compiled script side: working out the undocumented `.rsblob` format, mapping the script engine's instructions, and writing the decompiler that rebuilds readable code from them.
-
-Nothing was taken on trust. The format work was checked against mods whose original source was available. Every decompiled function's size is verified against what the compiler recorded, and the output was compared line by line with the real scripts. If you do spot something that looks wrong, it's worth reporting, along with the mod it came from.
 
 ## Credits
 
