@@ -11,7 +11,6 @@
 [![Game](https://badgen.net/badge/game/The%20Witcher%203/8B1A1A)](https://www.thewitcher.com/)
 [![License](https://badgen.net/badge/license/MIT/green)](LICENSE)
 [![Last commit](https://img.shields.io/github/last-commit/Faen668/W3ModWorkbench?color=yellow)](https://github.com/Faen668/W3ModWorkbench/commits)
-[![Stars](https://img.shields.io/github/stars/Faen668/W3ModWorkbench)](https://github.com/Faen668/W3ModWorkbench/stargazers)
 
 **The all-in-one toolbox for The Witcher 3 modders.** Browse and extract `.bundle` archives, turn REDkit compiled scripts back into readable WitcherScript, edit and compile scripts, search the game's strings, build mod menus, generate wrap and replace stubs, and check whether a mod was copied from another.
 
