@@ -76,26 +76,26 @@
             <StackPanel Orientation="Horizontal" DockPanel.Dock="Left">
                 <Button x:Name="OpenBundlesButton" Click="OpenBundles_Click" ToolTip="Open .bundle or .rsblob files (Ctrl+O)">
                     <StackPanel Orientation="Horizontal">
-                        <TextBlock Style="{StaticResource IconText}" Text="&#xE8E5;" />
-                        <TextBlock Margin="8,0,0,0" Text="Open files" />
+                        <TextBlock Style="{StaticResource IconText}" Text="&#xE8E5;" Margin="0,1,0,0" />
+                        <TextBlock Margin="8,0,0,0" Text="Open files" VerticalAlignment="Center" />
                     </StackPanel>
                 </Button>
                 <Button Margin="6,0,0,0" Click="OpenFolder_Click" ToolTip="Open every .bundle and .rsblob file in a folder and its subfolders">
                     <StackPanel Orientation="Horizontal">
-                        <TextBlock Style="{StaticResource IconText}" Text="&#xE838;" />
+                        <TextBlock Style="{StaticResource IconText}" Text="&#xE838;" Margin="0,1,0,0" />
                         <TextBlock Margin="8,0,0,0" Text="Open folder" />
                     </StackPanel>
                 </Button>
                 <Button x:Name="CloseAllButton" Margin="6,0,0,0" Click="CloseAll_Click" IsEnabled="False" ToolTip="Close all bundles">
                     <StackPanel Orientation="Horizontal">
-                        <TextBlock Style="{StaticResource IconText}" Text="&#xE894;" />
+                        <TextBlock Style="{StaticResource IconText}" Text="&#xE894;" Margin="0,2,0,0" />
                         <TextBlock Margin="8,0,0,0" Text="Close all" />
                     </StackPanel>
                 </Button>
                 <Button x:Name="ToolsButton" Margin="6,0,0,0" Click="Tools_Click"
                         ToolTip="Search the game's strings, generate wrap and replace stubs, build a mod menu, compare two mods for copied work">
                     <StackPanel Orientation="Horizontal">
-                        <TextBlock Style="{StaticResource IconText}" Text="&#xE90F;" />
+                        <TextBlock Style="{StaticResource IconText}" Text="&#xE90F;" Margin="0,1,0,0" />
                         <TextBlock Margin="8,0,0,0" Text="Tools" />
                         <TextBlock Style="{StaticResource IconText}" Text="&#xE70D;" FontSize="9" Margin="8,2,0,0" />
                     </StackPanel>
@@ -108,13 +108,13 @@
             </Button>
             <Button DockPanel.Dock="Right" Margin="6,0,0,0" Click="Help_Click" ToolTip="How everything works (F1)">
                 <StackPanel Orientation="Horizontal">
-                    <TextBlock Style="{StaticResource IconText}" Text="&#xE897;" />
+                    <TextBlock Style="{StaticResource IconText}" Text="&#xE897;" Margin="0,2,0,0" />
                     <TextBlock Margin="8,0,0,0" Text="Help" />
                 </StackPanel>
             </Button>
             <Button DockPanel.Dock="Right" Margin="6,0,0,0" Click="Settings_Click" ToolTip="Settings (Ctrl+,)">
                 <StackPanel Orientation="Horizontal">
-                    <TextBlock Style="{StaticResource IconText}" Text="&#xE713;" />
+                    <TextBlock Style="{StaticResource IconText}" Text="&#xE713;" Margin="0,1,0,0" />
                     <TextBlock Margin="8,0,0,0" Text="Settings" />
                 </StackPanel>
             </Button>
@@ -260,13 +260,13 @@
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,22,0,0">
                         <Button Click="OpenBundles_Click" Padding="16,7" Style="{DynamicResource AccentButtonStyle}">
                             <StackPanel Orientation="Horizontal">
-                                <TextBlock Style="{StaticResource IconText}" Text="&#xE8E5;" />
+                                <TextBlock Style="{StaticResource IconText}" Text="&#xE8E5;" Margin="0,1,0,0" />
                                 <TextBlock Margin="8,0,0,0" Text="Open files" />
                             </StackPanel>
                         </Button>
                         <Button Click="OpenFolder_Click" Padding="16,7" Margin="8,0,0,0">
                             <StackPanel Orientation="Horizontal">
-                                <TextBlock Style="{StaticResource IconText}" Text="&#xE838;" />
+                                <TextBlock Style="{StaticResource IconText}" Text="&#xE838;" Margin="0,1,0,0" />
                                 <TextBlock Margin="8,0,0,0" Text="Open folder" />
                             </StackPanel>
                         </Button>

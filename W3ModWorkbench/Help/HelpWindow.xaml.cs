@@ -67,7 +67,7 @@ public partial class HelpWindow : Window
             foreach (var t in topics)
             {
                 var row = new StackPanel { Orientation = Orientation.Horizontal };
-                row.Children.Add(new TextBlock { Text = t.Glyph, FontFamily = (FontFamily)FindResource("IconFont"), Width = 26, VerticalAlignment = VerticalAlignment.Center });
+                row.Children.Add(new TextBlock { Text = t.Glyph, FontFamily = (FontFamily)FindResource("IconFont"), Width = 26, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 2, 0, 0) });
                 row.Children.Add(new TextBlock { Text = t.Title, VerticalAlignment = VerticalAlignment.Center });
                 var item = new ListBoxItem { Content = row, Tag = t };
                 TopicList.Items.Add(item);
