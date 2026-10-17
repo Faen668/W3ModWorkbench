@@ -75,7 +75,7 @@ public sealed class ResultRow : INotifyPropertyChanged
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
-    private const string FileGlyph = "";
+    public const string FileGlyph = "";
 
     /// <summary>Hits grouped under a heading for each file, in the order they came.</summary>
     public static List<ResultRow> ByFile(IEnumerable<ScriptHit> hits)
@@ -236,6 +236,7 @@ public partial class ResultsPanel : UserControl
         TitleIcon.Text = title.StartsWith("References") ? "" // link
             : title.StartsWith("Changes") ? "" // edit
             : title.StartsWith("Hierarchy") ? "" // folder tree
+            : title.StartsWith("Compile") ? "" // play
             : ""; // search
         SummaryText.Text = summary;
         SummaryBadge.Visibility = summary.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
@@ -269,8 +270,14 @@ public partial class ResultsPanel : UserControl
     /// Buttons that add the installed mods' scripts to the search and run it again, in a strip under the list
     /// that says what they're for. Hidden when there are none.
     /// </summary>
-    public void SetActions(params (string Label, Action Run)[] actions)
+    public void SetActions(params (string Label, Action Run)[] actions) => SetActions(ModsNote, actions);
+
+    private const string ModsNote = "Only the open archives and the game's scripts were searched. Mods in the game's mods folder can be searched too:";
+
+    /// <summary>Buttons in the strip under the list, after <paramref name="note"/> saying what they're for.</summary>
+    public void SetActions(string note, params (string Label, Action Run)[] actions)
     {
+        StripText.Text = note;
         ActionBar.Children.Clear();
         foreach (var (label, run) in actions)
         {

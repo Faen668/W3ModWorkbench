@@ -132,8 +132,7 @@
                 <DockPanel>
                     <StackPanel x:Name="ActionBar" DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" />
                     <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE946;" FontSize="13" Margin="0,0,10,0" VerticalAlignment="Center" Opacity="0.8" />
-                    <TextBlock VerticalAlignment="Center" TextWrapping="Wrap" FontSize="12.5" Opacity="0.85"
-                               Text="Only the open archives and the game's scripts were searched. Mods in the game's mods folder can be searched too:" />
+                    <TextBlock x:Name="StripText" VerticalAlignment="Center" TextWrapping="Wrap" FontSize="12.5" Opacity="0.85" />
                 </DockPanel>
             </Border>
 

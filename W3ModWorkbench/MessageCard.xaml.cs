@@ -7,6 +7,9 @@ namespace W3ModWorkbench;
 
 public enum MessageKind { Info, Warning, Error, Question, Busy }
 
+/// <summary>Which button closed a card with three: the main one, the other one, or Cancel (or Esc, or anything else).</summary>
+public enum MessageChoice { Cancel, Primary, Secondary }
+
 /// <summary>A window that shows messages in a <see cref="MessageCard"/>.</summary>
 public interface IMessageHost
 {
@@ -41,6 +44,22 @@ public partial class MessageCard : UserControl
 
     public bool IsOpen => _result is not null;
 
+    /// <summary>Whether the card open now, or the one closed last, was closed with its other button.</summary>
+    private bool _secondary;
+
+    /// <summary>
+    /// A question with three answers, such as Save, Don't Save and Cancel. Anything but the first two buttons,
+    /// Esc included, counts as Cancel.
+    /// </summary>
+    public async Task<MessageChoice> Ask(string? title, string message, MessageKind kind, string primary, string secondary, string cancel = "Cancel")
+    {
+        var shown = Show(title, message, kind, primary, secondary);
+        CardCancel.Content = cancel;
+        CardCancel.Visibility = Visibility.Visible;
+        bool ok = await shown;
+        return ok ? MessageChoice.Primary : _secondary ? MessageChoice.Secondary : MessageChoice.Cancel;
+    }
+
     /// <summary>
     /// True when its main button is clicked; false when it's closed any other way: the other button, Esc,
     /// <see cref="Close"/>, another message, or the timer of an <paramref name="autoClose"/> one.
@@ -49,6 +68,8 @@ public partial class MessageCard : UserControl
         bool autoClose = false)
     {
         Close(false);
+        _secondary = false;
+        CardCancel.Visibility = Visibility.Collapsed;
         CardIcon.Text = kind switch
         {
             MessageKind.Warning => "",
@@ -137,5 +158,11 @@ public partial class MessageCard : UserControl
 
     private void CardPrimary_Click(object sender, RoutedEventArgs e) => Close(true);
 
-    private void CardSecondary_Click(object sender, RoutedEventArgs e) => Close(false);
+    private void CardSecondary_Click(object sender, RoutedEventArgs e)
+    {
+        _secondary = true;
+        Close(false);
+    }
+
+    private void CardCancel_Click(object sender, RoutedEventArgs e) => Close(false);
 }

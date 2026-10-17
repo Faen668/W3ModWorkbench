@@ -13,7 +13,7 @@
 [![Last commit](https://badgen.net/github/last-commit/Faen668/W3BundleExplorer?color=yellow)](https://github.com/Faen668/W3BundleExplorer/commits)
 [![Stars](https://badgen.net/github/stars/Faen668/W3BundleExplorer)](https://github.com/Faen668/W3BundleExplorer/stargazers)
 
-**Browse and extract The Witcher 3's `.bundle` archives, and turn REDkit compiled scripts (`precompiled.rsblob`) back into readable WitcherScript.**
+**Browse and extract The Witcher 3's `.bundle` archives, turn REDkit compiled scripts (`precompiled.rsblob`) back into readable WitcherScript, and edit and compile scripts with REDkit's own compiler.**
 
 <img src="docs/images/main-window.png" alt="W3 Mod Workbench main window" width="860" />
 
@@ -49,10 +49,15 @@
 - **Definition popup**: rest the mouse on a name to see its declaration, highlighted, before you jump.
 - **Tabs and split view**: files open as tabs (or separate windows, if you prefer), and `Ctrl+\` splits the preview to read two files, or two parts of one, side by side. Drag tabs between groups and windows.
 
+### Script editor
+- **Script projects**: open a folder of `.ws` files (a REDkit project's `workspace\scripts`, say) and edit its scripts with highlighting, go to definition and the definition popup, all following your edits. Unsaved files are marked and nothing closes without asking.
+- **Edit decompiled mods**: *Edit as project* saves a compiled mod's decompiled scripts to a folder and opens them for editing.
+- **Compile**: builds a project into a `.rsblob` with REDkit's own `wcc_lite.exe` (Ctrl+Shift+B), with its errors listed and linked to their lines. Needs REDkit, which is free for owners of the game; point Settings at `wcc_lite.exe` or let it find it.
+
 ### Everything else
 - **Light and dark modes**, or follow Windows, with eight colour themes: your Windows accent, one for each witcher school, and a plain Graphite.
 - **A full built-in guide** (F1), including an Advanced section on the file formats and how the decompiler works.
-- **Read-only**: it never changes a bundle, a script or anything in your game folder.
+- **Safe by default**: it never changes a bundle or a compiled script. Loose scripts are only written when you edit a script project and save.
 
 ## 📸 Screenshots
 
@@ -85,7 +90,7 @@ No installer and nothing else to install: the release includes everything it nee
 3. Tick the files you want, or search for them (Ctrl+F).
 4. Set **Extract to**, then press **Extract checked** (Ctrl+E).
 
-Double-click any text file or decompiled script to preview it. Press **F1** for the full guide.
+Double-click any text file or decompiled script to preview it. To edit scripts, open a folder of `.ws` files (or use **Edit as project** on a decompiled script), then **Ctrl+S** saves and **Ctrl+Shift+B** compiles. Press **F1** for the full guide.
 
 | Shortcut | Action |
 |---|---|
@@ -128,7 +133,7 @@ The only NuGet package is [AvalonEdit](https://github.com/icsharpcode/AvalonEdit
 | Folder | What's in it |
 |---|---|
 | `Core/` | Bundle reader, LZ4 and Snappy decoders, extraction, game folder detection |
-| `Core/Scripts/` | The `.rsblob` reader, bytecode decoder, operator table, decompiler and WitcherScript writer |
+| `Core/Scripts/` | The `.rsblob` reader, bytecode decoder, operator table, decompiler and WitcherScript writer; script projects and the wcc_lite compile runner |
 | `Highlighting/` | WebSpam's WitcherScript grammar and the engine that colours the preview with it |
 | `Help/` | The in-app guide (`HelpContent.cs` holds the text) |
 | `ViewModels/` | The tree and list items behind the main window |

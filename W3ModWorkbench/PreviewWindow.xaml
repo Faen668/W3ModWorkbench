@@ -37,16 +37,35 @@
                         <TextBlock x:Name="SplitText" Margin="8,0,0,0" />
                     </StackPanel>
                 </Button>
+                <Button x:Name="EditButton" Margin="6,0,0,0" Click="Edit_Click" Visibility="Collapsed"
+                        ToolTip="Decompiled scripts are read-only. Save the mod's scripts to a folder to edit and compile them">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE70F;" VerticalAlignment="Center" />
+                        <TextBlock Margin="8,0,0,0" Text="Edit as project" />
+                    </StackPanel>
+                </Button>
+                <Button x:Name="CompileButton" Margin="6,0,0,0" Click="Compile_Click" Visibility="Collapsed" ToolTipService.ShowOnDisabled="True">
+                    <Button.ContextMenu>
+                        <ContextMenu>
+                            <MenuItem Header="Compile to another file…" Click="CompileTo_Click" />
+                        </ContextMenu>
+                    </Button.ContextMenu>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE768;" VerticalAlignment="Center" />
+                        <TextBlock x:Name="CompileText" Margin="8,0,0,0" Text="Compile" />
+                    </StackPanel>
+                </Button>
                 <Button Margin="6,0,0,0" Click="Copy_Click" ToolTip="Copy the whole text">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE8C8;" VerticalAlignment="Center" />
                         <TextBlock Margin="8,0,0,0" Text="Copy" />
                     </StackPanel>
                 </Button>
-                <Button Margin="6,0,0,0" Click="Save_Click" Style="{DynamicResource AccentButtonStyle}" ToolTip="Save this file (Ctrl+S)">
+                <Button x:Name="SaveButton" Margin="6,0,0,0" Click="Save_Click" Style="{DynamicResource AccentButtonStyle}"
+                        ToolTip="Save this file (Ctrl+S)" ToolTipService.ShowOnDisabled="True">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE74E;" VerticalAlignment="Center" />
-                        <TextBlock Margin="8,0,0,0" Text="Save as" />
+                        <TextBlock x:Name="SaveText" Margin="8,0,0,0" Text="Save as" />
                     </StackPanel>
                 </Button>
             </StackPanel>

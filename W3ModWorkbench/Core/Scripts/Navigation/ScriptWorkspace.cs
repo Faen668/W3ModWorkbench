@@ -23,14 +23,13 @@ public sealed class ScriptWorkspace
 
     private readonly IArchive _own;
     private readonly Func<IEnumerable<IArchive>> _openArchives;
-    private readonly Task<ScriptIndex> _archive;
     private readonly Task<ScriptIndex> _game;
 
     private ScriptWorkspace(IArchive archive, Func<IEnumerable<IArchive>> openArchives)
     {
         _own = archive;
         _openArchives = openArchives;
-        _archive = ArchiveIndex(archive);
+        _ = ArchiveIndex(archive);
         GameScriptsFolder = GameScripts.FindFolder(archive.FilePath);
         _game = GameScriptsFolder is null ? Task.FromResult(ScriptIndex.Empty) : GameIndex(GameScriptsFolder);
         ModsFolder = GameScriptsFolder is null ? null : Path.GetFullPath(Path.Combine(GameScriptsFolder, "..", "..", "..", "mods"));
@@ -67,10 +66,20 @@ public sealed class ScriptWorkspace
         return Ready;
     }
 
-    public bool IsReady => _archive.IsCompleted && _game.IsCompleted && (Mods()?.IsCompleted ?? true) && (Blobs()?.IsCompleted ?? true)
+    /// <summary>The archive's own scripts. Read again after a file in it is saved, so it's looked up each time.</summary>
+    private Task<ScriptIndex> OwnIndex => ArchiveIndex(_own);
+
+    /// <summary>The archive a file is in: this one or another one open, or null for the game's or a mod's scripts.</summary>
+    public IArchive? ArchiveOf(ScriptFile file) =>
+        _openArchives().Prepend(_own).FirstOrDefault(a => string.Equals(a.FilePath, file.SourceKey, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>Reads an archive's scripts again, after one of them was saved, so every preview's lookups see the change.</summary>
+    public static void Reindex(IArchive archive) => ArchiveCache.AddOrUpdate(archive, Task.Run(() => IndexArchive(archive)));
+
+    public bool IsReady => OwnIndex.IsCompleted && _game.IsCompleted && (Mods()?.IsCompleted ?? true) && (Blobs()?.IsCompleted ?? true)
         && Others().All(t => t.IsCompleted);
 
-    public Task Ready => Task.WhenAll([_archive, _game, .. Mods() is { } mods ? [mods] : Array.Empty<Task>(),
+    public Task Ready => Task.WhenAll([OwnIndex, _game, .. Mods() is { } mods ? [mods] : Array.Empty<Task>(),
         .. Blobs() is { } blobs ? [blobs] : Array.Empty<Task>(), .. Others()]);
 
     private Task<List<(string Mod, ScriptIndex Index)>>? Mods() => IncludesLooseMods ? ModsIndex(GameScriptsFolder!, ModsFolder!) : null;
@@ -83,7 +92,7 @@ public sealed class ScriptWorkspace
     /// Opening or closing an archive changes it.
     /// </summary>
     public IReadOnlyList<ScriptIndex> Layers => IsReady
-        ? [Result(_archive), .. Others().Select(Result), .. NotOpen(Mods()), .. NotOpen(Blobs()), Result(_game)]
+        ? [Result(OwnIndex), .. Others().Select(Result), .. NotOpen(Mods()), .. NotOpen(Blobs()), Result(_game)]
         : [];
 
     /// <summary>
@@ -173,6 +182,7 @@ public sealed class ScriptWorkspace
         Path = entry.Path,
         Source = entry.Archive.Owner + "\\" + entry.Archive.Name,
         SourceKey = entry.Archive.FilePath,
+        DiskPath = (entry as LooseScriptEntry)?.FullPath,
         Read = () =>
         {
             if (!entry.Archive.ReadsFromDisk) return entry.Read(null);

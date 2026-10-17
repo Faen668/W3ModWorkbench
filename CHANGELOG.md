@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.4.1
+
+- Script editor: a folder of `.ws` files opens as a **script project** (Open folder, or open or drop a `.ws` file), and its files can be edited in the preview, with go to definition, the popup, the outline and highlighting following your edits. Ctrl+S saves (in the file's own encoding), Ctrl+Shift+S saves every file. Tabs show a dot for unsaved changes, and closing a tab, a window or the app asks first.
+- Edit as project: a decompiled blob's scripts are saved to a folder of your choice and open as a project in its place, so they can be edited and compiled.
+- Compile (Ctrl+Shift+B) builds a project into a `.rsblob` with REDkit's `wcc_lite.exe`, the same compiler REDkit publishes with, and lists its warnings and errors under the files, each opening its line. Set wcc_lite in Settings, or let it find REDkit in your Steam and GOG libraries; Compile stays off, with a note saying why, until it's set.
+- wcc_lite often leaves the file name out of its messages for projects with several files. The explorer works out the file from the name in the message and the line, and marks it as guessed.
+- Help: a new page, **Editing and compiling scripts**, and the shortcuts, Settings and troubleshooting pages cover the editor.
+
 ## 1.4.0
 
 - W3 Bundle Explorer is now **W3 Mod Workbench**, with a new icon: it does a lot more than bundles now. Settings move to `%AppData%\W3ModWorkbench` on the first start, with your old ones carried over.

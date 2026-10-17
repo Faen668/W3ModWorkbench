@@ -73,6 +73,19 @@ public partial class PreviewPane : UserControl
         else TabStrip.Children.Insert(Math.Max(index, _pinned.Count), tab);
     }
 
+    /// <summary>Puts <paramref name="doc"/> in place of <paramref name="old"/>: in its tab's place, pinned and selected as it was.</summary>
+    public void Replace(PreviewDocument old, PreviewDocument doc)
+    {
+        if (TabOf(old) is not { } tab) return;
+        int index = TabStrip.Children.IndexOf(tab);
+        bool pinned = _pinned.Contains(old), selected = Selected == old;
+        Remove(old);
+        old.Host = null;
+        Insert(doc, index);
+        if (pinned) SetPinned(doc, true);
+        if (selected) Select(doc, focus: false);
+    }
+
     public bool IsPinned(PreviewDocument doc) => _pinned.Contains(doc);
 
     /// <summary>Pins a tab, moving it to the end of the pinned ones at the front, or unpins it, moving it just after them.</summary>
@@ -276,6 +289,8 @@ public sealed class PreviewTab : Border
     private readonly TextBlock _name;
     private readonly TextBlock _pin;
     private readonly Button _close;
+    private readonly TextBlock _cross;
+    private readonly Border _dot;
     private readonly Border _mark;
     private Point? _dragStart;
     private bool _hover;
@@ -314,11 +329,18 @@ public sealed class PreviewTab : Border
             TextTrimming = TextTrimming.CharacterEllipsis,
             VerticalAlignment = VerticalAlignment.Center,
         };
-        var cross = new TextBlock { Text = "", FontSize = 9 };
+        var cross = new TextBlock { Text = "", FontSize = 9, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
         cross.SetResourceReference(TextBlock.FontFamilyProperty, "IconFont");
+        // a file with changes not saved shows a dot here, which turns into the cross under the mouse
+        _dot = new Border { Width = 8, Height = 8, CornerRadius = new CornerRadius(4), Visibility = Visibility.Collapsed };
+        _dot.SetResourceReference(BackgroundProperty, "TextFillColorPrimaryBrush");
+        _cross = cross;
+        var face = new Grid();
+        face.Children.Add(cross);
+        face.Children.Add(_dot);
         _close = new Button
         {
-            Content = cross,
+            Content = face,
             Width = 22,
             Height = 22,
             MinWidth = 0,
@@ -332,6 +354,14 @@ public sealed class PreviewTab : Border
             Visibility = Visibility.Hidden,
         };
         _close.Click += (_, _) => Pane.Host.CloseDocument(Document);
+        _close.MouseEnter += (_, _) => UpdateLook();
+        _close.MouseLeave += (_, _) => UpdateLook();
+        doc.DirtyChanged += (_, _) =>
+        {
+            if (!Pane.Contains(doc)) return; // moved to another tab since
+            UpdateLook();
+            Pane.Host.OnDirtyChanged(doc);
+        };
 
         _pin = new TextBlock
         {
@@ -382,7 +412,11 @@ public sealed class PreviewTab : Border
         else BorderBrush = Brushes.Transparent;
         _name.Opacity = selected ? 1 : 0.72;
         _pin.Visibility = Pane.IsPinned(Document) ? Visibility.Visible : Visibility.Collapsed;
-        _close.Visibility = selected || _hover ? Visibility.Visible : Visibility.Hidden;
+        bool dirty = Document.IsDirty;
+        _close.Visibility = selected || _hover || dirty ? Visibility.Visible : Visibility.Hidden;
+        _dot.Visibility = dirty && !_close.IsMouseOver ? Visibility.Visible : Visibility.Collapsed;
+        _cross.Visibility = _dot.Visibility == Visibility.Visible ? Visibility.Hidden : Visibility.Visible;
+        _close.ToolTip = dirty ? "Close (Ctrl+W). It has changes that aren't saved" : "Close (Ctrl+W)";
         _mark.Visibility = selected ? Visibility.Visible : Visibility.Hidden;
         _mark.SetResourceReference(BackgroundProperty, Pane.IsActive ? "AccentFillColorDefaultBrush" : "TextFillColorDisabledBrush");
     }

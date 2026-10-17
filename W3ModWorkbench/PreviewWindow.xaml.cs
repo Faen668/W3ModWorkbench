@@ -1,9 +1,13 @@
+using System.Diagnostics;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using Microsoft.Win32;
 using W3ModWorkbench.Core;
+using W3ModWorkbench.Core.Scripts;
 using W3ModWorkbench.Core.Scripts.Navigation;
 
 namespace W3ModWorkbench;
@@ -56,13 +60,24 @@ public partial class PreviewWindow : Window, IMessageHost
         {
             foreach (var doc in AllDocuments) doc.ClosePeek();
         };
-        // without this, Windows can hand the focus to another app when an owned window closes,
-        // and the explorer drops behind it as if it had been minimized
-        Closing += (_, _) => (_opener is { IsVisible: true } opener ? opener : Owner)?.Activate();
+        Closing += (_, e) =>
+        {
+            // changes that would be lost: asked about first, and the window closes again once answered
+            if (!_closeConfirmed && !SkipUnsavedCheck && UnsavedHere().Count > 0)
+            {
+                e.Cancel = true;
+                _ = ConfirmCloseWindowAsync();
+                return;
+            }
+            // without this, Windows can hand the focus to another app when an owned window closes,
+            // and the explorer drops behind it as if it had been minimized
+            (_opener is { IsVisible: true } opener ? opener : Owner)?.Activate();
+        };
         Closed += (_, _) =>
         {
             OpenWindows.Remove(this);
             _search?.Cancel();
+            _compile?.Cancel();
             foreach (var doc in AllDocuments)
             {
                 Remember(doc);
@@ -94,12 +109,12 @@ public partial class PreviewWindow : Window, IMessageHost
         }
         if (OpensTabs && OpenWindows.FirstOrDefault(w => w._takesTabs) is { } window)
         {
-            window.Add(new PreviewDocument(item));
+            window.Add(CreateDocument(item));
             window.BringForward();
             return;
         }
         var created = new PreviewWindow { Owner = owner };
-        created.Add(new PreviewDocument(item));
+        created.Add(CreateDocument(item));
         created.Show();
     }
 
@@ -118,7 +133,19 @@ public partial class PreviewWindow : Window, IMessageHost
         {
             window.Layout();
             window.UpdateSplitButton();
+            window.UpdateHeader();
         }
+    }
+
+    /// <summary>
+    /// A new view of a file. A project's file that's open somewhere already shares that view's text, so the
+    /// two can't drift apart with different edits.
+    /// </summary>
+    private static PreviewDocument CreateDocument(PreviewItem item)
+    {
+        var doc = new PreviewDocument(item);
+        if (item.IsEditable && FindOpen(item.Key) is { } open) doc.ShareTextWith(open);
+        return doc;
     }
 
     private static PreviewDocument? FindOpen(string key) =>
@@ -274,6 +301,7 @@ public partial class PreviewWindow : Window, IMessageHost
             return;
         }
         var copy = new PreviewDocument(doc.Item);
+        copy.ShareTextWith(doc);
         copy.CopyViewFrom(doc);
         target.Insert(copy);
         SetActive(target);
@@ -302,14 +330,31 @@ public partial class PreviewWindow : Window, IMessageHost
         else Close();
     }
 
-    public void CloseDocument(PreviewDocument doc)
+    public async void CloseDocument(PreviewDocument doc) => await CloseDocumentAsync(doc);
+
+    /// <summary>Closes tabs one after another, stopping if one with unsaved changes is kept open.</summary>
+    private async void CloseDocuments(IEnumerable<PreviewDocument> docs)
     {
-        if (PaneOf(doc) is not { } pane) return;
+        foreach (var doc in docs.ToList())
+            if (!await CloseDocumentAsync(doc)) return;
+    }
+
+    /// <summary>Closes a tab, first asking about changes that would be lost. False when it was kept open.</summary>
+    public async Task<bool> CloseDocumentAsync(PreviewDocument doc)
+    {
+        if (PaneOf(doc) is null) return true;
+        if (doc.IsDirty && !HasOtherView(doc))
+        {
+            ShowDocument(doc);
+            if (!await doc.ConfirmCloseAsync()) return false;
+        }
+        if (PaneOf(doc) is not { } pane) return true;
         Remember(doc);
         pane.Remove(doc);
         doc.Host = null;
         AfterRemoval(pane);
         UpdateHistoryButtons();
+        return true;
     }
 
     /// <summary>Keeps a closing file for Ctrl+Shift+T, unless the same file is still open somewhere.</summary>
@@ -330,7 +375,7 @@ public partial class PreviewWindow : Window, IMessageHost
             var (item, offset) = ClosedFiles[i];
             ClosedFiles.RemoveAt(i);
             if (FindOpen(item.Key) is not null) continue;
-            var doc = new PreviewDocument(item);
+            var doc = CreateDocument(item);
             doc.MoveCaret(offset);
             Add(doc);
             BringForward();
@@ -451,10 +496,10 @@ public partial class PreviewWindow : Window, IMessageHost
         // pinned tabs stay when the others are closed in bulk
         var unpinned = docs.Where(d => !pane.IsPinned(d)).ToList();
         Add("Close", () => CloseDocument(doc), gesture: "Ctrl+W");
-        Add("Close others", () => { foreach (var d in unpinned.Where(d => d != doc)) CloseDocument(d); }, unpinned.Any(d => d != doc));
-        Add("Close to the right", () => { foreach (var d in docs.Skip(index + 1).Where(unpinned.Contains)) CloseDocument(d); },
+        Add("Close others", () => CloseDocuments(unpinned.Where(d => d != doc)), unpinned.Any(d => d != doc));
+        Add("Close to the right", () => CloseDocuments(docs.Skip(index + 1).Where(unpinned.Contains)),
             docs.Skip(index + 1).Any(unpinned.Contains));
-        Add("Close all", () => { foreach (var d in unpinned) CloseDocument(d); }, unpinned.Count > 0);
+        Add("Close all", () => CloseDocuments(unpinned), unpinned.Count > 0);
         Add("Reopen closed tab", ReopenClosed, CanReopen, "Ctrl+Shift+T");
         menu.Items.Add(new Separator());
         Add(pane.IsPinned(doc) ? "Unpin" : "Pin", () => pane.SetPinned(doc, !pane.IsPinned(doc)));
@@ -465,7 +510,8 @@ public partial class PreviewWindow : Window, IMessageHost
         Add("Move to a new window", () => MoveToNewWindow(doc), AllDocuments.Count() > 1);
         menu.Items.Add(new Separator());
         Add("Copy path", () => Clipboard.SetText(doc.Item.Path));
-        Add("Save as…", doc.Save);
+        if (doc.IsEditable) Add("Save", () => doc.Save(), doc.IsDirty, "Ctrl+S");
+        Add("Save as…", () => doc.SaveAs());
     }
 
     // ---------------------------------------------------------------- go to definition and history
@@ -513,7 +559,7 @@ public partial class PreviewWindow : Window, IMessageHost
             _ = from.ShowCard($"{file.Path} could not be read", ex.Message, MessageKind.Warning, primary: "OK");
             return;
         }
-        var doc = new PreviewDocument(new PreviewItem(file.Path, file.Source, data, file, from.Item.Workspace));
+        var doc = CreateDocument(new PreviewItem(file.Path, file.Source, data, file, from.Item.Workspace));
         doc.Reveal(offset, length);
         if (inWindow)
         {
@@ -577,7 +623,7 @@ public partial class PreviewWindow : Window, IMessageHost
             open.MoveCaret(offset);
             return;
         }
-        var reopened = new PreviewDocument(doc.Item);
+        var reopened = CreateDocument(doc.Item);
         reopened.MoveCaret(offset);
         Add(reopened);
         BringForward();
@@ -711,6 +757,7 @@ public partial class PreviewWindow : Window, IMessageHost
         _search?.Cancel();
         var cancel = new CancellationTokenSource();
         _search = cancel;
+        _resultsShowing = cancel;
         _resultsFrom = from;
         OpenResultsPanel();
         if (Results.IsFind && title != FindTitle) Results.HideFind();
@@ -841,7 +888,7 @@ public partial class PreviewWindow : Window, IMessageHost
                 return;
             }
             if (!_panes.Contains(target)) return;
-            open = new PreviewDocument(new PreviewItem(older.Path, older.Source, data, older, doc.Item.Workspace));
+            open = CreateDocument(new PreviewItem(older.Path, older.Source, data, older, doc.Item.Workspace));
             target.Insert(open);
         }
         target.Select(open, focus: false);
@@ -896,10 +943,324 @@ public partial class PreviewWindow : Window, IMessageHost
     private void UpdateHeader()
     {
         if (Current is not { } doc) return;
-        Title = $"{doc.FileName} - Preview";
+        Title = $"{(doc.IsDirty ? "● " : "")}{doc.FileName} - Preview";
         FileNameText.Text = doc.FileName;
         DetailText.Text = doc.Detail;
+
+        SaveText.Text = doc.IsEditable ? "Save" : "Save as";
+        SaveButton.IsEnabled = !doc.IsEditable || doc.IsDirty;
+        SaveButton.ToolTip = !doc.IsEditable ? "Save a copy of this file (Ctrl+S)"
+            : doc.IsDirty ? "Save the changes to this file (Ctrl+S). Ctrl+Shift+S saves every file"
+            : "No changes to save";
+        EditButton.Visibility = CanEditAsProject(doc) ? Visibility.Visible : Visibility.Collapsed;
+
+        bool project = ProjectOf(doc) is not null;
+        CompileButton.Visibility = project ? Visibility.Visible : Visibility.Collapsed;
+        bool wcc = ScriptCompiler.IsWccLite(App.Settings.WccLitePath);
+        CompileButton.IsEnabled = project && wcc && _compile is null;
+        CompileText.Text = _compile is null ? "Compile" : "Compiling…";
+        CompileButton.ToolTip = !wcc
+            ? "Compiling needs REDkit's wcc_lite.exe. Set it in Settings (Ctrl+, in the main window), or press Find automatically there"
+            : _compile is not null ? "Compiling this project's scripts with wcc_lite…"
+            : "Compile this project's scripts into a .rsblob with REDkit's wcc_lite (Ctrl+Shift+B). Right-click to choose where it goes";
     }
+
+    /// <summary>A file's changes were saved, or it was changed after a save: its tab and, when it's in use, the header show it.</summary>
+    public void OnDirtyChanged(PreviewDocument doc)
+    {
+        if (doc == Current) UpdateHeader();
+    }
+
+    // ---------------------------------------------------------------- unsaved changes
+
+    /// <summary>Set once the main window has asked about unsaved changes, so the previews close without asking again.</summary>
+    public static bool SkipUnsavedCheck { get; set; }
+
+    private bool _closeConfirmed;
+
+    private static IEnumerable<PreviewDocument> AllOpenDocuments() => OpenWindows.SelectMany(w => w.AllDocuments);
+
+    /// <summary>Whether another open view shows the same text, so closing this one loses nothing.</summary>
+    private static bool HasOtherView(PreviewDocument doc) => AllOpenDocuments().Any(d => d != doc && d.SharesTextWith(doc));
+
+    /// <summary>Files with unsaved changes that closing this window would lose: not also shown in another window.</summary>
+    private List<PreviewDocument> UnsavedHere()
+    {
+        var elsewhere = OpenWindows.Where(w => w != this).SelectMany(w => w.AllDocuments).ToList();
+        var unsaved = new List<PreviewDocument>();
+        foreach (var doc in AllDocuments.Where(d => d.IsDirty))
+            if (!elsewhere.Any(d => d.SharesTextWith(doc)) && !unsaved.Any(d => d.SharesTextWith(doc))) unsaved.Add(doc);
+        return unsaved;
+    }
+
+    /// <summary>Every file with unsaved changes in any preview window, one view of each.</summary>
+    public static List<PreviewDocument> UnsavedDocuments()
+    {
+        var unsaved = new List<PreviewDocument>();
+        foreach (var doc in AllOpenDocuments().Where(d => d.IsDirty))
+            if (!unsaved.Any(d => d.SharesTextWith(doc))) unsaved.Add(doc);
+        return unsaved;
+    }
+
+    /// <summary>Saves each file, stopping at one that couldn't be saved. False when one wasn't.</summary>
+    public static bool SaveAll(IEnumerable<PreviewDocument> docs)
+    {
+        var saved = new List<PreviewDocument>();
+        foreach (var doc in docs.ToList())
+        {
+            if (saved.Any(d => d.SharesTextWith(doc))) continue;
+            if (!doc.Save()) return false;
+            saved.Add(doc);
+        }
+        return true;
+    }
+
+    /// <summary>The names of some files, for a message: "a.ws, b.ws and 3 more".</summary>
+    public static string Names(IReadOnlyList<PreviewDocument> docs) =>
+        docs.Count <= 4 ? string.Join(", ", docs.Select(d => d.FileName))
+            : string.Join(", ", docs.Take(3).Select(d => d.FileName)) + $" and {docs.Count - 3} more";
+
+    /// <summary>The window is closing with changes not saved: one file asks for itself, several are asked about together.</summary>
+    private async Task ConfirmCloseWindowAsync()
+    {
+        var unsaved = UnsavedHere();
+        bool close;
+        if (unsaved.Count == 1)
+        {
+            ShowDocument(unsaved[0]);
+            close = await unsaved[0].ConfirmCloseAsync();
+        }
+        else
+        {
+            if (Current is not { } doc) return;
+            var choice = await doc.Ask($"Save the changes to {unsaved.Count} files?", Names(unsaved) + ". The changes are lost if you don't save them.",
+                MessageKind.Question, "Save all", "Don't save");
+            close = choice == MessageChoice.Secondary || choice == MessageChoice.Primary && SaveAll(unsaved);
+        }
+        if (!close) return;
+        _closeConfirmed = true;
+        Close();
+    }
+
+    // ---------------------------------------------------------------- script projects
+
+    /// <summary>The script project a file belongs to, when it's one of a project's files.</summary>
+    public static ScriptFolder? ProjectOf(PreviewDocument doc) =>
+        doc.Item.Script is { } script ? doc.Item.Workspace?.ArchiveOf(script) as ScriptFolder : null;
+
+    /// <summary>Whether the file is a decompiled script, whose mod's scripts can be saved as a project to edit.</summary>
+    public bool CanEditAsProject(PreviewDocument doc) =>
+        doc.Item.Script is { } script && doc.Item.Workspace?.ArchiveOf(script) is ScriptArchive && Application.Current.MainWindow is MainWindow;
+
+    /// <summary>
+    /// Saves a decompiled mod's scripts, all but all.ws, to a scripts folder in a folder the user picks, opens that as a
+    /// script project in the main window in place of the blob, and swaps every open tab of the blob for the project's file.
+    /// </summary>
+    public async Task EditAsProjectAsync(PreviewDocument doc)
+    {
+        if (doc.Item.Script is not { } script || doc.Item.Workspace?.ArchiveOf(script) is not ScriptArchive blob
+            || Application.Current.MainWindow is not MainWindow main) return;
+
+        var dialog = new OpenFolderDialog { Title = $"Choose a folder for {blob.Owner}'s scripts. They go in a scripts folder inside it" };
+        if (dialog.ShowDialog(this) != true) return;
+        await SaveAsProjectAsync(doc, blob, main, dialog.FolderName);
+    }
+
+    /// <summary>The work of <see cref="EditAsProjectAsync"/> once the folder is chosen.</summary>
+    internal async Task SaveAsProjectAsync(PreviewDocument doc, ScriptArchive blob, MainWindow main, string folder)
+    {
+        string scripts = Path.Combine(folder, "scripts");
+        if (Directory.Exists(scripts) && Directory.EnumerateFileSystemEntries(scripts).Any())
+        {
+            _ = doc.ShowCard("That folder has a scripts folder already",
+                $"Choose an empty folder, or one without a scripts folder, so nothing in {scripts} is overwritten.", MessageKind.Warning, primary: "OK");
+            return;
+        }
+
+        var entries = blob.Entries.Where(e => !e.Path.Equals(@"scripts\all.ws", StringComparison.OrdinalIgnoreCase)).ToList();
+        try
+        {
+            await Task.Run(() =>
+            {
+                foreach (var entry in entries)
+                {
+                    string path = Path.Combine(folder, entry.Path);
+                    Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+                    File.WriteAllBytes(path, entry.Read(null));
+                }
+            });
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _ = doc.ShowCard("The scripts could not be saved", ex.Message, MessageKind.Warning, primary: "OK");
+            return;
+        }
+
+        if (await main.OpenScriptProjectAsync(scripts) is not { } project) return;
+        main.CloseArchive(blob.FilePath);
+        foreach (var window in OpenWindows.ToList()) window.SwapForProject(blob, project, main);
+        _ = Current?.ShowCard($"{blob.Owner} is a script project now",
+            $"{entries.Count} scripts were saved to {scripts}, and the tabs show them there: they can be edited and saved. "
+            + "Compile builds them into a .rsblob with REDkit's wcc_lite.", MessageKind.Info, primary: "OK");
+    }
+
+    /// <summary>Puts the project's version of each of the blob's files open here in its place, keeping the caret and scroll.</summary>
+    private void SwapForProject(IArchive blob, ScriptFolder project, MainWindow main)
+    {
+        foreach (var pane in _panes.ToList())
+            foreach (var old in pane.Documents)
+            {
+                if (!string.Equals(old.Item.Script?.SourceKey, blob.FilePath, StringComparison.OrdinalIgnoreCase)) continue;
+                var entry = project.Entries.FirstOrDefault(e => e.Path.Equals(old.Item.Path, StringComparison.OrdinalIgnoreCase));
+                if (entry is null) continue; // all.ws has no file of its own
+                var doc = CreateDocument(main.PreviewItemFor(entry, entry.Read(null)));
+                doc.CopyViewFrom(old);
+                pane.Replace(old, doc);
+            }
+        UpdateHeader();
+    }
+
+    // ---------------------------------------------------------------- compiling
+
+    /// <summary>The compile running from this window, if one is.</summary>
+    private CancellationTokenSource? _compile;
+
+    /// <summary>What the results panel shows now: a search, or a compile. Progress from an older one is dropped.</summary>
+    private object? _resultsShowing;
+
+    /// <summary>
+    /// Ctrl+Shift+B: saves the project's changed files, then compiles the project with wcc_lite into the file chosen for it
+    /// (asked the first time, or when <paramref name="chooseOutput"/>), and lists its warnings and errors under the files.
+    /// </summary>
+    private async Task CompileAsync(PreviewDocument doc, bool chooseOutput)
+    {
+        if (ProjectOf(doc) is not { } project || _compile is not null) return;
+        string wcc = App.Settings.WccLitePath;
+        if (!ScriptCompiler.IsWccLite(wcc))
+        {
+            _ = doc.ShowCard("REDkit's wcc_lite isn't set", "Set wcc_lite.exe in Settings to compile scripts. It's in REDkit's bin\\x64_RedKit folder.",
+                MessageKind.Info, primary: "OK");
+            return;
+        }
+
+        var unsaved = UnsavedDocuments().Where(d => ProjectOf(d)?.FilePath.Equals(project.FilePath, StringComparison.OrdinalIgnoreCase) == true).ToList();
+        if (unsaved.Count > 0)
+        {
+            if (!await doc.ShowCard(unsaved.Count == 1 ? $"Save {unsaved[0].FileName} first?" : $"Save {unsaved.Count} files first?",
+                    "wcc_lite compiles the files as they are on disk. " + (unsaved.Count == 1 ? "" : Names(unsaved) + " have changes."),
+                    MessageKind.Question, primary: "Save and compile", secondary: "Cancel"))
+                return;
+            if (!SaveAll(unsaved)) return;
+        }
+
+        if (chooseOutput || !App.Settings.CompileOutputs.TryGetValue(project.FilePath, out string? output)
+            || !Directory.Exists(Path.GetDirectoryName(output)))
+        {
+            string start = App.Settings.CompileOutputs.TryGetValue(project.FilePath, out string? before) && Path.GetDirectoryName(before) is { } dir
+                && Directory.Exists(dir) ? dir : Path.GetDirectoryName(project.FilePath) ?? "";
+            var dialog = new SaveFileDialog
+            {
+                Title = $"Where should {project.Owner}'s compiled scripts go?",
+                FileName = "precompiled.rsblob",
+                InitialDirectory = start,
+                Filter = "Compiled scripts (*.rsblob)|*.rsblob",
+            };
+            if (dialog.ShowDialog(this) != true) return;
+            output = dialog.FileName;
+            App.Settings.CompileOutputs[project.FilePath] = output;
+            App.Settings.Save();
+        }
+
+        var cancel = _compile = new CancellationTokenSource();
+        _resultsShowing = cancel;
+        _resultsFrom = doc;
+        foreach (var window in OpenWindows) window.UpdateHeader();
+        string title = $"Compile {project.Owner}";
+        OpenResultsPanel();
+        if (Results.IsFind) Results.HideFind();
+        Results.SetActions();
+        Results.ShowBusy(title, "Starting wcc_lite…");
+        var progress = new Progress<string>(text =>
+        {
+            if (_resultsShowing == cancel) Results.ShowBusy(title, text + "  It takes about a minute.");
+        });
+        var watch = Stopwatch.StartNew();
+        try
+        {
+            var result = await ScriptCompiler.CompileAsync(wcc, project.FilePath, output, progress, cancel.Token);
+            ShowCompileResult(title, project, result, output, watch.Elapsed);
+        }
+        catch (OperationCanceledException)
+        {
+            // the window closed
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
+        {
+            if (_resultsShowing == cancel) Results.ShowRows(title, "Failed", [], "wcc_lite couldn't be run: " + ex.Message);
+        }
+        finally
+        {
+            _compile = null;
+            foreach (var window in OpenWindows) window.UpdateHeader();
+        }
+    }
+
+    /// <summary>The compiler's warnings and errors, grouped by file, each opening its line. The log is a button away.</summary>
+    private void ShowCompileResult(string title, ScriptFolder project, CompileResult result, string output, TimeSpan took)
+    {
+        if (Results.Visibility != Visibility.Visible) OpenResultsPanel();
+        int errors = result.Messages.Count(m => m.IsError), warnings = result.Messages.Count - errors;
+        var rows = new List<ResultRow>();
+        foreach (var group in result.Messages.GroupBy(m => m.File ?? "").OrderBy(g => g.Key.Length == 0))
+        {
+            var list = group.OrderBy(m => m.Line).ToList();
+            var entry = group.Key.Length == 0 ? null : project.Entries.FirstOrDefault(e =>
+                ((LooseScriptEntry)e).FullPath.Equals(Path.GetFullPath(Path.Combine(project.FilePath, group.Key)), StringComparison.OrdinalIgnoreCase));
+            var file = entry is null ? null : ScriptWorkspace.FileFor(entry);
+            string folder = Path.GetDirectoryName(group.Key) ?? "";
+            rows.Add(new ResultRow
+            {
+                IsHeader = true,
+                Glyph = ResultRow.FileGlyph,
+                Before = group.Key.Length == 0 ? "File not named" : Path.GetFileName(group.Key),
+                Detail = group.Key.Length == 0 ? "    wcc_lite didn't say which file, and it couldn't be worked out. The line numbers are right"
+                    : folder.Length > 0 ? "    " + folder : "",
+                Count = list.Count.ToString(),
+            });
+            string[] lines = file is null ? [] : file.Text.Split('\n');
+            foreach (var m in list)
+            {
+                int offset = 0;
+                for (int i = 0; i < m.Line - 1 && i < lines.Length; i++) offset += lines[i].Length + 1;
+                int length = m.Line - 1 < lines.Length ? lines[m.Line - 1].TrimEnd('\r').Length : 0;
+                rows.Add(new ResultRow
+                {
+                    IsCode = true,
+                    LineText = m.Line.ToString(),
+                    Before = m.Text.Replace("\n", "  "),
+                    Label = (m.IsError ? "error" : "warning") + (m.Guessed ? ", file guessed" : ""),
+                    File = file,
+                    Offset = offset,
+                    Length = length,
+                });
+            }
+        }
+
+        string seconds = $"{took.TotalSeconds:0} s";
+        string summary = result.Success
+            ? warnings == 0 ? $"Compiled in {seconds}" : $"Compiled in {seconds}, {Format.Count(warnings, "warning")}"
+            : errors > 0 ? $"Failed: {Format.Count(errors, "error")}" + (warnings > 0 ? $", {Format.Count(warnings, "warning")}" : "")
+            : "Failed";
+        string empty = result.Success ? $"Compiled with no warnings, and saved to {output}." : result.Failure ?? "wcc_lite didn't compile the scripts.";
+        Results.ShowRows(title, summary, rows, empty);
+
+        var actions = new List<(string, Action)>();
+        if (result.Success)
+            actions.Add(("Show in folder", () => Process.Start("explorer.exe", $"/select,\"{output}\"")));
+        actions.Add(("Show log", () => ShowAlone(new PreviewItem("wcc_lite.log", title, System.Text.Encoding.UTF8.GetBytes(result.Log)), this)));
+        Results.SetActions(result.Success ? $"Saved to {output}" : "Nothing was saved. wcc_lite's own log has every line it wrote:", [.. actions]);
+    }
+
 
     private void Split_Click(object sender, RoutedEventArgs e) => ToggleSplit();
 
@@ -924,6 +1285,21 @@ public partial class PreviewWindow : Window, IMessageHost
 
     private void Save_Click(object sender, RoutedEventArgs e) => Current?.Save();
 
+    private void Edit_Click(object sender, RoutedEventArgs e)
+    {
+        if (Current is { } doc) _ = EditAsProjectAsync(doc);
+    }
+
+    private void Compile_Click(object sender, RoutedEventArgs e)
+    {
+        if (Current is { } doc) _ = CompileAsync(doc, chooseOutput: false);
+    }
+
+    private void CompileTo_Click(object sender, RoutedEventArgs e)
+    {
+        if (Current is { } doc) _ = CompileAsync(doc, chooseOutput: true);
+    }
+
     private void FocusPane(int index)
     {
         if (index >= _panes.Count || _panes[index].Selected is not { } doc) return;
@@ -945,6 +1321,12 @@ public partial class PreviewWindow : Window, IMessageHost
         }
         else if (key == Key.S && mods == ModifierKeys.Control)
             doc?.Save();
+        else if (key == Key.S && mods == (ModifierKeys.Control | ModifierKeys.Shift))
+            SaveAll(AllOpenDocuments().Where(d => d.IsDirty));
+        else if (key == Key.B && mods == (ModifierKeys.Control | ModifierKeys.Shift))
+        {
+            if (doc is not null && ProjectOf(doc) is not null) _ = CompileAsync(doc, chooseOutput: false);
+        }
         else if (key is Key.W or Key.F4 && mods == ModifierKeys.Control)
         {
             if (doc is not null) CloseDocument(doc);

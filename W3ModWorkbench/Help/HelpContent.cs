@@ -14,7 +14,7 @@ public static class HelpContent
     public static IReadOnlyList<HelpTopic> Topics { get; } =
     [
         new(Basics, "Getting started", "", """
-W3 Mod Workbench opens the archives The Witcher 3 keeps its files in, lets you look around inside them, and pulls out just the files you need. It also opens the compiled scripts that REDkit mods ship (`precompiled.rsblob`) and turns them back into readable WitcherScript.
+W3 Mod Workbench opens the archives The Witcher 3 keeps its files in, lets you look around inside them, and pulls out just the files you need. It also opens the compiled scripts that REDkit mods ship (`precompiled.rsblob`) and turns them back into readable WitcherScript, and it can edit a mod's scripts and compile them again with REDkit's compiler.
 
 ## The short version
 
@@ -27,7 +27,9 @@ That covers most of what people use it for. The rest of this guide goes through 
 
 ## What it never does
 
-The explorer only reads. It never changes a bundle, a script blob or anything in your game folder. Extracted files always go to the folder you choose, so it is safe to point it straight at a live install.
+The explorer never changes a bundle or a compiled script blob. Extracted files always go to the folder you choose, so it is safe to point it straight at a live install.
+
+The one thing that writes files is the script editor: a script in a script project is saved when you press **Save**, and a compiled blob is written only where you tell it to go (see **Editing and compiling scripts**).
 """),
 
         new(Basics, "Opening files", "", """
@@ -35,16 +37,17 @@ There are three ways to get files in, and you can mix them freely. Everything yo
 
 ## Open files
 
-**Open files** (Ctrl+O) lets you pick one or more `.bundle` or `.rsblob` files. Holding Ctrl or Shift in the file picker selects several at once. A `.w3strings` file, or a strings `.csv`, opens in the strings editor instead (see **Editing strings**).
+**Open files** (Ctrl+O) lets you pick one or more `.bundle` or `.rsblob` files. Holding Ctrl or Shift in the file picker selects several at once. A `.w3strings` file, or a strings `.csv`, opens in the strings editor instead (see **Editing strings**). A `.ws` script opens together with the rest of its script project: the `scripts` folder it's in, or its own folder when there's none.
 
 ## Open folder
 
-**Open folder** loads every bundle and compiled script inside a folder, including all of its subfolders. Each folder of `.w3strings` files is listed too, as one entry with all its languages; double-click a file in it to open it in the strings editor. Some useful places to point it at:
+**Open folder** loads every bundle and compiled script inside a folder, including all of its subfolders. Each folder of `.w3strings` files is listed too, as one entry with all its languages; double-click a file in it to open it in the strings editor. Loose `.ws` scripts open as script projects, one for each `scripts` folder, and can be edited (see **Editing and compiling scripts**). The game's own script folders are left out. Some useful places to point it at:
 
 - `The Witcher 3\content` for the base game's bundles.
 - `The Witcher 3\dlc` for the expansions and free DLC.
 - `The Witcher 3\mods` to see every mod you have installed at once.
 - A single mod folder, if you only care about one mod.
+- A REDkit project's `workspace\scripts` folder, to edit and compile its scripts.
 
 The whole game is around 365,000 files and takes about a second to load, so don't worry about opening big folders.
 
@@ -56,7 +59,7 @@ You can also drop files or folders anywhere on the window.
 
 Most mods name their bundle `blob0.bundle`, which isn't much help when twenty of them are open at once. So each entry in the tree is labelled with the folder it came from: the mod, DLC or content folder. The file name is shown greyed out next to it. Hover over an entry to see its full path.
 
-Bundles have a box icon. Compiled scripts have a `{ }` icon, and a folder's strings files a language icon.
+Bundles have a box icon. Compiled scripts and script projects have a `{ }` icon, and a folder's strings files a language icon.
 
 ## Closing
 
@@ -77,6 +80,7 @@ Click any column header to sort by it. Columns can be resized and reordered by d
 - **Stored**: not compressed at all.
 - **Zlib**, **LZ4**, **LZ4 HC** or **Snappy**: compressed. The explorer unpacks these for you when you extract.
 - **Decompiled**: a script the explorer rebuilt from a compiled blob (see the Advanced section).
+- **Script**: a loose script in a script project, read straight from disk.
 
 ## Searching
 
@@ -135,6 +139,7 @@ Text files can be read without extracting them first. That includes decompiled s
 - WitcherScript (`.ws`) files are colour coded, using the same grammar as WebSpam's WitcherScript extension for VS Code. The colours follow the app theme.
 - **Ctrl+F** opens a search bar. **Aa** matches case, **ab** matches whole words only, and **.\*** treats the search as a regular expression. **F3** and **Shift+F3** jump to the next and previous match, and every match is highlighted.
 - **Copy** copies all the text. **Save as** (Ctrl+S) writes the file somewhere, exactly as it came out of the archive.
+- Files in a script project can be edited, and the button reads **Save** instead (see **Editing and compiling scripts**). Everything else is read-only, which the line under the file name says for scripts.
 - **Esc** closes the search bar first, then the window when it shows just one file.
 
 ## Tabs and split view
@@ -191,6 +196,40 @@ The installed mods' scripts are only in these searches once they've been read fo
 - **Stop comparing** takes the marks off both.
 """),
 
+        new(Basics, "Editing and compiling scripts", "\uE70F", """
+The preview is also a script editor. Scripts in a **script project** can be changed and saved, with highlighting, go to definition, the definition popup and the outline all keeping up as you type, and a whole project can be compiled into a `precompiled.rsblob` with REDkit's own compiler.
+
+## Script projects
+
+A script project is a folder of loose `.ws` files: a REDkit project's `workspace\scripts`, a mod's `content\scripts`, or a decompiled mod you saved to edit. Open one with **Open folder**, or open or drop any `.ws` file in it, and it's listed in the tree under the project's name. Its files open editable; scripts inside bundles and blobs, and the game's own scripts, stay read-only.
+
+## Editing and saving
+
+- Type straight into the file. **Ctrl+Z** and **Ctrl+Y** undo and redo.
+- A dot on the tab, `●` in the window title and **not saved** under the file name mark changes that aren't saved yet.
+- **Save** (**Ctrl+S**) writes the file back where it came from, in the same encoding it had (UTF-8 or UTF-16, with or without a byte order mark), so nothing changes but what you typed. **Ctrl+Shift+S** saves every changed file.
+- Closing a tab, a window or the app with changes asks first: **Save**, **Don't save**, or **Cancel** to keep it open.
+- When the same file is open twice, in both groups of a split, both show the same text, so an edit in one is in the other too.
+- After a save, go to definition, references and the other searches see the change everywhere.
+
+## Editing a decompiled mod
+
+Decompiled scripts are read-only, since they live inside the blob. To change one, press **Edit as project** at the top of the window (typing in one offers it too) and choose a folder. The mod's scripts are saved to a `scripts` folder inside it, every file but `all.ws`, which only repeats the others. The folder opens as a script project in place of the blob, and the open tabs switch to its files, at the same place, now editable. The folder must not have a `scripts` folder with anything in it already, so nothing is overwritten.
+
+In testing, a decompiled mod compiled again without changes, though a mod that uses something the decompiler gets wrong may need a fix first. See **Reading decompiled code** for what decompiling can't bring back, such as comments.
+
+## Compiling
+
+**Compile** (**Ctrl+Shift+B**) builds the project into a `.rsblob` with REDkit's `wcc_lite.exe`, the same compiler REDkit uses to publish. It needs REDkit, which is free on Steam and GOG for owners of the game: set wcc_lite in **Settings**, or let **Find automatically** look for it. Until it's set, the button is greyed out, and resting the mouse on it says why. You can still edit and save scripts without it.
+
+- Changed files are saved first, since wcc_lite compiles what's on disk. It asks before saving them.
+- The first time, it asks where the compiled blob goes, and remembers that for the project. Right-click **Compile** and choose **Compile to another file** to change it. For a mod, that's usually `content\precompiled.rsblob` in the mod's folder.
+- It compiles the game's scripts and then yours on top, the way REDkit does, which takes about a minute.
+- Warnings and errors are listed under the files, grouped by file. Click one to go to its line. When it fails, nothing is written, so an older blob that works is left alone.
+- wcc_lite often leaves out which file a message is about when a project has more than one. The explorer works it out from the name the message mentions and the line it's on, and marks those **file guessed**. If it can't tell, the message is listed under **File not named**, with its line number.
+- **Show log** opens everything wcc_lite wrote, and **Show in folder** opens the folder the blob was saved to.
+"""),
+
         new(Basics, "Editing strings", "\uE8D2", """
 The text a mod shows in game lives in `.w3strings` files, one for each language. Drop one onto the window, or pick it with **Open files**, and it opens in a table you can read and edit. A strings `.csv`, the kind the modding tools encode from, opens the same way.
 
@@ -238,6 +277,10 @@ Where The Witcher 3 is installed. It only affects decompiled scripts, and only h
 
 You can leave it empty if you only open scripts from inside the game's `mods` folder, because those find the game on their own. It matters for scripts opened from anywhere else, like a mod's release folder or a download. A change applies to files you open after saving.
 
+## Script compiler (optional)
+
+REDkit's `wcc_lite.exe`, which **Compile** uses to build a script project into a `.rsblob`. It's in REDkit's `bin\x64_RedKit` folder. **Find automatically** looks for REDkit in your Steam and GOG libraries, or use the folder button to pick it. A tick under the box means it found wcc_lite and the game scripts REDkit compiles against (`r4data\scripts`). Leave it empty and **Compile** stays off; editing and saving scripts work either way.
+
 ## Preview
 
 - **Open files in**: tabs in one preview window, or a separate window for each file. Go to definition follows the same choice.
@@ -273,7 +316,10 @@ Everything is saved in `%AppData%\W3ModWorkbench\settings.json`. Delete that fil
 
 - **Ctrl+F**: search
 - **F3** / **Shift+F3**: next or previous match
-- **Ctrl+S**: save as
+- **Ctrl+S**: save, or save as for a read-only file
+- **Ctrl+Shift+S**: save every changed file
+- **Ctrl+Shift+B**: compile the script project
+- **Ctrl+Z** / **Ctrl+Y**: undo or redo
 - **Ctrl+click** or **F12**: go to definition (scripts)
 - **Ctrl+Alt+click** or **Ctrl+F12**: open the definition in the other group
 - **Shift+F12**: find all references
@@ -309,6 +355,20 @@ Doboz is a compression method the engine supports but nothing in the current gam
 ## A script shows numbers where names should be
 
 See **Enum names** in the Advanced section. The usual fix is to set the game folder in Settings.
+
+## Compile is greyed out
+
+Rest the mouse on it to see why. Usually wcc_lite isn't set in **Settings**. If it is set but the box under it shows a warning, the file isn't wcc_lite, or REDkit's `r4data\scripts` folder isn't where it should be, two folders up from it. Reinstalling or verifying REDkit fixes that.
+
+Compile only shows for a script project's files. For a decompiled script, use **Edit as project** first.
+
+## A compile fails with errors I can't find
+
+Check the line wcc_lite names. When the file is marked **file guessed**, the explorer worked it out from the message; **Show log** has wcc_lite's own words. Errors in the game's scripts are left out, since they come from REDkit itself, so every error listed is in your project.
+
+## A script can't be typed in
+
+It's read-only: inside a bundle or a blob, or one of the game's own scripts. Open its folder as a script project to edit it, or use **Edit as project** for a decompiled mod.
 
 ## Files won't extract to a folder
 
@@ -350,7 +410,7 @@ Nothing was taken on trust. The format work was checked against mods whose origi
 
 WebSpam's grammar and AvalonEdit are MIT licensed, and their full licence texts are in `THIRD-PARTY-NOTICES.md` next to the exe, and in Settings under About. No code was copied from tw3-cahirb, only facts about the file format.
 
-The bundle reader, the LZ4 and Snappy decoders and the script decompiler are all written for this tool.
+The bundle reader, the LZ4 and Snappy decoders and the script decompiler are all written for this tool. Compiling uses REDkit's own `wcc_lite.exe` from your REDkit install; nothing of REDkit's is shipped with the tool.
 """),
 
         new(Advanced, "How bundles work", "", """

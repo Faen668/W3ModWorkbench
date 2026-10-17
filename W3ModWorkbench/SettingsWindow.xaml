@@ -258,6 +258,42 @@
                     </StackPanel>
                 </Border>
 
+                <!-- Compiling -->
+                <Border Style="{StaticResource Card}">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource SectionTitle}">
+                            <Run Text="Script compiler" />
+                            <Run Text="(optional)" FontWeight="Normal" FontSize="13" />
+                        </TextBlock>
+                        <TextBlock TextWrapping="Wrap"
+                                   Text="REDkit's wcc_lite.exe, which compiles a script project into a precompiled.rsblob, the same way publishing from REDkit does. Compile stays off until it's set." />
+                        <Grid Margin="0,10,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBox x:Name="WccBox" VerticalContentAlignment="Center" Padding="8,6,40,6" />
+                            <Button HorizontalAlignment="Right" Margin="0,0,4,0" Padding="6,3" Background="Transparent" BorderThickness="0"
+                                    Click="BrowseWcc_Click" ToolTip="Choose wcc_lite.exe">
+                                <TextBlock Style="{StaticResource Icon}" Text="&#xE8DA;" />
+                            </Button>
+                            <Button Grid.Column="1" Margin="8,0,0,0" Padding="12,6" Click="DetectWcc_Click"
+                                    ToolTip="Look for REDkit in your Steam and GOG libraries">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Style="{StaticResource Icon}" Text="&#xE721;" />
+                                    <TextBlock Margin="8,0,0,0" Text="Find automatically" />
+                                </StackPanel>
+                            </Button>
+                        </Grid>
+                        <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                            <TextBlock x:Name="WccIcon" Style="{StaticResource Icon}" Margin="0,0,8,0" />
+                            <TextBlock x:Name="WccStatus" TextWrapping="Wrap" />
+                        </StackPanel>
+                        <TextBlock Style="{StaticResource Hint}" Margin="0,10,0,0"
+                                   Text="REDkit is free on Steam and GOG for owners of the game. wcc_lite is in its bin\x64_RedKit folder. Without it you can still edit and save scripts; only compiling needs it." />
+                    </StackPanel>
+                </Border>
+
                 <!-- About -->
                 <Border Style="{StaticResource Card}">
                     <Grid>
@@ -271,7 +307,7 @@
                             <TextBlock Text="W3 Mod Workbench" FontSize="15" FontWeight="SemiBold" />
                             <TextBlock x:Name="VersionText" Opacity="0.7" Margin="0,2,0,0" />
                             <TextBlock Style="{StaticResource Hint}"
-                                       Text="Browse and extract Witcher 3 .bundle archives, and open REDkit precompiled.rsblob files as decompiled WitcherScript." />
+                                       Text="Browse and extract Witcher 3 .bundle archives, open REDkit precompiled.rsblob files as decompiled WitcherScript, and edit and compile script projects." />
                             <TextBlock x:Name="CopyrightText" Margin="0,10,0,0" />
                             <TextBlock Margin="0,2,0,0">
                                 <Run Text="Free and open source under the MIT Licence." />

@@ -54,9 +54,10 @@ public partial class MainWindow : Window, IMessageHost
     {
         var dialog = new OpenFileDialog
         {
-            Title = "Open bundles, compiled scripts or strings",
-            Filter = "Bundles, compiled scripts and strings (*.bundle;*.rsblob;*.w3strings;*.csv)|*.bundle;*.rsblob;*.w3strings;*.csv|"
-                   + "Bundles (*.bundle)|*.bundle|Compiled scripts (*.rsblob)|*.rsblob|Strings (*.w3strings;*.csv)|*.w3strings;*.csv|All files (*.*)|*.*",
+            Title = "Open bundles, scripts or strings",
+            Filter = "Bundles, scripts and strings (*.bundle;*.rsblob;*.ws;*.w3strings;*.csv)|*.bundle;*.rsblob;*.ws;*.w3strings;*.csv|"
+                   + "Bundles (*.bundle)|*.bundle|Compiled scripts (*.rsblob)|*.rsblob|Scripts, opened with their project (*.ws)|*.ws|"
+                   + "Strings (*.w3strings;*.csv)|*.w3strings;*.csv|All files (*.*)|*.*",
             Multiselect = true,
             InitialDirectory = Directory.Exists(_settings.LastOpenFolder) ? _settings.LastOpenFolder : "",
         };
@@ -69,7 +70,7 @@ public partial class MainWindow : Window, IMessageHost
     {
         var dialog = new OpenFolderDialog
         {
-            Title = "Open every bundle and compiled script in a folder",
+            Title = "Open every bundle, compiled script and script project in a folder",
             InitialDirectory = Directory.Exists(_settings.LastOpenFolder) ? _settings.LastOpenFolder : "",
         };
         if (dialog.ShowDialog(this) != true) return;
@@ -114,11 +115,26 @@ public partial class MainWindow : Window, IMessageHost
                         .Select(f => Path.GetDirectoryName(f)!)
                         .Distinct(StringComparer.OrdinalIgnoreCase)
                         .Order(StringComparer.OrdinalIgnoreCase));
+                    // loose scripts open as script projects, one per scripts folder, which can be edited and compiled
+                    files.AddRange(found
+                        .Where(f => f.EndsWith(".ws", StringComparison.OrdinalIgnoreCase))
+                        .Select(f => ScriptFolder.RootOf(f, path))
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .Where(root => !ScriptFolder.IsGameScripts(root))
+                        .Order(StringComparer.OrdinalIgnoreCase));
                 }
                 catch (Exception ex)
                 {
                     ShowError($"Could not read the folder {path}.\n\n{ex.Message}");
                 }
+            }
+            else if (File.Exists(path) && path.EndsWith(".ws", StringComparison.OrdinalIgnoreCase))
+            {
+                // a script opens with the rest of its project: the scripts folder it's in, or its own folder
+                string folder = Path.GetDirectoryName(Path.GetFullPath(path))!;
+                string drive = Path.GetPathRoot(folder)!;
+                string root = ScriptFolder.RootOf(path, drive);
+                files.Add(root.Equals(drive.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase) ? folder : root);
             }
             else if (File.Exists(path))
             {
@@ -130,7 +146,7 @@ public partial class MainWindow : Window, IMessageHost
         files = [.. files.Select(Path.GetFullPath).Where(loaded.Add)];
         if (files.Count == 0)
         {
-            if (!paths.Any(File.Exists)) SetStatus("No .bundle, .rsblob or .w3strings files found there.");
+            if (!paths.Any(File.Exists)) SetStatus("No .bundle, .rsblob, .ws or .w3strings files found there.");
             return;
         }
 
@@ -175,10 +191,28 @@ public partial class MainWindow : Window, IMessageHost
                       (failures.Count > 15 ? $"\n…and {failures.Count - 15} more" : ""));
     }
 
+    /// <summary>A folder is a folder of strings, or else a script project.</summary>
     private static IArchive OpenArchive(string file) =>
-        Directory.Exists(file) ? StringsFolder.Open(file)
+        Directory.Exists(file) ? Directory.EnumerateFiles(file, "*.w3strings").Any() ? StringsFolder.Open(file) : ScriptFolder.Open(file)
         : ScriptBlob.LooksLikeBlob(file) ? ScriptArchive.Open(file)
         : Bundle.Open(file);
+
+    /// <summary>Opens a folder of scripts as a project, or finds it open already. Null when it couldn't be opened.</summary>
+    public async Task<ScriptFolder?> OpenScriptProjectAsync(string folder)
+    {
+        folder = Path.GetFullPath(folder).TrimEnd('\\');
+        await LoadPathsAsync([folder]);
+        return _roots.Select(r => r.Archive).OfType<ScriptFolder>()
+            .FirstOrDefault(a => a.FilePath.Equals(folder, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>Closes an open archive, by its path.</summary>
+    public void CloseArchive(string filePath)
+    {
+        foreach (var node in _roots.Where(r => r.Archive.FilePath.Equals(filePath, StringComparison.OrdinalIgnoreCase)).ToList())
+            _roots.Remove(node);
+        AfterBundlesClosed();
+    }
 
     private void CloseAll_Click(object sender, RoutedEventArgs e)
     {
@@ -339,16 +373,24 @@ public partial class MainWindow : Window, IMessageHost
                 using var fs = new FileStream(entry.Archive.FilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
                 return entry.Read(fs);
             });
-            // scripts can follow names to their definitions in the same archive, the other open ones and the game's scripts
-            bool script = Path.GetExtension(entry.Path).Equals(".ws", StringComparison.OrdinalIgnoreCase);
-            PreviewWindow.Show(new PreviewItem(entry.Path, item.BundleName, data,
-                script ? ScriptWorkspace.FileFor(entry) : null,
-                script ? ScriptWorkspace.For(entry.Archive, () => _roots.Select(r => r.Archive)) : null), this);
+            PreviewWindow.Show(PreviewItemFor(entry, data), this);
         }
         catch (Exception ex)
         {
             ShowError($"{item.Name} could not be read.\n\n{ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// A file to preview. Scripts can follow names to their definitions in the same archive, the other open ones
+    /// and the game's scripts, and a script project's files can be edited.
+    /// </summary>
+    public PreviewItem PreviewItemFor(ArchiveEntry entry, byte[] data)
+    {
+        bool script = Path.GetExtension(entry.Path).Equals(".ws", StringComparison.OrdinalIgnoreCase);
+        return new PreviewItem(entry.Path, entry.Archive.Owner + "\\" + entry.Archive.Name, data,
+            script ? ScriptWorkspace.FileFor(entry) : null,
+            script ? ScriptWorkspace.For(entry.Archive, () => _roots.Select(r => r.Archive)) : null);
     }
 
     private void CopyHighlightedPaths()
@@ -568,11 +610,31 @@ public partial class MainWindow : Window, IMessageHost
         _settings.OpenWhenDone = OpenWhenDoneCheck.IsChecked == true;
     }
 
+    private bool _closeConfirmed;
+
     private void Window_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
     {
+        // scripts edited in the previews and not saved: asked about here, once, before the previews close with this window
+        if (!_closeConfirmed && PreviewWindow.UnsavedDocuments() is { Count: > 0 } unsaved)
+        {
+            e.Cancel = true;
+            _ = ConfirmCloseAsync(unsaved);
+            return;
+        }
+        PreviewWindow.SkipUnsavedCheck = true;
         _extractCts?.Cancel();
         StoreExtractOptions();
         _settings.Save();
+    }
+
+    private async Task ConfirmCloseAsync(List<PreviewDocument> unsaved)
+    {
+        var choice = await Message.Ask(unsaved.Count == 1 ? $"Save the changes to {unsaved[0].FileName}?" : $"Save the changes to {unsaved.Count} scripts?",
+            PreviewWindow.Names(unsaved) + (unsaved.Count == 1 ? " has" : " have") + " changes that are lost if you don't save them.",
+            MessageKind.Question, unsaved.Count == 1 ? "Save" : "Save all", "Don't save");
+        if (choice == MessageChoice.Cancel || choice == MessageChoice.Primary && !PreviewWindow.SaveAll(unsaved)) return;
+        _closeConfirmed = true;
+        Close();
     }
 
     private void SetStatus(string text) => StatusText.Text = text;

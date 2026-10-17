@@ -14,21 +14,12 @@ public static partial class GameLocator
 
     private static IEnumerable<string> Candidates()
     {
-        // Steam: every library listed in libraryfolders.vdf
-        // (library paths first: the registry keeps Steam's own path in lower case)
-        foreach (string steam in SteamRoots())
-        {
-            string vdf = Path.Combine(steam, "steamapps", "libraryfolders.vdf");
-            string text;
-            try { text = File.Exists(vdf) ? File.ReadAllText(vdf) : ""; }
-            catch (IOException) { text = ""; }
-            foreach (Match m in LibraryPath().Matches(text))
-                yield return Path.Combine(m.Groups[1].Value.Replace(@"\\", @"\"), "steamapps", "common", "The Witcher 3");
-            yield return Path.Combine(steam, "steamapps", "common", "The Witcher 3");
-        }
+        foreach (string library in SteamLibraries())
+            yield return Path.Combine(library, "steamapps", "common", "The Witcher 3");
 
         // GOG Galaxy and the GOG installer record each game's folder in the registry
-        foreach (string? path in GogPaths())
+        foreach (string? path in GogPaths(name => name.Contains("Witcher 3", StringComparison.OrdinalIgnoreCase)
+                                                  && !name.Contains("REDkit", StringComparison.OrdinalIgnoreCase)))
             if (!string.IsNullOrEmpty(path)) yield return path;
 
         // last resort: the default folders on every drive
@@ -40,6 +31,24 @@ public static partial class GameLocator
             yield return Path.Combine(root, "Steam", "steamapps", "common", "The Witcher 3");
             yield return Path.Combine(root, "GOG Games", "The Witcher 3 Wild Hunt GOTY");
             yield return Path.Combine(root, "Program Files (x86)", "GOG Galaxy", "Games", "The Witcher 3 Wild Hunt GOTY");
+        }
+    }
+
+    /// <summary>
+    /// Every Steam library folder listed in libraryfolders.vdf, then Steam's own folder
+    /// (library paths first: the registry keeps Steam's own path in lower case).
+    /// </summary>
+    public static IEnumerable<string> SteamLibraries()
+    {
+        foreach (string steam in SteamRoots())
+        {
+            string vdf = Path.Combine(steam, "steamapps", "libraryfolders.vdf");
+            string text;
+            try { text = File.Exists(vdf) ? File.ReadAllText(vdf) : ""; }
+            catch (IOException) { text = ""; }
+            foreach (Match m in LibraryPath().Matches(text))
+                yield return m.Groups[1].Value.Replace(@"\\", @"\");
+            yield return steam;
         }
     }
 
@@ -58,7 +67,8 @@ public static partial class GameLocator
         return roots.Distinct(StringComparer.OrdinalIgnoreCase);
     }
 
-    private static List<string?> GogPaths()
+    /// <summary>The folders GOG recorded for the games whose name passes <paramref name="wanted"/>.</summary>
+    public static List<string?> GogPaths(Func<string, bool> wanted)
     {
         var paths = new List<string?>();
         try
@@ -68,7 +78,7 @@ public static partial class GameLocator
             foreach (string id in games.GetSubKeyNames())
             {
                 using var game = games.OpenSubKey(id);
-                if (game?.GetValue("gameName") is string name && name.Contains("Witcher 3", StringComparison.OrdinalIgnoreCase))
+                if (game?.GetValue("gameName") is string name && wanted(name))
                     paths.Add(game.GetValue("path") as string);
             }
         }

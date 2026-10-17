@@ -35,6 +35,12 @@ public sealed class Settings
     /// <summary>Show a declaration's code in a popup when the mouse rests on a name in a script.</summary>
     public bool PeekDefinitions { get; set; } = true;
 
+    /// <summary>REDkit's wcc_lite.exe, which compiles a script project into a .rsblob. Compiling is off while it's empty.</summary>
+    public string WccLitePath { get; set; } = "";
+
+    /// <summary>Where each script project's compiled blob was last saved, keyed by the project's scripts folder.</summary>
+    public Dictionary<string, string> CompileOutputs { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
     readonly static JsonSerializerOptions? _sOptions = new() { WriteIndented = true };
 
     public static Settings Load()

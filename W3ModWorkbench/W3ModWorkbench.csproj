@@ -18,11 +18,11 @@
   <PropertyGroup>
     <Product>W3 Mod Workbench</Product>
     <AssemblyTitle>W3 Mod Workbench</AssemblyTitle>
-    <Description>Browse and extract The Witcher 3 bundles and decompile REDkit compiled scripts</Description>
+    <Description>Browse and extract The Witcher 3 bundles, decompile REDkit compiled scripts, and edit and compile WitcherScript</Description>
     <Authors>Faen90</Authors>
     <Company>Faen90</Company>
     <Copyright>Copyright © 2026 Faen90</Copyright>
-    <Version>1.4.0</Version>
+    <Version>1.4.1</Version>
     <NeutralLanguage>en</NeutralLanguage>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>

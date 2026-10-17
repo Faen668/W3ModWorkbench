@@ -41,6 +41,9 @@ public partial class SettingsWindow : Window, IMessageHost
         PeekCheck.IsChecked = settings.PeekDefinitions;
         GameFolderBox.TextChanged += (_, _) => UpdateGameStatus();
         UpdateGameStatus();
+        WccBox.Text = settings.WccLitePath;
+        WccBox.TextChanged += (_, _) => UpdateWccStatus();
+        UpdateWccStatus();
 
         var assembly = Assembly.GetExecutingAssembly();
         VersionText.Text = $"Version {assembly.GetName().Version?.ToString(3)}  ·  by Faen90";
@@ -164,6 +167,52 @@ public partial class SettingsWindow : Window, IMessageHost
         }
     }
 
+    private void UpdateWccStatus()
+    {
+        string path = WccBox.Text.Trim().Trim('"');
+        if (path.Length == 0)
+        {
+            WccIcon.Text = ""; // info
+            WccIcon.ClearValue(ForegroundProperty);
+            WccStatus.Text = "Not set, so Compile is off. Scripts can still be edited and saved.";
+        }
+        else if (ScriptCompiler.IsWccLite(path))
+        {
+            WccIcon.Text = ""; // check mark
+            WccIcon.SetResourceReference(ForegroundProperty, "SystemFillColorSuccessBrush");
+            WccStatus.Text = "Found wcc_lite and REDkit's game scripts. Script projects can be compiled.";
+        }
+        else
+        {
+            WccIcon.Text = ""; // warning
+            WccIcon.SetResourceReference(ForegroundProperty, "SystemFillColorCautionBrush");
+            WccStatus.Text = File.Exists(path) && Path.GetFileName(path).Equals(ScriptCompiler.ExeName, StringComparison.OrdinalIgnoreCase)
+                ? @"That's wcc_lite, but REDkit's r4data\scripts folder isn't two folders up from it, where it's expected."
+                : @"Choose wcc_lite.exe in REDkit's bin\x64_RedKit folder.";
+        }
+    }
+
+    private void DetectWcc_Click(object sender, RoutedEventArgs e)
+    {
+        if (ScriptCompiler.Find() is { } found)
+            WccBox.Text = found;
+        else
+            _ = ShowMessage("REDkit wasn't found",
+                "It isn't in your Steam or GOG libraries. Use the folder button to pick wcc_lite.exe yourself.", MessageKind.Info);
+    }
+
+    private void BrowseWcc_Click(object sender, RoutedEventArgs e)
+    {
+        string current = WccBox.Text.Trim().Trim('"');
+        var dialog = new OpenFileDialog
+        {
+            Title = "Choose REDkit's wcc_lite.exe",
+            Filter = "wcc_lite (wcc_lite.exe)|wcc_lite.exe|Programs (*.exe)|*.exe",
+            InitialDirectory = File.Exists(current) ? Path.GetDirectoryName(current) : "",
+        };
+        if (dialog.ShowDialog(this) == true) WccBox.Text = dialog.FileName;
+    }
+
     private void DetectGame_Click(object sender, RoutedEventArgs e)
     {
         if (GameLocator.Find() is { } found)
@@ -201,6 +250,7 @@ public partial class SettingsWindow : Window, IMessageHost
         _settings.PreviewOpenIn = OpenInWindows.IsChecked == true ? "Windows" : "Tabs";
         _settings.PreviewSplit = SplitDown.IsChecked == true ? "Down" : "Right";
         _settings.PeekDefinitions = PeekCheck.IsChecked == true;
+        _settings.WccLitePath = WccBox.Text.Trim().Trim('"');
         _settings.Save();
         PreviewWindow.ApplySettings();
         DialogResult = true;

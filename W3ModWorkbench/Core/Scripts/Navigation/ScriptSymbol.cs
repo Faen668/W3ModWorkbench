@@ -19,6 +19,9 @@ public sealed class ScriptFile
 
     public required Func<byte[]> Read { get; init; }
 
+    /// <summary>The file on disk, for a script project's file, which can be edited and saved. Null for anything read-only.</summary>
+    public string? DiskPath { get; init; }
+
     private string? _text;
 
     /// <summary>The file's text, read once and kept, for searches that look through every file.</summary>

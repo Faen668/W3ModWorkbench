@@ -1,4 +1,5 @@
 using System.IO;
+using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -7,6 +8,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 using ICSharpCode.AvalonEdit;
+using ICSharpCode.AvalonEdit.Document;
 using ICSharpCode.AvalonEdit.Rendering;
 using ICSharpCode.AvalonEdit.Search;
 using Microsoft.Win32;
@@ -27,11 +29,17 @@ public sealed record PreviewItem(string Path, string Source, byte[] Data, Script
     public string Name => System.IO.Path.GetFileName(Path);
 
     public bool IsScript => System.IO.Path.GetExtension(Path).Equals(".ws", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>The file on disk when it's in a script project: it can be edited and saved. Null for anything read-only.</summary>
+    public string? DiskPath => Script?.DiskPath;
+
+    public bool IsEditable => DiskPath is not null;
 }
 
 /// <summary>
 /// One file in a <see cref="PreviewWindow"/>: the code view with its search bar, go to definition, the
 /// definition popup and in-place messages. The window shows it in a tab and handles where definitions open.
+/// A script project's files can be edited and saved; everything else is read-only.
 /// </summary>
 public partial class PreviewDocument : UserControl
 {
@@ -55,7 +63,16 @@ public partial class PreviewDocument : UserControl
     private int _peekVersion;
     private string[]? _lines;
 
+    // editing
+    private readonly DispatcherTimer _reparseTimer = new() { Interval = TimeSpan.FromMilliseconds(350) };
+    private TextDocument? _hooked;
+    private Encoding _encoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: true);
+    private int _size;
+
     public PreviewItem Item { get; }
+
+    /// <summary>The text was changed since it was opened or last saved, or saved again.</summary>
+    public event EventHandler? DirtyChanged;
 
     /// <summary>The window showing it; null once it's closed.</summary>
     public PreviewWindow? Host { get; internal set; }
@@ -69,8 +86,30 @@ public partial class PreviewDocument : UserControl
         Editor.Options.EnableHyperlinks = false;
         Editor.Options.EnableEmailHyperlinks = false;
         Editor.TextArea.TextView.Margin = new Thickness(10, 0, 0, 0);
-        Editor.Text = TextDecoding.Decode(item.Data);
+        // a project's file is read from disk, so one opened again after a save shows what was saved
+        byte[] data = item.Data;
+        if (item.DiskPath is { } disk)
+        {
+            try { data = File.ReadAllBytes(disk); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        }
+        _encoding = EncodingOf(data);
+        _size = data.Length;
+        Editor.Text = TextDecoding.Decode(data);
+        Editor.Document.UndoStack.ClearAll();
+        Editor.Document.UndoStack.MarkAsOriginalFile(); // ClearAll leaves the text loaded counting as a change
+        Editor.IsReadOnly = !item.IsEditable;
+        HookDocument();
         _search = SearchPanel.Install(Editor.TextArea);
+        _reparseTimer.Tick += (_, _) =>
+        {
+            _reparseTimer.Stop();
+            UpdateOutline();
+        };
+        Editor.TextArea.PreviewTextInput += (_, _) =>
+        {
+            if (Editor.IsReadOnly && !Card.IsOpen) ShowReadOnlyHint();
+        };
 
         _workspace = item.Workspace;
         if (item.Script is not null && _workspace is not null)
@@ -97,7 +136,8 @@ public partial class PreviewDocument : UserControl
             OutlineBar.Visibility = Visibility.Visible;
             Editor.TextArea.Caret.PositionChanged += (_, _) =>
             {
-                UpdateOutline();
+                // while typing, the outline waits until the typing stops
+                if (!_reparseTimer.IsEnabled) UpdateOutline();
                 CloseHint();
                 if (_workspace is not null) _hintTimer.Start();
             };
@@ -129,7 +169,8 @@ public partial class PreviewDocument : UserControl
     public string FileName => Item.Name;
 
     /// <summary>The line under the file name in the window: where it comes from, its path and its size.</summary>
-    public string Detail => $"{Item.Source}  ·  {Item.Path}  ·  {Format.Bytes(Item.Data.Length)}";
+    public string Detail => $"{Item.Source}  ·  {Item.Path}  ·  {Format.Bytes(_size)}"
+        + (IsDirty ? "  ·  not saved" : Item.IsScript && !IsEditable ? "  ·  read-only" : "");
 
     public string Text => Editor.Text;
 
@@ -153,7 +194,7 @@ public partial class PreviewDocument : UserControl
 
         // WitcherScript is coloured with the grammar from WebSpam's witcherscript-vscode extension
         if (Item.IsScript)
-            Editor.TextArea.TextView.LineTransformers.Insert(0, new WitcherScriptColorizer(Editor.Document, _dark));
+            Editor.TextArea.TextView.LineTransformers.Insert(0, new WitcherScriptColorizer(Editor.Document, _dark) { View = Editor.TextArea.TextView });
 
         _link.Brush = TryFindResource("AccentTextFillColorPrimaryBrush") as Brush;
         if (_link.Brush is SolidColorBrush link)
@@ -180,7 +221,126 @@ public partial class PreviewDocument : UserControl
 
     public void Copy() => Clipboard.SetText(Editor.Text);
 
-    public void Save()
+    // ---------------------------------------------------------------- editing and saving
+
+    public bool IsEditable => Item.IsEditable;
+
+    public bool IsDirty => !Editor.Document.UndoStack.IsOriginalFile;
+
+    /// <summary>Whether this and <paramref name="other"/> are two views of the same text, so editing one edits both.</summary>
+    public bool SharesTextWith(PreviewDocument other) => other.Editor.Document == Editor.Document;
+
+    /// <summary>Shows <paramref name="other"/>'s text, edits and all, as a second view of it. Called before it's shown.</summary>
+    public void ShareTextWith(PreviewDocument other)
+    {
+        Editor.Document = other.Editor.Document;
+        _encoding = other._encoding;
+        _size = other._size;
+        HookDocument();
+        Document_TextChanged(null, EventArgs.Empty);
+    }
+
+    private void HookDocument()
+    {
+        if (_hooked is not null)
+        {
+            _hooked.TextChanged -= Document_TextChanged;
+            _hooked.UndoStack.PropertyChanged -= UndoStack_PropertyChanged;
+        }
+        _hooked = Editor.Document;
+        _hooked.TextChanged += Document_TextChanged;
+        _hooked.UndoStack.PropertyChanged += UndoStack_PropertyChanged;
+    }
+
+    /// <summary>What was read from the text is out of date: it's read again the next time it's needed.</summary>
+    private void Document_TextChanged(object? sender, EventArgs e)
+    {
+        _doc = null;
+        _finder = null;
+        _finderLayers = [];
+        _lines = null;
+        ClearLink();
+        if (OutlineBar.Visibility == Visibility.Visible)
+        {
+            _reparseTimer.Stop();
+            _reparseTimer.Start();
+        }
+    }
+
+    private void UndoStack_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(UndoStack.IsOriginalFile)) DirtyChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>The encoding the file came in, by its byte order mark, so it's saved the same way.</summary>
+    private static Encoding EncodingOf(byte[] data) =>
+        data.Length >= 2 && data[0] == 0xFF && data[1] == 0xFE ? new UnicodeEncoding(bigEndian: false, byteOrderMark: true)
+        : data.Length >= 2 && data[0] == 0xFE && data[1] == 0xFF ? new UnicodeEncoding(bigEndian: true, byteOrderMark: true)
+        : new UTF8Encoding(encoderShouldEmitUTF8Identifier: data.Length >= 3 && data[0] == 0xEF && data[1] == 0xBB && data[2] == 0xBF);
+
+    private byte[] Encode(string text) => [.. _encoding.GetPreamble(), .. _encoding.GetBytes(text)];
+
+    /// <summary>
+    /// Ctrl+S: writes a project's file back to disk and reads the project's scripts again, so go to definition
+    /// sees the change. A read-only file is saved somewhere else instead. False when it wasn't saved.
+    /// </summary>
+    public bool Save()
+    {
+        if (!IsEditable) return SaveAs();
+        if (!IsDirty) return true;
+        byte[] data = Encode(Editor.Text);
+        try
+        {
+            File.WriteAllBytes(Item.DiskPath!, data);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _ = ShowCard($"{FileName} could not be saved", ex.Message, MessageKind.Warning, primary: "OK");
+            return false;
+        }
+        _size = data.Length;
+        Editor.Document.UndoStack.MarkAsOriginalFile();
+        if (Item.Script is { } script && _workspace?.ArchiveOf(script) is { } archive) ScriptWorkspace.Reindex(archive);
+        return true;
+    }
+
+    /// <summary>
+    /// Asks whether to save changes before the file closes. True when it can close: saved, or the changes
+    /// are to be thrown away; false to keep it open.
+    /// </summary>
+    public async Task<bool> ConfirmCloseAsync()
+    {
+        if (!IsDirty) return true;
+        return await Ask($"Save the changes to {FileName}?", "They're lost if you don't save them.", MessageKind.Question, "Save", "Don't save") switch
+        {
+            MessageChoice.Primary => Save(),
+            MessageChoice.Secondary => true,
+            _ => false,
+        };
+    }
+
+    /// <summary>Typing in a read-only file says why it can't be changed, and for a decompiled script, how it can.</summary>
+    private async void ShowReadOnlyHint()
+    {
+        if (Host is not { } host) return;
+        int at = Editor.CaretOffset;
+        if (host.CanEditAsProject(this))
+        {
+            if (await ShowCard("Decompiled scripts are read-only",
+                    "Save the mod's scripts to a folder to edit them. That folder is then a script project: its files can be changed, saved and compiled.",
+                    MessageKind.Info, primary: "Edit as project", secondary: "Close", anchor: at))
+                _ = host.EditAsProjectAsync(this);
+        }
+        else if (Item.Script is not null)
+            _ = ShowCard("This script is read-only",
+                "Scripts can be edited when their folder is opened as a script project: use Open folder in the main window on a folder of .ws files, such as a REDkit project's workspace\\scripts.",
+                MessageKind.Info, primary: "OK", anchor: at);
+        else
+            _ = ShowCard(null, "Files inside bundles are read-only. Save as makes a copy you can change.", MessageKind.Info, anchor: at, autoClose: true);
+    }
+
+    /// <summary>Saves the text somewhere else: as it is now for a project's file, otherwise exactly as it was read.</summary>
+    public bool SaveAs()
     {
         string ext = Path.GetExtension(Item.Path);
         var dialog = new SaveFileDialog
@@ -189,14 +349,16 @@ public partial class PreviewDocument : UserControl
             FileName = Item.Name,
             Filter = ext.Length > 0 ? $"{ext.TrimStart('.').ToUpperInvariant()} file (*{ext})|*{ext}|All files (*.*)|*.*" : "All files (*.*)|*.*",
         };
-        if (dialog.ShowDialog(Window.GetWindow(this)) != true) return;
+        if (dialog.ShowDialog(Window.GetWindow(this)) != true) return false;
         try
         {
-            File.WriteAllBytes(dialog.FileName, Item.Data);
+            File.WriteAllBytes(dialog.FileName, IsEditable ? Encode(Editor.Text) : Item.Data);
+            return true;
         }
         catch (Exception ex)
         {
             _ = ShowCard("The file could not be saved", ex.Message, MessageKind.Warning, primary: "OK");
+            return false;
         }
     }
 
@@ -352,7 +514,12 @@ public partial class PreviewDocument : UserControl
         var (start, length) = word ?? (0, 0);
         if (_link.Start == start && _link.Length == length && _link.Strong == strong) return;
         var view = Editor.TextArea.TextView;
-        if (_link.Length > 0) view.Redraw(_link.Start, _link.Length);
+        // after an edit the old underline may lie past the end of the text
+        if (_link.Length > 0)
+        {
+            if (_link.Start + _link.Length <= Editor.Document.TextLength) view.Redraw(_link.Start, _link.Length);
+            else view.Redraw();
+        }
         (_link.Start, _link.Length, _link.Strong) = (start, length, strong);
         if (_link.Length > 0) view.Redraw(_link.Start, _link.Length);
         if (word is not null && strong) view.Cursor = Cursors.Hand;
@@ -1011,6 +1178,16 @@ public partial class PreviewDocument : UserControl
         var result = Card.Show(title, message, kind, primary, secondary, autoClose);
         Card.Measure(new Size(Math.Max(0, CardLayer.ActualWidth - 16), double.PositiveInfinity));
         PlaceCard(anchor);
+        return result;
+    }
+
+    /// <summary>A question with three answers, at the top of the text: the main one, the other one, or Cancel.</summary>
+    public Task<MessageChoice> Ask(string title, string message, MessageKind kind, string primary, string secondary)
+    {
+        ClosePeek();
+        var result = Card.Ask(title, message, kind, primary, secondary);
+        Card.Measure(new Size(Math.Max(0, CardLayer.ActualWidth - 16), double.PositiveInfinity));
+        PlaceCard(null);
         return result;
     }
 
