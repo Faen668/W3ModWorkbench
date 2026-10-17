@@ -90,7 +90,8 @@ public partial class MainWindow : Window, IMessageHost
             await LoadPathsAsync(paths);
     }
 
-    private async Task LoadPathsAsync(IEnumerable<string> paths)
+    /// <param name="asFolders">Folders open as they are, as one archive each, instead of being searched for what's in them.</param>
+    private async Task LoadPathsAsync(IEnumerable<string> paths, bool asFolders = false)
     {
         // string tables open in an editor of their own rather than as archives
         var strings = paths.Where(p => File.Exists(p) && StringsWindow.CanOpen(p)).ToList();
@@ -105,7 +106,11 @@ public partial class MainWindow : Window, IMessageHost
         var files = new List<string>();
         foreach (var path in paths)
         {
-            if (Directory.Exists(path))
+            if (asFolders && Directory.Exists(path))
+            {
+                files.Add(path);
+            }
+            else if (Directory.Exists(path))
             {
                 try
                 {
@@ -351,10 +356,10 @@ public partial class MainWindow : Window, IMessageHost
         if (FindParent<DataGridRow>(e.OriginalSource as DependencyObject)?.Item is not EntryItem item) return;
         if (item.Entry is StringsEntry strings)
             StringsWindow.Open(strings.FullPath, this);
-        else if (XmlWindow.CanOpen(item.Name))
-            _ = OpenXmlAsync(item);
         else if (item.IsPreviewable)
             _ = PreviewAsync(item);
+        else if (XmlWindow.CanOpen(item.Name))
+            _ = OpenXmlAsync(item);
         else
             item.IsChecked = !item.IsChecked;
     }
@@ -368,8 +373,17 @@ public partial class MainWindow : Window, IMessageHost
         else _ = PreviewAsync(item);
     }
 
-    private void FileGrid_ContextMenuOpening(object sender, ContextMenuEventArgs e) =>
+    private void GridXmlEditor_Click(object sender, RoutedEventArgs e)
+    {
+        foreach (var item in Highlighted().Where(i => XmlWindow.CanOpen(i.Name)).Take(10))
+            _ = OpenXmlAsync(item);
+    }
+
+    private void FileGrid_ContextMenuOpening(object sender, ContextMenuEventArgs e)
+    {
         GridExternalItem.IsEnabled = Highlighted().Any(i => i.IsPreviewable);
+        GridXmlItem.Visibility = Highlighted().Any(i => XmlWindow.CanOpen(i.Name)) ? Visibility.Visible : Visibility.Collapsed;
+    }
 
     /// <summary>
     /// Opens the highlighted text files in the app Windows uses for their type: a project's file itself, or a
@@ -448,6 +462,10 @@ public partial class MainWindow : Window, IMessageHost
             menu.Items.Add(item);
             return item;
         }
+        Add("Find in files…", "Ctrl+Shift+F", () => FindInFilesWindow.Open(this));
+        Add("Browse game scripts", "", () => _ = BrowseGameScriptsAsync());
+        Add("Browse installed mods", "", () => _ = BrowseModsAsync());
+        menu.Items.Add(new Separator());
         Add("Search game strings…", "Ctrl+Shift+G", OpenGameStrings);
         Add("Stub generator…", "Ctrl+Shift+W", OpenStubGenerator);
         Add("Source inspector…", "Ctrl+Shift+I", () => SourceInspectorWindow.Open(this));
@@ -458,6 +476,50 @@ public partial class MainWindow : Window, IMessageHost
         menu.IsOpen = true;
     }
 
+    /// <summary>The archives open in the main window, for script lookups and for Find in files.</summary>
+    public IEnumerable<IArchive> OpenArchives() => _roots.Select(r => r.Archive);
+
+    /// <summary>Opens the game's own scripts (content\content0\scripts) in the file list, to read, with no project needed.</summary>
+    private async Task BrowseGameScriptsAsync()
+    {
+        string? game = GameLocator.Resolve(null);
+        string? scripts = game is null ? null : Path.Combine(game, "content", "content0", "scripts");
+        if (scripts is null || !Directory.Exists(scripts))
+        {
+            ShowError("The game folder isn't set.\n\nBrowsing the game's scripts needs The Witcher 3's folder. Set it in Settings.");
+            return;
+        }
+        await BrowseAsync([scripts], scripts);
+    }
+
+    /// <summary>Opens everything in the game's mods folder, as Open folder does: loose scripts, compiled scripts, bundles and strings.</summary>
+    private async Task BrowseModsAsync()
+    {
+        string? game = GameLocator.Resolve(null);
+        string? mods = game is null ? null : Path.Combine(game, "mods");
+        if (mods is null || !Directory.Exists(mods))
+        {
+            ShowError("The mods folder wasn't found.\n\nBrowsing the installed mods needs The Witcher 3's folder, and a mods folder in it. Set the game folder in Settings.");
+            return;
+        }
+        await BrowseAsync([mods], null);
+    }
+
+    private async Task BrowseAsync(string[] paths, string? select)
+    {
+        bool open = select is not null && _roots.Any(r => r.Archive.FilePath.Equals(select, StringComparison.OrdinalIgnoreCase));
+        if (!open)
+        {
+            await LoadPathsAsync(paths, asFolders: select is not null);
+            Activate();
+        }
+        if (select is not null && _roots.FirstOrDefault(r => r.Archive.FilePath.Equals(select, StringComparison.OrdinalIgnoreCase)) is { } node)
+        {
+            node.IsExpanded = true;
+            node.IsSelected = true;
+        }
+    }
+
     private void OpenGameStrings()
     {
         if (GameLocator.Resolve(null) is { } folder) GameStringsWindow.Open(this, folder);
@@ -465,6 +527,12 @@ public partial class MainWindow : Window, IMessageHost
     }
 
     private void OpenStubGenerator() => StubWindow.Open(this, GameLocator.Resolve(null));
+
+    private void FindInFiles_Click(object sender, RoutedEventArgs e) => FindInFilesWindow.Open(this);
+
+    private void BrowseGame_Click(object sender, RoutedEventArgs e) => _ = BrowseGameScriptsAsync();
+
+    private void BrowseMods_Click(object sender, RoutedEventArgs e) => _ = BrowseModsAsync();
 
     private void OpenXmlFile()
     {
@@ -663,6 +731,11 @@ public partial class MainWindow : Window, IMessageHost
         else if (ctrl && e.Key == Key.OemComma)
         {
             Settings_Click(sender, e);
+            e.Handled = true;
+        }
+        else if (Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && e.Key == Key.F)
+        {
+            FindInFilesWindow.Open(this);
             e.Handled = true;
         }
         else if (Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && e.Key == Key.G)

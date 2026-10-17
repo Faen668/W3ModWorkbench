@@ -3,6 +3,8 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Xml;
+using System.IO;
 using W3ModWorkbench.Core.Scripts.Navigation;
 
 namespace W3ModWorkbench;
@@ -23,14 +25,20 @@ public sealed class OutlineNode(ScriptSymbol symbol, int end) : INotifyPropertyC
 
     public List<OutlineNode> Children { get; } = [];
 
+    public OutlineNode? Parent { get; set; }
+
+    /// <summary>For an XML element: its tag, and the attribute that names it. Null for a declaration.</summary>
+    public string? CustomLabel { get; init; }
+    public string? CustomDetail { get; init; }
+
     /// <summary>The children the filter lets through.</summary>
     public List<OutlineNode> Shown { get; set; } = [];
 
-    public bool IsType => Symbol.IsType;
-    public string Glyph => DefinitionPeek.KindGlyph(Symbol.Kind);
+    public bool IsType => CustomLabel is not null ? Children.Count > 0 : Symbol.IsType;
+    public string Glyph => CustomLabel is not null ? (Children.Count > 0 ? "\uE8B7" : "\uE943") : DefinitionPeek.KindGlyph(Symbol.Kind);
 
     /// <summary>What a declaration is called in the tree. Annotated ones outside a class say what they change.</summary>
-    public string Label => Symbol.Kind switch
+    public string Label => CustomLabel ?? Symbol.Kind switch
     {
         SymbolKind.Function or SymbolKind.Event when Symbol.Annotation is not null && Symbol.Owner is not null => $"{Symbol.Owner}.{Symbol.Name}()",
         SymbolKind.Function or SymbolKind.Event => Symbol.Name + "()",
@@ -40,7 +48,8 @@ public sealed class OutlineNode(ScriptSymbol symbol, int end) : INotifyPropertyC
     };
 
     /// <summary>The dim text after the name: a type, a return type, a base class or an annotation.</summary>
-    public string Detail => Symbol.Annotation is { } a ? "@" + a
+    public string Detail => CustomLabel is not null ? CustomDetail ?? ""
+        : Symbol.Annotation is { } a ? "@" + a
         : Symbol.Kind == SymbolKind.Field && Symbol.Type is { } t ? ": " + t
         : Symbol.Kind is SymbolKind.Function or SymbolKind.Event && Symbol.Type is { } r ? ": " + r
         : Symbol.Base is { } b ? "extends " + b
@@ -49,7 +58,7 @@ public sealed class OutlineNode(ScriptSymbol symbol, int end) : INotifyPropertyC
     public string ToolTip => $"{Symbol.Title}  ·  line {Symbol.Line}";
 
     /// <summary>Tells the same declaration apart across edits.</summary>
-    public string Identity => $"{Symbol.Kind}|{Symbol.Annotation}|{Symbol.Owner}|{Symbol.Name}";
+    public string Identity => CustomLabel is not null ? $"xml|{Parent?.Identity}|{CustomLabel}|{CustomDetail}" : $"{Symbol.Kind}|{Symbol.Annotation}|{Symbol.Owner}|{Symbol.Name}";
 
     public bool IsExpanded
     {
@@ -124,10 +133,93 @@ public partial class OutlinePanel : UserControl
             if (s.IsType) byType[s] = node;
             // the type it's declared inside, if any: a type's own name sits before its {, so it never contains itself
             var parent = types.LastOrDefault(t => s.Offset > t.Start && s.Offset < t.End);
-            if (parent is not null && byType.TryGetValue(parent.Symbol, out var owner)) owner.Children.Add(node);
+            if (parent is not null && byType.TryGetValue(parent.Symbol, out var owner))
+            {
+                node.Parent = owner;
+                owner.Children.Add(node);
+            }
             else _roots.Add(node);
         }
         ApplyFilter();
+    }
+
+    private const int MaxXmlNodes = 4000;
+
+    /// <summary>
+    /// Shows an XML file's elements as a tree, each with the attribute that names it. When the tree is the same as before
+    /// (only places moved) it stays as it is. Text that isn't well-formed keeps what was read up to the error.
+    /// </summary>
+    public void UpdateXml(string text, ScriptFile file)
+    {
+        var starts = ScriptSearch.LineStarts(text);
+        var roots = new List<OutlineNode>();
+        var all = new List<OutlineNode>();
+        var stack = new Stack<OutlineNode>();
+        int At(IXmlLineInfo li) => starts[Math.Clamp(li.LineNumber - 1, 0, starts.Count - 1)] + Math.Max(0, li.LinePosition - 1);
+        try
+        {
+            using var reader = XmlReader.Create(new StringReader(text), new XmlReaderSettings { DtdProcessing = DtdProcessing.Ignore, XmlResolver = null });
+            var li = (IXmlLineInfo)reader;
+            while (all.Count < MaxXmlNodes && reader.Read())
+            {
+                if (reader.NodeType == XmlNodeType.Element)
+                {
+                    int start = Math.Max(0, At(li) - 1); // the <
+                    var node = new OutlineNode(new ScriptSymbol(reader.LocalName, SymbolKind.Field, null, null, file, start + 1, li.LineNumber), start)
+                    {
+                        CustomLabel = reader.Name,
+                        CustomDetail = Naming(reader),
+                        Parent = stack.Count > 0 ? stack.Peek() : null,
+                        IsExpanded = stack.Count < 3,
+                    };
+                    if (node.Parent is null) roots.Add(node);
+                    else node.Parent.Children.Add(node);
+                    all.Add(node);
+                    if (reader.IsEmptyElement) node.End = Math.Max(start, text.IndexOf('>', start) + 1);
+                    else stack.Push(node);
+                }
+                else if (reader.NodeType == XmlNodeType.EndElement && stack.Count > 0)
+                {
+                    var node = stack.Pop();
+                    node.End = Math.Max(node.End, text.IndexOf('>', At(li)) + 1);
+                }
+            }
+        }
+        catch (XmlException)
+        {
+            // keep what was read before the error
+        }
+        foreach (var open in stack) open.End = text.Length;
+        if (all.Count == 0 && _all.Count > 0) return;
+
+        string signature = string.Join("\n", all.Select(n => $"{n.Identity}|{n.Children.Count}"));
+        if (signature == _signature && _all.Count == all.Count)
+        {
+            for (int i = 0; i < all.Count; i++)
+            {
+                _all[i].Symbol = all[i].Symbol;
+                _all[i].End = all[i].End;
+            }
+            return;
+        }
+        var closed = _all.Where(n => !n.IsExpanded).Select(n => n.Identity).ToHashSet();
+        foreach (var n in all) if (closed.Contains(n.Identity)) n.IsExpanded = false;
+        _signature = signature;
+        _all = all;
+        _roots = roots;
+        ApplyFilter();
+    }
+
+    /// <summary>The attribute that names an element: name, id or key, else the first one written.</summary>
+    private static string? Naming(XmlReader reader)
+    {
+        foreach (string key in new[] { "name", "id", "key", "tag", "type" })
+            if (reader.GetAttribute(key) is { Length: > 0 } value) return key is "name" or "id" ? value : $"{key}=\"{value}\"";
+        if (!reader.HasAttributes) return null;
+        reader.MoveToFirstAttribute();
+        string first = $"{reader.Name}=\"{reader.Value}\"";
+        reader.MoveToElement();
+        return first;
     }
 
     /// <summary>Picks out the innermost declaration the caret is in, without taking the focus from the text.</summary>
@@ -138,7 +230,7 @@ public partial class OutlinePanel : UserControl
             .OrderByDescending(n => n.Symbol.Offset).FirstOrDefault();
         if (node is null || node.IsSelected) return;
         foreach (var n in _all) if (n.IsSelected && n != node) n.IsSelected = false;
-        if (OwnerOf(node) is { IsExpanded: false } parent) parent.IsExpanded = true;
+        for (var up = node.Parent; up is not null; up = up.Parent) up.IsExpanded = true;
         node.IsSelected = true;
         Dispatcher.BeginInvoke(() => ContainerFor(node)?.BringIntoView(), System.Windows.Threading.DispatcherPriority.Background);
     }
@@ -149,13 +241,17 @@ public partial class OutlinePanel : UserControl
         FilterBox.SelectAll();
     }
 
-    private OutlineNode? OwnerOf(OutlineNode node) => _roots.FirstOrDefault(r => r.Children.Contains(node));
-
     private TreeViewItem? ContainerFor(OutlineNode node)
     {
-        if (OwnerOf(node) is { } parent)
-            return (Tree.ItemContainerGenerator.ContainerFromItem(parent) as TreeViewItem)?.ItemContainerGenerator.ContainerFromItem(node) as TreeViewItem;
-        return Tree.ItemContainerGenerator.ContainerFromItem(node) as TreeViewItem;
+        var chain = new List<OutlineNode>();
+        for (var n = node; n is not null; n = n.Parent) chain.Insert(0, n);
+        ItemsControl container = Tree;
+        foreach (var n in chain)
+        {
+            if (container.ItemContainerGenerator.ContainerFromItem(n) is not TreeViewItem item) return null;
+            container = item;
+        }
+        return container as TreeViewItem;
     }
 
     // ---------------------------------------------------------------- filter
@@ -163,18 +259,25 @@ public partial class OutlinePanel : UserControl
     private void ApplyFilter()
     {
         string query = FilterBox.Text.Trim();
-        bool Matches(OutlineNode n) => query.Length == 0 || n.Label.Contains(query, StringComparison.OrdinalIgnoreCase);
-        var shown = new List<OutlineNode>();
-        foreach (var root in _roots)
-        {
-            root.Shown = Matches(root) ? root.Children : [.. root.Children.Where(Matches)];
-            if (Matches(root) || root.Shown.Count > 0) shown.Add(root);
-            root.Raise(nameof(OutlineNode.Shown));
-            if (query.Length > 0 && root.Shown.Count > 0) root.IsExpanded = true;
-        }
+        var shown = _roots.Where(r => Filter(r, query, query.Length == 0)).ToList();
         Tree.ItemsSource = shown;
         EmptyText.Text = _all.Count == 0 ? "Nothing declared in this file." : "Nothing matches the filter.";
         EmptyText.Visibility = shown.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    /// <summary>
+    /// Narrows a node's children to the names containing the text, keeping the parents they're in. Everything under a
+    /// name that matches is kept. Returns whether the node stays in the tree.
+    /// </summary>
+    private static bool Filter(OutlineNode node, string query, bool everything)
+    {
+        bool self = everything || node.Label.Contains(query, StringComparison.OrdinalIgnoreCase)
+            || node.Detail.Contains(query, StringComparison.OrdinalIgnoreCase);
+        var kept = node.Children.Where(c => Filter(c, query, self)).ToList();
+        node.Shown = self ? node.Children : kept;
+        node.Raise(nameof(OutlineNode.Shown));
+        if (query.Length > 0 && kept.Count > 0) node.IsExpanded = true;
+        return self || kept.Count > 0;
     }
 
     private void FilterBox_TextChanged(object sender, TextChangedEventArgs e)
@@ -206,12 +309,16 @@ public partial class OutlinePanel : UserControl
     private OutlineNode? FirstMatch()
     {
         string query = FilterBox.Text.Trim();
-        foreach (var root in Tree.Items.OfType<OutlineNode>())
+        static OutlineNode? Find(IEnumerable<OutlineNode> nodes, string query)
         {
-            if (root.Label.Contains(query, StringComparison.OrdinalIgnoreCase)) return root;
-            if (root.Shown.FirstOrDefault(n => n.Label.Contains(query, StringComparison.OrdinalIgnoreCase)) is { } member) return member;
+            foreach (var n in nodes)
+            {
+                if (n.Label.Contains(query, StringComparison.OrdinalIgnoreCase) || n.Detail.Contains(query, StringComparison.OrdinalIgnoreCase)) return n;
+                if (Find(n.Shown, query) is { } inner) return inner;
+            }
+            return null;
         }
-        return null;
+        return Find(Tree.Items.OfType<OutlineNode>(), query);
     }
 
     // ---------------------------------------------------------------- going to a declaration

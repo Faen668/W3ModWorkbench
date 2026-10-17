@@ -182,7 +182,8 @@ public sealed class ScriptWorkspace
         Path = entry.Path,
         Source = entry.Archive.Owner + "\\" + entry.Archive.Name,
         SourceKey = entry.Archive.FilePath,
-        DiskPath = (entry as LooseScriptEntry)?.FullPath,
+        // the game's own scripts are for reading, even when opened as a folder
+        DiskPath = entry is LooseScriptEntry { Archive: ScriptFolder folder } loose && !ScriptFolder.IsGameScripts(folder.FilePath) ? loose.FullPath : null,
         Read = () =>
         {
             if (!entry.Archive.ReadsFromDisk) return entry.Read(null);

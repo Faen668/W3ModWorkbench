@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.5.2
+
+- **Find in files** (Tools, Ctrl+Shift+F): searches the text of files in folders with nothing open, like Notepad++. Pick where to look (the game's scripts, the installed mods, REDkit's scripts, the open projects or any folder), filter file names (`*.ws; *.xml`, `!*.bak`), and match case, whole words or a regular expression. Matches are listed by file, a click opens the file at the match, and F4 / Shift+F4 step through them.
+- **Browse game scripts** and **Browse installed mods** (Tools, and on the start screen): list the game's own scripts, or everything in the mods folder, in the main window without opening a project first. The game's scripts always open read-only and no longer carry a PROJECT badge.
+- **XML outline**: XML previews and the XML editor have an outline side bar of the file's elements, each with the attribute that names it (`ability  DLC5 Nilfgaardian Armor _Stats`). It follows the cursor, filters by name and keeps up as you edit.
+- **XML folding** in the preview, and a softer look for the fold markers everywhere. A folded element keeps its attributes, so it reads `<ability name="DLC5 Nilfgaardian Armor _Stats">` instead of `<ability>`.
+- **Double-clicking an XML file** now opens the preview, like right-click > Preview. **Open in XML editor** on the right-click menu opens the editor.
+- The outline can be shown or hidden **separately in each side of a split view**. What you chose last is what newly opened files start with.
+- Fixed: splitting a preview with only one XML tab hung the app.
+- Fixed: go to definition on a type name written after a colon (`out vector : Vector`) went to the variable of the same name instead of the type.
+
 ## 1.5.1
 
 - **Load order analyser** (Tools, Ctrl+Shift+L): reads every installed mod and DLC and checks the load order. Compiled scripts are decompiled to what they declare and use, loose scripts parsed, bundle tables and strings listed, and priorities come from `mods.settings` (DLC first, then mods by priority, then unlisted mods by folder name).

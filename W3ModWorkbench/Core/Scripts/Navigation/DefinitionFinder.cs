@@ -91,12 +91,38 @@ public sealed partial class DefinitionFinder(ParsedScript doc, IReadOnlyList<Scr
             return Distinct(All(word).Where(s => s.IsMember && Fits(s)));
         }
 
+        // the word is written where a type goes, so a variable of the same name (case doesn't matter) isn't what's meant: out vector : Vector
+        if (!call && IsDeclaredType(start) && Distinct(All(word).Where(s => s.IsType)) is { Count: > 0 } types) return types;
+
         if (!call && fn is not null && Local(fn, word) is { } local) return [local];
         if (self is not null && MembersInChain(self, word, includeStateOwner: true, filter: Fits) is { Count: > 0 } own) return own;
         if (!call && EngineGlobals.TryGetValue(word, out string? engineType)) return TypeDefinition(engineType);
 
         var globals = Distinct(All(word).Where(s => Fits(s) && (s.IsType || s.Kind == SymbolKind.EnumMember || (s.IsMember && s.Owner is null))));
         return globals.Count > 0 ? globals : Distinct(All(word).Where(s => s.IsMember && Fits(s)));
+    }
+
+    /// <summary>
+    /// A type name in a declaration: after the colon of a var or parameter, in array&lt;…&gt; or after extends.
+    /// A colon in the middle of a ?: expression, and a plain less-than, don't count.
+    /// </summary>
+    private bool IsDeclaredType(int start)
+    {
+        if (!IsTypePosition(start)) return false;
+        int before = PrevNonSpace(start - 1);
+        if (_code[before] == '<')
+        {
+            int w = WordStart(PrevNonSpace(before - 1) + 1);
+            int e = PrevNonSpace(before - 1) + 1;
+            return e > w && _code.AsSpan(w, e - w).Equals("array", StringComparison.OrdinalIgnoreCase);
+        }
+        if (_code[before] != ':') return true;
+        for (int i = before - 1; i >= 0 && before - i < 300; i--)
+        {
+            if (_code[i] is ';' or '{' or '}') break;
+            if (_code[i] == '?') return false;
+        }
+        return true;
     }
 
     /// <summary>

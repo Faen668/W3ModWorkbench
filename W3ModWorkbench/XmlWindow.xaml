@@ -87,6 +87,12 @@
             <!-- the file, and what can be done with it -->
             <DockPanel Margin="0,0,0,10" LastChildFill="True">
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                    <ToggleButton x:Name="OutlineToggle" Margin="0,0,6,0" Click="OutlineToggle_Click" ToolTip="Show or hide the outline of the file's elements (Ctrl+Shift+O)">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Style="{StaticResource IconText}" Text="&#xE8FD;" />
+                            <TextBlock Margin="8,0,0,0" Text="Outline" />
+                        </StackPanel>
+                    </ToggleButton>
                     <ToggleButton x:Name="BuilderToggle" Margin="0,0,6,0" Click="BuilderToggle_Click"
                                   ToolTip="Edit a mod menu with forms instead of tags: pages, settings, presets, their strings and the script that reads them (Ctrl+B)">
                         <StackPanel Orientation="Horizontal">
@@ -124,6 +130,8 @@
                     <ColumnDefinition x:Name="BuilderColumn" Width="0" />
                     <ColumnDefinition x:Name="SplitterColumn" Width="0" />
                     <ColumnDefinition Width="*" MinWidth="260" />
+                    <ColumnDefinition x:Name="OutlineSplitterColumn" Width="0" />
+                    <ColumnDefinition x:Name="OutlineColumn" Width="0" />
                 </Grid.ColumnDefinitions>
 
                 <local:MenuBuilderPanel x:Name="Builder" Visibility="Collapsed" />
@@ -138,6 +146,12 @@
                                                Background="Transparent" Foreground="{DynamicResource TextFillColorPrimaryBrush}"
                                                LineNumbersForeground="{DynamicResource TextFillColorTertiaryBrush}" />
                     </AdornerDecorator>
+                </Border>
+
+                <GridSplitter x:Name="OutlineSplitter" Grid.Column="3" Width="6" HorizontalAlignment="Center" Background="Transparent" Focusable="False"
+                              Visibility="Collapsed" DragCompleted="OutlineSplitter_DragCompleted" />
+                <Border x:Name="OutlineHost" Grid.Column="4" Style="{StaticResource Card}" Padding="0,8,0,0" ClipToBounds="True" Visibility="Collapsed">
+                    <local:OutlinePanel x:Name="Outline" />
                 </Border>
             </Grid>
 

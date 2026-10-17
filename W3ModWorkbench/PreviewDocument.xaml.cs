@@ -9,6 +9,7 @@ using System.Windows.Media;
 using System.Windows.Threading;
 using ICSharpCode.AvalonEdit;
 using ICSharpCode.AvalonEdit.Document;
+using ICSharpCode.AvalonEdit.Folding;
 using ICSharpCode.AvalonEdit.Rendering;
 using ICSharpCode.AvalonEdit.Search;
 using Microsoft.Win32;
@@ -146,6 +147,23 @@ public partial class PreviewDocument : UserControl
             };
             UpdateOutline();
         }
+        else if (IsXml(item.Path))
+        {
+            // XML has an outline of its elements and folds like the XML editor
+            _isXml = true;
+            _folding = FoldingManager.Install(Editor.TextArea);
+            Loaded += (_, _) => FoldingStyle.Apply(Editor, this);
+            Outline.Picked += symbol => Reveal(symbol.Offset, symbol.Name.Length);
+            Outline.CloseRequested += () => SetOutlineShown(false);
+            ApplyOutline();
+            Editor.TextArea.Caret.PositionChanged += (_, _) =>
+            {
+                if (!_reparseTimer.IsEnabled) UpdateOutline();
+            };
+            UpdateOutline();
+        }
+        else
+            OutlineBar.Visibility = Visibility.Collapsed;
 
         // the theme's brushes are only found once it's in a window
         bool styled = false;
@@ -243,7 +261,14 @@ public partial class PreviewDocument : UserControl
     /// <summary>Shows <paramref name="other"/>'s text, edits and all, as a second view of it. Called before it's shown.</summary>
     public void ShareTextWith(PreviewDocument other)
     {
+        // fold markers belong to one document: start again on the shared one
+        if (_folding is not null) FoldingManager.Uninstall(_folding);
         Editor.Document = other.Editor.Document;
+        if (_folding is not null)
+        {
+            _folding = FoldingManager.Install(Editor.TextArea);
+            if (IsLoaded) FoldingStyle.Apply(Editor, this);
+        }
         _encoding = other._encoding;
         _size = other._size;
         HookDocument();
@@ -271,6 +296,7 @@ public partial class PreviewDocument : UserControl
         _lines = null;
         ClearLink();
         _outlineStale = true;
+        _foldStale = true;
         if (OutlineBar.Visibility == Visibility.Visible)
         {
             _reparseTimer.Stop();
@@ -874,6 +900,11 @@ public partial class PreviewDocument : UserControl
     {
         if (OutlineBar.Visibility != Visibility.Visible) return;
         int offset = Editor.CaretOffset;
+        if (_isXml)
+        {
+            UpdateXmlOutline(offset);
+            return;
+        }
         if (OutlineHost.Visibility == Visibility.Visible)
         {
             if (_outlineStale)
@@ -898,13 +929,41 @@ public partial class PreviewDocument : UserControl
         }
     }
 
+    private bool _isXml;
+    private FoldingManager? _folding;
+    private bool _foldStale = true;
+    private readonly XmlFoldingStrategy _foldingStrategy = new() { ShowAttributesWhenFolded = true };
+
+    /// <summary>An XML file's elements in the side bar, with the one the caret is in picked out, and its fold markers up to date.</summary>
+    private void UpdateXmlOutline(int offset)
+    {
+        if (_foldStale && _folding is not null)
+        {
+            _foldStale = false;
+            if (Editor.Document.TextLength < 3_000_000)
+            {
+                try { _foldingStrategy.UpdateFoldings(_folding, Editor.Document); }
+                catch (System.Xml.XmlException) { }
+            }
+        }
+        if (OutlineHost.Visibility != Visibility.Visible) return;
+        if (_outlineStale)
+        {
+            _outlineStale = false;
+            Outline.UpdateXml(Editor.Text, Item.Script ?? new ScriptFile
+            {
+                Key = Item.Key, Path = Item.Path, Source = Item.Source, SourceKey = Item.Source, Read = () => [],
+            });
+        }
+        Outline.Reveal(offset);
+    }
+
     private TypeScope? _crumbType;
     private FunctionScope? _crumbFunction;
     private bool _outlineStale = true;
 
     /// <summary>
-    /// Ctrl+Shift+O and the Outline button: shows or hides the outline side bar. It's one setting for every
-    /// script, so the other open ones follow. Showing it puts the keyboard in its filter.
+    /// Ctrl+Shift+O and the Outline button: shows or hides the outline side bar. It's per view, so in a split each side has its own. Showing it puts the keyboard in its filter.
     /// </summary>
     public void ToggleOutline()
     {
@@ -914,17 +973,21 @@ public partial class PreviewDocument : UserControl
         else Editor.TextArea.Focus();
     }
 
-    private static void SetOutlineShown(bool show)
+    /// <summary>This view's side bar only: the other views of a split keep theirs. What's chosen last is what new files start with.</summary>
+    private void SetOutlineShown(bool show)
     {
+        _outlineWanted = show;
         App.Settings.ShowOutline = show;
         App.Settings.Save();
-        PreviewWindow.ApplyOutlineSetting();
+        ApplyOutline();
     }
+
+    private bool? _outlineWanted;
 
     /// <summary>Shows or hides the outline side bar as Settings says, for a script.</summary>
     public void ApplyOutline()
     {
-        bool show = OutlineBar.Visibility == Visibility.Visible && App.Settings.ShowOutline;
+        bool show = OutlineBar.Visibility == Visibility.Visible && (_outlineWanted ?? App.Settings.ShowOutline);
         OutlineToggle.IsChecked = show;
         if (show == (OutlineHost.Visibility == Visibility.Visible))
         {

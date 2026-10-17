@@ -31,8 +31,9 @@ public partial class XmlWindow : Window, IMessageHost
     private readonly DispatcherTimer _checkTimer = new() { Interval = TimeSpan.FromMilliseconds(350) };
     private readonly DispatcherTimer _writeTimer = new() { Interval = TimeSpan.FromMilliseconds(180) };
     private readonly string _source;
+    private readonly Settings _settings = App.Settings;
     private readonly FoldingManager _folding;
-    private readonly XmlFoldingStrategy _foldingStrategy = new();
+    private readonly XmlFoldingStrategy _foldingStrategy = new() { ShowAttributesWhenFolded = true };
     private string? _path;
     private bool _edited;
     private bool _closeConfirmed;
@@ -65,6 +66,14 @@ public partial class XmlWindow : Window, IMessageHost
             _writeTimer.Stop();
             WriteModel();
         };
+        Outline.Picked += symbol =>
+        {
+            Editor.Select(symbol.Offset, symbol.Name.Length);
+            Editor.TextArea.Caret.Offset = symbol.Offset;
+            Editor.ScrollTo(symbol.Line, 1);
+            Editor.TextArea.Focus();
+        };
+        Outline.CloseRequested += () => ShowOutline(false);
         Editor.Document.TextChanged += (_, _) =>
         {
             if (!_syncing) MarkEdited();
@@ -72,7 +81,10 @@ public partial class XmlWindow : Window, IMessageHost
             _checkTimer.Start();
         };
         Editor.TextArea.Caret.PositionChanged += (_, _) =>
+        {
+            if (OutlineHost.Visibility == Visibility.Visible) Outline.Reveal(Editor.CaretOffset);
             PositionText.Text = $"Line {Editor.TextArea.Caret.Line}, column {Editor.TextArea.Caret.Column}";
+        };
 
         Loaded += (_, _) =>
         {
@@ -89,6 +101,8 @@ public partial class XmlWindow : Window, IMessageHost
                 marker.Freeze();
                 search.MarkerBrush = marker;
             }
+            W3ModWorkbench.Highlighting.FoldingStyle.Apply(Editor, this);
+            ShowOutline(_settings.ShowOutline);
             Editor.TextArea.TextView.LineTransformers.Insert(0, new XmlColorizer(Editor.Document, _dark) { View = Editor.TextArea.TextView });
             Check();
             UpdateHeader();
@@ -181,8 +195,36 @@ public partial class XmlWindow : Window, IMessageHost
 
     // ---------------------------------------------------------------- checking
 
+    /// <summary>The outline side bar's elements, read again from the text.</summary>
+    private void UpdateOutline()
+    {
+        if (OutlineHost.Visibility != Visibility.Visible) return;
+        Outline.UpdateXml(Editor.Text, new W3ModWorkbench.Core.Scripts.Navigation.ScriptFile
+        {
+            Key = _path ?? _source, Path = _path ?? _source, Source = _source, SourceKey = _source, Read = () => [],
+        });
+        Outline.Reveal(Editor.CaretOffset);
+    }
+
+    private void ShowOutline(bool show)
+    {
+        _settings.ShowOutline = show;
+        OutlineToggle.IsChecked = show;
+        OutlineHost.Visibility = OutlineSplitter.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+        OutlineSplitterColumn.Width = new GridLength(show ? 6 : 0);
+        OutlineColumn.Width = new GridLength(show ? _settings.OutlineWidth : 0);
+        OutlineColumn.MinWidth = show ? 160 : 0;
+        UpdateOutline();
+    }
+
+    private void OutlineToggle_Click(object sender, RoutedEventArgs e) => ShowOutline(OutlineToggle.IsChecked == true);
+
+    private void OutlineSplitter_DragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e) =>
+        _settings.OutlineWidth = Math.Round(OutlineColumn.ActualWidth);
+
     private void Check()
     {
+        UpdateOutline();
         string text = Editor.Text;
         _errorAt = null;
         try
@@ -404,6 +446,11 @@ public partial class XmlWindow : Window, IMessageHost
         var mods = Keyboard.Modifiers;
         if (e.Key == Key.S && mods == ModifierKeys.Control) _ = SaveAsync(_path);
         else if (e.Key == Key.S && mods == (ModifierKeys.Control | ModifierKeys.Shift)) _ = SaveAsync(null);
+        else if (e.Key == Key.O && mods == (ModifierKeys.Control | ModifierKeys.Shift))
+        {
+            ShowOutline(OutlineHost.Visibility != Visibility.Visible);
+            e.Handled = true;
+        }
         else if (e.Key == Key.B && mods == ModifierKeys.Control)
         {
             BuilderToggle.IsChecked = !_builderOn;

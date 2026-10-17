@@ -132,6 +132,7 @@ Text files can be read without extracting them first. That includes decompiled s
 
 - Double-click a text file, or highlight it and press **Enter**.
 - Or right-click it and choose **Preview**.
+- XML files open in the preview too. For the XML editor, right-click one and choose **Open in XML editor**.
 
 ## In the preview
 
@@ -175,7 +176,7 @@ Double-clicking anything that isn't text ticks or unticks it instead.
 ## Finding your way around a script
 
 - The bar above a script shows the class and function the cursor is in. Click either one for a list of the others in the file.
-- **Outline**, or **Ctrl+Shift+O**, shows or hides the outline beside the text: everything the file declares, as a tree with each class's variables, functions and events under it, and each enum's values. Click a name, or pick it and press Enter, to go there. The declaration the cursor is in is picked out as you move, the filter box narrows the tree to matching names, and the outline keeps up as you edit. Drag its edge to make it wider; it stays open, at that width, for every script until you hide it.
+- **Outline**, or **Ctrl+Shift+O**, shows or hides the outline beside the text: everything the file declares, as a tree with each class's variables, functions and events under it, and each enum's values. Click a name, or pick it and press Enter, to go there. The declaration the cursor is in is picked out as you move, the filter box narrows the tree to matching names, and the outline keeps up as you edit. Drag its edge to make it wider; the width is shared by every file. Each side of a split view shows or hides its own outline, and files you open next start the way you left it last.
 - **Go to symbol in file**, on the right-click menu, lists the same declarations to type a name and go to it.
 - **Ctrl+T** goes to any class, function, variable or enum value in everything that's searched: type part of the name, or `Class.name`, or just some of its letters in order.
 - When the cursor is inside a call's brackets, a strip over the line shows the function's parameters, with the one the cursor is on in bold. It follows the same setting as the definition popup.
@@ -287,12 +288,13 @@ In the strings editor, **Check IDs** compares every ID with the game's, the DLC'
 """),
 
         new(Basics, "XML files and the mod menu builder", "", """
-XML files open in an editor of their own, like strings. Double-click one in the file list, drop it on the window, or use **Tools > Open an XML file**. XML inside a bundle opens as a copy that **Save as** writes out.
+XML files open in the preview when you double-click them, with an outline of their elements and folding. For an editor of their own, like strings, right-click one in the file list and choose **Open in XML editor**, drop it on the window, or use **Tools > Open an XML file**. XML inside a bundle opens as a copy that **Save as** writes out.
 
 ## The editor
 
 - Tags, names, attribute values, comments and entities are coloured, in both light and dark.
-- Elements fold from the margin, and the bar under the text says whether the XML is well-formed, or where it isn't. Click the message to jump to the line.
+- The **Outline** (the button at the top, or Ctrl+Shift+O) lists every element in the file as a tree, each with the attribute that names it: `ability  DLC5 Nilfgaardian Armor _Stats`. Click one to go there; the element the cursor is in is picked out as you move, and the filter box narrows the tree to matching names. The preview has the same outline.
+- Elements fold from the margin, a folded element keeps its attributes so you can tell which one it is, and the bar under the text says whether the XML is well-formed, or where it isn't. Click the message to jump to the line.
 - **Format** indents the XML with tabs, one element a line.
 - Files keep the encoding they came in with (UTF-8, UTF-8 with BOM or UTF-16). A file that says `encoding="utf-16"` is saved as UTF-16.
 
@@ -436,12 +438,44 @@ Problems will break something, warnings might, notes are only worth knowing. Pic
 To change the order, set the priority numbers in the game's mod manager (or in `mods.settings`), then analyse again.
 """),
 
+        new(Basics, "Find in files", "", """
+**Tools > Find in files** (Ctrl+Shift+F) searches the text of files in folders, like Find in Files in Notepad++. Nothing needs to be open first: no project, no archive, no script.
+
+## Searching
+
+Type what to look for and press Enter, or click **Find all**. The three buttons beside the box are **Aa** (match case), **ab** (whole words only) and **.\*** (a regular expression). Every match is listed under its file with the line number, and the match is picked out in the line.
+
+**Filters** says which files to read: wildcards separated by `;`, such as `*.ws; *.xml`. Put `!` in front of one to leave files out, such as `!*.bak`. Leave it empty to search every text file; files that are too big or aren't text are skipped.
+
+## Where it looks
+
+The **Look in** list has the places you're most likely to want:
+
+- **Game scripts and installed mods**: the game's own scripts (`content\content0\scripts`) together with the loose files in its `mods` folder.
+- **Game scripts**, **Installed mods** or **REDkit scripts** alone (REDkit's is found from the wcc_lite.exe set in Settings).
+- **Open script projects**: the projects open in the main window.
+- **A folder...**: any folder you pick. The last one picked is kept in the list.
+
+**Subfolders** controls whether folders inside are searched too.
+
+## Opening a match
+
+Click a line, or press Enter, to open that file in a preview with the match selected. **F4** and **Shift+F4** step through the matches. Clicking a file's name folds its lines away. The game's scripts open read-only, and a script project's files can be edited and saved as usual. Go to definition works from any script opened this way.
+
+Inside a script preview, Ctrl+Shift+F still searches from there, through the scripts that preview knows about.
+
+## Browsing instead
+
+**Tools > Browse game scripts** lists the game's own scripts in the main window, to read, and **Browse installed mods** opens everything in the `mods` folder the way Open folder does. Both need the game folder, which is found for you or set in Settings.
+"""),
+
         new(Basics, "Keyboard shortcuts", "", """
 ## Anywhere
 
 - **Ctrl+O**: open files
 - **Ctrl+F**: jump to the search box
 - **Ctrl+E**: extract checked files
+- **Ctrl+Shift+F**: find in files, in the game's scripts, the mods or any folder
 - **Ctrl+Shift+G**: search the game's strings
 - **Ctrl+Shift+W**: stub generator
 - **Ctrl+Shift+I**: source inspector

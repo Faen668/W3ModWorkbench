@@ -26,12 +26,13 @@
 |---|---|---|
 | 📦 | **Bundle explorer** | Opens the whole game or any mod, browse, search and extract. |
 | 🧩 | **Script decompiler** | `precompiled.rsblob` back into tidy, readable WitcherScript. |
-| ✏️ | **Script editor** | Edit script projects with go to definition, an outline and highlighting, and compile with REDkit's own compiler. |
+| ✏️ | **Script editor** | Edit script projects with go to definition, an outline and highlighting (XML gets an outline and folding too), and compile with REDkit's own compiler. |
 | 🔤 | **Strings** | Read and edit `.w3strings`, update translations in minutes, search every string the game has. |
 | 🗂️ | **Mod menu builder** | Build `user_config_matrix` menus with forms, with the strings and the script that reads them. |
 | 🪄 | **Stub generator** | Exact `@wrapMethod`, `@replaceMethod`, `@addMethod` and `@addField` code from the game's scripts. |
 | 🕵️ | **Source inspector** | Compare two mods and see how much of one was copied from the other, even with everything renamed. |
 | 🧭 | **Load order analyser** | Reads every installed mod and checks the load order: collisions, missing targets, missing or mis-ordered dependencies. |
+| 🔎 | **Find in files** | Search the text of the game's scripts, your installed mods or any folder, like Notepad++, with nothing open first. |
 
 ## ✨ Features
 
@@ -82,6 +83,15 @@
 
 ### Stub generator
 - Pick a game function and get the `@wrapMethod` (with the right `wrappedMethod(...)` call), `@replaceMethod` (starting from the original code), `@addMethod` or `@addField` code, with its exact signature, from the game's own scripts. Also on a script's right-click menu.
+
+### Find in files
+Tools > Find in files (`Ctrl+Shift+F`) searches the text of files in folders, with no project, archive or script open first.
+
+- **Look anywhere**: the game's scripts, the installed mods, REDkit's scripts, the open script projects or any folder you pick, with subfolders on or off.
+- **Filter by file name**: `*.ws; *.xml`, with `!` in front to leave files out (`!*.bak`). Files that are too big or aren't text are skipped.
+- **Match case, whole words or a regular expression**, as in any text editor.
+- **Results by file** with the match picked out in each line. A click opens the file at the match; `F4` and `Shift+F4` step through them. The game's scripts open read-only, and go to definition works from them.
+- **Browse instead**: Tools > Browse game scripts lists the game's own scripts in the main window, and Browse installed mods opens everything in the mods folder.
 
 ### Source inspector
 Tools > Source inspector (`Ctrl+Shift+I`) compares two mods and reports how much of one is in the other, so a re-upload or a rewritten copy can be told apart from honest overlap. Each source can be a folder of loose files, a folder of bundles and compiled scripts, or a mix.
@@ -174,6 +184,7 @@ Double-click any text file or decompiled script to preview it. To edit scripts, 
 | `Space` | Tick or untick the highlighted rows |
 | `Enter` | Preview the highlighted text file |
 | `Ctrl+,` | Settings |
+| `Ctrl+Shift+F` | Find in files |
 | `Ctrl+Shift+G` | Search the game's strings |
 | `Ctrl+Shift+W` | Stub generator |
 | `Ctrl+Shift+I` | Source inspector |

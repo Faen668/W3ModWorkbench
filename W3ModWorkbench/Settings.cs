@@ -56,6 +56,16 @@ public sealed class Settings
     /// <summary>Script Merger Remastered's exe, opened from the load order analyser to merge clashing scripts and bundle files. Empty when not set.</summary>
     public string ScriptMergerPath { get; set; } = "";
 
+    /// <summary>The Find in files window's last search: the text, the file filters, where it looked, and its options.</summary>
+    public string FindText { get; set; } = "";
+    public string FindFilters { get; set; } = "*.ws";
+    public string FindScope { get; set; } = "";
+    public string FindFolder { get; set; } = "";
+    public bool FindMatchCase { get; set; }
+    public bool FindWholeWord { get; set; }
+    public bool FindRegex { get; set; }
+    public bool FindSubfolders { get; set; } = true;
+
     /// <summary>Where each script project's compiled blob was last saved, keyed by the project's scripts folder.</summary>
     public Dictionary<string, string> CompileOutputs { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 

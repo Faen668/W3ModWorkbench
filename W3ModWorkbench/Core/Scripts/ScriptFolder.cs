@@ -55,6 +55,9 @@ public sealed class ScriptFolder : IArchive
         return archive;
     }
 
+    /// <summary>A folder with no files listed, to stand for it as the archive that scripts opened from it belong to.</summary>
+    public static ScriptFolder Empty(string folder) => new(Path.GetFullPath(folder).TrimEnd('\\'), []);
+
     /// <summary>The first folder up from <paramref name="folder"/> that isn't just scripts, content, workspace or local.</summary>
     private static string ProjectName(string folder)
     {

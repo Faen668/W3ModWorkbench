@@ -118,6 +118,28 @@ public partial class PreviewWindow : Window, IMessageHost
         created.Show();
     }
 
+    /// <summary>Shows a file as <see cref="Show"/> does, with a place in it selected.</summary>
+    public static void ShowAt(PreviewItem item, Window owner, int offset, int length)
+    {
+        if (FindOpen(item.Key) is { Host: { } host } open)
+        {
+            host.ShowDocument(open);
+            open.Reveal(offset, length);
+            return;
+        }
+        var doc = CreateDocument(item);
+        doc.Reveal(offset, length);
+        if (OpensTabs && OpenWindows.FirstOrDefault(w => w._takesTabs) is { } window)
+        {
+            window.Add(doc);
+            window.BringForward();
+            return;
+        }
+        var created = new PreviewWindow { Owner = owner };
+        created.Add(doc);
+        created.Show();
+    }
+
     /// <summary>A file in a window of its own that other files don't open in, like the licence from Settings.</summary>
     public static void ShowAlone(PreviewItem item, Window owner)
     {
@@ -1083,7 +1105,7 @@ public partial class PreviewWindow : Window, IMessageHost
 
     /// <summary>The script project a file belongs to, when it's one of a project's files.</summary>
     public static ScriptFolder? ProjectOf(PreviewDocument doc) =>
-        doc.Item.Script is { } script ? doc.Item.Workspace?.ArchiveOf(script) as ScriptFolder : null;
+        doc.Item.Script is { } script && doc.Item.Workspace?.ArchiveOf(script) is ScriptFolder { } folder && !ScriptFolder.IsGameScripts(folder.FilePath) ? folder : null;
 
     /// <summary>Whether the file is a decompiled script, whose mod's scripts can be saved as a project to edit.</summary>
     public bool CanEditAsProject(PreviewDocument doc) =>

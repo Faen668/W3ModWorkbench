@@ -93,7 +93,7 @@
                     </StackPanel>
                 </Button>
                 <Button x:Name="ToolsButton" Margin="6,0,0,0" Click="Tools_Click"
-                        ToolTip="Search the game's strings, generate wrap and replace stubs, build a mod menu, compare two mods for copied work">
+                        ToolTip="Find in files, browse the game's scripts and mods, search the game's strings, generate stubs, build a mod menu, compare mods">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Style="{StaticResource IconText}" Text="&#xE90F;" Margin="0,1,0,0" />
                         <TextBlock Margin="8,0,0,0" Text="Tools" />
@@ -227,6 +227,9 @@
                                 <MenuItem Header="Preview" InputGestureText="Enter" Click="GridPreview_Click">
                                     <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE8A1;" /></MenuItem.Icon>
                                 </MenuItem>
+                                <MenuItem x:Name="GridXmlItem" Header="Open in XML editor" Click="GridXmlEditor_Click" Visibility="Collapsed">
+                                    <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE70F;" /></MenuItem.Icon>
+                                </MenuItem>
                                 <MenuItem x:Name="GridExternalItem" Header="Open in external editor" Click="GridExternal_Click">
                                     <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE8A7;" /></MenuItem.Icon>
                                 </MenuItem>
@@ -268,6 +271,26 @@
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Style="{StaticResource IconText}" Text="&#xE838;" Margin="0,1,0,0" />
                                 <TextBlock Margin="8,0,0,0" Text="Open folder" />
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,8,0,0">
+                        <Button Click="BrowseGame_Click" Padding="14,6" ToolTip="Open the game's own scripts to read">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Style="{StaticResource IconText}" Text="&#xE943;" Margin="0,1,0,0" />
+                                <TextBlock Margin="8,0,0,0" Text="Browse game scripts" />
+                            </StackPanel>
+                        </Button>
+                        <Button Click="BrowseMods_Click" Padding="14,6" Margin="8,0,0,0" ToolTip="Open everything in the game's mods folder">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Style="{StaticResource IconText}" Text="&#xE838;" Margin="0,1,0,0" />
+                                <TextBlock Margin="8,0,0,0" Text="Browse installed mods" />
+                            </StackPanel>
+                        </Button>
+                        <Button Click="FindInFiles_Click" Padding="14,6" Margin="8,0,0,0" ToolTip="Search the text of the scripts in the game, the mods or any folder (Ctrl+Shift+F)">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Style="{StaticResource IconText}" Text="&#xE721;" Margin="0,1,0,0" />
+                                <TextBlock Margin="8,0,0,0" Text="Find in files" />
                             </StackPanel>
                         </Button>
                     </StackPanel>

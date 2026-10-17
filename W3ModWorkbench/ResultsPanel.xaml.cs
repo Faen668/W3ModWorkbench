@@ -197,6 +197,9 @@ public partial class ResultsPanel : UserControl
         };
     }
 
+    /// <summary>For a panel in a window of its own, which has no panel to close.</summary>
+    public void HideClose() => CloseButton.Visibility = Visibility.Collapsed;
+
     public bool IsFind => FindBar.Visibility == Visibility.Visible;
 
     /// <summary>A search is running: the title, and what it's doing.</summary>

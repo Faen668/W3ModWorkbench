@@ -124,7 +124,7 @@ public static class ScriptSearch
     private static ScriptHit Hit(ScriptFile file, ParsedScript parsed, string text, int offset, int length, string? label) =>
         Hit(file, parsed.LineStarts, text, offset, length, label);
 
-    private static ScriptHit Hit(ScriptFile file, List<int> starts, string text, int offset, int length, string? label)
+    internal static ScriptHit Hit(ScriptFile file, List<int> starts, string text, int offset, int length, string? label)
     {
         int index = starts.BinarySearch(offset);
         int line = index >= 0 ? index : ~index - 1;
@@ -134,7 +134,7 @@ public static class ScriptSearch
         return new ScriptHit(file, offset, length, line + 1, lineText, offset - start, label);
     }
 
-    private static List<int> LineStarts(string text)
+    internal static List<int> LineStarts(string text)
     {
         var starts = new List<int> { 0 };
         for (int i = 0; i < text.Length; i++) if (text[i] == '\n') starts.Add(i + 1);
