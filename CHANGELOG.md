@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.4.0
 
 - W3 Bundle Explorer is now **W3 Mod Workbench**, with a new icon: it does a lot more than bundles now. Settings move to `%AppData%\W3ModWorkbench` on the first start, with your old ones carried over.
 - Strings editor: drop a `.w3strings` file, or a strings `.csv`, onto the window to read and edit it, then save it as a `.w3strings` file the game reads (byte for byte what the modding tools' encoder writes), optionally copied to every language, or export it as CSV. Opening a folder lists its strings files in the tree. Key names come back from a strings CSV beside the file.
