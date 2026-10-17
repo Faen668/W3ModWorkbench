@@ -1,6 +1,6 @@
 # Third-party notices
 
-W3 Bundle Explorer includes work by other people. Thank you to everyone below.
+W3 Mod Workbench includes work by other people. Thank you to everyone below.
 
 ## WitcherScript syntax highlighting: witcherscript-vscode by WebSpam
 

@@ -1,0 +1,986 @@
+using System.Runtime.InteropServices;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Input;
+using System.Windows.Media;
+using W3ModWorkbench.Core;
+using W3ModWorkbench.Core.Scripts.Navigation;
+
+namespace W3ModWorkbench;
+
+/// <summary>
+/// Shows files as tabs, in one group or two side by side. Files open here as tabs or in windows of their
+/// own, as Settings has it; tabs can be dragged between groups and windows, or out into a new window.
+/// </summary>
+public partial class PreviewWindow : Window, IMessageHost
+{
+    /// <summary>Open preview windows, the one used last first. New tabs open in it.</summary>
+    private static readonly List<PreviewWindow> OpenWindows = [];
+
+    private readonly List<PreviewPane> _panes = [];
+    private PreviewPane _active;
+    private readonly bool _takesTabs;
+    private PreviewWindow? _opener;
+
+    /// <summary>Where go to definition jumped from, for Alt+Left. The files can be in any window by now.</summary>
+    private readonly Stack<(PreviewDocument Doc, int Offset)> _back = new();
+
+    /// <summary>Where Alt+Left came back from, for Alt+Right. Emptied by a new jump.</summary>
+    private readonly Stack<(PreviewDocument Doc, int Offset)> _forward = new();
+
+    /// <summary>Files closed lately, newest last, with where the caret was, for Ctrl+Shift+T.</summary>
+    private static readonly List<(PreviewItem Item, int Offset)> ClosedFiles = [];
+
+    /// <param name="takesTabs">False for a window of its own, like the licence, that other files don't open in.</param>
+    private PreviewWindow(bool takesTabs = true)
+    {
+        InitializeComponent();
+        _takesTabs = takesTabs;
+        _active = AddPane();
+        _active.IsActive = true;
+        Layout();
+        UpdateSplitButton();
+        UpdateHistoryButtons();
+        DisabledLook.Apply(this);
+        OpenWindows.Add(this);
+        Results.Open += OpenResult;
+        Results.Closed += CloseResultsPanel;
+        Results.FindRequested += Results_FindRequested;
+
+        Activated += (_, _) =>
+        {
+            OpenWindows.Remove(this);
+            OpenWindows.Insert(0, this);
+        };
+        Deactivated += (_, _) =>
+        {
+            foreach (var doc in AllDocuments) doc.ClosePeek();
+        };
+        // without this, Windows can hand the focus to another app when an owned window closes,
+        // and the explorer drops behind it as if it had been minimized
+        Closing += (_, _) => (_opener is { IsVisible: true } opener ? opener : Owner)?.Activate();
+        Closed += (_, _) =>
+        {
+            OpenWindows.Remove(this);
+            _search?.Cancel();
+            foreach (var doc in AllDocuments)
+            {
+                Remember(doc);
+                doc.CloseOverlays();
+                doc.Host = null;
+            }
+        };
+        PreviewMouseDown += (_, e) =>
+        {
+            if (e.ChangedButton == MouseButton.XButton1) GoBack();
+            else if (e.ChangedButton == MouseButton.XButton2) GoForward();
+            else return;
+            e.Handled = true;
+        };
+    }
+
+    private static bool OpensTabs => App.Settings.PreviewOpenIn != "Windows";
+
+    /// <summary>
+    /// Shows a file: brings it forward if it's open already, otherwise opens it as a tab in the preview
+    /// window used last, or in a new window, as Settings has it.
+    /// </summary>
+    public static void Show(PreviewItem item, Window owner)
+    {
+        if (FindOpen(item.Key) is { Host: { } host } open)
+        {
+            host.ShowDocument(open);
+            return;
+        }
+        if (OpensTabs && OpenWindows.FirstOrDefault(w => w._takesTabs) is { } window)
+        {
+            window.Add(new PreviewDocument(item));
+            window.BringForward();
+            return;
+        }
+        var created = new PreviewWindow { Owner = owner };
+        created.Add(new PreviewDocument(item));
+        created.Show();
+    }
+
+    /// <summary>A file in a window of its own that other files don't open in, like the licence from Settings.</summary>
+    public static void ShowAlone(PreviewItem item, Window owner)
+    {
+        var window = new PreviewWindow(takesTabs: false) { Owner = owner };
+        window.Add(new PreviewDocument(item));
+        window.Show();
+    }
+
+    /// <summary>Lays the open windows out again after Settings changed the split direction.</summary>
+    public static void ApplySettings()
+    {
+        foreach (var window in OpenWindows)
+        {
+            window.Layout();
+            window.UpdateSplitButton();
+        }
+    }
+
+    private static PreviewDocument? FindOpen(string key) =>
+        OpenWindows.SelectMany(w => w.AllDocuments).FirstOrDefault(d => d.Item.Key == key);
+
+    private IEnumerable<PreviewDocument> AllDocuments => _panes.SelectMany(p => p.Documents);
+
+    private PreviewDocument? Current => _active.Selected;
+
+    private void Add(PreviewDocument doc)
+    {
+        _active.Insert(doc);
+        _active.Select(doc);
+    }
+
+    private void BringForward()
+    {
+        if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal;
+        Activate();
+    }
+
+    /// <summary>Selects a file's tab and brings its window forward.</summary>
+    public void ShowDocument(PreviewDocument doc)
+    {
+        if (PaneOf(doc) is not { } pane) return;
+        SetActive(pane);
+        pane.Select(doc);
+        BringForward();
+    }
+
+    private PreviewPane? PaneOf(PreviewDocument doc) => _panes.FirstOrDefault(p => p.Contains(doc));
+
+    // ---------------------------------------------------------------- groups and split view
+
+    public bool CanSplit => _panes.Count < 2;
+
+    public static bool SplitsDown => App.Settings.PreviewSplit == "Down";
+
+    private PreviewPane AddPane()
+    {
+        var pane = new PreviewPane(this);
+        pane.PreviewGotKeyboardFocus += (_, _) => SetActive(pane);
+        pane.PreviewMouseDown += (_, _) => SetActive(pane);
+        _panes.Add(pane);
+        return pane;
+    }
+
+    private void SetActive(PreviewPane pane)
+    {
+        if (_active == pane) return;
+        _active.IsActive = false;
+        _active = pane;
+        pane.IsActive = true;
+        UpdateHeader();
+    }
+
+    /// <summary>The other group, made when the window isn't split yet.</summary>
+    private PreviewPane OtherPane(PreviewPane pane)
+    {
+        if (_panes.FirstOrDefault(p => p != pane) is { } other) return other;
+        other = AddPane();
+        Layout();
+        UpdateSplitButton();
+        return other;
+    }
+
+    /// <summary>Puts the groups in the window: one, or two with a splitter between, side by side or one above the other.</summary>
+    private void Layout()
+    {
+        PaneGrid.Children.Clear();
+        PaneGrid.RowDefinitions.Clear();
+        PaneGrid.ColumnDefinitions.Clear();
+        if (_panes.Count == 1)
+        {
+            PaneGrid.Children.Add(_panes[0]);
+            return;
+        }
+
+        bool down = SplitsDown;
+        for (int i = 0; i < 3; i++)
+        {
+            var size = i == 1 ? new GridLength(12) : new GridLength(1, GridUnitType.Star);
+            if (down) PaneGrid.RowDefinitions.Add(new RowDefinition { Height = size, MinHeight = i == 1 ? 0 : 80 });
+            else PaneGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = size, MinWidth = i == 1 ? 0 : 160 });
+        }
+        var splitter = new GridSplitter
+        {
+            ResizeBehavior = GridResizeBehavior.PreviousAndNext,
+            ResizeDirection = down ? GridResizeDirection.Rows : GridResizeDirection.Columns,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            VerticalAlignment = VerticalAlignment.Stretch,
+            Background = Brushes.Transparent,
+            Focusable = false,
+            ToolTip = "Drag to resize",
+        };
+        for (int i = 0; i < 3; i++)
+        {
+            UIElement part = i == 1 ? splitter : _panes[i / 2];
+            if (down) Grid.SetRow(part, i);
+            else Grid.SetColumn(part, i);
+            PaneGrid.Children.Add(part);
+        }
+    }
+
+    private void UpdateSplitButton()
+    {
+        bool split = _panes.Count > 1, down = SplitsDown;
+        SplitIcon.Text = split ? "" : down ? "" : ""; // close pane, dock bottom, dock right
+        SplitText.Text = split ? "Unsplit" : "Split";
+        SplitButton.ToolTip = split
+            ? "Put every tab back in one group (Ctrl+\\)"
+            : $"Move this file into a second group of tabs {(down ? "below" : "beside")} the others (Ctrl+\\). Right-click to choose the direction";
+        SplitRightItem.IsChecked = !down;
+        SplitDownItem.IsChecked = down;
+    }
+
+    /// <summary>
+    /// Ctrl+\: splits the window, moving the file in use into a second group (or showing it there too
+    /// when it's the only tab), or puts the second group's tabs back in the first.
+    /// </summary>
+    private void ToggleSplit()
+    {
+        if (_panes.Count == 1)
+        {
+            if (Current is not { } doc) return;
+            if (_active.Count > 1) MoveToNewGroup(doc);
+            else OpenBeside(doc);
+            return;
+        }
+
+        var keep = _panes[0];
+        var other = _panes[1];
+        string? current = Current?.Item.Key;
+        foreach (var doc in other.Documents)
+        {
+            other.Remove(doc);
+            if (keep.Find(doc.Item.Key) is null) keep.Insert(doc);
+            else doc.Host = null; // the same file is already there
+        }
+        RemovePane(other);
+        if (current is not null && keep.Find(current) is { } selected) keep.Select(selected);
+    }
+
+    /// <summary>Shows a file in the other group too, keeping its place, as a second view of it.</summary>
+    private void OpenBeside(PreviewDocument doc)
+    {
+        if (PaneOf(doc) is not { } pane) return;
+        var target = OtherPane(pane);
+        if (target.Find(doc.Item.Key) is { } there)
+        {
+            SetActive(target);
+            target.Select(there);
+            return;
+        }
+        var copy = new PreviewDocument(doc.Item);
+        copy.CopyViewFrom(doc);
+        target.Insert(copy);
+        SetActive(target);
+        target.Select(copy);
+    }
+
+    private void RemovePane(PreviewPane pane)
+    {
+        _panes.Remove(pane);
+        if (_active == pane)
+        {
+            _active = _panes[0];
+            _active.IsActive = true;
+            _active.Selected?.FocusEditor();
+        }
+        Layout();
+        UpdateSplitButton();
+        UpdateHeader();
+    }
+
+    /// <summary>After a tab leaves a group: an empty group goes, and an empty window closes.</summary>
+    private void AfterRemoval(PreviewPane pane)
+    {
+        if (pane.Count > 0 || !_panes.Contains(pane)) return;
+        if (_panes.Count > 1) RemovePane(pane);
+        else Close();
+    }
+
+    public void CloseDocument(PreviewDocument doc)
+    {
+        if (PaneOf(doc) is not { } pane) return;
+        Remember(doc);
+        pane.Remove(doc);
+        doc.Host = null;
+        AfterRemoval(pane);
+        UpdateHistoryButtons();
+    }
+
+    /// <summary>Keeps a closing file for Ctrl+Shift+T, unless the same file is still open somewhere.</summary>
+    private static void Remember(PreviewDocument doc)
+    {
+        ClosedFiles.RemoveAll(c => c.Item.Key == doc.Item.Key);
+        ClosedFiles.Add((doc.Item, doc.CaretOffset));
+        if (ClosedFiles.Count > 25) ClosedFiles.RemoveAt(0);
+    }
+
+    public static bool CanReopen => ClosedFiles.Any(c => FindOpen(c.Item.Key) is null);
+
+    /// <summary>Ctrl+Shift+T: opens the file closed last again, here, where its caret was.</summary>
+    public void ReopenClosed()
+    {
+        for (int i = ClosedFiles.Count - 1; i >= 0; i--)
+        {
+            var (item, offset) = ClosedFiles[i];
+            ClosedFiles.RemoveAt(i);
+            if (FindOpen(item.Key) is not null) continue;
+            var doc = new PreviewDocument(item);
+            doc.MoveCaret(offset);
+            Add(doc);
+            BringForward();
+            return;
+        }
+    }
+
+    /// <summary>Moves a tab, from this window or another, into a group of this one.</summary>
+    public void MoveDocument(PreviewDocument doc, PreviewPane target, int index)
+    {
+        if (doc.Host is not { } from || from.PaneOf(doc) is not { } source) return;
+        if (source == target)
+        {
+            if (index >= 0) target.Reorder(doc, index);
+            target.Select(doc);
+            return;
+        }
+
+        source.Remove(doc);
+        if (target.Find(doc.Item.Key) is { } there)
+        {
+            // already open in that group: show that one
+            doc.Host = null;
+            SetActive(target);
+            target.Select(there);
+        }
+        else
+        {
+            target.Insert(doc, index);
+            SetActive(target);
+            target.Select(doc);
+        }
+        if (from != this) BringForward();
+        from.AfterRemoval(source);
+    }
+
+    /// <summary>Moves a tab into a new group beside the one it's in, splitting the window.</summary>
+    public void MoveToNewGroup(PreviewDocument doc)
+    {
+        if (!CanSplit || doc.Host is not { } from || from.PaneOf(doc) is not { } source) return;
+        var target = OtherPane(_panes[0]);
+        source.Remove(doc);
+        target.Insert(doc);
+        SetActive(target);
+        target.Select(doc);
+        if (from != this) BringForward();
+        from.AfterRemoval(source);
+    }
+
+    /// <summary>Moves a tab out into a window of its own, its top left corner at <paramref name="at"/> (screen pixels) when given.</summary>
+    private void MoveToNewWindow(PreviewDocument doc, Point? at = null)
+    {
+        if (PaneOf(doc) is not { } source) return;
+        var dpi = VisualTreeHelper.GetDpi(this);
+        var window = new PreviewWindow
+        {
+            Owner = Owner,
+            WindowStartupLocation = WindowStartupLocation.Manual,
+            Left = at is { } p ? p.X / dpi.DpiScaleX - 120 : Left + 32,
+            Top = at is { } q ? q.Y / dpi.DpiScaleY - 24 : Top + 32,
+            Width = Width,
+            Height = Height,
+        };
+        source.Remove(doc);
+        window.Add(doc);
+        window.Show();
+        AfterRemoval(source);
+    }
+
+    /// <summary>Drags a tab to another group or window. Dropped anywhere else, it gets a window of its own.</summary>
+    public void DragTab(PreviewTab tab)
+    {
+        var doc = tab.Document;
+        var result = DragDrop.DoDragDrop(tab, new DataObject(typeof(PreviewTab), tab), DragDropEffects.Move);
+        foreach (var pane in OpenWindows.SelectMany(w => w._panes)) pane.ClearDropMarks();
+        if (result != DragDropEffects.None || doc.Host != this || AllDocuments.Count() < 2) return;
+        if (!GetCursorPos(out var cursor)) return;
+        var point = new Point(cursor.X, cursor.Y);
+        if (OpenWindows.Any(w => w.IsVisible && w.ContainsScreenPoint(point))) return;
+        MoveToNewWindow(doc, point);
+    }
+
+    private bool ContainsScreenPoint(Point point)
+    {
+        var topLeft = PointToScreen(new Point(0, 0));
+        var bottomRight = PointToScreen(new Point(ActualWidth, ActualHeight));
+        return new Rect(topLeft, bottomRight).Contains(point);
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativePoint
+    {
+        public int X;
+        public int Y;
+    }
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetCursorPos(out NativePoint point);
+
+    // ---------------------------------------------------------------- tab menu
+
+    /// <summary>The right-click menu of a tab, made as it opens.</summary>
+    public void FillTabMenu(ContextMenu menu, PreviewDocument doc)
+    {
+        menu.Items.Clear();
+        if (PaneOf(doc) is not { } pane) return;
+        var docs = pane.Documents;
+        int index = docs.IndexOf(doc);
+
+        void Add(string header, Action action, bool enabled = true, string? gesture = null)
+        {
+            var item = new MenuItem { Header = header, IsEnabled = enabled, InputGestureText = gesture ?? "" };
+            item.Click += (_, _) => action();
+            menu.Items.Add(item);
+        }
+
+        // pinned tabs stay when the others are closed in bulk
+        var unpinned = docs.Where(d => !pane.IsPinned(d)).ToList();
+        Add("Close", () => CloseDocument(doc), gesture: "Ctrl+W");
+        Add("Close others", () => { foreach (var d in unpinned.Where(d => d != doc)) CloseDocument(d); }, unpinned.Any(d => d != doc));
+        Add("Close to the right", () => { foreach (var d in docs.Skip(index + 1).Where(unpinned.Contains)) CloseDocument(d); },
+            docs.Skip(index + 1).Any(unpinned.Contains));
+        Add("Close all", () => { foreach (var d in unpinned) CloseDocument(d); }, unpinned.Count > 0);
+        Add("Reopen closed tab", ReopenClosed, CanReopen, "Ctrl+Shift+T");
+        menu.Items.Add(new Separator());
+        Add(pane.IsPinned(doc) ? "Unpin" : "Pin", () => pane.SetPinned(doc, !pane.IsPinned(doc)));
+        menu.Items.Add(new Separator());
+        Add(_panes.Count > 1 ? "Open in the other group" : SplitsDown ? "Open below" : "Open to the side", () => OpenBeside(doc));
+        Add(_panes.Count > 1 ? "Move to the other group" : SplitsDown ? "Move below" : "Move to the side",
+            () => MoveDocument(doc, OtherPane(pane), -1), _panes.Count > 1 || docs.Count > 1);
+        Add("Move to a new window", () => MoveToNewWindow(doc), AllDocuments.Count() > 1);
+        menu.Items.Add(new Separator());
+        Add("Copy path", () => Clipboard.SetText(doc.Item.Path));
+        Add("Save as…", doc.Save);
+    }
+
+    // ---------------------------------------------------------------- go to definition and history
+
+    public bool CanGoBack => _back.Count > 0;
+
+    public bool CanGoForward => _forward.Count > 0;
+
+    /// <summary>
+    /// Opens a definition: in place for the same file, in its tab when that group has it open already,
+    /// otherwise in a new tab, or a new window when Settings says so. <paramref name="toSide"/> uses the other group.
+    /// </summary>
+    public Task NavigateAsync(PreviewDocument from, ScriptSymbol target, bool toSide) =>
+        NavigateAsync(from, target.File, target.Offset, target.Name.Length, toSide);
+
+    /// <summary>Opens a place in a script, as <see cref="NavigateAsync(PreviewDocument, ScriptSymbol, bool)"/> does, and selects what's there.</summary>
+    public async Task NavigateAsync(PreviewDocument from, ScriptFile file, int offset, int length, bool toSide)
+    {
+        if (PaneOf(from) is not { } pane) return;
+        var jumpedFrom = (from, from.CaretOffset);
+
+        if (!toSide && file.Key == from.Item.Key)
+        {
+            Jumped(jumpedFrom);
+            from.Reveal(offset, length);
+            return;
+        }
+        bool inWindow = !toSide && !OpensTabs;
+        var targetPane = toSide ? OtherPane(pane) : pane;
+        if ((inWindow ? FindOpen(file.Key) : targetPane.Find(file.Key)) is { Host: { } host } open)
+        {
+            host.Jumped(jumpedFrom);
+            host.ShowDocument(open);
+            open.Reveal(offset, length);
+            return;
+        }
+
+        byte[] data;
+        try
+        {
+            data = await Task.Run(file.Read);
+        }
+        catch (Exception ex)
+        {
+            _ = from.ShowCard($"{file.Path} could not be read", ex.Message, MessageKind.Warning, primary: "OK");
+            return;
+        }
+        var doc = new PreviewDocument(new PreviewItem(file.Path, file.Source, data, file, from.Item.Workspace));
+        doc.Reveal(offset, length);
+        if (inWindow)
+        {
+            var window = new PreviewWindow
+            {
+                Owner = Owner,
+                _opener = this,
+                WindowStartupLocation = WindowStartupLocation.Manual,
+                Left = Left + 32,
+                Top = Top + 32,
+                Width = Width,
+                Height = Height,
+            };
+            window.Jumped(jumpedFrom);
+            window.Add(doc);
+            window.Show();
+            return;
+        }
+        if (!_panes.Contains(targetPane)) return; // closed while the file was read
+        Jumped(jumpedFrom);
+        targetPane.Insert(doc, targetPane.Selected is { } selected ? targetPane.Documents.IndexOf(selected) + 1 : -1);
+        SetActive(targetPane);
+        targetPane.Select(doc);
+    }
+
+    /// <summary>A jump was made from here: it's where Back goes, and Forward starts over.</summary>
+    private void Jumped((PreviewDocument Doc, int Offset) from)
+    {
+        _back.Push(from);
+        _forward.Clear();
+        UpdateHistoryButtons();
+    }
+
+    /// <summary>Alt+Left: back to where the last jump started, in whichever tab or window that file is now.</summary>
+    public void GoBack() => Step(_back, _forward);
+
+    /// <summary>Alt+Right: to where Back came from.</summary>
+    public void GoForward() => Step(_forward, _back);
+
+    private void Step(Stack<(PreviewDocument Doc, int Offset)> from, Stack<(PreviewDocument Doc, int Offset)> to)
+    {
+        if (from.Count > 0)
+        {
+            var (doc, offset) = from.Pop();
+            if (Current is { } here) to.Push((here, here.CaretOffset));
+            GoTo(doc, offset);
+        }
+        UpdateHistoryButtons();
+    }
+
+    /// <summary>
+    /// Shows a place in a file: in its tab, wherever that is now, or, when the file has been closed since,
+    /// opened again here.
+    /// </summary>
+    private void GoTo(PreviewDocument doc, int offset)
+    {
+        var open = doc.Host is not null ? doc : FindOpen(doc.Item.Key);
+        if (open?.Host is { } host)
+        {
+            host.ShowDocument(open);
+            open.MoveCaret(offset);
+            return;
+        }
+        var reopened = new PreviewDocument(doc.Item);
+        reopened.MoveCaret(offset);
+        Add(reopened);
+        BringForward();
+    }
+
+    private void UpdateHistoryButtons()
+    {
+        BackButton.IsEnabled = CanGoBack;
+        ForwardButton.IsEnabled = CanGoForward;
+        HistoryButton.IsEnabled = CanGoBack || CanGoForward;
+    }
+
+    /// <summary>
+    /// The places jumped from, newest first, then the ones Back has passed, to pick one to go to. A file closed
+    /// since opens again.
+    /// </summary>
+    private void ShowHistory()
+    {
+        var entries = _back.Select(b => (Place: b, Back: true)).Concat(_forward.Select(f => (Place: f, Back: false)))
+            .Take(40)
+            .Select(e =>
+            {
+                var (doc, offset) = e.Place;
+                var (line, text) = doc.LineAt(offset);
+                string closed = doc.Host is null && FindOpen(doc.Item.Key) is null ? "  ·  closed, opens again" : "";
+                return new QuickPickItem(e.Back ? "" : "", $"{doc.FileName} : {line}", $"{text.Trim()}  ·  {doc.Item.Source}{closed}", e.Place);
+            })
+            .ToList();
+        if (entries.Count == 0) return;
+        ShowPicker("Go back to…", query => [.. entries.Where(i => Matches(i, query))], item =>
+        {
+            var (doc, offset) = ((PreviewDocument Doc, int Offset))item.Tag!;
+            if (Current is { } here && here != doc) Jumped((here, here.CaretOffset));
+            GoTo(doc, offset);
+        });
+
+        static bool Matches(QuickPickItem item, string query) =>
+            query.Length == 0 || item.Title.Contains(query, StringComparison.OrdinalIgnoreCase) || item.Detail.Contains(query, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>Shows the box to type in over the top of the window.</summary>
+    public void ShowPicker(string placeholder, Func<string, IReadOnlyList<QuickPickItem>> filter, Action<QuickPickItem> chosen, string? note = null)
+    {
+        foreach (var doc in AllDocuments) doc.CloseOverlays();
+        Picker.Show(placeholder, filter, chosen, note);
+    }
+
+    // ---------------------------------------------------------------- go to symbol
+
+    /// <summary>Ctrl+T: every class, function, field and enum value in the scripts searched, narrowed by what's typed.</summary>
+    private async Task GoToSymbolAsync()
+    {
+        if (ScriptDocument() is not { } doc)
+        {
+            _ = Current?.ShowCard(null, "Go to symbol works from a script. Open a .ws file first.", MessageKind.Info, autoClose: true);
+            return;
+        }
+        if (await doc.FinderAsync() is not { } finder) return;
+        var symbols = finder.Layers.SelectMany(l => l.All)
+            .Where(s => s.Kind is not (SymbolKind.Local or SymbolKind.Parameter))
+            .DistinctBy(s => (s.File.Key, s.Offset))
+            .ToList();
+        ShowPicker("Go to symbol: a name, or Class.name", query => SymbolMatches(symbols, query), item =>
+        {
+            if (item.Tag is ScriptSymbol symbol && doc.Host is not null) _ = NavigateAsync(doc, symbol, toSide: false);
+        }, "Searches the open archives, the game's scripts and any mod scripts already read.");
+    }
+
+    /// <summary>The best matches for a name, or for Class.name: the whole name first, then names starting with it, then the rest.</summary>
+    internal static IReadOnlyList<QuickPickItem> SymbolMatches(IEnumerable<ScriptSymbol> symbols, string query)
+    {
+        if (query.Length == 0) return [];
+        string? owner = null;
+        string name = query;
+        int dot = query.LastIndexOf('.');
+        if (dot >= 0)
+        {
+            owner = query[..dot];
+            name = query[(dot + 1)..];
+        }
+        var matches = new List<(int Score, ScriptSymbol Symbol)>();
+        foreach (var s in symbols)
+        {
+            if (owner is not null && !(s.OwnerTitle ?? s.Owner ?? "").Contains(owner, StringComparison.OrdinalIgnoreCase)) continue;
+            int score = name.Length == 0 ? 2
+                : s.Name.Equals(name, StringComparison.OrdinalIgnoreCase) ? 0
+                : s.Name.StartsWith(name, StringComparison.OrdinalIgnoreCase) ? 1
+                : s.Name.Contains(name, StringComparison.OrdinalIgnoreCase) ? 2
+                : InOrder(s.Name, name) ? 3
+                : -1;
+            if (score < 0) continue;
+            // types and plain declarations before what annotations add
+            matches.Add((score * 4 + (s.IsType ? 0 : s.Annotation is null ? 1 : 2), s));
+        }
+        return [.. matches
+            .OrderBy(m => m.Score).ThenBy(m => m.Symbol.Name.Length).ThenBy(m => m.Symbol.Name, StringComparer.OrdinalIgnoreCase)
+            .Take(200)
+            .Select(m => new QuickPickItem(DefinitionPeek.KindGlyph(m.Symbol.Kind), m.Symbol.Title,
+                $"{m.Symbol.File.Path} : {m.Symbol.Line}  ·  {m.Symbol.File.Source}", m.Symbol))];
+    }
+
+    /// <summary>Whether the letters typed appear in the name in the same order, so CrMenu finds CR4CraftingMenu.</summary>
+    private static bool InOrder(string name, string typed)
+    {
+        int at = 0;
+        foreach (char c in typed)
+        {
+            at = name.IndexOf(c.ToString(), at, StringComparison.OrdinalIgnoreCase);
+            if (at < 0) return false;
+            at++;
+        }
+        return true;
+    }
+
+    /// <summary>The script in use, or another one open here, for searches that need a script to start from.</summary>
+    private PreviewDocument? ScriptDocument() =>
+        Current is { CanNavigate: true } doc ? doc : AllDocuments.FirstOrDefault(d => d.CanNavigate);
+
+    // ---------------------------------------------------------------- results
+
+    private CancellationTokenSource? _search;
+    private PreviewDocument? _resultsFrom;
+
+    /// <summary>
+    /// Fills the results panel from a search that runs in the background. A new search stops the one before.
+    /// <paramref name="work"/> returns the lines and a short summary such as "12 references in 4 files".
+    /// </summary>
+    public async void ShowResults(PreviewDocument from, string title, string busy, Func<CancellationToken, (List<ResultRow> Rows, string Summary)> work,
+        string empty, params (string Label, Action Run)[] actions)
+    {
+        _search?.Cancel();
+        var cancel = new CancellationTokenSource();
+        _search = cancel;
+        _resultsFrom = from;
+        OpenResultsPanel();
+        if (Results.IsFind && title != FindTitle) Results.HideFind();
+        Results.SetActions();
+        Results.ShowBusy(title, busy);
+        try
+        {
+            var (rows, summary) = await Task.Run(() => work(cancel.Token), cancel.Token);
+            if (cancel.IsCancellationRequested) return;
+            Results.ShowRows(title, summary, rows, empty);
+            Results.SetActions(actions);
+        }
+        catch (OperationCanceledException)
+        {
+            // a newer search took over
+        }
+        catch (Exception ex) when (!cancel.IsCancellationRequested)
+        {
+            var inner = ex is AggregateException { InnerException: { } e } ? e : ex;
+            Results.ShowRows(title, "", [], inner is System.Text.RegularExpressions.RegexMatchTimeoutException
+                ? "The search took too long and was stopped. Try a simpler pattern."
+                : "The search failed: " + inner.Message);
+        }
+    }
+
+    private const string FindTitle = "Find in files";
+
+    private void OpenResultsPanel()
+    {
+        if (Results.Visibility == Visibility.Visible) return;
+        Results.Visibility = Visibility.Visible;
+        ResultsSplitter.Visibility = Visibility.Visible;
+        ResultsSplitterRow.Height = new GridLength(12);
+        ResultsRow.Height = new GridLength(Math.Max(180, ActualHeight * 0.3));
+        ResultsRow.MinHeight = 90;
+    }
+
+    private void CloseResultsPanel()
+    {
+        _search?.Cancel();
+        Results.Visibility = Visibility.Collapsed;
+        ResultsSplitter.Visibility = Visibility.Collapsed;
+        ResultsSplitterRow.Height = new GridLength(0);
+        ResultsRow.MinHeight = 0;
+        ResultsRow.Height = new GridLength(0);
+        Current?.FocusEditor();
+    }
+
+    private void OpenResult(ResultRow row, bool toSide)
+    {
+        if (row.File is not { } file) return;
+        var from = _resultsFrom is { } d && d.Host == this && PaneOf(d) is not null ? d : Current;
+        if (from is null) return;
+        _ = NavigateAsync(from, file, row.Offset, row.Length, toSide);
+    }
+
+    /// <summary>Ctrl+Shift+F: the find box in the results panel, filled with the selected text.</summary>
+    private void FindInFiles()
+    {
+        OpenResultsPanel();
+        Results.ShowFind(Current?.SelectedText is { Length: > 0 and < 200 } selected && !selected.Contains('\n') ? selected : null);
+    }
+
+    private async void Results_FindRequested(System.Text.RegularExpressions.Regex pattern, string text)
+    {
+        if (ScriptDocument() is not { } doc)
+        {
+            Results.ShowRows(FindTitle, "", [], "Find in files searches from a script. Open a .ws file first.");
+            return;
+        }
+        if (await doc.FinderAsync() is not { } finder) return;
+        var layers = finder.Layers;
+        var file = doc.Item.Script!;
+        ShowResults(doc, FindTitle, $"Looking for '{text}'…", cancel =>
+        {
+            var hits = ScriptSearch.Text(pattern, file, layers, cancel);
+            return (ResultRow.ByFile(hits), Summary(hits, "match", "matches"));
+        }, $"Nothing matches '{text}' in the scripts searched.");
+    }
+
+    /// <summary>"12 references in 4 files", noting when the list stopped at the most it shows.</summary>
+    public static string Summary(IReadOnlyCollection<ScriptHit> hits, string one, string many)
+    {
+        int files = hits.Select(h => h.File.Key).Distinct().Count();
+        string text = $"{hits.Count} {(hits.Count == 1 ? one : many)} in {files} {(files == 1 ? "file" : "files")}";
+        return hits.Count >= ScriptSearch.MaxHits ? $"{text} (stopped at the first {ScriptSearch.MaxHits})" : text;
+    }
+
+    // ---------------------------------------------------------------- comparing
+
+    /// <summary>Files being compared, each with the file it's compared with, both ways round.</summary>
+    private static readonly Dictionary<PreviewDocument, PreviewDocument> Compared = [];
+
+    private static IEnumerable<PreviewDocument> OtherFiles(PreviewDocument doc) =>
+        OpenWindows.SelectMany(w => w.AllDocuments).Where(d => d != doc && d.Item.Key != doc.Item.Key).DistinctBy(d => d.Item.Key);
+
+    public bool HasOtherFiles(PreviewDocument doc) => OtherFiles(doc).Any();
+
+    /// <summary>Picks another open file to compare with, as the older version.</summary>
+    public void PickFileToCompare(PreviewDocument doc)
+    {
+        var others = OtherFiles(doc).ToList();
+        ShowPicker($"Compare {doc.FileName} with…", query =>
+            [.. others.Where(d => query.Length == 0 || d.Item.Path.Contains(query, StringComparison.OrdinalIgnoreCase)
+                    || d.Item.Source.Contains(query, StringComparison.OrdinalIgnoreCase))
+                .Select(d => new QuickPickItem("", d.FileName, $"{d.Item.Path}  ·  {d.Item.Source}", d))],
+            item =>
+            {
+                if (item.Tag is PreviewDocument other) _ = CompareAsync(doc, other);
+            }, "The file picked is shown as the older version, on the other side.");
+    }
+
+    /// <summary>Opens <paramref name="older"/> beside <paramref name="doc"/>, or finds it there, and compares the two.</summary>
+    public async Task CompareWithFileAsync(PreviewDocument doc, ScriptFile older)
+    {
+        if (PaneOf(doc) is not { } pane) return;
+        var target = OtherPane(pane);
+        if (target.Find(older.Key) is not { } open)
+        {
+            byte[] data;
+            try
+            {
+                data = await Task.Run(older.Read);
+            }
+            catch (Exception ex)
+            {
+                _ = doc.ShowCard($"{older.Path} could not be read", ex.Message, MessageKind.Warning, primary: "OK");
+                return;
+            }
+            if (!_panes.Contains(target)) return;
+            open = new PreviewDocument(new PreviewItem(older.Path, older.Source, data, older, doc.Item.Workspace));
+            target.Insert(open);
+        }
+        target.Select(open, focus: false);
+        await CompareAsync(doc, open);
+    }
+
+    /// <summary>Marks the lines that differ in both files, side by side when they're in the same window.</summary>
+    private async Task CompareAsync(PreviewDocument newer, PreviewDocument older)
+    {
+        StopComparing(newer);
+        StopComparing(older);
+        if (older.Host == this && PaneOf(older) == PaneOf(newer) && PaneOf(newer) is { } pane)
+            MoveDocument(older, OtherPane(pane), -1);
+        if (newer.Host is { } host) host.ShowDocument(newer);
+
+        static string[] Lines(string text) => [.. text.Split('\n').Select(l => l.TrimEnd('\r'))];
+        string oldText = older.Text, newText = newer.Text;
+        var (oldKinds, newKinds) = await Task.Run(() => LineDiff.Compare(Lines(oldText), Lines(newText)));
+        if (older.Host is null || newer.Host is null) return;
+        older.SetDiff(oldKinds);
+        newer.SetDiff(newKinds);
+        Compared[newer] = older;
+        Compared[older] = newer;
+
+        int changed = newKinds.Count(k => k == DiffKind.Changed), added = newKinds.Count(k => k == DiffKind.Added);
+        int removed = oldKinds.Count(k => k == DiffKind.Removed);
+        string message = changed + added + removed == 0
+            ? "They're the same, apart from spaces at the ends of lines."
+            : $"{Count(changed, "changed")}, {Count(added, "added")} and {Count(removed, "removed")} compared with {older.FileName}. "
+              + "F8 and Shift+F8 step through the differences.";
+        _ = newer.ShowCard(changed + added + removed == 0 ? $"Same as {older.FileName}" : "Differences marked", message, MessageKind.Info, primary: "OK");
+
+        static string Count(int n, string what) => $"{n} {(n == 1 ? "line" : "lines")} {what}";
+    }
+
+    /// <summary>Takes the marks off a file and the file it was compared with.</summary>
+    public void StopComparing(PreviewDocument doc)
+    {
+        doc.ClearDiff();
+        if (!Compared.Remove(doc, out var other)) return;
+        other.ClearDiff();
+        Compared.Remove(other);
+    }
+
+    // ---------------------------------------------------------------- header and keys
+
+    public void OnSelectionChanged(PreviewPane pane)
+    {
+        if (pane == _active) UpdateHeader();
+    }
+
+    private void UpdateHeader()
+    {
+        if (Current is not { } doc) return;
+        Title = $"{doc.FileName} - Preview";
+        FileNameText.Text = doc.FileName;
+        DetailText.Text = doc.Detail;
+    }
+
+    private void Split_Click(object sender, RoutedEventArgs e) => ToggleSplit();
+
+    private void Back_Click(object sender, RoutedEventArgs e) => GoBack();
+
+    private void Forward_Click(object sender, RoutedEventArgs e) => GoForward();
+
+    private void History_Click(object sender, RoutedEventArgs e) => ShowHistory();
+
+    private void SplitRight_Click(object sender, RoutedEventArgs e) => SetSplitDirection("Right");
+
+    private void SplitDown_Click(object sender, RoutedEventArgs e) => SetSplitDirection("Down");
+
+    private static void SetSplitDirection(string direction)
+    {
+        App.Settings.PreviewSplit = direction;
+        App.Settings.Save();
+        ApplySettings();
+    }
+
+    private void Copy_Click(object sender, RoutedEventArgs e) => Current?.Copy();
+
+    private void Save_Click(object sender, RoutedEventArgs e) => Current?.Save();
+
+    private void FocusPane(int index)
+    {
+        if (index >= _panes.Count || _panes[index].Selected is not { } doc) return;
+        SetActive(_panes[index]);
+        doc.FocusEditor();
+    }
+
+    private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        var key = e.Key == Key.System ? e.SystemKey : e.Key;
+        var mods = Keyboard.Modifiers;
+        var doc = Current;
+        if (Picker.IsOpen) return; // it has the keys while it's open
+        if (key == Key.Escape)
+        {
+            // in the results: closes them. In a file: a message first, then the search bar, then a window showing just one file
+            if (Results.IsKeyboardFocusWithin) CloseResultsPanel();
+            else if (doc?.HandleEscape() != true && AllDocuments.Count() == 1) Close();
+        }
+        else if (key == Key.S && mods == ModifierKeys.Control)
+            doc?.Save();
+        else if (key is Key.W or Key.F4 && mods == ModifierKeys.Control)
+        {
+            if (doc is not null) CloseDocument(doc);
+        }
+        else if (key == Key.Tab && (mods & ModifierKeys.Control) != 0)
+            _active.SelectNext((mods & ModifierKeys.Shift) != 0 ? -1 : 1);
+        else if (key is Key.Oem5 or Key.OemBackslash && mods == ModifierKeys.Control)
+            ToggleSplit();
+        else if (key is Key.D1 or Key.NumPad1 && mods == ModifierKeys.Control)
+            FocusPane(0);
+        else if (key is Key.D2 or Key.NumPad2 && mods == ModifierKeys.Control)
+            FocusPane(1);
+        else if (key == Key.Left && mods == ModifierKeys.Alt)
+            GoBack();
+        else if (key == Key.Right && mods == ModifierKeys.Alt)
+            GoForward();
+        else if (key == Key.T && mods == ModifierKeys.Control)
+            _ = GoToSymbolAsync();
+        else if (key == Key.T && mods == (ModifierKeys.Control | ModifierKeys.Shift))
+            ReopenClosed();
+        else if (key == Key.F && mods == (ModifierKeys.Control | ModifierKeys.Shift))
+            FindInFiles();
+        else if (key == Key.F4 && mods is ModifierKeys.None or ModifierKeys.Shift && Results.IsVisible)
+        {
+            if (Results.Step(mods == ModifierKeys.Shift ? -1 : 1) is { } row) OpenResult(row, toSide: false);
+        }
+        else
+        {
+            doc?.HandleKey(e);
+            return;
+        }
+        e.Handled = true;
+    }
+
+    private void Window_PreviewKeyUp(object sender, KeyEventArgs e) => Current?.HandleKeyUp(e);
+
+    public Task ShowMessage(string? title, string message, MessageKind kind) =>
+        Current?.ShowCard(title, message, kind, primary: "OK") ?? Task.CompletedTask;
+}

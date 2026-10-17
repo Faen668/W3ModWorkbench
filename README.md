@@ -1,8 +1,8 @@
 <div align="center">
 
-<img src="docs/images/icon.png" alt="W3 Bundle Explorer icon" width="96" />
+<img src="docs/images/icon.png" alt="W3 Mod Workbench icon" width="96" />
 
-# W3 Bundle Explorer
+# W3 Mod Workbench
 
 [![Release](https://badgen.net/github/tag/Faen668/W3BundleExplorer?label=release)](https://github.com/Faen668/W3BundleExplorer/releases/latest)
 [![Downloads](https://badgen.net/github/assets-dl/Faen668/W3BundleExplorer?label=downloads&color=green)](https://github.com/Faen668/W3BundleExplorer/releases)
@@ -15,7 +15,7 @@
 
 **Browse and extract The Witcher 3's `.bundle` archives, and turn REDkit compiled scripts (`precompiled.rsblob`) back into readable WitcherScript.**
 
-<img src="docs/images/main-window.png" alt="W3 Bundle Explorer main window" width="860" />
+<img src="docs/images/main-window.png" alt="W3 Mod Workbench main window" width="860" />
 
 </div>
 
@@ -68,9 +68,9 @@
 
 ## 📥 Download
 
-1. Grab the latest `W3BundleExplorer-v<version>-win-x64.zip` from **[Releases](https://github.com/Faen668/W3BundleExplorer/releases/latest)**.
+1. Grab the latest `W3ModWorkbench-v<version>-win-x64.zip` from **[Releases](https://github.com/Faen668/W3BundleExplorer/releases/latest)**.
 2. Unzip it anywhere.
-3. Run `W3BundleExplorer.exe`.
+3. Run `W3ModWorkbench.exe`.
 
 No installer and nothing else to install: the release includes everything it needs, including .NET.
 
@@ -112,15 +112,15 @@ Decompiling is great for understanding how a mod works, checking two mods for co
 
 **You need:** Windows, and the [.NET 9 SDK](https://dotnet.microsoft.com/download/dotnet/9.0) or Visual Studio 2022 17.12 or newer.
 
-Open `W3BundleExplorer.sln` in Visual Studio and press F5, or build from a terminal:
+Open `W3ModWorkbench.sln` in Visual Studio and press F5, or build from a terminal:
 
 ```bash
-dotnet build W3BundleExplorer.sln -c Release
+dotnet build W3ModWorkbench.sln -c Release
 ```
 
 The only NuGet package is [AvalonEdit](https://github.com/icsharpcode/AvalonEdit), and it restores automatically.
 
-**Making a release:** run `create-release.bat`. It publishes a self-contained single-file exe and packs it with the licence, notices, readme and changelog into `release\W3BundleExplorer-v<version>-win-x64.zip`. The version comes from `<Version>` in `W3BundleExplorer.csproj`. Visual Studio's **Publish** button uses the same `Release-win-x64` profile.
+**Making a release:** run `create-release.bat`. It publishes a self-contained single-file exe and packs it with the licence, notices, readme and changelog into `release\W3ModWorkbench-v<version>-win-x64.zip`. The version comes from `<Version>` in `W3ModWorkbench.csproj`. Visual Studio's **Publish** button uses the same `Release-win-x64` profile.
 
 <details>
 <summary><b>Project layout</b></summary>
@@ -145,7 +145,7 @@ Licence texts for the third-party parts are in [THIRD-PARTY-NOTICES.md](THIRD-PA
 
 ## 🤖 How it was made
 
-W3 Bundle Explorer was developed with AI assistance (Claude, by Anthropic), most of all in reverse-engineering the undocumented `.rsblob` format and building the decompiler. Nothing was taken on trust: the format work was checked against mods whose original source was available, and every decompiled function's size is verified against what the compiler recorded.
+W3 Mod Workbench was developed with AI assistance (Claude, by Anthropic), most of all in reverse-engineering the undocumented `.rsblob` format and building the decompiler. Nothing was taken on trust: the format work was checked against mods whose original source was available, and every decompiled function's size is verified against what the compiler recorded.
 
 ## 📄 Licence
 
@@ -153,7 +153,7 @@ Released under the [MIT Licence](LICENSE). Copyright © 2026 Faen90.
 
 ## ⚠️ Disclaimer
 
-W3 Bundle Explorer is an unofficial fan-made tool. It is not affiliated with, endorsed by or supported by CD PROJEKT RED. The Witcher, REDkit and REDengine are trademarks of CD PROJEKT S.A., used here only to describe what the tool works with.
+W3 Mod Workbench is an unofficial fan-made tool. It is not affiliated with, endorsed by or supported by CD PROJEKT RED. The Witcher, REDkit and REDengine are trademarks of CD PROJEKT S.A., used here only to describe what the tool works with.
 
 <div align="center">
 <sub>Developed by Faen90</sub>

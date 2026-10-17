@@ -1,0 +1,166 @@
+<Window x:Class="W3ModWorkbench.StringsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:W3ModWorkbench"
+        Title="Strings" Icon="pack://application:,,,/W3ModWorkbench;component/Assets/app.ico"
+        Width="1100" Height="760" MinWidth="720" MinHeight="420"
+        WindowStartupLocation="CenterOwner" PreviewKeyDown="Window_PreviewKeyDown" Closing="Window_Closing">
+    <Window.Resources>
+        <Style x:Key="Card" TargetType="Border">
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}" />
+            <Setter Property="Background" Value="{DynamicResource CardBackgroundFillColorDefaultBrush}" />
+        </Style>
+        <Style x:Key="IconText" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="{StaticResource IconFont}" />
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style x:Key="CellText" TargetType="TextBlock">
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+            <Setter Property="Margin" Value="6,0" />
+        </Style>
+        <Style x:Key="CodeCellText" TargetType="TextBlock" BasedOn="{StaticResource CellText}">
+            <Setter Property="FontFamily" Value="Cascadia Mono, Consolas" />
+            <Setter Property="FontSize" Value="12.5" />
+        </Style>
+        <Style x:Key="CellEdit" TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="Padding" Value="5,3" />
+        </Style>
+        <!-- as in the file list: a soft accent tint marks the selection, and the text keeps its colour -->
+        <Style x:Key="StringCell" TargetType="DataGridCell">
+            <Setter Property="OverridesDefaultStyle" Value="True" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="MinHeight" Value="32" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="VerticalContentAlignment" Value="Stretch" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="DataGridCell">
+                        <Grid SnapsToDevicePixels="True" Background="Transparent">
+                            <Rectangle x:Name="Highlight" Fill="{DynamicResource AccentFillColorDefaultBrush}" Opacity="0" />
+                            <ContentPresenter VerticalAlignment="Center" SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}" />
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Highlight" Property="Opacity" Value="0.22" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Grid>
+        <Grid Margin="14,12,14,10">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <!-- the file, and what can be done with it -->
+            <DockPanel Margin="0,0,0,10" LastChildFill="True">
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button Click="ExportCsv_Click" ToolTip="Save the strings as a CSV for the modding tools or a translator">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Style="{StaticResource IconText}" Text="&#xE9F9;" />
+                            <TextBlock Margin="8,0,0,0" Text="Export CSV" />
+                        </StackPanel>
+                    </Button>
+                    <Button Margin="6,0,0,0" Click="SaveAs_Click" ToolTip="Save as a .w3strings file somewhere else (Ctrl+Shift+S)">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Style="{StaticResource IconText}" Text="&#xE792;" />
+                            <TextBlock Margin="8,0,0,0" Text="Save as" />
+                        </StackPanel>
+                    </Button>
+                    <Button x:Name="SaveButton" Margin="6,0,0,0" Click="Save_Click" Style="{DynamicResource AccentButtonStyle}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Style="{StaticResource IconText}" Text="&#xE74E;" />
+                            <TextBlock Margin="8,0,0,0" Text="Save" />
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+                <StackPanel VerticalAlignment="Center" Margin="0,0,12,0">
+                    <TextBlock x:Name="FileNameText" FontSize="16" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                    <TextBlock x:Name="DetailText" Opacity="0.65" TextTrimming="CharacterEllipsis" Margin="0,2,0,0" />
+                </StackPanel>
+            </DockPanel>
+
+            <!-- search, adding and removing strings, the language -->
+            <DockPanel Grid.Row="1" Margin="0,0,0,10" LastChildFill="True">
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="Language" VerticalAlignment="Center" Margin="0,0,8,0" />
+                    <ComboBox x:Name="LanguageBox" Width="90" SelectionChanged="LanguageBox_SelectionChanged"
+                              ToolTip="The language the file is saved as. Languages scramble their text differently." />
+                    <CheckBox x:Name="AllLanguagesCheck" Margin="14,0,0,0" MinWidth="0" VerticalAlignment="Center" Content="Copy to every language"
+                              ToolTip="Saving also writes ar, br, cz, de, en, es, esmx, fr, hu, it, jp, kr, pl, ru and zh .w3strings beside it, so every language shows your text" />
+                </StackPanel>
+                <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" Margin="0,0,10,0">
+                    <Button Click="Add_Click" ToolTip="Add a string after the selected one, with the next free ID (Ctrl+N)">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Style="{StaticResource IconText}" Text="&#xE710;" />
+                            <TextBlock Margin="8,0,0,0" Text="Add" />
+                        </StackPanel>
+                    </Button>
+                    <Button x:Name="DeleteButton" Margin="6,0,0,0" Click="Delete_Click" ToolTip="Remove the selected strings (Delete)">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Style="{StaticResource IconText}" Text="&#xE74D;" />
+                            <TextBlock Margin="8,0,0,0" Text="Remove" />
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+                <Grid Width="420" HorizontalAlignment="Left">
+                    <TextBox x:Name="SearchBox" Padding="32,6,8,6" VerticalContentAlignment="Center" TextChanged="SearchBox_TextChanged" />
+                    <TextBlock Style="{StaticResource IconText}" Text="&#xE721;" FontSize="13" Margin="11,0,0,0" Opacity="0.6"
+                               HorizontalAlignment="Left" IsHitTestVisible="False" />
+                    <TextBlock x:Name="SearchPlaceholder" Text="Search IDs, keys and text  (Ctrl+F)" Margin="33,0,0,0" Opacity="0.55"
+                               VerticalAlignment="Center" IsHitTestVisible="False" />
+                </Grid>
+            </DockPanel>
+
+            <Border Grid.Row="2" Style="{StaticResource Card}" ClipToBounds="True">
+                <DataGrid x:Name="Grid" AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False"
+                          HeadersVisibility="Column" GridLinesVisibility="None" BorderThickness="0" Background="Transparent"
+                          SelectionMode="Extended" SelectionUnit="FullRow" CanUserResizeRows="False"
+                          EnableRowVirtualization="True" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling"
+                          CellStyle="{StaticResource StringCell}" CellEditEnding="Grid_CellEditEnding">
+                    <DataGrid.Columns>
+                        <!-- a row with a problem, such as an ID used twice, gets a warning sign that says what's wrong -->
+                        <DataGridTemplateColumn Width="30" CanUserResize="False" CanUserSort="False" IsReadOnly="True">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate DataType="{x:Type local:StringRow}">
+                                    <TextBlock Text="&#xE7BA;" FontFamily="{StaticResource IconFont}" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                               Foreground="{DynamicResource SystemFillColorCautionBrush}" ToolTip="{Binding Problem}"
+                                               Visibility="{Binding HasProblem, Converter={StaticResource BoolToVisibility}}" />
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                        <DataGridTextColumn Header="ID" Binding="{Binding IdText, UpdateSourceTrigger=LostFocus}" Width="120"
+                                            ElementStyle="{StaticResource CodeCellText}" EditingElementStyle="{StaticResource CellEdit}" />
+                        <DataGridTextColumn Header="Key" Binding="{Binding KeyName, UpdateSourceTrigger=LostFocus}" Width="240"
+                                            ElementStyle="{StaticResource CodeCellText}" EditingElementStyle="{StaticResource CellEdit}" />
+                        <DataGridTextColumn Header="Key hash" Binding="{Binding HashText, UpdateSourceTrigger=LostFocus}" Width="96"
+                                            ElementStyle="{StaticResource CodeCellText}" EditingElementStyle="{StaticResource CellEdit}" />
+                        <DataGridTextColumn Header="Text" Binding="{Binding Text, UpdateSourceTrigger=LostFocus}" Width="*"
+                                            ElementStyle="{StaticResource CellText}" EditingElementStyle="{StaticResource CellEdit}" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </Border>
+
+            <DockPanel Grid.Row="3" Margin="2,8,2,0">
+                <TextBlock x:Name="ProblemText" DockPanel.Dock="Right" Foreground="{DynamicResource SystemFillColorCautionBrush}"
+                           TextTrimming="CharacterEllipsis" MaxWidth="640" />
+                <TextBlock x:Name="StatusText" Opacity="0.75" />
+            </DockPanel>
+        </Grid>
+
+        <local:MessageCard x:Name="Message" IsModal="True" />
+    </Grid>
+</Window>

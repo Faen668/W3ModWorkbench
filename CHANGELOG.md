@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- W3 Bundle Explorer is now **W3 Mod Workbench**, with a new icon: it does a lot more than bundles now. Settings move to `%AppData%\W3ModWorkbench` on the first start, with your old ones carried over.
+- Strings editor: drop a `.w3strings` file, or a strings `.csv`, onto the window to read and edit it, then save it as a `.w3strings` file the game reads (byte for byte what the modding tools' encoder writes), optionally copied to every language, or export it as CSV. Opening a folder lists its strings files in the tree. Key names come back from a strings CSV beside the file.
+- Script previews: find all references (Shift+F12), who else changes this (Ctrl+Shift+F12) for wraps, replacements, overrides and loose file replacements, a type hierarchy (Shift+Alt+H), go to symbol (Ctrl+T), find in files (Ctrl+Shift+F), all in a results list under the files.
+- Script previews: an outline bar with the class and function you're in (Ctrl+Shift+O lists the whole file), parameter hints in calls, and a richer definition popup that says what a declaration belongs to and an enum value's number.
+- Compare a mod's loose copy of a game script with the game's version, or any two open files, with the differences marked; F8 steps through them.
+- Back and forward (Alt+Left / Alt+Right) with a history list, which reopen closed tabs at the right place. Pinned tabs, and Ctrl+Shift+T to reopen the tab closed last.
+
 - Previews open as tabs in one window instead of a new window each time, and a file that's already open is brought forward instead of opening again. Settings > Preview can put each file in its own window as before.
 - Split view: **Split** (`Ctrl+\`) moves the file you're reading into a second group of tabs beside or below the first, or shows a second view of it when it's the only tab. Drag tabs to reorder them, move them between groups and windows, onto the side of the text to split, or out of the window to give them one of their own. Right-click a tab to close others, move it, or copy its path.
 - Resting the mouse on a name in a script shows its declaration in a popup, coloured like the preview, with its file and line, so you can see where Ctrl+click will go. Can be turned off in Settings.
