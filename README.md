@@ -64,6 +64,7 @@
 
 ### Script editor
 - **Projects**: a `.w3bench` file in the mod's folder names its scripts folder, lists its other files (menus, strings, notes) and remembers where it compiles to. **Project > New project** makes one, **Open project** opens one, and the tool reopens the last project with the scripts that were open. Its scripts edit with highlighting, go to definition and the definition popup, all following your edits. Unsaved files are marked and nothing closes without asking.\n- **Loose files ask first**: scripts that aren't in the open project can be read, and the first time you type in one the editor offers to add it to the project (or make a project for it). The XML and strings editors offer the same when you save.
+- **Texture caches**: open a `texture.cache` (the game's, a DLC's or a mod's) and preview its textures, each mip level and channel, then save them as PNG or DDS. An `.xbm` in a bundle opens the texture it describes from the matching cache.
 - **Edit decompiled mods**: *Edit as project* saves a compiled mod's decompiled scripts to a folder, makes a project for it and opens the scripts for editing.
 - **Compile**: builds a project into a `.rsblob` (Ctrl+Shift+B), with its errors listed and linked to their lines. It uses REDkit's own `wcc_lite.exe` when you have it (free for owners of the game; point Settings at it or let it find it). **No REDkit? No problem**: the built-in compiler reads the game's scripts and your installed mods (Shared Utils, say) and compiles in about a second, and on real mods its output matches wcc_lite's.
 - **Projects stand out**: the open project carries a **PROJECT** badge in the tree and beside the file name in the preview, so you can tell what you can edit from what's read-only.
@@ -224,6 +225,7 @@ The only NuGet package is [AvalonEdit](https://github.com/icsharpcode/AvalonEdit
 | `Core/` | Bundle reader, LZ4 and Snappy decoders, extraction, game folder detection |
 | `Core/Scripts/` | The `.rsblob` reader, bytecode decoder, operator table, decompiler and WitcherScript writer; script projects, the wcc_lite compile runner and the built-in compiler (`Standalone/`) |
 | `Core/Projects/` | The `.w3bench` project file (scripts folder, other files, compile output) and the workspace that holds the open project |
+| `Core/Textures/` | The `texture.cache` reader, the block-compressed decoders (BC1 to BC7) and the DDS writer |
 | `Core/Inspector/` | The source inspector: scanner, script and XML analysers, matching and scoring, coding style, and the report writer |
 | `Core/Strings/` | The .w3strings reader and writer, and the index of the game's strings |
 | `Core/Menu/` | The mod menu model: reading and writing the XML, checks, keys and script |

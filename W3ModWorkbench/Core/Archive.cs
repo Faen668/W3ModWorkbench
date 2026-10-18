@@ -29,6 +29,9 @@ public abstract class ArchiveEntry
 
     public abstract string FormatText { get; }
 
+    /// <summary>The path a file is extracted to. A texture is written as a .dds, so its path says so.</summary>
+    public virtual string ExtractPath => Path;
+
     /// <param name="archiveStream">The archive's file when <see cref="IArchive.ReadsFromDisk"/>, otherwise null.</param>
     public abstract byte[] Read(Stream? archiveStream);
 

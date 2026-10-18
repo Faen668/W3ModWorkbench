@@ -13,6 +13,7 @@ using W3ModWorkbench.Core;
 using W3ModWorkbench.Core.Projects;
 using W3ModWorkbench.Core.Scripts;
 using W3ModWorkbench.Core.Strings;
+using W3ModWorkbench.Core.Textures;
 using W3ModWorkbench.Core.Scripts.Navigation;
 using W3ModWorkbench.ViewModels;
 
@@ -20,7 +21,9 @@ namespace W3ModWorkbench;
 
 public partial class MainWindow : Window, IMessageHost
 {
+    /// <summary>Every open archive, flat. The tree shows these grouped by mod: see <see cref="RebuildTree"/>.</summary>
     private readonly ObservableCollection<FolderNode> _roots = [];
+    private readonly ObservableCollection<FolderNode> _tree = [];
     private readonly DispatcherTimer _searchTimer;
     private readonly Settings _settings = App.Settings;
     private List<EntryItem> _shown = [];
@@ -33,7 +36,8 @@ public partial class MainWindow : Window, IMessageHost
     {
         InitializeComponent();
         DisabledLook.Apply(this);
-        FolderTree.ItemsSource = _roots;
+        FolderTree.ItemsSource = _tree;
+        _roots.CollectionChanged += (_, _) => RebuildTree();
         _searchTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(220) };
         _searchTimer.Tick += (_, _) => { _searchTimer.Stop(); RefreshView(); };
 
@@ -59,8 +63,8 @@ public partial class MainWindow : Window, IMessageHost
         var dialog = new OpenFileDialog
         {
             Title = "Open projects, bundles, scripts or strings",
-            Filter = "Projects, bundles, scripts, strings and XML (*.w3bench;*.bundle;*.rsblob;*.ws;*.w3strings;*.csv;*.xml)|*.w3bench;*.bundle;*.rsblob;*.ws;*.w3strings;*.csv;*.xml|"
-                   + "Projects (*.w3bench)|*.w3bench|Bundles (*.bundle)|*.bundle|Compiled scripts (*.rsblob)|*.rsblob|Loose scripts (*.ws)|*.ws|"
+            Filter = "Projects, bundles, scripts, strings and XML (*.w3bench;*.bundle;*.rsblob;*.cache;*.ws;*.w3strings;*.csv;*.xml)|*.w3bench;*.bundle;*.rsblob;*.cache;*.ws;*.w3strings;*.csv;*.xml|"
+                   + "Projects (*.w3bench)|*.w3bench|Bundles (*.bundle)|*.bundle|Compiled scripts (*.rsblob)|*.rsblob|Texture caches (*.cache)|*.cache|Loose scripts (*.ws)|*.ws|"
                    + "Strings (*.w3strings;*.csv)|*.w3strings;*.csv|XML, opened in the XML editor (*.xml)|*.xml|All files (*.*)|*.*",
             Multiselect = true,
             InitialDirectory = Directory.Exists(_settings.LastOpenFolder) ? _settings.LastOpenFolder : "",
@@ -131,7 +135,7 @@ public partial class MainWindow : Window, IMessageHost
                 {
                     var found = Directory.EnumerateFiles(path, "*.*", SearchOption.AllDirectories).ToList();
                     files.AddRange(found
-                        .Where(f => f.EndsWith(".bundle", StringComparison.OrdinalIgnoreCase) || ScriptBlob.LooksLikeBlob(f))
+                        .Where(f => f.EndsWith(".bundle", StringComparison.OrdinalIgnoreCase) || ScriptBlob.LooksLikeBlob(f) || TextureCacheArchive.LooksLikeCache(f))
                         .Order(StringComparer.OrdinalIgnoreCase));
                     // each folder of .w3strings files is listed as one entry, beside the bundles
                     files.AddRange(found
@@ -219,6 +223,7 @@ public partial class MainWindow : Window, IMessageHost
     private static IArchive OpenArchive(string file) =>
         Directory.Exists(file) ? Directory.EnumerateFiles(file, "*.w3strings").Any() ? StringsFolder.Open(file) : ScriptFolder.Open(file)
         : ScriptBlob.LooksLikeBlob(file) ? ScriptArchive.Open(file)
+        : TextureCacheArchive.LooksLikeCache(file) ? TextureCacheArchive.Open(file)
         : Bundle.Open(file);
 
     // ---------------------------------------------------------------- projects
@@ -521,7 +526,7 @@ public partial class MainWindow : Window, IMessageHost
         foreach (var item in new[] { TreeProjectPropertiesItem, TreeAddFilesItem, TreeRefreshItem, TreeRevealItem })
             item.Visibility = project ? Visibility.Visible : Visibility.Collapsed;
         TreeProjectSeparator.Visibility = project || loose ? Visibility.Visible : Visibility.Collapsed;
-        TreeCloseItem.Header = project ? "Close project" : loose ? "Close scripts" : "Close bundle";
+        TreeCloseItem.Header = project ? "Close project" : loose ? "Close scripts" : root is { IsGroup: true } ? "Close mod" : "Close bundle";
     }
 
     private void GridAddToProject_Click(object sender, RoutedEventArgs e)
@@ -569,8 +574,45 @@ public partial class MainWindow : Window, IMessageHost
             _ = CloseProjectAsync();
             return;
         }
-        _roots.Remove(node);
+        if (node.IsGroup)
+            foreach (var member in node.Children.ToList()) _roots.Remove(member);
+        else _roots.Remove(node);
         AfterBundlesClosed();
+    }
+
+    /// <summary>
+    /// What the tree lists: the open archives, with the bundles, compiled scripts and strings of one mod gathered under
+    /// that mod's name. A mod with only one archive, projects and loose script folders stay as they are.
+    /// </summary>
+    private void RebuildTree()
+    {
+        var old = _tree.Where(n => n.IsGroup).ToDictionary(n => n.Name, StringComparer.OrdinalIgnoreCase);
+        var byOwner = _roots.Where(r => r.Archive is not ScriptFolder).GroupBy(r => r.Archive.Owner, StringComparer.OrdinalIgnoreCase)
+            .Where(g => g.Count() > 1).ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
+        var shown = new List<FolderNode>();
+        var made = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var root in _roots)
+        {
+            if (root.Archive is not ScriptFolder && byOwner.TryGetValue(root.Archive.Owner, out var members))
+            {
+                if (!made.Add(root.Archive.Owner)) continue;
+                var group = FolderNode.Group(root.Archive.Owner, members);
+                if (old.TryGetValue(root.Archive.Owner, out var before))
+                {
+                    group.IsExpanded = before.IsExpanded;
+                    group.IsSelected = before.IsSelected;
+                }
+                else group.IsExpanded = false;
+                shown.Add(group);
+            }
+            else
+            {
+                root.SetInGroup(false);
+                shown.Add(root);
+            }
+        }
+        _tree.Clear();
+        foreach (var node in shown) _tree.Add(node);
     }
 
     private void AfterBundlesClosed()
@@ -692,6 +734,10 @@ public partial class MainWindow : Window, IMessageHost
         if (FindParent<DataGridRow>(e.OriginalSource as DependencyObject)?.Item is not EntryItem item) return;
         if (item.Entry is StringsEntry strings)
             StringsWindow.Open(strings.FullPath, this);
+        else if (item.Entry is TextureEntry texture)
+            TextureWindow.Open(texture, this);
+        else if (IsTextureHeader(item))
+            _ = OpenTextureHeaderAsync(item);
         else if (item.Entry is LooseScriptEntry { IsScript: false } && XmlWindow.CanOpen(item.Name))
             _ = OpenXmlAsync(item);
         else if (item.IsPreviewable)
@@ -702,12 +748,54 @@ public partial class MainWindow : Window, IMessageHost
             item.IsChecked = !item.IsChecked;
     }
 
+    /// <summary>An .xbm in a bundle: the texture's description, whose pixels are in a texture.cache under the same path.</summary>
+    private static bool IsTextureHeader(EntryItem item) =>
+        item.Entry is not TextureEntry and not LooseScriptEntry && item.Name.EndsWith(".xbm", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Texture caches found beside a bundle or in the game folder, kept so the next texture doesn't read the index again.</summary>
+    private static readonly Dictionary<string, TextureCacheArchive?> SideCaches = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Shows the texture an .xbm in a bundle describes. Its pixels are in a texture.cache, under the same path: one that's
+    /// open, else the one beside the bundle, else the game's own.
+    /// </summary>
+    private async Task OpenTextureHeaderAsync(EntryItem item)
+    {
+        var open = _roots.Select(r => r.Archive).OfType<TextureCacheArchive>().ToList();
+        string owner = item.Entry.Archive.Owner;
+        string? beside = Path.GetDirectoryName(item.Entry.Archive.FilePath) is { } folder ? Path.Combine(folder, "texture.cache") : null;
+        string? game = GameLocator.Resolve(null) is { } g ? Path.Combine(g, "content", "content0", "texture.cache") : null;
+        var found = await Task.Run(() =>
+        {
+            var caches = new List<TextureCacheArchive>(open.OrderByDescending(c => c.Owner.Equals(owner, StringComparison.OrdinalIgnoreCase)));
+            foreach (string? path in new[] { beside, game })
+            {
+                if (path is null || !File.Exists(path) || caches.Any(c => c.FilePath.Equals(path, StringComparison.OrdinalIgnoreCase))) continue;
+                lock (SideCaches)
+                {
+                    if (!SideCaches.TryGetValue(path, out var cache))
+                    {
+                        try { cache = TextureCacheArchive.LooksLikeCache(path) ? TextureCacheArchive.Open(path) : null; }
+                        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException) { cache = null; }
+                        SideCaches[path] = cache;
+                    }
+                    if (cache is not null) caches.Add(cache);
+                }
+            }
+            return caches.Select(c => c.Entries.OfType<TextureEntry>().FirstOrDefault(e => e.Path.Equals(item.Path, StringComparison.OrdinalIgnoreCase))).FirstOrDefault(e => e is not null);
+        });
+        if (found is not null) TextureWindow.Open(found, this);
+        else ShowError($"The texture's pixels weren't found.\n\n{item.Name} only describes the texture; its pixels are in a texture.cache under the same path. Open the mod's texture.cache (or the game's, in content\\content0), or put one beside this bundle.");
+    }
+
     private void GridCopyPath_Click(object sender, RoutedEventArgs e) => CopyHighlightedPaths();
 
     private void GridPreview_Click(object sender, RoutedEventArgs e)
     {
-        if (Highlighted().FirstOrDefault(i => i.IsPreviewable || i.Entry is StringsEntry) is not { } item) return;
+        if (Highlighted().FirstOrDefault(i => i.IsPreviewable || i.Entry is StringsEntry or TextureEntry || IsTextureHeader(i)) is not { } item) return;
         if (item.Entry is StringsEntry strings) StringsWindow.Open(strings.FullPath, this);
+        else if (item.Entry is TextureEntry texture) TextureWindow.Open(texture, this);
+        else if (IsTextureHeader(item)) _ = OpenTextureHeaderAsync(item);
         else _ = PreviewAsync(item);
     }
 

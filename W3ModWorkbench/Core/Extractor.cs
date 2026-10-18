@@ -58,7 +58,7 @@ public static class Extractor
                     }
                     try
                     {
-                        string target = TargetPath(root, entry.Path, keepStructure, usedNames);
+                        string target = TargetPath(root, entry.ExtractPath, keepStructure, usedNames);
                         byte[] data = entry.Read(stream);
                         Directory.CreateDirectory(Path.GetDirectoryName(target)!);
                         File.WriteAllBytes(target, data);

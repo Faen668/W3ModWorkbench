@@ -37,7 +37,7 @@ There are three ways to get files in, and you can mix them freely. Everything yo
 
 ## Open files
 
-**Open files** (Ctrl+O) lets you pick one or more `.bundle` or `.rsblob` files. Holding Ctrl or Shift in the file picker selects several at once. A `.w3strings` file, or a strings `.csv`, opens in the strings editor instead (see **Editing strings**). A `.w3bench` project file opens the project (see **Projects**). A `.ws` script opens together with the rest of its scripts: the `scripts` folder it's in, or its own folder when there's none, as loose scripts that can be read, and edited once they're added to a project.
+**Open files** (Ctrl+O) lets you pick one or more `.bundle` or `.rsblob` files. Holding Ctrl or Shift in the file picker selects several at once. A `.w3strings` file, or a strings `.csv`, opens in the strings editor instead (see **Editing strings**). A `texture.cache` opens like a bundle, with its textures listed (see **Texture caches**). A `.w3bench` project file opens the project (see **Projects**). A `.ws` script opens together with the rest of its scripts: the `scripts` folder it's in, or its own folder when there's none, as loose scripts that can be read, and edited once they're added to a project.
 
 ## Open folder
 
@@ -198,6 +198,23 @@ The installed mods' scripts are only in these searches once they've been read fo
 - On a mod's loose copy of one of the game's scripts, **Compare with game version** in the right-click menu opens the game's file beside it and marks what's different: green for added lines, red for removed ones, amber for changed ones. **F8** and **Shift+F8** step through the differences.
 - **Compare with an open file** does the same with any other file that's open, which is shown as the older version.
 - **Stop comparing** takes the marks off both.
+"""),
+
+        new(Basics, "Texture caches", "\uEB9F", """
+A `texture.cache` holds textures outside the bundles: the game's own is in `content\content0`, and DLC and mods ship small ones beside their bundles. Open one with **Open files**, drop it on the window, or find it under a mod in **Browse installed mods**. It is listed like a bundle, with each texture under its game path, and the **Format** column says how it's stored (for example `BC1 2048x1024 ×12`: BC1 colour, with 12 mip levels).
+
+Double-click a texture, or select it and press **Enter**, to open the viewer:
+
+- **RGBA** shows the picture over a chequerboard where it's transparent; **RGB** drops the transparency; **R**, **G**, **B** and **A** show one channel as grey, which is how masks and normal maps are checked.
+- **Mip** picks a smaller level of the texture.
+- **Fit** shows the whole picture in the window; turn it off to see it at its own size, and hold **Ctrl** and turn the wheel to zoom.
+- **Save PNG** writes the level and channel shown. **Save DDS** writes the whole texture with every mip level, for tools that read `.dds`.
+
+An `.xbm` inside a bundle only describes its texture. Double-click one and the tool looks for the pixels in a texture cache under the same path: one that's open, the one beside the bundle, or the game's own, and says so if none has it.
+
+Extracting a texture from the file list writes it as `name.xbm.dds`.
+
+Formats it reads: BC1 and BC3 (colour, with and without alpha), BC4 (single-channel masks), BC5 and BC7 (normal maps and the Remastered's high quality textures), plain 32-bit colour and float data (light probes). A texture in another format is listed, but the viewer says it can't show it yet. Cube maps and texture arrays show their first slice. Normal maps are shown as stored, with the blue worked out for BC5.
 """),
 
         new(Basics, "Projects", "\uE821", """

@@ -170,7 +170,7 @@
                                             VerticalAlignment="Center" Background="{DynamicResource AccentFillColorDefaultBrush}">
                                         <TextBlock Text="PROJECT" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource TextOnAccentFillColorPrimaryBrush}" />
                                     </Border>
-                                    <TextBlock x:Name="NameText" Text="{Binding Name}" VerticalAlignment="Center" />
+                                    <TextBlock x:Name="NameText" Text="{Binding DisplayName}" VerticalAlignment="Center" />
                                     <TextBlock Text="{Binding Detail, StringFormat='  {0}'}" Opacity="0.65" VerticalAlignment="Center" />
                                     <TextBlock Text="{Binding TotalFiles, StringFormat='  {0:N0}'}" Opacity="0.5" VerticalAlignment="Center" />
                                 </StackPanel>
