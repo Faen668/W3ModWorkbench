@@ -35,8 +35,8 @@ public static class Dds
             case TextureFormat.Bc4: Put(80, FourCc); Put(84, 0x31495441); break; // ATI1
             case TextureFormat.Bc5: Put(80, FourCc); Put(84, 0x32495441); break; // ATI2
             case TextureFormat.Bc7: case TextureFormat.Rgb32F: Put(80, FourCc); Put(84, 0x30315844); break; // DX10
-            case TextureFormat.Bgra8:
-                Put(80, Rgb | AlphaPixels); Put(88, 32); Put(92, 0x00FF0000); Put(96, 0x0000FF00); Put(100, 0x000000FF); Put(104, 0xFF000000);
+            case TextureFormat.Rgba8:
+                Put(80, Rgb | AlphaPixels); Put(88, 32); Put(92, 0x000000FF); Put(96, 0x0000FF00); Put(100, 0x00FF0000); Put(104, 0xFF000000);
                 break;
             case TextureFormat.R8:
                 Put(80, Luminance); Put(88, 8); Put(92, 0xFF);
@@ -84,8 +84,13 @@ public static class Dds
                     break;
             }
         }
-        else if ((flags & Rgb) != 0 && U(88) == 32 && U(92) == 0x00FF0000 && U(96) == 0x0000FF00 && U(100) == 0x000000FF)
-            format = TextureFormat.Bgra8;
+        // 32-bit pixels, red first or blue first; blue-first ones are turned round below
+        bool blueFirst = false;
+        if (format == TextureFormat.Unknown && (flags & Rgb) != 0 && U(88) == 32 && U(96) == 0x0000FF00)
+        {
+            if (U(92) == 0x000000FF && U(100) == 0x00FF0000) format = TextureFormat.Rgba8;
+            else if (U(92) == 0x00FF0000 && U(100) == 0x000000FF) (format, blueFirst) = (TextureFormat.Rgba8, true);
+        }
         if (format == TextureFormat.Unknown || width <= 0 || height <= 0) return false;
         info = new TextureInfo(width, height, mips, 1, 0, format, 16, 0, file.Length, file.Length - body);
         int chain = TextureDecoder.ChainSize(info);
@@ -97,6 +102,8 @@ public static class Dds
             if (file.Length - body < chain) return false;
         }
         pixels = file.AsSpan(body, chain).ToArray();
+        if (blueFirst)
+            for (int i = 0; i + 4 <= pixels.Length; i += 4) (pixels[i], pixels[i + 2]) = (pixels[i + 2], pixels[i]);
         return true;
     }
 }

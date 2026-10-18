@@ -57,7 +57,8 @@ public sealed class WitcherScriptColorizer : DocumentColorizingTransformer
 
     protected override void ColorizeLine(DocumentLine line)
     {
-        if (line.IsDeleted) return;
+        // a line of a document swapped in after this was made: its offsets aren't ours
+        if (line.IsDeleted || CurrentContext.Document != _document) return;
         Tokenize(line.LineNumber);
         if (line.LineNumber > _lines.Count) return;
         foreach (var t in _lines[line.LineNumber - 1])

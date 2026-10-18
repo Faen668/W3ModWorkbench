@@ -72,6 +72,13 @@ public sealed class Settings
     /// <summary>Where each scripts folder's compiled blob was last saved, from before projects had a .w3bench file. A new project picks its entry up.</summary>
     public Dictionary<string, string> CompileOutputs { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>How the main window lists files: Details, or Small, Medium or Large thumbnails.</summary>
+    public string FileView { get; set; } = "Details";
+
+    /// <summary>Show the preview pane beside the file list, and how wide it is.</summary>
+    public bool ShowFilePreview { get; set; } = true;
+    public double FilePreviewWidth { get; set; } = 380;
+
     /// <summary>The project files opened most recently, newest first.</summary>
     public List<string> RecentProjects { get; set; } = [];
 

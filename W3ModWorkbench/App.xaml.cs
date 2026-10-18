@@ -41,6 +41,10 @@ public partial class App : Application
                 else
                     MessageBox.Show(args.Exception.Message, "W3 Mod Workbench", MessageBoxButton.OK, MessageBoxImage.Error);
             }
+            catch
+            {
+                // failing to show it: thrown on out of this async void handler, it would come straight back here, forever
+            }
             finally
             {
                 reporting = false;

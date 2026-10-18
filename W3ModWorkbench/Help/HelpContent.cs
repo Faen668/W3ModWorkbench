@@ -59,7 +59,9 @@ You can also drop files or folders anywhere on the window.
 
 Most mods name their bundle `blob0.bundle`, which isn't much help when twenty of them are open at once. So each entry in the tree is labelled with the folder it came from: the mod, DLC or content folder. The file name is shown greyed out next to it. Hover over an entry to see its full path.
 
-Bundles have a box icon. Compiled scripts have a `{ }` icon, a project a `PROJECT` badge in the accent colour, loose scripts a page icon, and a folder's strings files a language icon.
+When a mod has more than one thing open (say a bundle, a compiled script, a texture cache, its strings and its loose scripts), they're gathered under one entry with the mod's name and a folder icon, each listed by its file name. Selecting the mod lists every file in it, and **Close mod** closes all of it. A mod with only one thing open, the open project and the game's own scripts stay entries of their own.
+
+Bundles have a box icon. Compiled scripts have a `{ }` icon, a project a `PROJECT` badge in the accent colour, loose scripts a page icon, a texture cache a picture icon, and a folder's strings files a language icon.
 
 ## Closing
 
@@ -81,6 +83,14 @@ Click any column header to sort by it. Columns can be resized and reordered by d
 - **Zlib**, **LZ4**, **LZ4 HC** or **Snappy**: compressed. The explorer unpacks these for you when you extract.
 - **Decompiled**: a script the explorer rebuilt from a compiled blob (see the Advanced section).
 - **Script**: a loose script, read straight from disk.
+
+## Thumbnails
+
+**View** in the toolbar switches the list between **Details** and **small**, **medium** or **large thumbnails**. Textures and picture files show their picture, and other files an icon for their kind. Click a file to highlight it, Ctrl+click to add or take one away, Shift+click for a run of them, and use the arrow keys to move. Double-click opens a file, and the tick box in a thumbnail's corner checks it for extracting. The tool remembers which view you chose.
+
+## The preview pane
+
+**View > Preview pane** (Alt+P) shows the highlighted file beside the list, without opening it: textures and pictures as images (an `.xbm` finds its texture in a cache), scripts with WitcherScript colouring, XML with XML colouring, and other text as it is. With several files highlighted it says how many and their size. Drag the bar between the list and the pane to resize it.
 
 ## Searching
 
@@ -551,6 +561,7 @@ Inside a script preview, Ctrl+Shift+F still searches from there, through the scr
 
 - **Space**: tick or untick the highlighted rows
 - **Enter**: preview the highlighted text file
+- **Alt+P**: show or hide the preview pane
 - **Ctrl+C**: copy the highlighted files' paths
 - **Ctrl+A**: highlight every row
 

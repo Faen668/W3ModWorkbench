@@ -8,7 +8,7 @@ public static class TextureDecoder
 {
     public static int BytesPerPixel(TextureFormat format) => format switch
     {
-        TextureFormat.Bgra8 => 4,
+        TextureFormat.Rgba8 => 4,
         TextureFormat.R8 => 1,
         TextureFormat.Rgb32F => 12,
         _ => 0,
@@ -53,7 +53,10 @@ public static class TextureDecoder
         var bgra = new byte[w * h * 4];
         switch (info.Format)
         {
-            case TextureFormat.Bgra8: src.CopyTo(bgra); break;
+            case TextureFormat.Rgba8:
+                // stored red first (the game's TRF_TrueColor, R8G8B8A8); WPF wants blue first
+                for (int i = 0; i < w * h * 4; i += 4) { bgra[i] = src[i + 2]; bgra[i + 1] = src[i + 1]; bgra[i + 2] = src[i]; bgra[i + 3] = src[i + 3]; }
+                break;
             case TextureFormat.R8:
                 for (int i = 0; i < w * h; i++) { bgra[i * 4] = bgra[i * 4 + 1] = bgra[i * 4 + 2] = src[i]; bgra[i * 4 + 3] = 255; }
                 break;

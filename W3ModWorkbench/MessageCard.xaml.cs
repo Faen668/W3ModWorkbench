@@ -108,9 +108,12 @@ public partial class MessageCard : UserControl
         }
         if (primary is not null)
         {
-            // so Enter clicks the main button; a card that's only just been shown isn't laid out yet
-            UpdateLayout();
-            CardPrimary.Focus();
+            // so Enter clicks the main button; a card that's only just been shown isn't laid out yet. Not with
+            // UpdateLayout here: an error card shown for a layout error would run the failing layout again, and loop.
+            Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () =>
+            {
+                if (_result == result) CardPrimary.Focus();
+            });
         }
         return result.Task;
     }

@@ -150,7 +150,8 @@ public sealed class XmlColorizer : DocumentColorizingTransformer
 
     protected override void ColorizeLine(DocumentLine line)
     {
-        if (line.IsDeleted || _spans.Count == 0) return;
+        // a line of a document swapped in after this was made: its offsets aren't ours
+        if (line.IsDeleted || _spans.Count == 0 || CurrentContext.Document != _document) return;
         // the first span that reaches this line
         int lo = 0, hi = _spans.Count;
         while (lo < hi)

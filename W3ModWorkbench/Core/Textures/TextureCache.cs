@@ -13,7 +13,7 @@ public enum TextureFormat
     Bc4,
     Bc5,
     Bc7,
-    Bgra8,
+    Rgba8,
     R8,
     Rgb32F,
 }
@@ -27,7 +27,7 @@ public sealed record TextureInfo(int Width, int Height, int Mips, int Slices, in
     /// <summary>The format as the game writes it, for what's not understood yet.</summary>
     public string FormatName => Format == TextureFormat.Unknown ? $"format {RawFormat}" : Format switch
     {
-        TextureFormat.Bgra8 => "BGRA8",
+        TextureFormat.Rgba8 => "RGBA8",
         TextureFormat.Rgb32F => "RGB32F",
         _ => Format.ToString().ToUpperInvariant(),
     };
@@ -166,7 +166,7 @@ public sealed class TextureCacheArchive : IArchive
         15 => TextureFormat.Bc5,
         10 => TextureFormat.Bc7,
         13 => TextureFormat.Bc3,
-        253 => TextureFormat.Bgra8,
+        253 => TextureFormat.Rgba8,
         16 => TextureFormat.Rgb32F,
         _ => TextureFormat.Unknown,
     };

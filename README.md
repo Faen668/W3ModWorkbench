@@ -38,7 +38,9 @@
 
 ### Bundles
 - **Opens any `.bundle`**: the base game, expansions, DLC and mods. Supports both the current format (version 5, used since the next-gen update and by REDkit) and the older version 3, including the game's bundles over 4 GB.
-- **Opens whole folders**: point it at `The Witcher 3\mods` and every installed mod is listed side by side, labelled by mod name rather than a sea of `blob0.bundle`.
+- **Opens whole folders**: point it at `The Witcher 3\mods` and every installed mod is listed side by side, labelled by mod name rather than a sea of `blob0.bundle`. A mod's bundles, compiled scripts, texture cache, strings and loose scripts are gathered under one entry.
+- **Texture caches**: opens the game's, a DLC's or a mod's `texture.cache` and lists every texture in it. A viewer shows each one with its mip levels and channels, and saves PNG or DDS. An `.xbm` in a bundle finds its pixels in the cache, and PNG, JPEG, BMP, GIF, TIFF and DDS files open in the same viewer.
+- **Thumbnails and a preview pane**: **View** switches the file list to small, medium or large thumbnails, and the preview pane (`Alt+P`) shows the highlighted file beside the list: a picture, or highlighted script, XML or text.
 - **Fast**: the entire game, about 365,000 files, loads in around a second.
 - **Browse and search**: folder tree, sortable file list, and a search box that matches words anywhere in the path or wildcards on the file name (`*.redswf`, `*_icon??.xbm`).
 - **Extract exactly what you need**: tick files across several archives at once, or extract everything shown, a single folder or a quick selection, with or without the original folder structure.
@@ -184,6 +186,7 @@ Double-click any text file or decompiled script to preview it. To edit scripts, 
 | `Ctrl+E` | Extract checked files |
 | `Space` | Tick or untick the highlighted rows |
 | `Enter` | Preview the highlighted text file |
+| `Alt+P` | Show or hide the preview pane |
 | `Ctrl+,` | Settings |
 | `Ctrl+Shift+F` | Find in files |
 | `Ctrl+Shift+G` | Search the game's strings |

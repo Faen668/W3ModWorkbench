@@ -14,6 +14,8 @@ using W3ModWorkbench.Core.Projects;
 using W3ModWorkbench.Core.Scripts;
 using W3ModWorkbench.Core.Strings;
 using W3ModWorkbench.Core.Textures;
+using W3ModWorkbench.Highlighting;
+using ICSharpCode.AvalonEdit.Document;
 using W3ModWorkbench.Core.Scripts.Navigation;
 using W3ModWorkbench.ViewModels;
 
@@ -25,6 +27,8 @@ public partial class MainWindow : Window, IMessageHost
     private readonly ObservableCollection<FolderNode> _roots = [];
     private readonly ObservableCollection<FolderNode> _tree = [];
     private readonly DispatcherTimer _searchTimer;
+    private readonly DispatcherTimer _previewTimer;
+    private CancellationTokenSource? _previewCts;
     private readonly Settings _settings = App.Settings;
     private List<EntryItem> _shown = [];
     private int _checkedCount;
@@ -50,6 +54,11 @@ public partial class MainWindow : Window, IMessageHost
         OpenWhenDoneCheck.IsChecked = _settings.OpenWhenDone;
 
         UpdateProjectUi();
+        FileThumbs.ContextMenu = FileGrid.ContextMenu;
+        _previewTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(140) };
+        _previewTimer.Tick += (_, _) => { _previewTimer.Stop(); _ = UpdatePreviewAsync(); };
+        ApplyView();
+        ApplyPreviewPane();
         if (args.Length > 0)
             Loaded += async (_, _) => await LoadPathsAsync(args);
         else if (_settings.ReopenLastProject && File.Exists(_settings.LastProject))
@@ -581,19 +590,20 @@ public partial class MainWindow : Window, IMessageHost
     }
 
     /// <summary>
-    /// What the tree lists: the open archives, with the bundles, compiled scripts and strings of one mod gathered under
-    /// that mod's name. A mod with only one archive, projects and loose script folders stay as they are.
+    /// What the tree lists: the open archives, with the bundles, compiled scripts, strings and loose scripts of one mod
+    /// gathered under that mod's name. A mod with only one archive, projects and the game's scripts stay as they are.
     /// </summary>
     private void RebuildTree()
     {
+        static bool Groups(FolderNode root) => root.Archive is not ScriptFolder || root.IsLooseScripts;
         var old = _tree.Where(n => n.IsGroup).ToDictionary(n => n.Name, StringComparer.OrdinalIgnoreCase);
-        var byOwner = _roots.Where(r => r.Archive is not ScriptFolder).GroupBy(r => r.Archive.Owner, StringComparer.OrdinalIgnoreCase)
+        var byOwner = _roots.Where(Groups).GroupBy(r => r.Archive.Owner, StringComparer.OrdinalIgnoreCase)
             .Where(g => g.Count() > 1).ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
         var shown = new List<FolderNode>();
         var made = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var root in _roots)
         {
-            if (root.Archive is not ScriptFolder && byOwner.TryGetValue(root.Archive.Owner, out var members))
+            if (Groups(root) && byOwner.TryGetValue(root.Archive.Owner, out var members))
             {
                 if (!made.Add(root.Archive.Owner)) continue;
                 var group = FolderNode.Group(root.Archive.Owner, members);
@@ -667,7 +677,7 @@ public partial class MainWindow : Window, IMessageHost
             items = items.Where(match);
 
         _shown = [.. items];
-        FileGrid.ItemsSource = _shown;
+        BindFiles();
         NoMatchesText.Visibility = _shown.Count == 0 && _roots.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
         ExtractShownButton.IsEnabled = _shown.Count > 0;
         ExtractShownText.Text = _shown.Count > 0 ? $"Extract shown ({_shown.Count:N0})" : "Extract shown";
@@ -732,6 +742,12 @@ public partial class MainWindow : Window, IMessageHost
     private void FileGrid_MouseDoubleClick(object sender, MouseButtonEventArgs e)
     {
         if (FindParent<DataGridRow>(e.OriginalSource as DependencyObject)?.Item is not EntryItem item) return;
+        OpenItem(item);
+    }
+
+    /// <summary>What double-clicking a file does: opens it in the editor or viewer for its kind, or ticks it when there's none.</summary>
+    private void OpenItem(EntryItem item)
+    {
         if (item.Entry is StringsEntry strings)
             StringsWindow.Open(strings.FullPath, this);
         else if (item.Entry is TextureEntry texture)
@@ -784,11 +800,19 @@ public partial class MainWindow : Window, IMessageHost
     /// </summary>
     private async Task OpenTextureHeaderAsync(EntryItem item)
     {
+        var found = await FindTextureForHeaderAsync(item);
+        if (found is not null) TextureWindow.Open(found, this);
+        else ShowError($"The texture's pixels weren't found.\n\n{item.Name} only describes the texture; its pixels are in a texture.cache under the same path. Open the mod's texture.cache (or the game's, in content\\content0), or put one beside this bundle.");
+    }
+
+    /// <summary>The texture an .xbm in a bundle describes, from a cache that's open, the one beside the bundle or the game's. Null when none has it.</summary>
+    private async Task<TextureEntry?> FindTextureForHeaderAsync(EntryItem item)
+    {
         var open = _roots.Select(r => r.Archive).OfType<TextureCacheArchive>().ToList();
         string owner = item.Entry.Archive.Owner;
         string? beside = Path.GetDirectoryName(item.Entry.Archive.FilePath) is { } folder ? Path.Combine(folder, "texture.cache") : null;
         string? game = GameLocator.Resolve(null) is { } g ? Path.Combine(g, "content", "content0", "texture.cache") : null;
-        var found = await Task.Run(() =>
+        return await Task.Run(() =>
         {
             var caches = new List<TextureCacheArchive>(open.OrderByDescending(c => c.Owner.Equals(owner, StringComparison.OrdinalIgnoreCase)));
             foreach (string? path in new[] { beside, game })
@@ -807,8 +831,6 @@ public partial class MainWindow : Window, IMessageHost
             }
             return caches.Select(c => c.Entries.OfType<TextureEntry>().FirstOrDefault(e => e.Path.Equals(item.Path, StringComparison.OrdinalIgnoreCase))).FirstOrDefault(e => e is not null);
         });
-        if (found is not null) TextureWindow.Open(found, this);
-        else ShowError($"The texture's pixels weren't found.\n\n{item.Name} only describes the texture; its pixels are in a texture.cache under the same path. Open the mod's texture.cache (or the game's, in content\\content0), or put one beside this bundle.");
     }
 
     private void GridCopyPath_Click(object sender, RoutedEventArgs e) => CopyHighlightedPaths();
@@ -902,6 +924,405 @@ public partial class MainWindow : Window, IMessageHost
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
         {
             ShowError($"{item.Name} could not be opened.\n\n{ex.Message}");
+        }
+    }
+
+    // ---------------------------------------------------------------- view and preview pane
+
+    private bool ThumbsMode => _settings.FileView is "Small" or "Medium" or "Large";
+
+    private bool FilesFocused => FileGrid.IsKeyboardFocusWithin || FileThumbs.IsKeyboardFocusWithin;
+
+    private int _perRow = 1;
+    private EntryItem? _anchor;
+
+    private int ThumbnailSize => _settings.FileView switch { "Small" => 64, "Large" => 160, _ => 96 };
+
+    /// <summary>Gives the list that's showing the files, and none to the other, so a hidden list isn't kept up to date.</summary>
+    private void BindFiles()
+    {
+        if (ThumbsMode)
+        {
+            FileGrid.ItemsSource = null;
+            foreach (var item in _shown.Where(i => i.IsSelected && !ReferenceEquals(_anchor, i))) item.IsSelected = false;
+            if (FileThumbs.IsVisible) RebuildRows();
+        }
+        else
+        {
+            FileGrid.ItemsSource = _shown;
+        }
+    }
+
+    // Thumbnails are placed by hand: every cell is the same size, so where a file goes follows from its number, and only
+    // the cells in view are made, from a pool. Nothing in the layout depends on what a cell holds, so it can't loop.
+    private readonly Dictionary<int, ContentControl> _liveCells = [];
+    private readonly Stack<ContentControl> _cellPool = new();
+
+    private const double ThumbPadding = 8;
+
+    private int CellWidth => ThumbnailSize + 22;
+
+    private int CellHeight => ThumbnailSize + 60;
+
+    private void RebuildRows()
+    {
+        foreach (var cell in _liveCells.Values) ReleaseCell(cell);
+        _liveCells.Clear();
+        FileThumbs.ScrollToVerticalOffset(0);
+        LayoutThumbs();
+    }
+
+    private void ReleaseCell(ContentControl cell)
+    {
+        ThumbCanvas.Children.Remove(cell);
+        cell.Content = null;
+        _cellPool.Push(cell);
+    }
+
+    private ContentControl NewCell()
+    {
+        if (_cellPool.Count > 0) return _cellPool.Pop();
+        var cell = new ContentControl { ContentTemplate = (DataTemplate)FindResource("ThumbCell"), Focusable = false };
+        cell.MouseLeftButtonDown += Cell_MouseLeftButtonDown;
+        cell.MouseRightButtonDown += Cell_MouseRightButtonDown;
+        return cell;
+    }
+
+    /// <summary>Puts each file in view where it goes, makes the cells that are missing and gives back the ones that scrolled away.</summary>
+    private void LayoutThumbs()
+    {
+        if (!ThumbsMode || !FileThumbs.IsVisible) return;
+        double width = FileThumbs.ViewportWidth > 0 ? FileThumbs.ViewportWidth : Math.Max(0, FileThumbs.ActualWidth - 18);
+        double height = FileThumbs.ViewportHeight > 0 ? FileThumbs.ViewportHeight : FileThumbs.ActualHeight;
+        _perRow = Math.Max(1, (int)((width - 2 * ThumbPadding) / CellWidth));
+        int count = _shown.Count;
+        int rows = (count + _perRow - 1) / _perRow;
+        ThumbCanvas.Width = _perRow * CellWidth + 2 * ThumbPadding;
+        ThumbCanvas.Height = rows * CellHeight + 2 * ThumbPadding;
+
+        double top = FileThumbs.VerticalOffset;
+        int firstRow = Math.Max(0, (int)((top - ThumbPadding) / CellHeight) - 1);
+        int lastRow = Math.Min(rows - 1, (int)((top + height) / CellHeight) + 1);
+        int first = firstRow * _perRow, last = Math.Min(count - 1, (lastRow + 1) * _perRow - 1);
+        if (count == 0 || last < first) { first = 0; last = -1; }
+
+        foreach (var (index, cell) in _liveCells.Where(c => c.Key < first || c.Key > last).ToList())
+        {
+            _liveCells.Remove(index);
+            ReleaseCell(cell);
+        }
+        for (int i = first; i <= last; i++)
+        {
+            if (!_liveCells.TryGetValue(i, out var cell))
+            {
+                cell = NewCell();
+                cell.Tag = (double)ThumbnailSize;
+                cell.Width = CellWidth;
+                cell.Height = CellHeight;
+                cell.Content = _shown[i];
+                ThumbCanvas.Children.Add(cell);
+                _liveCells[i] = cell;
+                RequestThumbnail(_shown[i], cell);
+            }
+            Canvas.SetLeft(cell, ThumbPadding + i % _perRow * CellWidth);
+            Canvas.SetTop(cell, ThumbPadding + i / _perRow * CellHeight);
+        }
+    }
+
+    private void FileThumbs_ScrollChanged(object sender, ScrollChangedEventArgs e) => LayoutThumbs();
+
+    private void FileThumbs_SizeChanged(object sender, SizeChangedEventArgs e) => LayoutThumbs();
+
+    private void ApplyView()
+    {
+        FileGrid.Visibility = ThumbsMode ? Visibility.Collapsed : Visibility.Visible;
+        FileThumbs.Visibility = ThumbsMode ? Visibility.Visible : Visibility.Collapsed;
+        FileThumbs.Tag = (double)ThumbnailSize;
+        BindFiles();
+        if (ThumbsMode) Dispatcher.BeginInvoke(DispatcherPriority.Loaded, RebuildRows);
+    }
+
+    private void SetView(string view)
+    {
+        if (_settings.FileView == view) return;
+        var selected = Highlighted();
+        _settings.FileView = view;
+        ApplyView();
+        if (ThumbsMode)
+        {
+            foreach (var item in _shown) item.IsSelected = false;
+            foreach (var item in selected) item.IsSelected = true;
+        }
+        else
+            foreach (var item in selected) FileGrid.SelectedItems.Add(item);
+        QueueStatusUpdate();
+        _previewTimer.Stop();
+        _previewTimer.Start();
+    }
+
+    // ---------------------------------------------------------------- thumbnail selection
+
+    /// <summary>Highlights the files for thumbnails, which keep their own selection: just these, or these added to it.</summary>
+    private void SelectThumbs(IEnumerable<EntryItem> items, bool add = false)
+    {
+        var set = items.ToHashSet();
+        foreach (var item in _shown)
+            if (set.Contains(item)) item.IsSelected = true;
+            else if (!add && item.IsSelected) item.IsSelected = false;
+        _previewTimer.Stop();
+        _previewTimer.Start();
+    }
+
+    private void Cell_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if ((sender as ContentControl)?.Content is not EntryItem item || e.OriginalSource is CheckBox || FindParent<CheckBox>(e.OriginalSource as DependencyObject) is not null) return;
+        FileThumbs.Focus();
+        if (e.ClickCount == 2)
+        {
+            OpenItem(item);
+            e.Handled = true;
+            return;
+        }
+        var mods = Keyboard.Modifiers;
+        if (mods == ModifierKeys.Control)
+        {
+            item.IsSelected = !item.IsSelected;
+            _anchor = item;
+            _previewTimer.Stop();
+            _previewTimer.Start();
+        }
+        else if (mods == ModifierKeys.Shift && _anchor is not null)
+        {
+            int a = _shown.IndexOf(_anchor), b = _shown.IndexOf(item);
+            if (a < 0) a = b;
+            SelectThumbs(_shown.Skip(Math.Min(a, b)).Take(Math.Abs(a - b) + 1));
+        }
+        else
+        {
+            SelectThumbs([item]);
+            _anchor = item;
+        }
+        e.Handled = true;
+    }
+
+    /// <summary>A right-click on a file that isn't highlighted highlights just it, so the menu acts on what was clicked.</summary>
+    private void Cell_MouseRightButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if ((sender as ContentControl)?.Content is not EntryItem item) return;
+        FileThumbs.Focus();
+        if (!item.IsSelected)
+        {
+            SelectThumbs([item]);
+            _anchor = item;
+        }
+    }
+
+    /// <summary>The keys of the thumbnail view: arrows move by a file or a row, Shift extends, Ctrl+A selects all.</summary>
+    private void FileThumbs_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (_shown.Count == 0) return;
+        if (e.Key == Key.A && Keyboard.Modifiers == ModifierKeys.Control)
+        {
+            SelectThumbs(_shown);
+            e.Handled = true;
+            return;
+        }
+        int step = e.Key switch { Key.Left => -1, Key.Right => 1, Key.Up => -_perRow, Key.Down => _perRow, _ => 0 };
+        if (step == 0 && e.Key is not (Key.Home or Key.End)) return;
+        if (Keyboard.Modifiers is not (ModifierKeys.None or ModifierKeys.Shift)) return;
+        int current = _anchor is null ? -1 : _shown.IndexOf(_anchor);
+        int target = e.Key == Key.Home ? 0 : e.Key == Key.End ? _shown.Count - 1 : Math.Clamp(current < 0 ? 0 : current + step, 0, _shown.Count - 1);
+        if (Keyboard.Modifiers == ModifierKeys.Shift && current >= 0)
+            SelectThumbs(_shown.Skip(Math.Min(current, target)).Take(Math.Abs(current - target) + 1));
+        else
+        {
+            SelectThumbs([_shown[target]]);
+            _anchor = _shown[target];
+        }
+        if (Keyboard.Modifiers == ModifierKeys.None) _anchor = _shown[target];
+        double rowTop = ThumbPadding + target / _perRow * CellHeight;
+        if (rowTop < FileThumbs.VerticalOffset) FileThumbs.ScrollToVerticalOffset(rowTop - ThumbPadding);
+        else if (rowTop + CellHeight > FileThumbs.VerticalOffset + FileThumbs.ViewportHeight) FileThumbs.ScrollToVerticalOffset(rowTop + CellHeight - FileThumbs.ViewportHeight + ThumbPadding);
+        e.Handled = true;
+    }
+
+    private void View_Click(object sender, RoutedEventArgs e)
+    {
+        var menu = new ContextMenu { PlacementTarget = ViewButton, Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom };
+        void Choice(string header, string view)
+        {
+            var item = new MenuItem { Header = header, IsCheckable = true, IsChecked = _settings.FileView == view };
+            item.Click += (_, _) => SetView(view);
+            menu.Items.Add(item);
+        }
+        Choice("Details", "Details");
+        Choice("Small thumbnails", "Small");
+        Choice("Medium thumbnails", "Medium");
+        Choice("Large thumbnails", "Large");
+        menu.Items.Add(new Separator());
+        var pane = new MenuItem { Header = "Preview pane", InputGestureText = "Alt+P", IsCheckable = true, IsChecked = _settings.ShowFilePreview };
+        pane.Click += (_, _) => TogglePreviewPane();
+        menu.Items.Add(pane);
+        menu.IsOpen = true;
+    }
+
+    private void TogglePreviewPane()
+    {
+        _settings.ShowFilePreview = !_settings.ShowFilePreview;
+        ApplyPreviewPane();
+    }
+
+    private void ApplyPreviewPane()
+    {
+        bool show = _settings.ShowFilePreview;
+        PreviewPane.Visibility = PreviewSplitter.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+        PreviewSplitterColumn.Width = new GridLength(show ? 8 : 0);
+        PreviewColumn.MinWidth = show ? 240 : 0;
+        PreviewColumn.Width = new GridLength(show ? Math.Max(240, _settings.FilePreviewWidth) : 0);
+        if (show) _ = UpdatePreviewAsync();
+        else _previewCts?.Cancel();
+    }
+
+    private void PreviewSplitter_DragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e) =>
+        _settings.FilePreviewWidth = PreviewColumn.ActualWidth;
+
+    private void FileSelection_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (ThumbsMode) return;
+        _previewTimer.Stop();
+        if (_settings.ShowFilePreview) _previewTimer.Start();
+    }
+
+    /// <summary>Makes a thumbnail for a picture file the first time its cell is built, and only while the cell is still showing it.</summary>
+    private async void RequestThumbnail(EntryItem item, ContentControl cell)
+    {
+        if (item.ThumbnailRequested || !item.CanHaveThumbnail) return;
+        item.ThumbnailRequested = true;
+        bool Wanted() => ReferenceEquals(cell.Content, item);
+        var picture = await EntryImages.LoadAsync(item.Entry, 192, wanted: Wanted);
+        if (picture is not null) item.Thumbnail = picture.Image;
+        else if (!Wanted()) item.ThumbnailRequested = false;
+    }
+
+    private const int MaxPreviewText = 200_000;
+
+    /// <summary>Puts text in the preview editor, coloured as WitcherScript or XML when the file is one.</summary>
+    private void SetPreviewText(string text, string? name)
+    {
+        var view = PreviewText.TextArea.TextView;
+        var document = SetPreviewDocument(new TextDocument(text));
+        bool dark = TryFindResource("TextFillColorPrimaryBrush") is SolidColorBrush b && 0.299 * b.Color.R + 0.587 * b.Color.G + 0.114 * b.Color.B > 128;
+        string ext = Path.GetExtension(name ?? "").ToLowerInvariant();
+        if (ext == ".ws") view.LineTransformers.Insert(0, new WitcherScriptColorizer(document, dark) { View = view });
+        else if (ext is ".xml" or ".xsd" or ".config") view.LineTransformers.Insert(0, new XmlColorizer(document, dark) { View = view });
+        PreviewText.ScrollToHome();
+    }
+
+    /// <summary>
+    /// Swaps the preview editor's document, taking the colourers off with the old one: a colourer reads its own
+    /// document, and left on it colours the new one's lines with the old one's offsets.
+    /// </summary>
+    private TextDocument SetPreviewDocument(TextDocument document)
+    {
+        var view = PreviewText.TextArea.TextView;
+        foreach (var old in view.LineTransformers.Where(t => t is WitcherScriptColorizer or XmlColorizer).ToList()) view.LineTransformers.Remove(old);
+        PreviewText.Document = document;
+        return document;
+    }
+
+    private void ShowPreview(string glyph, string? message, EntryPicture? picture = null, string? text = null, string? name = null)
+    {
+        PreviewImageHost.Visibility = picture is not null ? Visibility.Visible : Visibility.Collapsed;
+        PreviewImage.Source = picture?.Image;
+        PreviewText.Visibility = text is not null ? Visibility.Visible : Visibility.Collapsed;
+        if (text is not null) SetPreviewText(text, name);
+        else SetPreviewDocument(new TextDocument());
+        PreviewEmpty.Visibility = picture is null && text is null ? Visibility.Visible : Visibility.Collapsed;
+        PreviewEmptyGlyph.Text = glyph;
+        PreviewEmptyText.Text = message ?? "";
+    }
+
+    /// <summary>Shows the file highlighted in the list, when there's just one: a picture for textures and picture files, text for text files, and what it is for the rest.</summary>
+    private async Task UpdatePreviewAsync()
+    {
+        _previewCts?.Cancel();
+        _previewCts = null;
+        if (!_settings.ShowFilePreview) return;
+        var items = Highlighted();
+        if (items.Count != 1)
+        {
+            PreviewName.Text = items.Count > 1 ? $"{items.Count:N0} files selected" : "";
+            PreviewDetail.Text = items.Count > 1 ? Format.Bytes(items.Sum(i => (long)i.Size)) + " in all" : "";
+            ShowPreview("\uE8A5", items.Count == 0 ? "Highlight a file to see it here." : "Highlight a single file to see it here.");
+            return;
+        }
+        var item = items[0];
+        var cts = _previewCts = new CancellationTokenSource();
+        var token = cts.Token;
+        PreviewName.Text = item.Name;
+        string detail = $"{item.Entry.FormatText}  ·  {item.SizeText}  ·  {item.Folder}";
+        PreviewDetail.Text = detail;
+        try
+        {
+            if (item.Entry is TextureEntry || TextureWindow.CanShow(item.Name))
+            {
+                var picture = await EntryImages.LoadAsync(item.Entry, 1024, token);
+                if (token.IsCancellationRequested) return;
+                if (picture is null) ShowPreview(item.Glyph, "This picture can't be shown yet.");
+                else
+                {
+                    ShowPreview(item.Glyph, null, picture);
+                    PreviewDetail.Text = detail + "  ·  " + picture.Info;
+                }
+            }
+            else if (IsTextureHeader(item))
+            {
+                ShowPreview(item.Glyph, "Looking for the texture's pixels…");
+                var texture = await FindTextureForHeaderAsync(item);
+                if (token.IsCancellationRequested) return;
+                var picture = texture is null ? null : await Task.Run(() => EntryImages.FromTexture(texture, 1024));
+                if (token.IsCancellationRequested) return;
+                if (picture is null) ShowPreview(item.Glyph, "Its pixels are in a texture.cache under the same path. Open the mod's texture.cache, or the game's, and they show here.");
+                else
+                {
+                    ShowPreview(item.Glyph, null, picture);
+                    PreviewDetail.Text = detail + "  ·  " + picture.Info;
+                }
+            }
+            else if (item.Entry is StringsEntry)
+                ShowPreview(item.Glyph, "Double-click to open it in the strings editor.");
+            else if (item.IsPreviewable)
+            {
+                if (item.Size > 4_000_000)
+                {
+                    ShowPreview(item.Glyph, "Too large to read here. Double-click to open it.");
+                    return;
+                }
+                var entry = item.Entry;
+                string text = await Task.Run(() =>
+                {
+                    byte[] data;
+                    if (!entry.Archive.ReadsFromDisk) data = entry.Read(null);
+                    else
+                    {
+                        using var fs = new FileStream(entry.Archive.FilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                        data = entry.Read(fs);
+                    }
+                    string decoded = TextDecoding.Decode(data);
+                    return decoded.Length > MaxPreviewText ? decoded[..MaxPreviewText] + "\n…" : decoded;
+                }, token);
+                if (token.IsCancellationRequested) return;
+                ShowPreview(item.Glyph, null, text: text, name: item.Name);
+            }
+            else
+                ShowPreview(item.Glyph, "No preview for this kind of file. Check it and extract it, or double-click for what the tool can do with it.");
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
+        {
+            if (!token.IsCancellationRequested) ShowPreview(item.Glyph, "It could not be read: " + ex.Message);
         }
     }
 
@@ -1041,7 +1462,7 @@ public partial class MainWindow : Window, IMessageHost
         if (paths.Count > 0) Clipboard.SetText(string.Join(Environment.NewLine, paths));
     }
 
-    private List<EntryItem> Highlighted() => [.. FileGrid.SelectedItems.OfType<EntryItem>()];
+    private List<EntryItem> Highlighted() => ThumbsMode ? [.. _shown.Where(i => i.IsSelected)] : [.. FileGrid.SelectedItems.OfType<EntryItem>()];
 
     private void QueueStatusUpdate()
     {
@@ -1179,7 +1600,12 @@ public partial class MainWindow : Window, IMessageHost
             return;
         }
         bool ctrl = Keyboard.Modifiers == ModifierKeys.Control;
-        if (e.Key == Key.F1 && Keyboard.Modifiers == ModifierKeys.None)
+        if (Keyboard.Modifiers == ModifierKeys.Alt && (e.Key == Key.System ? e.SystemKey : e.Key) == Key.P)
+        {
+            TogglePreviewPane();
+            e.Handled = true;
+        }
+        else if (e.Key == Key.F1 && Keyboard.Modifiers == ModifierKeys.None)
         {
             Help_Click(sender, e);
             e.Handled = true;
@@ -1240,18 +1666,18 @@ public partial class MainWindow : Window, IMessageHost
             ExtractChecked_Click(sender, e);
             e.Handled = true;
         }
-        else if (FileGrid.IsKeyboardFocusWithin && e.Key == Key.Space && Keyboard.Modifiers == ModifierKeys.None)
+        else if (FilesFocused && e.Key == Key.Space && Keyboard.Modifiers == ModifierKeys.None)
         {
             var items = Highlighted();
             SetChecked(items, !items.All(i => i.IsChecked));
             e.Handled = true;
         }
-        else if (FileGrid.IsKeyboardFocusWithin && e.Key == Key.Enter && Keyboard.Modifiers == ModifierKeys.None)
+        else if (FilesFocused && e.Key == Key.Enter && Keyboard.Modifiers == ModifierKeys.None)
         {
             GridPreview_Click(sender, e);
             e.Handled = true;
         }
-        else if (FileGrid.IsKeyboardFocusWithin && ctrl && e.Key == Key.C)
+        else if (FilesFocused && ctrl && e.Key == Key.C)
         {
             CopyHighlightedPaths();
             e.Handled = true;
