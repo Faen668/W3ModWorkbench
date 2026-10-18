@@ -3,8 +3,18 @@ using System.IO;
 
 namespace W3ModWorkbench.Core.Strings;
 
-/// <summary>A string from one of the game's, a DLC's or an installed mod's .w3strings files, and where it came from.</summary>
-public sealed record GameString(uint Id, uint KeyHash, string Text, string Source, string File);
+/// <summary>
+/// A string from one of the game's, a DLC's or an installed mod's .w3strings files, or from REDkit's strings
+/// database, and where it came from. Only the database knows the rest: the key's name, the voiceover file, what
+/// kind of text it is ("Line text", "Journal", "Item"…) and the scene or other resource it belongs to.
+/// </summary>
+public sealed record GameString(uint Id, uint KeyHash, string Text, string Source, string File)
+{
+    public string? KeyName { get; init; }
+    public string? Voiceover { get; init; }
+    public string? Property { get; init; }
+    public string? Resource { get; init; }
+}
 
 /// <summary>A .w3strings file found under the game folder, and the name to show for where it is.</summary>
 public sealed record StringsSource(string Name, string Path);
@@ -70,20 +80,35 @@ public sealed class GameStringIndex
 
     /// <summary>Reads every file for the language. Slow for the whole game, so it belongs on a background thread.</summary>
     /// <param name="skipFolder">A folder whose files are left out, such as the mod being edited, so it doesn't clash with itself.</param>
-    public static GameStringIndex Load(string gameFolder, W3Language language, bool dlcAndMods = true, string? skipFolder = null)
+    /// <param name="database">
+    /// REDkit's strings database, read instead of the game's and the DLC's own files; installed mods' files are
+    /// still read from the game folder when <paramref name="dlcAndMods"/> is set.
+    /// </param>
+    public static GameStringIndex Load(string? gameFolder, W3Language language, bool dlcAndMods = true, string? skipFolder = null,
+        string? database = null)
     {
         var all = new List<GameString>();
         var sources = new List<StringsSource>();
         var problems = new List<string>();
+        if (database is not null)
+        {
+            // a database that can't be read is the whole search gone, so it's thrown rather than listed
+            all.AddRange(RedkitStrings.Read(database, language));
+            sources.Add(new StringsSource("REDkit database", database));
+        }
         string? skip = skipFolder is null ? null : System.IO.Path.GetFullPath(skipFolder).TrimEnd('\\', '/');
-        foreach (var source in FindFiles(gameFolder, language.Handle, dlcAndMods))
+        var files = gameFolder is null ? []
+            : database is null ? FindFiles(gameFolder, language.Handle, dlcAndMods)
+            : dlcAndMods ? FindFiles(gameFolder, language.Handle).Where(f => f.Name.StartsWith("Mod: ", StringComparison.Ordinal)).ToList()
+            : [];
+        foreach (var source in files)
         {
             if (skip is not null && System.IO.Path.GetFullPath(source.Path).StartsWith(skip + System.IO.Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
                 continue;
             try
             {
                 var file = W3Strings.Read(File.ReadAllBytes(source.Path), source.Path);
-                string rel = System.IO.Path.GetRelativePath(gameFolder, source.Path);
+                string rel = System.IO.Path.GetRelativePath(gameFolder!, source.Path);
                 foreach (var s in file.Strings) all.Add(new GameString(s.Id, s.KeyHash, s.Text, source.Name, rel));
                 sources.Add(source);
             }
@@ -104,13 +129,15 @@ public sealed class GameStringIndex
     private static readonly Dictionary<string, Task<GameStringIndex>> Cache = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>The index for a language, read once in the background and kept until the app closes.</summary>
-    public static Task<GameStringIndex> GetAsync(string gameFolder, W3Language language, bool dlcAndMods = true)
+    /// <param name="database">REDkit's strings database, to read instead of the game's and the DLC's files.</param>
+    public static Task<GameStringIndex> GetAsync(string? gameFolder, W3Language language, bool dlcAndMods = true, string? database = null)
     {
-        string key = $"{gameFolder}|{language.Handle}|{dlcAndMods}";
+        string key = $"{gameFolder}|{language.Handle}|{dlcAndMods}|{database}";
         lock (Cache)
         {
-            if (!Cache.TryGetValue(key, out var task))
-                Cache[key] = task = Task.Run(() => Load(gameFolder, language, dlcAndMods));
+            // a read that failed isn't kept, so trying again reads again
+            if (!Cache.TryGetValue(key, out var task) || task.IsFaulted)
+                Cache[key] = task = Task.Run(() => Load(gameFolder, language, dlcAndMods, database: database));
             return task;
         }
     }
@@ -128,7 +155,8 @@ public sealed class GameStringIndex
 
     /// <summary>
     /// Strings matching a search: words that all appear in the text (ignoring case), a number that is, or starts, an
-    /// ID, or a key, whether typed as its name or as its hash in hex.
+    /// ID, or a key, whether typed as its name or as its hash in hex. Strings from REDkit's database also match on
+    /// part of their key's name, their voiceover name and the path of the scene or resource they're in.
     /// </summary>
     public IEnumerable<GameString> Search(string query, bool wholeWord = false)
     {
@@ -145,6 +173,9 @@ public sealed class GameStringIndex
         {
             if (s.KeyHash != 0 && (s.KeyHash == nameHash || hex && s.KeyHash == hexHash)) return true;
             if (digits && s.Id.ToString(CultureInfo.InvariantCulture).StartsWith(query, StringComparison.Ordinal)) return true;
+            if (s.KeyName?.Contains(query, StringComparison.OrdinalIgnoreCase) == true
+                || s.Voiceover?.Contains(query, StringComparison.OrdinalIgnoreCase) == true
+                || s.Resource?.Contains(query, StringComparison.OrdinalIgnoreCase) == true) return true;
             foreach (string word in words)
                 if (!ContainsWord(s.Text, word, wholeWord)) return false;
             return true;

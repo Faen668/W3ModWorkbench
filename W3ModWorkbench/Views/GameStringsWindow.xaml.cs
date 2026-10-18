@@ -13,35 +13,54 @@ namespace W3ModWorkbench;
 public sealed class GameStringRow(GameString s)
 {
     public uint Id => s.Id;
-    public string Hash => s.KeyHash == 0 ? "" : s.KeyHash.ToString("x8");
+    public string Key => s.KeyName ?? (s.KeyHash == 0 ? "" : s.KeyHash.ToString("x8"));
     public string Text { get; } = s.Text.ReplaceLineEndings(" ⏎ ");
+    public string Kind => s.Property ?? "";
+    public string UsedIn => s.Resource ?? "";
+    public string Voiceover => s.Voiceover ?? "";
     public string Source => s.Source;
     public GameString String => s;
 }
 
 /// <summary>
 /// Searches the text of the game's own strings, and the DLC's and installed mods', in one language: what a
-/// modder does to find the ID or key of a line the game already has, instead of making a new one.
+/// modder does to find the ID or key of a line the game already has, instead of making a new one. The strings
+/// come from the game's .w3strings files, or from REDkit's strings database, which also names each key and says
+/// where each string is used.
 /// </summary>
 public partial class GameStringsWindow : Window, IMessageHost
 {
     private const int MaxShown = 2000;
 
-    private readonly string _gameFolder;
+    private readonly string? _gameFolder;
+    private readonly string? _redkitDatabase = RedkitStrings.Find(App.Settings.WccLitePath);
     private readonly DispatcherTimer _searchTimer = new() { Interval = TimeSpan.FromMilliseconds(220) };
     private GameStringIndex? _index;
     private int _loadId;
     private bool _ready;
 
-    private GameStringsWindow(string gameFolder, string handle)
+    private GameStringsWindow(string? gameFolder, string handle)
     {
         InitializeComponent();
         DisabledLook.Apply(this);
         _gameFolder = gameFolder;
         LanguageBox.ItemsSource = W3Strings.Languages;
         LanguageBox.SelectedItem = W3Strings.Language(handle) ?? W3Strings.Language("en");
+        GameItem.IsEnabled = gameFolder is not null;
+        RedkitItem.IsEnabled = _redkitDatabase is not null;
+        RedkitItem.Content = _redkitDatabase is null ? "REDkit database (not found)" : "REDkit database";
+        RedkitItem.ToolTip = _redkitDatabase ?? "REDkit wasn't found. Set wcc_lite in Settings to the REDkit you have, or pick the database with Database file…";
+        string saved = App.Settings.GameStringsSource;
+        if (saved == "File" && !File.Exists(App.Settings.StringsDatabasePath)) saved = "REDkit";
+        if (saved == "REDkit" && _redkitDatabase is null) saved = "Game";
+        if (saved == "Game" && gameFolder is null) saved = _redkitDatabase is not null ? "REDkit" : "File";
+        SourceBox.SelectedItem = SourceBox.Items.OfType<ComboBoxItem>().First(i => (string)i.Tag == saved);
+        _lastSource = saved;
+        ShowSource();
         _ready = true;
         Grid.SelectionChanged += (_, _) => CopyIdButton.IsEnabled = CopyScriptButton.IsEnabled = Grid.SelectedItem is not null;
+        Grid.ContextMenuOpening += (_, _) =>
+            CopyKeyItem.IsEnabled = CopyKeyScriptItem.IsEnabled = Selected().Any(s => s.KeyName is not null);
         _searchTimer.Tick += (_, _) =>
         {
             _searchTimer.Stop();
@@ -54,13 +73,17 @@ public partial class GameStringsWindow : Window, IMessageHost
         };
     }
 
-    /// <summary>Opens the window for the game folder, or says what's missing when there isn't one.</summary>
-    public static void Open(Window owner, string gameFolder, string handle = "en", string? query = null)
+    /// <summary>
+    /// Opens the window for the game folder, or says what's missing when there's neither it nor a REDkit strings
+    /// database to read.
+    /// </summary>
+    public static void Open(Window owner, string? gameFolder, string handle = "en", string? query = null)
     {
-        if (!GameLocator.IsGameFolder(gameFolder))
+        if (gameFolder is not null && !GameLocator.IsGameFolder(gameFolder)) gameFolder = null;
+        if (gameFolder is null && RedkitStrings.Find(App.Settings.WccLitePath) is null && !File.Exists(App.Settings.StringsDatabasePath))
         {
             if (owner is IMessageHost host)
-                _ = host.ShowMessage("The game folder isn't set", "Searching the game's strings needs The Witcher 3's folder. Set it in Settings, or let Settings find it.", MessageKind.Info);
+                _ = host.ShowMessage("The game folder isn't set", "Searching the game's strings needs The Witcher 3's folder, or REDkit for its strings database. Set either in Settings, or let Settings find them.", MessageKind.Info);
             return;
         }
         var window = new GameStringsWindow(gameFolder, handle).Standalone(owner);
@@ -70,18 +93,53 @@ public partial class GameStringsWindow : Window, IMessageHost
 
     private W3Language Language => LanguageBox.SelectedItem as W3Language ?? W3Strings.Languages[0];
 
+    private string SourceTag => (SourceBox.SelectedItem as ComboBoxItem)?.Tag as string ?? "Game";
+
+    /// <summary>The database to read, or null for the game's .w3strings files.</summary>
+    private string? Database => SourceTag switch
+    {
+        "REDkit" => _redkitDatabase,
+        "File" => App.Settings.StringsDatabasePath,
+        _ => null,
+    };
+
+    /// <summary>The database's extra columns, and what the mods box adds, follow where the strings come from.</summary>
+    private void ShowSource()
+    {
+        bool database = SourceTag != "Game";
+        var shown = database ? Visibility.Visible : Visibility.Collapsed;
+        KindColumn.Visibility = UsedInColumn.Visibility = VoiceoverColumn.Visibility = shown;
+        KeyColumn.Header = database ? "Key" : "Key hash";
+        KeyColumn.Width = database ? 220 : 90;
+        ModsCheck.Content = database ? "Include installed mods" : "Include DLC and mods";
+        ModsCheck.ToolTip = database
+            ? "Also read the strings of the mods you have installed (the database already has the DLC's)"
+            : "Also read the strings of the DLC and the mods you have installed";
+        ModsCheck.IsEnabled = _gameFolder is not null;
+        FileItem.Content = SourceTag == "File" && App.Settings.StringsDatabasePath.Length > 0
+            ? "File: " + Path.GetFileName(App.Settings.StringsDatabasePath)
+            : "Database file…";
+        SearchPlaceholder.Text = database
+            ? "Search by text, ID, key name, voiceover or scene path  (Ctrl+F)"
+            : "Search by text, ID (2115940000), or key (name or hash)  (Ctrl+F)";
+    }
+
     private async Task LoadAsync()
     {
         int id = ++_loadId;
         _index = null;
         Grid.ItemsSource = null;
-        StatusText.Text = $"Reading the {Language.Handle} strings…";
+        string? database = Database;
+        StatusText.Text = database is null ? $"Reading the {Language.Handle} strings…" : $"Reading the {Language.Handle} strings from {Path.GetFileName(database)}…";
         try
         {
-            var index = await GameStringIndex.GetAsync(_gameFolder, Language, ModsCheck.IsChecked == true);
+            var index = await GameStringIndex.GetAsync(_gameFolder, Language, ModsCheck.IsChecked == true && _gameFolder is not null, database);
             if (id != _loadId) return;
             _index = index;
-            string sources = index.Sources.Count == 0
+            int files = index.Sources.Count - (database is null ? 0 : 1);
+            string sources = database is not null
+                ? $"{Format.Count(index.All.Count, "string")} from {Path.GetFileName(database)}" + (files > 0 ? $" and {Format.Count(files, "mod file")}" : "")
+                : index.Sources.Count == 0
                 ? $"No {Language.Handle}.w3strings files found under the game folder"
                 : $"{Format.Count(index.All.Count, "string")} from {Format.Count(index.Sources.Count, "file")}";
             DetailText.Text = sources + (index.Problems.Count > 0 ? $"  ·  {Format.Count(index.Problems.Count, "file")} couldn't be read" : "");
@@ -89,7 +147,8 @@ public partial class GameStringsWindow : Window, IMessageHost
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
         {
-            StatusText.Text = ex.Message;
+            if (id != _loadId) return;
+            StatusText.Text = database is null ? ex.Message : $"{Path.GetFileName(database)} couldn't be read: {ex.Message}";
         }
     }
 
@@ -133,6 +192,39 @@ public partial class GameStringsWindow : Window, IMessageHost
         if (_ready && IsLoaded) _ = LoadAsync();
     }
 
+    private string _lastSource = "Game";
+
+    private void SourceBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!_ready || SourceTag == _lastSource && SourceTag != "File") return;
+        if (SourceTag == "File" && !PickDatabase())
+        {
+            // cancelled: back to where it was reading from
+            SourceBox.SelectedItem = SourceBox.Items.OfType<ComboBoxItem>().First(i => (string)i.Tag == _lastSource);
+            return;
+        }
+        _lastSource = SourceTag;
+        App.Settings.GameStringsSource = SourceTag;
+        App.Settings.Save();
+        ShowSource();
+        if (IsLoaded) _ = LoadAsync();
+    }
+
+    /// <summary>Asks for a strings database, such as a copy of REDkit's or one from a mod project.</summary>
+    private bool PickDatabase()
+    {
+        string current = App.Settings.StringsDatabasePath;
+        var dialog = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = "Pick a REDkit strings database",
+            Filter = "REDkit strings database (*.db)|*.db|All files (*.*)|*.*",
+            InitialDirectory = Path.GetDirectoryName(current.Length > 0 ? current : _redkitDatabase ?? "") ?? "",
+        };
+        if (dialog.ShowDialog(this) != true) return false;
+        App.Settings.StringsDatabasePath = dialog.FileName;
+        return true;
+    }
+
     // ---------------------------------------------------------------- copying
 
     private IEnumerable<GameString> Selected() => Grid.SelectedItems.OfType<GameStringRow>().Select(r => r.String);
@@ -156,6 +248,18 @@ public partial class GameStringsWindow : Window, IMessageHost
         if (chosen.Count > 0) Copy(string.Join(Environment.NewLine, chosen.Select(s => s.Id)), chosen.Count == 1 ? "the ID" : $"{chosen.Count} IDs");
     }
 
+    private void CopyKey_Click(object sender, RoutedEventArgs e)
+    {
+        var keys = Selected().Select(s => s.KeyName).OfType<string>().ToList();
+        if (keys.Count > 0) Copy(string.Join(Environment.NewLine, keys), keys.Count == 1 ? "the key" : $"{keys.Count} keys");
+    }
+
+    private void CopyKeyScript_Click(object sender, RoutedEventArgs e)
+    {
+        var keys = Selected().Select(s => s.KeyName).OfType<string>().ToList();
+        if (keys.Count > 0) Copy(string.Join(Environment.NewLine, keys.Select(k => $"GetLocStringByKeyExt(\"{k}\")")), "GetLocStringByKeyExt");
+    }
+
     private void CopyText_Click(object sender, RoutedEventArgs e)
     {
         var chosen = Selected().ToList();
@@ -174,7 +278,9 @@ public partial class GameStringsWindow : Window, IMessageHost
         var chosen = Selected().ToList();
         if (chosen.Count == 0) return;
         Copy(string.Join(Environment.NewLine, chosen.Select(s =>
-            $"{s.Id.ToString(CultureInfo.InvariantCulture)}|{(s.KeyHash == 0 ? "" : s.KeyHash.ToString("x8"))}||{s.Text}")), "as strings CSV lines");
+            s.KeyName is not null
+                ? $"{s.Id.ToString(CultureInfo.InvariantCulture)}||{s.KeyName}|{s.Text}"
+                : $"{s.Id.ToString(CultureInfo.InvariantCulture)}|{(s.KeyHash == 0 ? "" : s.KeyHash.ToString("x8"))}||{s.Text}")), "as strings CSV lines");
     }
 
     private void Grid_MouseDoubleClick(object sender, MouseButtonEventArgs e)

@@ -395,12 +395,7 @@ public partial class StringsWindow : Window, IMessageHost
 
     private void GameStrings_Click(object sender, RoutedEventArgs e)
     {
-        if (GameFolder() is not { } folder)
-        {
-            _ = ShowMessage("The game folder isn't set", "Searching the game's strings needs The Witcher 3's folder. Set it in Settings.", MessageKind.Info);
-            return;
-        }
-        GameStringsWindow.Open(this, folder, StringsLanguage.Handle);
+        GameStringsWindow.Open(this, GameFolder(), StringsLanguage.Handle);
     }
 
     /// <summary>

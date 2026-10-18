@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **Search game strings from REDkit's database**: **Read from** in the game strings search can now read REDkit's strings database (`LocalEditorStringDataBaseW3_UTF8.db`) instead of the game's `.w3strings`. The database names every key (the game's files only keep a hash) and says what kind of text each string is, the scene, journal or other resource it's used in, and the voiceover of spoken lines, each in a column of its own. Search finds part of a key's name, a scene path or a voiceover name, and the right-click menu copies the key or `GetLocStringByKeyExt("key")`. It's found from the wcc_lite in Settings or in the usual Steam and GOG folders, or pick any database file; installed mods' strings can be added on top. The database is read by the tool itself, so no SQLite library is needed. Thanks to glassfish for the idea.
+
 ## 1.6.0
 
 - **Meshes extract with their `.buffer` files**: a mesh keeps its shape in numbered `.buffer` files, which the game packs in their own bundle (`buffers0.bundle` beside `blob0.bundle`). With **Include .buffer files** (on by default, in the extract bar) extracting a file takes its buffers along from any bundle open in the same folder, and extracting a buffer takes the file it belongs to.

@@ -1488,8 +1488,8 @@ public partial class MainWindow : Window, IMessageHost
 
     private void OpenGameStrings()
     {
-        if (GameLocator.Resolve(null) is { } folder) GameStringsWindow.Open(this, folder);
-        else ShowError("The game folder isn't set.\n\nSearching the game's strings needs The Witcher 3's folder. Set it in Settings.");
+        // without a game folder it can still read REDkit's strings database, and says so when there's neither
+        GameStringsWindow.Open(this, GameLocator.Resolve(null));
     }
 
     private void OpenStubGenerator() => StubWindow.Open(this, GameLocator.Resolve(null));

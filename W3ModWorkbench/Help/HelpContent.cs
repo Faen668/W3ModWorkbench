@@ -370,15 +370,22 @@ Before adding a line of text to your mod, check whether the game already says it
 
 ## What it reads
 
-The base game's `content\content*\<language>.w3strings`, and, with **Include DLC and mods** ticked, the files in `dlc\*\content` and `mods\*\content`. The **From** column says which one each result comes from. It needs the game folder (Settings finds it, or it's picked up from the file you're working on).
+**Read from** picks where the strings come from:
+
+- **Game files (.w3strings)**: the base game's `content\content*\<language>.w3strings`, and, with **Include DLC and mods** ticked, the files in `dlc\*\content` and `mods\*\content`. It needs the game folder (Settings finds it, or it's picked up from the file you're working on).
+- **REDkit database**: REDkit's own strings database (`r4data\LocalEditorStringDataBaseW3_UTF8.db`), with the strings of the game and both expansions. It knows more than the game's files do: the **name** of each key (the game's files only keep a hash), the **kind** of text (dialogue line, choice, journal, item, book…), the **scene or resource** it's used in, and the **voiceover** name of spoken lines. It's found from the wcc_lite set in Settings, or in the usual Steam and GOG folders. REDkit is free on Steam and GOG for owners of the game; without it this choice is greyed out. **Include installed mods** adds your mods' `.w3strings` on top.
+- **Database file…**: any REDkit strings database you pick, such as a copy of REDkit's.
+
+The database comes with REDkit and may miss a few hundred lines added to the game in later patches; the game's files have every string the game loads. The **From** column says where each result comes from, and the choice is remembered.
 
 ## Searching
 
 - Type words and every one has to appear in the text, whatever the case: `swallow potion`. **Whole words** stops `ale` from finding `scale`.
 - Type a number to find an ID, or the start of one: `2115940`.
 - Type a key's name (`panel_Mods`) or its hash in hex (`4d5f8b0c`) to find the strings that use that key.
+- Reading from the REDkit database, part of a key's name finds it too (`item_name_cat`), and so does part of a scene's path (`q202_05b`) or a voiceover name (`EGHT_Q202`).
 
-Results show the ID, the key hash and the text, from the first 2,000 matches. Double-click a row to copy its ID; right-click to copy the text, `GetLocStringById(id)` for a script, or a line ready to paste into a strings CSV.
+Results show the ID, the key and the text, from the first 2,000 matches, and from the database also the kind, where it's used and the voiceover. Double-click a row to copy its ID; right-click to copy the text, `GetLocStringById(id)` for a script, or a line ready to paste into a strings CSV. Strings with a known key name can also copy the key, or `GetLocStringByKeyExt("key")`.
 
 ## Checking your own IDs
 
