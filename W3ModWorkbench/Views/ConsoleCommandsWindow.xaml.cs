@@ -25,7 +25,6 @@ public partial class ConsoleCommandsWindow : Window, IMessageHost
     private ConsoleCommandsWindow()
     {
         InitializeComponent();
-        DisabledLook.Apply(this);
         _gameFolder = GameLocator.Resolve(null);
         _searchTimer.Tick += (_, _) =>
         {

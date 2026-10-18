@@ -30,7 +30,6 @@ public partial class FactsWindow : Window, IMessageHost
     private FactsWindow()
     {
         InitializeComponent();
-        DisabledLook.Apply(this);
         _gameFolder = GameLocator.Resolve(null);
         _searchTimer.Tick += (_, _) =>
         {

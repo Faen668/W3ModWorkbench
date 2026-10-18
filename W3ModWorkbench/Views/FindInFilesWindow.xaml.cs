@@ -39,7 +39,6 @@ public partial class FindInFilesWindow : Window
     private FindInFilesWindow(MainWindow main)
     {
         InitializeComponent();
-        DisabledLook.Apply(this);
         _main = main;
         this.Standalone(main);
         Results.HideClose();

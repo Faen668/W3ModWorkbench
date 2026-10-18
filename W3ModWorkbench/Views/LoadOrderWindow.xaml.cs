@@ -80,7 +80,6 @@ public partial class LoadOrderWindow : Window, IMessageHost
     private LoadOrderWindow()
     {
         InitializeComponent();
-        DisabledLook.Apply(this);
 
         string? mods = _settings.LoadOrderModsFolder;
         if (string.IsNullOrWhiteSpace(mods) || !Directory.Exists(mods))

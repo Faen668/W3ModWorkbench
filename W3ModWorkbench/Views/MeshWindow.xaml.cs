@@ -38,7 +38,6 @@ public partial class MeshWindow : Window, IMessageHost
     private MeshWindow(string path, string source, Func<byte[]> readData, Func<int, byte[]?> readBuffer, ResourceLocator locator)
     {
         InitializeComponent();
-        DisabledLook.Apply(this);
         _path = path;
         _source = source;
         _readData = readData;
@@ -130,7 +129,6 @@ public partial class MeshWindow : Window, IMessageHost
         ShowChunks();
         InfoText.Text = $"{_path}   ·   {_source}   ·   CR2W {_mesh.File.Version}, {_mesh.Chunks.Count} chunks, {_mesh.LodCount} LOD{(_mesh.LodCount == 1 ? "" : "s")}, {materials.Count} material{(materials.Count == 1 ? "" : "s")}";
         ExportButton.IsEnabled = true;
-        DisabledLook.Apply(this);
         foreach (var item in _materials) await ApplyAsync(item);
     }
 

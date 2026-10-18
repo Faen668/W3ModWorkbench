@@ -179,7 +179,6 @@ public partial class StringsWindow : Window, IMessageHost
     private StringsWindow()
     {
         InitializeComponent();
-        DisabledLook.Apply(this);
         _view = CollectionViewSource.GetDefaultView(_rows);
         _view.Filter = Matches;
         Grid.ItemsSource = _view;

@@ -38,7 +38,6 @@ public partial class InputBindingsWindow : Window, IMessageHost
     private InputBindingsWindow()
     {
         InitializeComponent();
-        DisabledLook.Apply(this);
         _gameFolder = GameLocator.Resolve(null);
         KeyBox.ItemsSource = Keys();
         KeyBox.Text = "IK_K";

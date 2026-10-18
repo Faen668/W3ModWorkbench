@@ -25,6 +25,24 @@
                 <Button x:Name="HistoryButton" Margin="4,0,12,0" Click="History_Click" ToolTip="The places you jumped from" Padding="10,6">
                     <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE81C;" VerticalAlignment="Center" />
                 </Button>
+                <!-- the commands that otherwise only have keys -->
+                <Button x:Name="GoToSymbolButton" Click="GoToSymbol_Click" Padding="10,6" ToolTipService.ShowOnDisabled="True"
+                        ToolTip="Go to symbol: any class, function, field or enum value in the scripts (Ctrl+T)">
+                    <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE8FD;" VerticalAlignment="Center" />
+                </Button>
+                <Button x:Name="FindInFilesButton" Margin="4,0,0,0" Click="FindInFiles_Click" Padding="10,6"
+                        ToolTip="Find in files (Ctrl+Shift+F)">
+                    <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE721;" VerticalAlignment="Center" />
+                </Button>
+                <Button x:Name="SnippetButton" Margin="4,0,0,0" Click="Snippet_Click" Padding="10,6" ToolTipService.ShowOnDisabled="True"
+                        ToolTip="Insert snippet: common WitcherScript patterns, and your own (Ctrl+J)">
+                    <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE943;" VerticalAlignment="Center" />
+                </Button>
+                <Button x:Name="BuildButton" Margin="4,0,0,0" Click="Build_Click" Padding="10,6" ToolTipService.ShowOnDisabled="True"
+                        ToolTip="Build the mod (Ctrl+Shift+B)">
+                    <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE90F;" VerticalAlignment="Center" />
+                </Button>
+                <Rectangle Width="1" Margin="12,6" Fill="{DynamicResource DividerStrokeColorDefaultBrush}" />
                 <Button x:Name="SplitButton" Click="Split_Click">
                     <Button.ContextMenu>
                         <ContextMenu>

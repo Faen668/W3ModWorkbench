@@ -1479,6 +1479,17 @@ public partial class PreviewDocument : UserControl
 
     private void Snippet_Click(object sender, RoutedEventArgs e) => ShowSnippetPicker();
 
+    /// <summary>The window's snippet button: the picker, or why there isn't one for this file.</summary>
+    public void InsertSnippet()
+    {
+        if (!CanNavigate)
+            _ = ShowCard(null, "Snippets go into scripts. Open a .ws file first.", MessageKind.Info, autoClose: true);
+        else if (Editor.IsReadOnly)
+            _ = ShowCard(null, "This file is read-only, so there's nowhere to put a snippet.", MessageKind.Info, autoClose: true);
+        else
+            ShowSnippetPicker();
+    }
+
     // ---------------------------------------------------------------- rename
 
     /// <summary>
@@ -1813,6 +1824,10 @@ public partial class PreviewDocument : UserControl
         window.AllowsTransparency = true;
         window.Background = Brushes.Transparent;
         window.BorderThickness = new Thickness(0);
+        // the Fluent theme gives every window its own background when it opens, which fills the shadow's margin
+        // as a square behind the card
+        window.SourceInitialized += (_, _) => window.Background = Brushes.Transparent;
+        window.Loaded += (_, _) => window.Background = Brushes.Transparent;
 
         var list = window.CompletionList;
         list.ListBox.ItemContainerStyle = (Style)FindResource("CompletionItem");
@@ -1901,13 +1916,15 @@ public partial class PreviewDocument : UserControl
             get
             {
                 var panel = new StackPanel();
-                panel.Children.Add(new TextBlock
+                var title = new TextBlock
                 {
                     Text = _symbol?.Title ?? Text,
                     FontFamily = new FontFamily("Cascadia Mono, Consolas"),
                     FontSize = 12.5,
                     TextWrapping = TextWrapping.Wrap,
-                });
+                };
+                title.SetResourceReference(TextBlock.ForegroundProperty, "TextFillColorPrimaryBrush");
+                panel.Children.Add(title);
                 var where = new TextBlock
                 {
                     Text = _symbol is null ? _kind : $"{_symbol.File.Source}  ·  {_symbol.File.Path} : {_symbol.Line}",

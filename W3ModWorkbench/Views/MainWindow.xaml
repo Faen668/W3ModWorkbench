@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="clr-namespace:W3ModWorkbench.ViewModels"
         xmlns:local="clr-namespace:W3ModWorkbench"
+        xmlns:sys="clr-namespace:System;assembly=System.Runtime"
         xmlns:avalonEdit="http://icsharpcode.net/sharpdevelop/avalonedit"
         Title="W3 Mod Workbench"
         Icon="pack://application:,,,/W3ModWorkbench;component/Assets/app.ico"
@@ -37,8 +38,13 @@
                                     </Style>
                                 </TextBlock.Style>
                             </TextBlock>
-                            <CheckBox IsChecked="{Binding IsChecked, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                      HorizontalAlignment="Left" VerticalAlignment="Top" Margin="4,2,0,0" MinWidth="0" Padding="0" Focusable="False" />
+                            <!-- sized with the thumbnails: small, medium and large -->
+                            <CheckBox x:Name="ThumbCheck" IsChecked="{Binding IsChecked, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                      HorizontalAlignment="Left" VerticalAlignment="Top" Margin="4,2,0,0" MinWidth="0" Padding="0" Focusable="False">
+                                <CheckBox.LayoutTransform>
+                                    <ScaleTransform ScaleX="0.85" ScaleY="0.85" />
+                                </CheckBox.LayoutTransform>
+                            </CheckBox>
                         </Grid>
                     </Border>
                     <TextBlock Grid.Row="1" Text="{Binding Name}" FontSize="12" TextAlignment="Center" TextWrapping="Wrap"
@@ -49,6 +55,20 @@
                 <DataTrigger Binding="{Binding IsSelected}" Value="True">
                     <Setter TargetName="Cell" Property="BorderBrush" Value="{DynamicResource AccentFillColorDefaultBrush}" />
                     <Setter TargetName="Cell" Property="Background" Value="{DynamicResource SubtleFillColorSecondaryBrush}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Tag, RelativeSource={RelativeSource AncestorType=ContentControl}}">
+                    <DataTrigger.Value><sys:Double>64</sys:Double></DataTrigger.Value>
+                    <Setter TargetName="ThumbCheck" Property="LayoutTransform">
+                        <Setter.Value><ScaleTransform ScaleX="0.65" ScaleY="0.65" /></Setter.Value>
+                    </Setter>
+                    <Setter TargetName="ThumbCheck" Property="Margin" Value="2,1,0,0" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Tag, RelativeSource={RelativeSource AncestorType=ContentControl}}">
+                    <DataTrigger.Value><sys:Double>160</sys:Double></DataTrigger.Value>
+                    <Setter TargetName="ThumbCheck" Property="LayoutTransform">
+                        <Setter.Value><ScaleTransform ScaleX="1.1" ScaleY="1.1" /></Setter.Value>
+                    </Setter>
+                    <Setter TargetName="ThumbCheck" Property="Margin" Value="6,4,0,0" />
                 </DataTrigger>
             </DataTemplate.Triggers>
         </DataTemplate>

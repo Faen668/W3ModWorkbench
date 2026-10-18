@@ -37,7 +37,6 @@ public partial class ProjectWindow : Window
     private ProjectWindow(WorkbenchProject? existing, string? root, string? name, string? scripts)
     {
         InitializeComponent();
-        DisabledLook.Apply(this);
         _existing = existing;
         FilesList.ItemsSource = _files;
         _setting = true;

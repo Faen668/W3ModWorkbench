@@ -32,7 +32,6 @@ public partial class HashToolsWindow : Window, IMessageHost
     private HashToolsWindow()
     {
         InitializeComponent();
-        DisabledLook.Apply(this);
         Loaded += (_, _) => TextBox.Focus();
         Closed += (_, _) => _instance = null;
     }

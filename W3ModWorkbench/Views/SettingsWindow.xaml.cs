@@ -25,7 +25,6 @@ public partial class SettingsWindow : Window, IMessageHost
     public SettingsWindow(Settings settings)
     {
         InitializeComponent();
-        DisabledLook.Apply(this);
         _settings = settings;
         _originalTheme = settings.Theme;
         _originalPreset = settings.ThemePreset;

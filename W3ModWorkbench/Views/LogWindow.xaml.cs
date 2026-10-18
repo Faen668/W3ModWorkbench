@@ -38,7 +38,6 @@ public partial class LogWindow : Window, IMessageHost
     private LogWindow(string path)
     {
         InitializeComponent();
-        DisabledLook.Apply(this);
         _tail = new LogTail(path);
         LineList.ItemsSource = _shown;
         ChannelBox.ItemsSource = new List<string> { AllChannels };

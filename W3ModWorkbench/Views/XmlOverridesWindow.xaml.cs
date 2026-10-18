@@ -56,7 +56,6 @@ public partial class XmlOverridesWindow : Window, IMessageHost
     private XmlOverridesWindow()
     {
         InitializeComponent();
-        DisabledLook.Apply(this);
         string? mods = _settings.LoadOrderModsFolder;
         if (string.IsNullOrWhiteSpace(mods) || !Directory.Exists(mods))
             mods = GameLocator.Resolve(null) is { } game && Directory.Exists(Path.Combine(game, "mods")) ? Path.Combine(game, "mods") : "";

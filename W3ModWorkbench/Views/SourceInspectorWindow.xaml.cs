@@ -81,7 +81,6 @@ public partial class SourceInspectorWindow : Window, IMessageHost
     private SourceInspectorWindow()
     {
         InitializeComponent();
-        DisabledLook.Apply(this);
 
         OriginalBox.Text = _settings.InspectorOriginal;
         SuspectBox.Text = _settings.InspectorSuspect;

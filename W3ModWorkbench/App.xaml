@@ -13,10 +13,39 @@
             <FontFamily x:Key="IconFont">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
             <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
 
-            <!-- A tooltip takes the font of what it's on, so one on an icon (drawn in IconFont) would show its text as boxes.
-                 Every tooltip uses the ordinary text font instead. -->
-            <Style TargetType="ToolTip" BasedOn="{StaticResource {x:Type ToolTip}}">
+            <!-- Every tooltip as a small card in the theme's colours, following light, dark and the presets.
+                 A tooltip takes the font of what it's on, so one on an icon (drawn in IconFont) would show its text as boxes:
+                 it uses the ordinary text font instead. -->
+            <Style TargetType="ToolTip">
                 <Setter Property="FontFamily" Value="{x:Static SystemFonts.MessageFontFamily}" />
+                <Setter Property="FontSize" Value="12.5" />
+                <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+                <Setter Property="Background" Value="{DynamicResource ToolTipBackground}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource SurfaceStrokeColorFlyoutBrush}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="Padding" Value="10,6" />
+                <Setter Property="HasDropShadow" Value="False" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="ToolTip">
+                            <Border Margin="0,0,10,10" MaxWidth="440" CornerRadius="6"
+                                    Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}" Padding="{TemplateBinding Padding}"
+                                    TextElement.Foreground="{TemplateBinding Foreground}">
+                                <Border.Effect>
+                                    <DropShadowEffect BlurRadius="10" ShadowDepth="2" Opacity="0.25" />
+                                </Border.Effect>
+                                <ContentPresenter>
+                                    <ContentPresenter.Resources>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="TextWrapping" Value="Wrap" />
+                                        </Style>
+                                    </ContentPresenter.Resources>
+                                </ContentPresenter>
+                            </Border>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
             </Style>
         </ResourceDictionary>
     </Application.Resources>

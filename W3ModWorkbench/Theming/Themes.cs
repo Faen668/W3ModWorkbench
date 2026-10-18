@@ -92,6 +92,8 @@ public static class Themes
                 Set(key, flyout);
         }
 
+        DisabledLook.Apply(app, Set);
+
         foreach (Window w in app.Windows) StyleWindow(w);
 
         if (!_hooked)

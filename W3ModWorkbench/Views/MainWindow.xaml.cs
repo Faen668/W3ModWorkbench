@@ -43,7 +43,6 @@ public partial class MainWindow : Window, IMessageHost
     public MainWindow(string[] args)
     {
         InitializeComponent();
-        DisabledLook.Apply(this);
         FolderTree.ItemsSource = _tree;
         _roots.CollectionChanged += (_, _) => RebuildTree();
         _searchTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(220) };

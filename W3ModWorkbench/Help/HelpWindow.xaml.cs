@@ -32,7 +32,6 @@ public partial class HelpWindow : Window
     private HelpWindow()
     {
         InitializeComponent();
-        W3ModWorkbench.DisabledLook.Apply(this);
         Fill("");
         TopicList.SelectedIndex = 1; // first topic, after the group header
     }

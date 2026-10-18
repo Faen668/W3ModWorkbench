@@ -42,7 +42,6 @@ public partial class GameStringsWindow : Window, IMessageHost
     private GameStringsWindow(string? gameFolder, string handle)
     {
         InitializeComponent();
-        DisabledLook.Apply(this);
         _gameFolder = gameFolder;
         LanguageBox.ItemsSource = W3Strings.Languages;
         LanguageBox.SelectedItem = W3Strings.Language(handle) ?? W3Strings.Language("en");

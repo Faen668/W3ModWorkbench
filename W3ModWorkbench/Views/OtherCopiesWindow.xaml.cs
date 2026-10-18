@@ -66,7 +66,6 @@ public partial class OtherCopiesWindow : Window, IMessageHost
     private OtherCopiesWindow(MainWindow main, EntryItem item, List<EntryItem> copies)
     {
         InitializeComponent();
-        DisabledLook.Apply(this);
         _main = main;
         _item = item;
         FileTitle.Text = item.Name;

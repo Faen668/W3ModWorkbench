@@ -1,36 +1,60 @@
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 
 namespace W3ModWorkbench;
 
 /// <summary>
-/// The Fluent theme only greys a disabled button's text slightly, which is easy to miss.
-/// This fades every button in a window to 40% while it is disabled. It sets opacity on each
-/// button rather than adding a Button style, which would replace the theme's own look.
+/// The Fluent theme greys a disabled button's text only when its content is plain text. Content of our own (an icon
+/// and a label in a StackPanel) takes its colour from the button instead, so it stayed as bright as an enabled button,
+/// or black on an accent button in dark mode. This puts a style over each of the theme's button styles that gives the
+/// button itself the theme's disabled colour while it is disabled.
 /// </summary>
+/// <remarks>
+/// The styles are built here, on the theme's own styles as the app finds them once the theme is applied. Written in
+/// App.xaml with BasedOn, they were based on the classic Windows look instead, as the theme wasn't in place yet.
+/// </remarks>
 public static class DisabledLook
 {
-    private const double DisabledOpacity = 0.4;
-
-    public static void Apply(DependencyObject root)
+    /// <summary>
+    /// Makes the styles. <paramref name="set"/> adds each to the app's resources: <see cref="Themes"/> takes them out
+    /// again before the next theme is applied, so each is always based on the theme's style and never on itself.
+    /// </summary>
+    public static void Apply(Application app, Action<object, object> set)
     {
-        foreach (var button in Buttons(root))
+        Add(app, set, typeof(Button), typeof(Button), "ButtonForegroundDisabled");
+        Add(app, set, "AccentButtonStyle", typeof(Button), "ButtonForegroundDisabled");
+        Add(app, set, typeof(RepeatButton), typeof(RepeatButton), "RepeatButtonForegroundDisabled");
+
+        if (app.TryFindResource(typeof(ToggleButton)) is Style toggle)
         {
-            button.IsEnabledChanged -= OnEnabledChanged;
-            button.IsEnabledChanged += OnEnabledChanged;
-            Update(button);
+            var style = new Style(typeof(ToggleButton), toggle);
+            style.Triggers.Add(Disabled(ToggleButton.IsCheckedProperty, true, "ToggleButtonForegroundCheckedDisabled"));
+            style.Triggers.Add(Disabled(ToggleButton.IsCheckedProperty, false, "ToggleButtonForegroundDisabled"));
+            set(typeof(ToggleButton), style);
         }
     }
 
-    private static IEnumerable<ButtonBase> Buttons(DependencyObject node)
+    private static void Add(Application app, Action<object, object> set, object key, Type type, string brush)
     {
-        if (node is ButtonBase b) yield return b;
-        foreach (var child in LogicalTreeHelper.GetChildren(node).OfType<DependencyObject>())
-            foreach (var found in Buttons(child))
-                yield return found;
+        if (app.TryFindResource(key) is not Style theme) return;
+        var style = new Style(type, theme);
+        style.Triggers.Add(new Trigger
+        {
+            Property = UIElement.IsEnabledProperty,
+            Value = false,
+            Setters = { new Setter(Control.ForegroundProperty, new DynamicResourceExtension(brush)) },
+        });
+        set(key, style);
     }
 
-    private static void OnEnabledChanged(object sender, DependencyPropertyChangedEventArgs e) => Update((UIElement)sender);
-
-    private static void Update(UIElement button) => button.Opacity = button.IsEnabled ? 1.0 : DisabledOpacity;
+    private static MultiTrigger Disabled(DependencyProperty property, object value, string brush) => new()
+    {
+        Conditions =
+        {
+            new Condition(UIElement.IsEnabledProperty, false),
+            new Condition(property, value),
+        },
+        Setters = { new Setter(Control.ForegroundProperty, new DynamicResourceExtension(brush)) },
+    };
 }

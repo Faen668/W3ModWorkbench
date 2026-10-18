@@ -28,7 +28,6 @@ public partial class TextureWindow : Window, IMessageHost
     private TextureWindow(string path, string detail, TextureInfo? info, Func<byte[]> readPixels, DecodedImage? picture, int mips)
     {
         InitializeComponent();
-        DisabledLook.Apply(this);
         _path = path;
         _info = info;
         _readPixels = readPixels;

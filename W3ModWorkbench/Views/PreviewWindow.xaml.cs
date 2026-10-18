@@ -46,7 +46,6 @@ public partial class PreviewWindow : Window, IMessageHost
         Layout();
         UpdateSplitButton();
         UpdateHistoryButtons();
-        DisabledLook.Apply(this);
         OpenWindows.Add(this);
         ProjectWorkspace.Changed += UpdateHeader;
         Results.Open += OpenResult;
@@ -1037,6 +1036,10 @@ public partial class PreviewWindow : Window, IMessageHost
             : doc.IsDirty ? "Save the changes to this file (Ctrl+S). Ctrl+Shift+S saves every file"
             : "No changes to save";
         EditButton.Visibility = CanEditAsProject(doc) ? Visibility.Visible : Visibility.Collapsed;
+        GoToSymbolButton.IsEnabled = ScriptDocument() is not null;
+        SnippetButton.IsEnabled = doc.CanNavigate;
+        BuildButton.IsEnabled = ProjectWorkspace.Current is not null;
+        BuildButton.ToolTip = ProjectWorkspace.Current is null ? "Build the mod (Ctrl+Shift+B). Open a project to build it" : "Build the mod (Ctrl+Shift+B)";
 
         // a project's file says so, with the project's name, beside the file name
         var owner = ProjectOf(doc);
@@ -1467,6 +1470,17 @@ public partial class PreviewWindow : Window, IMessageHost
         App.Settings.PreviewSplit = direction;
         App.Settings.Save();
         ApplySettings();
+    }
+
+    private void GoToSymbol_Click(object sender, RoutedEventArgs e) => _ = GoToSymbolAsync();
+
+    private void FindInFiles_Click(object sender, RoutedEventArgs e) => FindInFiles();
+
+    private void Snippet_Click(object sender, RoutedEventArgs e) => Current?.InsertSnippet();
+
+    private void Build_Click(object sender, RoutedEventArgs e)
+    {
+        if (Application.Current.MainWindow is MainWindow main && ProjectWorkspace.Current is not null) _ = main.BuildModAsync();
     }
 
     private void Copy_Click(object sender, RoutedEventArgs e) => Current?.Copy();
