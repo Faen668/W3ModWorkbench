@@ -86,7 +86,15 @@
                         <TextBlock Margin="8,0,0,0" Text="Open folder" />
                     </StackPanel>
                 </Button>
-                <Button x:Name="CloseAllButton" Margin="6,0,0,0" Click="CloseAll_Click" IsEnabled="False" ToolTip="Close all bundles">
+                <Button x:Name="ProjectButton" Margin="6,0,0,0" Click="Project_Click"
+                        ToolTip="New project, open a project (Ctrl+Shift+O), project properties, add files to the project">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Style="{StaticResource IconText}" Text="&#xE821;" Margin="0,1,0,0" />
+                        <TextBlock x:Name="ProjectButtonText" Margin="8,0,0,0" Text="Project" />
+                        <TextBlock Style="{StaticResource IconText}" Text="&#xE70D;" FontSize="9" Margin="8,2,0,0" />
+                    </StackPanel>
+                </Button>
+                <Button x:Name="CloseAllButton" Margin="6,0,0,0" Click="CloseAll_Click" IsEnabled="False" ToolTip="Close the project and everything else that's open">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Style="{StaticResource IconText}" Text="&#xE894;" Margin="0,2,0,0" />
                         <TextBlock Margin="8,0,0,0" Text="Close all" />
@@ -176,7 +184,17 @@
                             </HierarchicalDataTemplate>
                         </TreeView.ItemTemplate>
                         <TreeView.ContextMenu>
-                            <ContextMenu>
+                            <ContextMenu Opened="TreeMenu_Opened">
+                                <MenuItem x:Name="TreeCreateProjectItem" Header="Create a project from these scripts…" Click="TreeCreateProject_Click" Visibility="Collapsed">
+                                    <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE821;" /></MenuItem.Icon>
+                                </MenuItem>
+                                <MenuItem x:Name="TreeProjectPropertiesItem" Header="Project properties…" Click="ProjectProperties_Click" Visibility="Collapsed">
+                                    <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE713;" /></MenuItem.Icon>
+                                </MenuItem>
+                                <MenuItem x:Name="TreeAddFilesItem" Header="Add files to the project…" Click="ProjectAddFiles_Click" Visibility="Collapsed" />
+                                <MenuItem x:Name="TreeRefreshItem" Header="Refresh the project" Click="ProjectRefresh_Click" Visibility="Collapsed" />
+                                <MenuItem x:Name="TreeRevealItem" Header="Open the project folder" Click="ProjectReveal_Click" Visibility="Collapsed" />
+                                <Separator x:Name="TreeProjectSeparator" Visibility="Collapsed" />
                                 <MenuItem Header="Extract this folder" Click="TreeExtract_Click">
                                     <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE896;" /></MenuItem.Icon>
                                 </MenuItem>
@@ -184,7 +202,7 @@
                                 <MenuItem Header="Check all in folder" Click="TreeCheck_Click" />
                                 <MenuItem Header="Uncheck all in folder" Click="TreeUncheck_Click" />
                                 <Separator />
-                                <MenuItem Header="Close bundle" Click="TreeCloseBundle_Click">
+                                <MenuItem x:Name="TreeCloseItem" Header="Close bundle" Click="TreeCloseBundle_Click">
                                     <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE711;" /></MenuItem.Icon>
                                 </MenuItem>
                             </ContextMenu>
@@ -230,6 +248,12 @@
                                 <MenuItem x:Name="GridXmlItem" Header="Open in XML editor" Click="GridXmlEditor_Click" Visibility="Collapsed">
                                     <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE70F;" /></MenuItem.Icon>
                                 </MenuItem>
+                                <MenuItem x:Name="GridAddToProjectItem" Header="Add to project" Click="GridAddToProject_Click" Visibility="Collapsed">
+                                    <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE710;" /></MenuItem.Icon>
+                                </MenuItem>
+                                <MenuItem x:Name="GridRemoveFromProjectItem" Header="Remove from project" Click="GridRemoveFromProject_Click" Visibility="Collapsed">
+                                    <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE738;" /></MenuItem.Icon>
+                                </MenuItem>
                                 <MenuItem x:Name="GridExternalItem" Header="Open in external editor" Click="GridExternal_Click">
                                     <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE8A7;" /></MenuItem.Icon>
                                 </MenuItem>
@@ -255,49 +279,19 @@
 
             <!-- Empty state -->
             <Border x:Name="EmptyState" Style="{StaticResource Card}">
-                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="600">
-                    <TextBlock Style="{StaticResource IconText}" Text="&#xE7B8;" FontSize="52" HorizontalAlignment="Center" Opacity="0.85" />
-                    <TextBlock Text="Open Witcher 3 bundles, scripts, strings or XML" FontSize="22" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,18,0,6" />
-                    <TextBlock TextWrapping="Wrap" TextAlignment="Center" Opacity="0.7" Margin="0,0,0,4"
-                               Text="Drop .bundle, .rsblob, .w3strings or .xml files, or a folder, anywhere on this window. Compiled scripts (precompiled.rsblob) open as decompiled WitcherScript, and strings (.w3strings, or a strings .csv) open in an editor you can save from, as do XML files (with a builder for mod menus). Tools has a search of the game's own strings and a stub generator. Opening a folder loads everything inside it, such as the game's content or a mod." />
-                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,22,0,0">
-                        <Button Click="OpenBundles_Click" Padding="16,7" Style="{DynamicResource AccentButtonStyle}">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Style="{StaticResource IconText}" Text="&#xE8E5;" Margin="0,1,0,0" />
-                                <TextBlock Margin="8,0,0,0" Text="Open files" />
-                            </StackPanel>
-                        </Button>
-                        <Button Click="OpenFolder_Click" Padding="16,7" Margin="8,0,0,0">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Style="{StaticResource IconText}" Text="&#xE838;" Margin="0,1,0,0" />
-                                <TextBlock Margin="8,0,0,0" Text="Open folder" />
-                            </StackPanel>
-                        </Button>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="40,0">
+                    <Image Source="pack://application:,,,/W3ModWorkbench;component/Assets/icon.png" Width="200" Height="200"
+                           VerticalAlignment="Center" Margin="0,0,48,0" RenderOptions.BitmapScalingMode="HighQuality" />
+                    <StackPanel VerticalAlignment="Center" Width="520">
+                        <TextBlock Text="W3 Mod Workbench" FontSize="30" FontWeight="SemiBold" />
+                        <TextBlock Text="Open a project, or Witcher 3 bundles, scripts, strings or XML" FontSize="16" Opacity="0.85" TextWrapping="Wrap" Margin="0,6,0,14" />
+                        <TextBlock TextWrapping="Wrap" Opacity="0.7"
+                                   Text="Drop .bundle, .rsblob, .w3strings or .xml files, or a folder, anywhere on this window. Compiled scripts (precompiled.rsblob) open as decompiled WitcherScript, and strings (.w3strings, or a strings .csv) open in an editor you can save from, as do XML files (with a builder for mod menus). Tools has a search of the game's own strings and a stub generator. Opening a folder loads everything inside it, such as the game's content or a mod. To edit and compile a mod's scripts, make it a project: a .w3bench file that keeps the mod's scripts folder, its other files and where it compiles to." />
+                        <TextBlock Margin="0,18,0,0" Opacity="0.8">
+                            <Run Text="New here?" />
+                            <Hyperlink Click="Help_Click">Read the guide</Hyperlink>
+                        </TextBlock>
                     </StackPanel>
-                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,8,0,0">
-                        <Button Click="BrowseGame_Click" Padding="14,6" ToolTip="Open the game's own scripts to read">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Style="{StaticResource IconText}" Text="&#xE943;" Margin="0,1,0,0" />
-                                <TextBlock Margin="8,0,0,0" Text="Browse game scripts" />
-                            </StackPanel>
-                        </Button>
-                        <Button Click="BrowseMods_Click" Padding="14,6" Margin="8,0,0,0" ToolTip="Open everything in the game's mods folder">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Style="{StaticResource IconText}" Text="&#xE838;" Margin="0,1,0,0" />
-                                <TextBlock Margin="8,0,0,0" Text="Browse installed mods" />
-                            </StackPanel>
-                        </Button>
-                        <Button Click="FindInFiles_Click" Padding="14,6" Margin="8,0,0,0" ToolTip="Search the text of the scripts in the game, the mods or any folder (Ctrl+Shift+F)">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Style="{StaticResource IconText}" Text="&#xE721;" Margin="0,1,0,0" />
-                                <TextBlock Margin="8,0,0,0" Text="Find in files" />
-                            </StackPanel>
-                        </Button>
-                    </StackPanel>
-                    <TextBlock HorizontalAlignment="Center" Margin="0,18,0,0" Opacity="0.8">
-                        <Run Text="New here?" />
-                        <Hyperlink Click="Help_Click">Read the guide</Hyperlink>
-                    </TextBlock>
                 </StackPanel>
             </Border>
 

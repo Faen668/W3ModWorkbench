@@ -422,7 +422,8 @@ public partial class XmlWindow : Window, IMessageHost
         _path = path;
         _edited = false;
         UpdateHeader();
-        _ = Message.Show(null, $"Saved {Path.GetFileName(path)}.", MessageKind.Info, autoClose: true);
+        if (ProjectPrompts.ShouldOffer(path)) _ = ProjectPrompts.OfferAsync(path, Message, $"Saved {Path.GetFileName(path)}.");
+        else _ = Message.Show(null, $"Saved {Path.GetFileName(path)}.", MessageKind.Info, autoClose: true);
         return true;
     }
 

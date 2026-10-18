@@ -1,36 +1,76 @@
 using System.IO;
+using W3ModWorkbench.Core.Projects;
 
 namespace W3ModWorkbench.Core.Scripts;
 
-/// <summary>A loose .ws file in a <see cref="ScriptFolder"/>, read straight from disk and saved back to it.</summary>
+/// <summary>A loose file in a <see cref="ScriptFolder"/> (a .ws script, or one of a project's other files), read straight from disk and saved back to it.</summary>
 public sealed class LooseScriptEntry : ArchiveEntry
 {
     public required string FullPath { get; init; }
-    public override string FormatText => "Script";
+    public bool IsScript => System.IO.Path.GetExtension(FullPath).Equals(".ws", StringComparison.OrdinalIgnoreCase);
+    public override string FormatText => IsScript ? "Script" : System.IO.Path.GetExtension(FullPath).TrimStart('.').ToUpperInvariant() is { Length: > 0 } ext ? ext : "File";
     public override byte[] Read(Stream? archiveStream) => File.ReadAllBytes(FullPath);
 }
 
 /// <summary>
-/// A folder of loose WitcherScript files: a script project, such as a REDkit project's workspace\scripts, a mod's
-/// content\scripts or a decompiled blob saved to edit. Listed like an archive; its files can be edited and saved,
-/// and the whole folder compiled into a .rsblob.
+/// A folder of loose WitcherScript files, listed like an archive. Opened from a <see cref="WorkbenchProject"/> it is the
+/// project's files: its scripts folder and its other files, which can be edited, saved and compiled into a .rsblob.
+/// Opened on its own it is just loose scripts: readable, and editable once they're added to a project.
 /// </summary>
 public sealed class ScriptFolder : IArchive
 {
     /// <summary>Folder names skipped when naming a project after the folders it's in.</summary>
     private static readonly HashSet<string> Plain = new(StringComparer.OrdinalIgnoreCase) { "scripts", "content", "workspace", "local" };
 
+    /// <summary>The scripts folder.</summary>
     public string FilePath { get; }
-    public string Name => Path.GetFileName(FilePath);
+    public string Name => Project is null ? Path.GetFileName(FilePath) : Path.GetFileName(Project.FilePath);
     public string Owner { get; }
     public IReadOnlyList<ArchiveEntry> Entries { get; }
     public bool ReadsFromDisk => false;
 
-    private ScriptFolder(string folder, List<ArchiveEntry> entries)
+    /// <summary>The project this is the files of, or null for loose scripts opened without one.</summary>
+    public WorkbenchProject? Project { get; }
+
+    private ScriptFolder(string folder, List<ArchiveEntry> entries, WorkbenchProject? project = null)
     {
         FilePath = folder;
-        Owner = ProjectName(folder);
+        Project = project;
+        Owner = project?.Name ?? ProjectName(folder);
         Entries = entries;
+    }
+
+    /// <summary>
+    /// The project's files: every script in its scripts folder, then its other files. Paths start at the project's
+    /// folder, so they read the same as the mod's own layout (<c>scripts\game\player.ws</c>, <c>menu\settings.xml</c>).
+    /// </summary>
+    public static ScriptFolder OpenProject(WorkbenchProject project)
+    {
+        string scripts = project.ScriptsPath.TrimEnd('\\');
+        var entries = new List<ArchiveEntry>();
+        var archive = new ScriptFolder(scripts, entries, project);
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        void Add(string path)
+        {
+            if (!seen.Add(path)) return;
+            int size;
+            try { size = (int)Math.Min(int.MaxValue, new FileInfo(path).Length); }
+            catch (IOException) { return; }
+            string relative = Path.GetRelativePath(project.Root, path);
+            entries.Add(new LooseScriptEntry
+            {
+                Archive = archive,
+                Path = relative.StartsWith("..", StringComparison.Ordinal) || Path.IsPathRooted(relative) ? Path.Combine("external", Path.GetFileName(path)) : relative,
+                Size = size,
+                PackedSize = size,
+                FullPath = path,
+            });
+        }
+        if (Directory.Exists(scripts))
+            foreach (string path in Directory.EnumerateFiles(scripts, "*.ws", SearchOption.AllDirectories).Order(StringComparer.OrdinalIgnoreCase))
+                Add(path);
+        foreach (string path in project.OtherFiles()) Add(path);
+        return archive;
     }
 
     public static ScriptFolder Open(string folder)
@@ -53,6 +93,20 @@ public sealed class ScriptFolder : IArchive
             });
         }
         return archive;
+    }
+
+    /// <summary>The name a mod's folder gives to loose scripts found in it, such as when a project is made from them.</summary>
+    public static string SuggestedName(string scriptsFolder) => ProjectName(Path.GetFullPath(scriptsFolder).TrimEnd('\\'));
+
+    /// <summary>
+    /// The folder a project for loose scripts would live in: the folder above <paramref name="scriptsFolder"/> that isn't
+    /// just scripts, content, workspace or local, which is the mod's own folder.
+    /// </summary>
+    public static string SuggestedRoot(string scriptsFolder)
+    {
+        for (var dir = new DirectoryInfo(Path.GetFullPath(scriptsFolder).TrimEnd('\\')); dir is not null; dir = dir.Parent)
+            if (!Plain.Contains(dir.Name)) return dir.FullName;
+        return Path.GetFullPath(scriptsFolder);
     }
 
     /// <summary>A folder with no files listed, to stand for it as the archive that scripts opened from it belong to.</summary>

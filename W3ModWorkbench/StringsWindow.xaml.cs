@@ -689,10 +689,11 @@ public partial class StringsWindow : Window, IMessageHost
         _path = path;
         _edited = false;
         UpdateHeader();
-        _ = Message.Show(null, copies.Count > 0
-                ? $"Saved {Path.GetFileName(path)} and {copies.Count} {(copies.Count == 1 ? "copy" : "copies")} for the other languages."
-                : $"Saved {Path.GetFileName(path)}.",
-            MessageKind.Info, autoClose: true);
+        string savedText = copies.Count > 0
+            ? $"Saved {Path.GetFileName(path)} and {copies.Count} {(copies.Count == 1 ? "copy" : "copies")} for the other languages."
+            : $"Saved {Path.GetFileName(path)}.";
+        if (ProjectPrompts.ShouldOffer(path)) _ = ProjectPrompts.OfferAsync(path, Message, savedText);
+        else _ = Message.Show(null, savedText, MessageKind.Info, autoClose: true);
         return true;
     }
 

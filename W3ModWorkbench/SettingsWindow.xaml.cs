@@ -36,6 +36,7 @@ public partial class SettingsWindow : Window, IMessageHost
         OutputBox.Text = settings.OutputFolder;
         KeepStructureCheck.IsChecked = settings.KeepStructure;
         OpenWhenDoneCheck.IsChecked = settings.OpenWhenDone;
+        ReopenProjectCheck.IsChecked = settings.ReopenLastProject;
         GameFolderBox.Text = settings.GameFolder;
         (settings.PreviewOpenIn == "Windows" ? OpenInWindows : OpenInTabs).IsChecked = true;
         (settings.PreviewSplit == "Down" ? SplitDown : SplitRight).IsChecked = true;
@@ -290,6 +291,7 @@ public partial class SettingsWindow : Window, IMessageHost
         _settings.OutputFolder = OutputBox.Text.Trim();
         _settings.KeepStructure = KeepStructureCheck.IsChecked == true;
         _settings.OpenWhenDone = OpenWhenDoneCheck.IsChecked == true;
+        _settings.ReopenLastProject = ReopenProjectCheck.IsChecked == true;
         _settings.GameFolder = GameFolderBox.Text.Trim();
         GameScripts.GameFolder = _settings.GameFolder;
         _settings.PreviewOpenIn = OpenInWindows.IsChecked == true ? "Windows" : "Tabs";

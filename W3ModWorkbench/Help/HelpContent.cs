@@ -29,7 +29,7 @@ That covers most of what people use it for. The rest of this guide goes through 
 
 The explorer never changes a bundle or a compiled script blob. Extracted files always go to the folder you choose, so it is safe to point it straight at a live install.
 
-The one thing that writes files is the script editor: a script in a script project is saved when you press **Save**, and a compiled blob is written only where you tell it to go (see **Editing and compiling scripts**).
+The one thing that writes files is the script editor: a script in a project is saved when you press **Save**, and a compiled blob is written only where you tell it to go (see **Editing and compiling scripts**).
 """),
 
         new(Basics, "Opening files", "", """
@@ -37,11 +37,11 @@ There are three ways to get files in, and you can mix them freely. Everything yo
 
 ## Open files
 
-**Open files** (Ctrl+O) lets you pick one or more `.bundle` or `.rsblob` files. Holding Ctrl or Shift in the file picker selects several at once. A `.w3strings` file, or a strings `.csv`, opens in the strings editor instead (see **Editing strings**). A `.ws` script opens together with the rest of its script project: the `scripts` folder it's in, or its own folder when there's none.
+**Open files** (Ctrl+O) lets you pick one or more `.bundle` or `.rsblob` files. Holding Ctrl or Shift in the file picker selects several at once. A `.w3strings` file, or a strings `.csv`, opens in the strings editor instead (see **Editing strings**). A `.w3bench` project file opens the project (see **Projects**). A `.ws` script opens together with the rest of its scripts: the `scripts` folder it's in, or its own folder when there's none, as loose scripts that can be read, and edited once they're added to a project.
 
 ## Open folder
 
-**Open folder** loads every bundle and compiled script inside a folder, including all of its subfolders. Each folder of `.w3strings` files is listed too, as one entry with all its languages; double-click a file in it to open it in the strings editor. Loose `.ws` scripts open as script projects, one for each `scripts` folder, and can be edited (see **Editing and compiling scripts**). The game's own script folders are left out. Some useful places to point it at:
+**Open folder** loads every bundle and compiled script inside a folder, including all of its subfolders. Each folder of `.w3strings` files is listed too, as one entry with all its languages; double-click a file in it to open it in the strings editor. A folder with a `.w3bench` file in it opens as that project. Loose `.ws` scripts open as loose scripts, one entry for each `scripts` folder (see **Projects**). The game's own script folders are left out. Some useful places to point it at:
 
 - `The Witcher 3\content` for the base game's bundles.
 - `The Witcher 3\dlc` for the expansions and free DLC.
@@ -59,7 +59,7 @@ You can also drop files or folders anywhere on the window.
 
 Most mods name their bundle `blob0.bundle`, which isn't much help when twenty of them are open at once. So each entry in the tree is labelled with the folder it came from: the mod, DLC or content folder. The file name is shown greyed out next to it. Hover over an entry to see its full path.
 
-Bundles have a box icon. Compiled scripts and script projects have a `{ }` icon, and a folder's strings files a language icon.
+Bundles have a box icon. Compiled scripts have a `{ }` icon, a project a `PROJECT` badge in the accent colour, loose scripts a page icon, and a folder's strings files a language icon.
 
 ## Closing
 
@@ -80,7 +80,7 @@ Click any column header to sort by it. Columns can be resized and reordered by d
 - **Stored**: not compressed at all.
 - **Zlib**, **LZ4**, **LZ4 HC** or **Snappy**: compressed. The explorer unpacks these for you when you extract.
 - **Decompiled**: a script the explorer rebuilt from a compiled blob (see the Advanced section).
-- **Script**: a loose script in a script project, read straight from disk.
+- **Script**: a loose script, read straight from disk.
 
 ## Searching
 
@@ -140,7 +140,7 @@ Text files can be read without extracting them first. That includes decompiled s
 - WitcherScript (`.ws`) files are colour coded, using the same grammar as WebSpam's WitcherScript extension for VS Code. The colours follow the app theme.
 - **Ctrl+F** opens a search bar. **Aa** matches case, **ab** matches whole words only, and **.\*** treats the search as a regular expression. **F3** and **Shift+F3** jump to the next and previous match, and every match is highlighted.
 - **Copy** copies all the text. **Save as** (Ctrl+S) writes the file somewhere, exactly as it came out of the archive.
-- Files in a script project can be edited, and the button reads **Save** instead (see **Editing and compiling scripts**). Everything else is read-only, which the line under the file name says for scripts.
+- Files in the open project can be edited, and the button reads **Save** instead. A loose script that isn't in a project asks about that first (see **Projects**). Everything else is read-only, which the line under the file name says for scripts.
 - **Esc** closes the search bar first, then the window when it shows just one file.
 
 ## Tabs and split view
@@ -200,12 +200,50 @@ The installed mods' scripts are only in these searches once they've been read fo
 - **Stop comparing** takes the marks off both.
 """),
 
+        new(Basics, "Projects", "\uE821", """
+A **project** is how the tool knows which files are your mod's. It is a small `.w3bench` file (plain JSON) that lives in the mod's folder and keeps:
+
+- the mod's **scripts folder**: every `.ws` file in it is part of the project, and it's what **Compile** builds;
+- the project's **other files and folders**: menus, strings, notes, anything you add;
+- **where Compile writes** the `.rsblob`;
+- a name, author, version and description.
+
+Paths in it are relative to the file, so the folder can be moved, zipped or kept in git and the project still opens. Which tabs you had open is kept separately, in the tool's own settings folder, not in the `.w3bench` file, so sharing a project doesn't share your tabs.
+
+## Making and opening a project
+
+**Project > New project** asks for a name, the mod's folder and the scripts folder (it looks for `scripts`, `content\scripts` and `workspace\scripts` in the folder), and makes `Name.w3bench`. **Project > Open project** (**Ctrl+Shift+O**), a `.w3bench` file dropped on the window or opened from Open files, or a folder with one in it, opens an existing one. **Recent projects** lists the last ten. One project is open at a time: opening another closes the first, asking about unsaved changes. When the tool starts it opens the project you had last, with the scripts that were open (turn this off in Settings).
+
+To turn a folder of loose scripts into a project, right-click its entry in the tree and choose **Create a project from these scripts**. The project goes in the mod's folder above the scripts, and the name and scripts folder are filled in for you. **Edit as project** on a decompiled mod makes one as well.
+
+## What the tree shows
+
+The project is the first entry in the tree, with a `PROJECT` badge and its name. Under it are its scripts and its other files, laid out as they are in the mod's folder. Loose scripts opened with Open folder or by dropping a `.ws` file are listed separately and aren't part of it. The game's scripts and mods are never part of a project.
+
+Right-click the project for **Project properties**, **Add files to the project**, **Refresh the project** (after files change outside the tool), **Open the project folder** and **Close project**. Right-click files in the list for **Add to project** (on loose files) or **Remove from project** (on files added by hand). Removing only takes the name off the list: the file is never deleted. XML files in a project open in the XML editor on double-click.
+
+## Editing files that aren't in the project
+
+Any loose script can still be opened, read and followed with go to definition. The first time you type in one that isn't in the open project, the editor stops and asks:
+
+- with a project open: **Add to project**, or **Edit without adding**;
+- with no project open: **Create project\u2026** from that script's folder, or **Edit without a project**.
+
+A script outside the project's scripts folder can be added, but it isn't compiled with the project. A file you're editing without a project says **not in a project** under its name, and has no Compile button.
+
+The XML editor and the strings editor don't interrupt typing. When you save a file that isn't in the open project they ask once per session whether to add it.
+
+## Project properties
+
+**Project > Project properties** changes the name, scripts folder, compile output, author, version and description, and lists the other files, with **Add files**, **Add folder** and **Remove**. Adding a folder adds everything inside it (not `.git`, `bin` or `obj`). Changing the scripts folder or the file list reloads the tree.
+"""),
+
         new(Basics, "Editing and compiling scripts", "\uE70F", """
-The preview is also a script editor. Scripts in a **script project** can be changed and saved, with highlighting, go to definition, the definition popup and the outline all keeping up as you type, and a whole project can be compiled into a `precompiled.rsblob`, with REDkit's own compiler or, without REDkit, the one built into the tool.
+The preview is also a script editor. Scripts in a **project** can be changed and saved, with highlighting, go to definition, the definition popup and the outline all keeping up as you type, and a whole project can be compiled into a `precompiled.rsblob`, with REDkit's own compiler or, without REDkit, the one built into the tool.
 
-## Script projects
+## Projects
 
-A script project is a folder of loose `.ws` files: a REDkit project's `workspace\scripts`, a mod's `content\scripts`, or a decompiled mod you saved to edit. Open one with **Open folder**, or open or drop any `.ws` file in it, and it's listed in the tree under the project's name. Its files open editable; scripts inside bundles and blobs, and the game's own scripts, stay read-only.
+Editing is done in a project: see the **Projects** page for how they work. In short, a project is a `.w3bench` file in the mod's folder that names the mod's scripts folder, lists its other files and remembers where it compiles to. Scripts that aren't in the open project are loose: the editor asks whether to add them (or to make a project for them) the first time you type in one.
 
 ## Editing and saving
 
@@ -218,7 +256,7 @@ A script project is a folder of loose `.ws` files: a REDkit project's `workspace
 
 ## Editing a decompiled mod
 
-Decompiled scripts are read-only, since they live inside the blob. To change one, press **Edit as project** at the top of the window (typing in one offers it too) and choose a folder. The mod's scripts are saved to a `scripts` folder inside it, every file but `all.ws`, which only repeats the others. The folder opens as a script project in place of the blob, and the open tabs switch to its files, at the same place, now editable. The folder must not have a `scripts` folder with anything in it already, so nothing is overwritten.
+Decompiled scripts are read-only, since they live inside the blob. To change one, press **Edit as project** at the top of the window (typing in one offers it too) and choose a folder. The mod's scripts are saved to a `scripts` folder inside it, every file but `all.ws`, which only repeats the others. A `.w3bench` project is made in that folder, named after the mod, and opens in place of the blob; the open tabs switch to its files, at the same place, now editable. The folder must not have a `scripts` folder with anything in it already, or a project file, so nothing is overwritten.
 
 In testing, a decompiled mod compiled again without changes, though a mod that uses something the decompiler gets wrong may need a fix first. See **Reading decompiled code** for what decompiling can't bring back, such as comments.
 
@@ -232,7 +270,7 @@ In testing, a decompiled mod compiled again without changes, though a mod that u
 Until one of them can run, the button is greyed out, and resting the mouse on it says why. You can still edit and save scripts without it.
 
 - Changed files are saved first, since both compilers read what's on disk. It asks before saving them.
-- The first time, it asks where the compiled blob goes, and remembers that for the project. Right-click **Compile** and choose **Compile to another file** to change it. For a mod, that's usually `content\precompiled.rsblob` in the mod's folder.
+- The first time, it asks where the compiled blob goes, and keeps that in the project's `.w3bench` file (also in Project > Project properties). Right-click **Compile** and choose **Compile to another file** to change it. For a mod, that's usually `content\precompiled.rsblob` in the mod's folder.
 - wcc_lite compiles the game's scripts and then yours on top, the way REDkit does, which takes about a minute. The built-in compiler only reads the game's scripts for what they declare, so it takes a second.
 - The built-in compiler checks your scripts the way the game's compiler does, but it is newer and less tested. Its output was compared with wcc_lite's on real mods and on about ten thousand of the game's own functions, and it matched on nearly all of them, but for a release, compile with wcc_lite when you can. Maps (`map<K, V>`) are supported, by the compiler and the decompiler.
 - Warnings and errors are listed under the files, grouped by file. Click one to go to its line. When it fails, nothing is written, so an older blob that works is left alone.
@@ -357,7 +395,7 @@ You can leave it empty if you only open scripts from inside the game's `mods` fo
 
 ## Script compiler (optional)
 
-REDkit's `wcc_lite.exe`, which **Compile** uses to build a script project into a `.rsblob`. It's in REDkit's `bin\x64_RedKit` folder. **Find automatically** looks for REDkit in your Steam and GOG libraries, or use the folder button to pick it. A tick under the box means it found wcc_lite and the game scripts REDkit compiles against (`r4data\scripts`). Leave it empty and **Compile** uses the built-in compiler, as long as the game's scripts are found; editing and saving scripts work either way.
+REDkit's `wcc_lite.exe`, which **Compile** uses to build a project into a `.rsblob`. It's in REDkit's `bin\x64_RedKit` folder. **Find automatically** looks for REDkit in your Steam and GOG libraries, or use the folder button to pick it. A tick under the box means it found wcc_lite and the game scripts REDkit compiles against (`r4data\scripts`). Leave it empty and **Compile** uses the built-in compiler, as long as the game's scripts are found; editing and saving scripts work either way.
 
 ## Script merger (optional)
 
@@ -460,14 +498,14 @@ The **Look in** list has the places you're most likely to want:
 
 - **Game scripts and installed mods**: the game's own scripts (`content\content0\scripts`) together with the loose files in its `mods` folder.
 - **Game scripts**, **Installed mods** or **REDkit scripts** alone (REDkit's is found from the wcc_lite.exe set in Settings).
-- **Open script projects**: the projects open in the main window.
+- **The open project and loose scripts**: the project's scripts folder and folders, and any loose scripts open in the main window.
 - **A folder...**: any folder you pick. The last one picked is kept in the list.
 
 **Subfolders** controls whether folders inside are searched too.
 
 ## Opening a match
 
-Click a line, or press Enter, to open that file in a preview with the match selected. **F4** and **Shift+F4** step through the matches. Clicking a file's name folds its lines away. The game's scripts open read-only, and a script project's files can be edited and saved as usual. Go to definition works from any script opened this way.
+Click a line, or press Enter, to open that file in a preview with the match selected. **F4** and **Shift+F4** step through the matches. Clicking a file's name folds its lines away. The game's scripts open read-only, and a project's files can be edited and saved as usual. Go to definition works from any script opened this way.
 
 Inside a script preview, Ctrl+Shift+F still searches from there, through the scripts that preview knows about.
 
@@ -513,7 +551,8 @@ Inside a script preview, Ctrl+Shift+F still searches from there, through the scr
 - **F3** / **Shift+F3**: next or previous match
 - **Ctrl+S**: save, or save as for a read-only file
 - **Ctrl+Shift+S**: save every changed file
-- **Ctrl+Shift+B**: compile the script project
+- **Ctrl+Shift+B**: compile the project
+- **Ctrl+Shift+N** and **Ctrl+Shift+O** (main window): new project, open project
 - **Ctrl+Z** / **Ctrl+Y**: undo or redo
 - **Ctrl+click** or **F12**: go to definition (scripts)
 - **Ctrl+Alt+click** or **Ctrl+F12**: open the definition in the other group
@@ -555,7 +594,7 @@ See **Enum names** in the Advanced section. The usual fix is to set the game fol
 
 Rest the mouse on it to see why. Neither compiler can run: wcc_lite isn't set in **Settings**, and the game's scripts weren't found for the built-in compiler. Set the game folder (or wcc_lite) there. If wcc_lite is set but the box under it shows a warning, the file isn't wcc_lite, or REDkit's `r4data\scripts` folder isn't where it should be, two folders up from it. Reinstalling or verifying REDkit fixes that.
 
-Compile only shows for a script project's files. For a decompiled script, use **Edit as project** first.
+Compile only shows for the open project's files. For a decompiled script, use **Edit as project** first.
 
 ## A compile fails with errors I can't find
 
@@ -563,7 +602,7 @@ Check the line it names. When the file is marked **file guessed**, the explorer 
 
 ## A script can't be typed in
 
-It's read-only: inside a bundle or a blob, or one of the game's own scripts. Open its folder as a script project to edit it, or use **Edit as project** for a decompiled mod.
+It's read-only: inside a bundle or a blob, or one of the game's own scripts. Open its folder, make a project for it and edit it there, or use **Edit as project** for a decompiled mod.
 
 ## Files won't extract to a folder
 

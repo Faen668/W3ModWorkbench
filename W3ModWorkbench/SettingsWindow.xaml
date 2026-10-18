@@ -177,6 +177,7 @@
                         </Grid>
                         <CheckBox x:Name="KeepStructureCheck" Content="Keep folder structure" Margin="0,12,0,0" />
                         <CheckBox x:Name="OpenWhenDoneCheck" Content="Open the folder when extraction finishes" Margin="0,4,0,0" />
+                        <CheckBox x:Name="ReopenProjectCheck" Content="Open the last project again when the tool starts" Margin="0,12,0,0" />
                     </StackPanel>
                 </Border>
 

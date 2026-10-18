@@ -14,6 +14,7 @@ using ICSharpCode.AvalonEdit.Rendering;
 using ICSharpCode.AvalonEdit.Search;
 using Microsoft.Win32;
 using W3ModWorkbench.Core;
+using W3ModWorkbench.Core.Projects;
 using W3ModWorkbench.Core.Scripts.Navigation;
 using W3ModWorkbench.Highlighting;
 
@@ -99,7 +100,7 @@ public partial class PreviewDocument : UserControl
         Editor.Text = TextDecoding.Decode(data);
         Editor.Document.UndoStack.ClearAll();
         Editor.Document.UndoStack.MarkAsOriginalFile(); // ClearAll leaves the text loaded counting as a change
-        Editor.IsReadOnly = !item.IsEditable;
+        UpdateReadOnly();
         HookDocument();
         _search = SearchPanel.Install(Editor.TextArea);
         _reparseTimer.Tick += (_, _) =>
@@ -111,6 +112,19 @@ public partial class PreviewDocument : UserControl
         {
             if (Editor.IsReadOnly && !Card.IsOpen) ShowReadOnlyHint();
         };
+        Editor.TextArea.PreviewKeyDown += (_, e) =>
+        {
+            if (Editor.IsReadOnly && IsEditable && !Card.IsOpen && e.Key is Key.Back or Key.Delete or Key.Return or Key.Tab && Keyboard.Modifiers == ModifierKeys.None)
+                ShowReadOnlyHint();
+        };
+        // whether the file is in the open project decides whether it can be typed in: follows the project opening, closing and changing
+        Loaded += (_, _) =>
+        {
+            ProjectWorkspace.Changed -= OnProjectChanged;
+            ProjectWorkspace.Changed += OnProjectChanged;
+            UpdateReadOnly();
+        };
+        Unloaded += (_, _) => ProjectWorkspace.Changed -= OnProjectChanged;
 
         _workspace = item.Workspace;
         if (item.Script is not null && _workspace is not null)
@@ -191,7 +205,7 @@ public partial class PreviewDocument : UserControl
 
     /// <summary>The line under the file name in the window: where it comes from, its path and its size.</summary>
     public string Detail => $"{Item.Source}  ·  {Item.Path}  ·  {Format.Bytes(_size)}"
-        + (IsDirty ? "  ·  not saved" : Item.IsScript && !IsEditable ? "  ·  read-only" : "");
+        + (IsDirty ? "  ·  not saved" : Item.IsScript && !IsEditable ? "  ·  read-only" : IsEditable && !InProject ? "  ·  not in a project" : "");
 
     public string Text => Editor.Text;
 
@@ -251,7 +265,23 @@ public partial class PreviewDocument : UserControl
 
     // ---------------------------------------------------------------- editing and saving
 
+    /// <summary>Whether the file is on disk, and so could be edited: a loose script. Whether it can be edited now also depends on <see cref="InProject"/>.</summary>
     public bool IsEditable => Item.IsEditable;
+
+    /// <summary>Whether the file is part of the open project.</summary>
+    public bool InProject => Item.DiskPath is { } disk && ProjectWorkspace.IsMember(disk);
+
+    /// <summary>The person chose to edit a file that isn't in a project anyway.</summary>
+    private bool _editAnyway;
+
+    /// <summary>A file can be typed in once it's in the project, or the person said to go ahead without one. Anything else asks first.</summary>
+    private void UpdateReadOnly() => Editor.IsReadOnly = !(IsEditable && (InProject || _editAnyway));
+
+    private void OnProjectChanged()
+    {
+        UpdateReadOnly();
+        Host?.OnDirtyChanged(this);
+    }
 
     public bool IsDirty => !Editor.Document.UndoStack.IsOriginalFile;
 
@@ -361,6 +391,11 @@ public partial class PreviewDocument : UserControl
     {
         if (Host is not { } host) return;
         int at = Editor.CaretOffset;
+        if (IsEditable && !InProject)
+        {
+            await AskToJoinProjectAsync(host);
+            return;
+        }
         if (host.CanEditAsProject(this))
         {
             if (await ShowCard("Decompiled scripts are read-only",
@@ -374,6 +409,38 @@ public partial class PreviewDocument : UserControl
                 MessageKind.Info, primary: "OK", anchor: at);
         else
             _ = ShowCard(null, "Files inside bundles are read-only. Save as makes a copy you can change.", MessageKind.Info, anchor: at, autoClose: true);
+    }
+
+    /// <summary>
+    /// A loose script is typed in for the first time. With a project open it offers to add the file to it; without one,
+    /// to make a project from the script's folder. Either way the person can edit without, and a project isn't forced on anyone.
+    /// </summary>
+    private async Task AskToJoinProjectAsync(PreviewWindow host)
+    {
+        if (ProjectWorkspace.Current is { } project)
+        {
+            string note = Item.IsScript && !Path.GetFullPath(Item.DiskPath!).StartsWith(project.ScriptsPath.TrimEnd('\\') + "\\", StringComparison.OrdinalIgnoreCase)
+                ? " It isn't in the project's scripts folder, so it's part of the project but isn't compiled with it." : "";
+            var choice = await Ask($"{FileName} isn't in {project.Name}",
+                $"Add it to the project to edit it with the project's other files.{note}", MessageKind.Question, "Add to project", "Edit without adding");
+            if (choice == MessageChoice.Primary) await host.AddToProjectAsync(this);
+            else if (choice == MessageChoice.Secondary) EditWithoutProject();
+        }
+        else
+        {
+            var choice = await Ask("This script isn't in a project",
+                "A project (a .w3bench file) keeps the mod's scripts folder, its other files and where it compiles to, and Compile works on it. "
+                + "Make one from this script's folder, or edit the file on its own.", MessageKind.Question, "Create project…", "Edit without a project");
+            if (choice == MessageChoice.Primary) await host.CreateProjectForAsync(this);
+            else if (choice == MessageChoice.Secondary) EditWithoutProject();
+        }
+    }
+
+    private void EditWithoutProject()
+    {
+        _editAnyway = true;
+        UpdateReadOnly();
+        Editor.TextArea.Focus();
     }
 
     /// <summary>Saves the text somewhere else: as it is now for a project's file, otherwise exactly as it was read.</summary>

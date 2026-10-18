@@ -26,7 +26,7 @@
 |---|---|---|
 | 📦 | **Bundle explorer** | Opens the whole game or any mod, browse, search and extract. |
 | 🧩 | **Script decompiler** | `precompiled.rsblob` back into tidy, readable WitcherScript. |
-| ✏️ | **Script editor** | Edit script projects with go to definition, an outline and highlighting (XML gets an outline and folding too), and compile with REDkit's compiler, or the built-in one when you don't have REDkit. |
+| ✏️ | **Script editor** | Edit a mod as a project (a `.w3bench` file) with go to definition, an outline and highlighting (XML gets an outline and folding too), and compile with REDkit's compiler, or the built-in one when you don't have REDkit. |
 | 🔤 | **Strings** | Read and edit `.w3strings`, update translations in minutes, search every string the game has. |
 | 🗂️ | **Mod menu builder** | Build `user_config_matrix` menus with forms, with the strings and the script that reads them. |
 | 🪄 | **Stub generator** | Exact `@wrapMethod`, `@replaceMethod`, `@addMethod` and `@addField` code from the game's scripts. |
@@ -63,10 +63,10 @@
 - **Tabs and split view**: files open as tabs (or separate windows, if you prefer), and `Ctrl+\` splits the preview to read two files, or two parts of one, side by side. Drag tabs between groups and windows.
 
 ### Script editor
-- **Script projects**: open a folder of `.ws` files (a REDkit project's `workspace\scripts`, say) and edit its scripts with highlighting, go to definition and the definition popup, all following your edits. Unsaved files are marked and nothing closes without asking.
-- **Edit decompiled mods**: *Edit as project* saves a compiled mod's decompiled scripts to a folder and opens them for editing.
+- **Projects**: a `.w3bench` file in the mod's folder names its scripts folder, lists its other files (menus, strings, notes) and remembers where it compiles to. **Project > New project** makes one, **Open project** opens one, and the tool reopens the last project with the scripts that were open. Its scripts edit with highlighting, go to definition and the definition popup, all following your edits. Unsaved files are marked and nothing closes without asking.\n- **Loose files ask first**: scripts that aren't in the open project can be read, and the first time you type in one the editor offers to add it to the project (or make a project for it). The XML and strings editors offer the same when you save.
+- **Edit decompiled mods**: *Edit as project* saves a compiled mod's decompiled scripts to a folder, makes a project for it and opens the scripts for editing.
 - **Compile**: builds a project into a `.rsblob` (Ctrl+Shift+B), with its errors listed and linked to their lines. It uses REDkit's own `wcc_lite.exe` when you have it (free for owners of the game; point Settings at it or let it find it). **No REDkit? No problem**: the built-in compiler reads the game's scripts and your installed mods (Shared Utils, say) and compiles in about a second, and on real mods its output matches wcc_lite's.
-- **Projects stand out**: script projects carry a **PROJECT** badge in the tree and beside the file name in the preview, so you can tell what you can edit from what's read-only.
+- **Projects stand out**: the open project carries a **PROJECT** badge in the tree and beside the file name in the preview, so you can tell what you can edit from what's read-only.
 - **Open in external editor**: right-click a text file or a preview tab to open it in your usual editor. A project's file opens itself; a file inside a bundle opens as a read-only copy.
 
 ### Strings
@@ -87,7 +87,7 @@
 ### Find in files
 Tools > Find in files (`Ctrl+Shift+F`) searches the text of files in folders, with no project, archive or script open first.
 
-- **Look anywhere**: the game's scripts, the installed mods, REDkit's scripts, the open script projects or any folder you pick, with subfolders on or off.
+- **Look anywhere**: the game's scripts, the installed mods, REDkit's scripts, the open project or any folder you pick, with subfolders on or off.
 - **Filter by file name**: `*.ws; *.xml`, with `!` in front to leave files out (`!*.bak`). Files that are too big or aren't text are skipped.
 - **Match case, whole words or a regular expression**, as in any text editor.
 - **Results by file** with the match picked out in each line. A click opens the file at the match; `F4` and `Shift+F4` step through them. The game's scripts open read-only, and go to definition works from them.
@@ -119,7 +119,7 @@ Tools > Load order analyser (`Ctrl+Shift+L`) reads every installed mod and DLC a
 ### Everything else
 - **Light and dark modes**, or follow Windows, with eight colour themes: your Windows accent, one for each witcher school, and a plain Graphite.
 - **A full built-in guide** (F1), including an Advanced section on the file formats and how the decompiler works.
-- **Safe by default**: it never changes a bundle or a compiled script. Loose scripts are only written when you edit a script project and save.
+- **Safe by default**: it never changes a bundle or a compiled script. Loose scripts are only written when you edit a script and save.
 
 ## 📸 Screenshots
 
@@ -174,7 +174,7 @@ No installer and nothing else to install: the release includes everything it nee
 3. Tick the files you want, or search for them (Ctrl+F).
 4. Set **Extract to**, then press **Extract checked** (Ctrl+E).
 
-Double-click any text file or decompiled script to preview it. To edit scripts, open a folder of `.ws` files (or use **Edit as project** on a decompiled script), then **Ctrl+S** saves and **Ctrl+Shift+B** compiles. Press **F1** for the full guide.
+Double-click any text file or decompiled script to preview it. To edit scripts, make a project (**Project > New project**, or right-click a folder of loose scripts and *Create a project*; or use **Edit as project** on a decompiled script), then **Ctrl+S** saves and **Ctrl+Shift+B** compiles. Press **F1** for the full guide.
 
 | Shortcut | Action |
 |---|---|
@@ -223,6 +223,7 @@ The only NuGet package is [AvalonEdit](https://github.com/icsharpcode/AvalonEdit
 |---|---|
 | `Core/` | Bundle reader, LZ4 and Snappy decoders, extraction, game folder detection |
 | `Core/Scripts/` | The `.rsblob` reader, bytecode decoder, operator table, decompiler and WitcherScript writer; script projects, the wcc_lite compile runner and the built-in compiler (`Standalone/`) |
+| `Core/Projects/` | The `.w3bench` project file (scripts folder, other files, compile output) and the workspace that holds the open project |
 | `Core/Inspector/` | The source inspector: scanner, script and XML analysers, matching and scoring, coding style, and the report writer |
 | `Core/Strings/` | The .w3strings reader and writer, and the index of the game's strings |
 | `Core/Menu/` | The mod menu model: reading and writing the XML, checks, keys and script |

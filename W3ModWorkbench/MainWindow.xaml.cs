@@ -10,6 +10,7 @@ using System.Windows.Media;
 using System.Windows.Threading;
 using Microsoft.Win32;
 using W3ModWorkbench.Core;
+using W3ModWorkbench.Core.Projects;
 using W3ModWorkbench.Core.Scripts;
 using W3ModWorkbench.Core.Strings;
 using W3ModWorkbench.Core.Scripts.Navigation;
@@ -44,8 +45,11 @@ public partial class MainWindow : Window, IMessageHost
         KeepStructureCheck.IsChecked = _settings.KeepStructure;
         OpenWhenDoneCheck.IsChecked = _settings.OpenWhenDone;
 
+        UpdateProjectUi();
         if (args.Length > 0)
             Loaded += async (_, _) => await LoadPathsAsync(args);
+        else if (_settings.ReopenLastProject && File.Exists(_settings.LastProject))
+            Loaded += async (_, _) => await OpenProjectAsync(_settings.LastProject, quiet: true);
     }
 
     // ---------------------------------------------------------------- loading
@@ -54,9 +58,9 @@ public partial class MainWindow : Window, IMessageHost
     {
         var dialog = new OpenFileDialog
         {
-            Title = "Open bundles, scripts or strings",
-            Filter = "Bundles, scripts, strings and XML (*.bundle;*.rsblob;*.ws;*.w3strings;*.csv;*.xml)|*.bundle;*.rsblob;*.ws;*.w3strings;*.csv;*.xml|"
-                   + "Bundles (*.bundle)|*.bundle|Compiled scripts (*.rsblob)|*.rsblob|Scripts, opened with their project (*.ws)|*.ws|"
+            Title = "Open projects, bundles, scripts or strings",
+            Filter = "Projects, bundles, scripts, strings and XML (*.w3bench;*.bundle;*.rsblob;*.ws;*.w3strings;*.csv;*.xml)|*.w3bench;*.bundle;*.rsblob;*.ws;*.w3strings;*.csv;*.xml|"
+                   + "Projects (*.w3bench)|*.w3bench|Bundles (*.bundle)|*.bundle|Compiled scripts (*.rsblob)|*.rsblob|Loose scripts (*.ws)|*.ws|"
                    + "Strings (*.w3strings;*.csv)|*.w3strings;*.csv|XML, opened in the XML editor (*.xml)|*.xml|All files (*.*)|*.*",
             Multiselect = true,
             InitialDirectory = Directory.Exists(_settings.LastOpenFolder) ? _settings.LastOpenFolder : "",
@@ -93,6 +97,17 @@ public partial class MainWindow : Window, IMessageHost
     /// <param name="asFolders">Folders open as they are, as one archive each, instead of being searched for what's in them.</param>
     private async Task LoadPathsAsync(IEnumerable<string> paths, bool asFolders = false)
     {
+        // a project file opens the project; so does a folder that is one project's folder
+        paths = [.. paths];
+        var projects = paths.Where(p => File.Exists(p) && p.EndsWith(WorkbenchProject.Extension, StringComparison.OrdinalIgnoreCase)).ToList();
+        var projectFolders = asFolders ? [] : paths.Where(Directory.Exists).Where(d => WorkbenchProject.FileIn(d) is not null).ToList();
+        if (projects.Count > 0 || projectFolders.Count > 0)
+        {
+            await OpenProjectAsync(projects.Count > 0 ? projects[0] : WorkbenchProject.FileIn(projectFolders[0])!);
+            paths = [.. paths.Except(projects).Except(projectFolders)];
+            if (!paths.Any()) return;
+        }
+
         // string tables open in an editor of their own rather than as archives
         var strings = paths.Where(p => File.Exists(p) && StringsWindow.CanOpen(p)).ToList();
         foreach (string path in strings) StringsWindow.Open(path, this);
@@ -206,13 +221,328 @@ public partial class MainWindow : Window, IMessageHost
         : ScriptBlob.LooksLikeBlob(file) ? ScriptArchive.Open(file)
         : Bundle.Open(file);
 
-    /// <summary>Opens a folder of scripts as a project, or finds it open already. Null when it couldn't be opened.</summary>
-    public async Task<ScriptFolder?> OpenScriptProjectAsync(string folder)
+    // ---------------------------------------------------------------- projects
+
+    /// <summary>The open project's files, as listed in the tree. Null when no project is open.</summary>
+    public ScriptFolder? ProjectArchive => _roots.Select(r => r.Archive).OfType<ScriptFolder>().FirstOrDefault(a => a.Project is not null);
+
+    private FolderNode? ProjectNode => _roots.FirstOrDefault(r => r.Archive is ScriptFolder { Project: not null });
+
+    private void UpdateProjectUi()
     {
-        folder = Path.GetFullPath(folder).TrimEnd('\\');
-        await LoadPathsAsync([folder]);
-        return _roots.Select(r => r.Archive).OfType<ScriptFolder>()
-            .FirstOrDefault(a => a.FilePath.Equals(folder, StringComparison.OrdinalIgnoreCase));
+        var project = ProjectWorkspace.Current;
+        Title = project is null ? "W3 Mod Workbench" : $"{project.Name} - W3 Mod Workbench";
+        ProjectButtonText.Text = project is null ? "Project" : project.Name;
+        ProjectButton.ToolTip = project is null ? "New project, open a project (Ctrl+Shift+O)"
+            : $"{project.FilePath}\nProject properties, add files, recent projects";
+    }
+
+    private void NewProject_Click(object sender, RoutedEventArgs e) => _ = NewProjectAsync();
+
+    private void OpenProject_Click(object sender, RoutedEventArgs e) => OpenProjectDialog();
+
+    /// <summary>New project: asks for its name and folder, makes the .w3bench file and opens it.</summary>
+    public async Task NewProjectAsync(string? root = null, string? name = null, string? scripts = null)
+    {
+        var dialog = ProjectWindow.ForNew(this, root, name, scripts);
+        if (dialog.ShowDialog() == true && dialog.Result is { } project)
+        {
+            _settings.LastOpenFolder = project.Root;
+            await OpenProjectAsync(project.FilePath);
+        }
+    }
+
+    private void OpenProjectDialog()
+    {
+        var dialog = new OpenFileDialog
+        {
+            Title = "Open a project",
+            Filter = "W3 Mod Workbench projects (*.w3bench)|*.w3bench",
+            InitialDirectory = Directory.Exists(_settings.LastOpenFolder) ? _settings.LastOpenFolder : "",
+        };
+        if (dialog.ShowDialog(this) != true) return;
+        _settings.LastOpenFolder = Path.GetDirectoryName(dialog.FileName) ?? "";
+        _ = OpenProjectAsync(dialog.FileName);
+    }
+
+    /// <summary>
+    /// Opens a project in the tree, as the workspace's project: the one open before it is closed first (asking about
+    /// unsaved changes), and the files that were open last time are opened again. False when it wasn't opened.
+    /// </summary>
+    /// <param name="quiet">Opened by the tool on its own at the start: a project that is gone isn't reported.</param>
+    public async Task<bool> OpenProjectAsync(string file, bool quiet = false)
+    {
+        file = Path.GetFullPath(file);
+        WorkbenchProject project;
+        try
+        {
+            project = WorkbenchProject.Load(file);
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
+        {
+            ProjectWorkspace.ForgetRecent(file);
+            if (!quiet) ShowError($"{Path.GetFileName(file)} could not be opened.\n\n{ex.Message}");
+            return false;
+        }
+
+        if (ProjectWorkspace.Current is { } current)
+        {
+            if (current.FilePath.Equals(file, StringComparison.OrdinalIgnoreCase))
+            {
+                if (ProjectNode is { } open) open.IsSelected = true;
+                return true;
+            }
+            if (!await CloseProjectAsync()) return false;
+        }
+
+        // loose scripts open from the project's scripts folder are replaced by the project's own listing of them
+        string scriptsPath = project.ScriptsPath.TrimEnd('\\');
+        foreach (var loose in _roots.Where(r => r.Archive is ScriptFolder { Project: null } f && f.FilePath.Equals(scriptsPath, StringComparison.OrdinalIgnoreCase)).ToList())
+            _roots.Remove(loose);
+
+        LoadingOverlay.Visibility = Visibility.Visible;
+        EmptyState.Visibility = Visibility.Collapsed;
+        BrowserPanel.Visibility = Visibility.Collapsed;
+        LoadingText.Text = $"Opening {project.Name}…";
+        LoadingProgress.IsIndeterminate = true;
+        FolderNode node;
+        try
+        {
+            node = await Task.Run(() => FolderNode.Build(ScriptFolder.OpenProject(project), OnEntryChecked));
+        }
+        finally
+        {
+            LoadingProgress.IsIndeterminate = false;
+            LoadingOverlay.Visibility = Visibility.Collapsed;
+        }
+        node.IsExpanded = true;
+        _roots.Insert(0, node);
+        ProjectWorkspace.Open(project);
+        UpdateProjectUi();
+        UpdateEmptyState();
+        node.IsSelected = true;
+        if (FolderTree.SelectedItem is null) RefreshView();
+        SetStatus(Directory.Exists(project.ScriptsPath)
+            ? $"Opened {project.Name}: {Format.Count(node.TotalFiles, "file")}"
+            : $"Opened {project.Name}, but its scripts folder {project.ScriptsFolder} isn't there. Project properties can point it somewhere else.");
+        await RestoreWorkspaceAsync(project);
+        return true;
+    }
+
+    /// <summary>Opens again the scripts that were open in the project when it was closed, the one in front last.</summary>
+    private async Task RestoreWorkspaceAsync(WorkbenchProject project)
+    {
+        var state = ProjectWorkspace.LoadState(project);
+        if (state.OpenFiles.Count == 0 || ProjectNode is not { } node) return;
+        var items = node.AllFiles().Where(i => i.Entry is LooseScriptEntry { IsScript: true }).ToList();
+        IEnumerable<string> order = state.OpenFiles.Where(f => !f.Equals(state.ActiveFile, StringComparison.OrdinalIgnoreCase));
+        if (state.ActiveFile is not null) order = order.Append(state.ActiveFile);
+        foreach (string path in order.Take(25))
+            if (items.FirstOrDefault(i => ((LooseScriptEntry)i.Entry).FullPath.Equals(path, StringComparison.OrdinalIgnoreCase)) is { } item)
+                await PreviewAsync(item);
+    }
+
+    private void SaveWorkspaceState()
+    {
+        if (ProjectWorkspace.Current is not { } project) return;
+        var (files, active) = PreviewWindow.OpenFilesIn(project.Contains);
+        ProjectWorkspace.SaveState(project, new WorkspaceState { OpenFiles = files, ActiveFile = active });
+    }
+
+    /// <summary>
+    /// Closes the project. Files in it with unsaved changes are asked about first; false when the answer was to keep
+    /// working. Their tabs stay open, as files that are no longer in a project.
+    /// </summary>
+    public async Task<bool> CloseProjectAsync()
+    {
+        if (ProjectWorkspace.Current is not { } project) return true;
+        var unsaved = PreviewWindow.UnsavedDocuments().Where(d => d.Item.DiskPath is { } p && project.Contains(p)).ToList();
+        if (unsaved.Count > 0)
+        {
+            var choice = await Message.Ask(unsaved.Count == 1 ? $"Save the changes to {unsaved[0].FileName}?" : $"Save the changes to {unsaved.Count} files?",
+                PreviewWindow.Names(unsaved) + (unsaved.Count == 1 ? " has" : " have") + $" changes that are lost if you don't save them before {project.Name} closes.",
+                MessageKind.Question, unsaved.Count == 1 ? "Save" : "Save all", "Don't save");
+            if (choice == MessageChoice.Cancel || choice == MessageChoice.Primary && !PreviewWindow.SaveAll(unsaved)) return false;
+        }
+        SaveWorkspaceState();
+        foreach (var node in _roots.Where(r => r.Archive is ScriptFolder { Project: not null }).ToList()) _roots.Remove(node);
+        ProjectWorkspace.Open(null);
+        UpdateProjectUi();
+        AfterBundlesClosed();
+        return true;
+    }
+
+    /// <summary>Reads the project's files again, after they were added to or removed from it or changed outside the tool.</summary>
+    public async Task ReloadProjectAsync()
+    {
+        if (ProjectWorkspace.Current is not { } project || ProjectNode is not { } old) return;
+        bool selected = old.IsSelected;
+        var node = await Task.Run(() => FolderNode.Build(ScriptFolder.OpenProject(project), OnEntryChecked));
+        node.IsExpanded = true;
+        int index = _roots.IndexOf(old);
+        if (index < 0) return; // closed while it was being read
+        _roots[index] = node;
+        if (selected) node.IsSelected = true;
+        W3ModWorkbench.Core.Scripts.Navigation.ScriptWorkspace.Reindex(node.Archive);
+        UpdateProjectUi();
+        AfterBundlesClosed();
+        ProjectWorkspace.NotifyChanged();
+    }
+
+    /// <summary>Adds files or folders to the open project.</summary>
+    public async Task<bool> AddToProjectAsync(IEnumerable<string> paths)
+    {
+        if (ProjectWorkspace.Current is not { } project)
+        {
+            ShowError("No project is open.\n\nMake or open a project first with Project > New project.");
+            return false;
+        }
+        int added = 0;
+        bool outside = false;
+        foreach (string path in paths)
+        {
+            if (!project.Add(path)) continue;
+            added++;
+            outside |= path.EndsWith(".ws", StringComparison.OrdinalIgnoreCase);
+        }
+        if (added == 0) return true;
+        try
+        {
+            project.Save();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            ShowError($"The project could not be saved.\n\n{ex.Message}");
+            return false;
+        }
+        await ReloadProjectAsync();
+        SetStatus($"Added {added:N0} {(added == 1 ? "file or folder" : "files and folders")} to {project.Name}"
+            + (outside ? ". Scripts outside the project's scripts folder are part of the project but aren't compiled with it" : ""));
+        return true;
+    }
+
+    /// <summary>A project for a folder of loose scripts: asks for its name, in the mod's folder above the scripts.</summary>
+    public async Task CreateProjectFromScriptsAsync(string scriptsFolder)
+    {
+        scriptsFolder = Path.GetFullPath(scriptsFolder).TrimEnd('\\');
+        string root = ScriptFolder.SuggestedRoot(scriptsFolder);
+        if (WorkbenchProject.FileIn(root) is { } existing)
+        {
+            if (await Message.Ask("This folder is a project already", $"{Path.GetFileName(existing)} is in {root}. Open it, and its scripts are part of the project.",
+                    MessageKind.Question, "Open project", "Close") == MessageChoice.Primary)
+                await OpenProjectAsync(existing);
+            return;
+        }
+        string relative = Path.GetRelativePath(root, scriptsFolder).Replace('\\', '/');
+        await NewProjectAsync(root, ScriptFolder.SuggestedName(scriptsFolder), relative == "." ? "scripts" : relative);
+    }
+
+    private void Project_Click(object sender, RoutedEventArgs e)
+    {
+        var project = ProjectWorkspace.Current;
+        var menu = new ContextMenu { PlacementTarget = ProjectButton, Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom };
+        MenuItem Add(string header, string gesture, Action action, bool enabled = true)
+        {
+            var item = new MenuItem { Header = header, InputGestureText = gesture, IsEnabled = enabled };
+            item.Click += (_, _) => action();
+            menu.Items.Add(item);
+            return item;
+        }
+        Add("New project…", "Ctrl+Shift+N", () => _ = NewProjectAsync());
+        Add("Open project…", "Ctrl+Shift+O", OpenProjectDialog);
+        var recent = new MenuItem { Header = "Recent projects" };
+        var recents = ProjectWorkspace.Recent().Where(p => project is null || !p.Equals(project.FilePath, StringComparison.OrdinalIgnoreCase)).ToList();
+        foreach (string path in recents)
+        {
+            var item = new MenuItem { Header = Path.GetFileNameWithoutExtension(path).Replace("_", "__"), ToolTip = path };
+            item.Click += (_, _) => _ = OpenProjectAsync(path);
+            recent.Items.Add(item);
+        }
+        recent.IsEnabled = recents.Count > 0;
+        menu.Items.Add(recent);
+        menu.Items.Add(new Separator());
+        Add("Project properties…", "", () => ProjectProperties_Click(this, new RoutedEventArgs()), project is not null);
+        Add("Add files to the project…", "", () => ProjectAddFiles_Click(this, new RoutedEventArgs()), project is not null);
+        Add("Add a folder to the project…", "", AddFolderToProject, project is not null);
+        Add("Refresh the project", "", () => _ = ReloadProjectAsync(), project is not null);
+        Add("Open the project folder", "", () => ProjectReveal_Click(this, new RoutedEventArgs()), project is not null);
+        menu.Items.Add(new Separator());
+        Add("Close project", "", () => _ = CloseProjectAsync(), project is not null);
+        menu.IsOpen = true;
+    }
+
+    private void ProjectProperties_Click(object sender, RoutedEventArgs e)
+    {
+        if (ProjectWorkspace.Current is not { } project) return;
+        var dialog = ProjectWindow.ForProperties(this, project);
+        if (dialog.ShowDialog() != true) return;
+        UpdateProjectUi();
+        if (dialog.FilesChanged) _ = ReloadProjectAsync();
+        else ProjectWorkspace.NotifyChanged();
+    }
+
+    private void ProjectAddFiles_Click(object sender, RoutedEventArgs e)
+    {
+        if (ProjectWorkspace.Current is not { } project) return;
+        var dialog = new OpenFileDialog { Title = "Add files to the project", Multiselect = true, InitialDirectory = Directory.Exists(project.Root) ? project.Root : "" };
+        if (dialog.ShowDialog(this) == true) _ = AddToProjectAsync(dialog.FileNames);
+    }
+
+    private void AddFolderToProject()
+    {
+        if (ProjectWorkspace.Current is not { } project) return;
+        var dialog = new OpenFolderDialog { Title = "Add a folder to the project", InitialDirectory = Directory.Exists(project.Root) ? project.Root : "" };
+        if (dialog.ShowDialog(this) == true) _ = AddToProjectAsync([dialog.FolderName]);
+    }
+
+    private void ProjectRefresh_Click(object sender, RoutedEventArgs e) => _ = ReloadProjectAsync();
+
+    private void ProjectReveal_Click(object sender, RoutedEventArgs e)
+    {
+        if (ProjectWorkspace.Current is { } project && Directory.Exists(project.Root))
+            Process.Start(new ProcessStartInfo("explorer.exe", $"\"{project.Root}\"") { UseShellExecute = true });
+    }
+
+    private void TreeCreateProject_Click(object sender, RoutedEventArgs e)
+    {
+        if (FolderTree.SelectedItem is not FolderNode node) return;
+        while (node.Parent is not null) node = node.Parent;
+        if (node.Archive is ScriptFolder { Project: null } folder) _ = CreateProjectFromScriptsAsync(folder.FilePath);
+    }
+
+    /// <summary>The right-click menu on the tree shows what applies to the folder under it: the project's, loose scripts', or a bundle's.</summary>
+    private void TreeMenu_Opened(object sender, RoutedEventArgs e)
+    {
+        FolderNode? root = FolderTree.SelectedItem as FolderNode;
+        while (root?.Parent is not null) root = root.Parent;
+        bool project = root is { IsProject: true };
+        bool loose = root is { IsLooseScripts: true };
+        TreeCreateProjectItem.Visibility = loose ? Visibility.Visible : Visibility.Collapsed;
+        foreach (var item in new[] { TreeProjectPropertiesItem, TreeAddFilesItem, TreeRefreshItem, TreeRevealItem })
+            item.Visibility = project ? Visibility.Visible : Visibility.Collapsed;
+        TreeProjectSeparator.Visibility = project || loose ? Visibility.Visible : Visibility.Collapsed;
+        TreeCloseItem.Header = project ? "Close project" : loose ? "Close scripts" : "Close bundle";
+    }
+
+    private void GridAddToProject_Click(object sender, RoutedEventArgs e)
+    {
+        var files = Highlighted().Select(i => i.Entry).OfType<LooseScriptEntry>().Select(l => l.FullPath).ToList();
+        if (files.Count > 0) _ = AddToProjectAsync(files);
+    }
+
+    private void GridRemoveFromProject_Click(object sender, RoutedEventArgs e)
+    {
+        if (ProjectWorkspace.Current is not { } project) return;
+        int removed = Highlighted().Select(i => i.Entry).OfType<LooseScriptEntry>().Count(l => project.Remove(l.FullPath));
+        if (removed == 0) return;
+        try { project.Save(); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            ShowError($"The project could not be saved.\n\n{ex.Message}");
+            return;
+        }
+        _ = ReloadProjectAsync();
+        SetStatus($"Removed {removed:N0} {(removed == 1 ? "file" : "files")} from {project.Name}. The files themselves are untouched");
     }
 
     /// <summary>Closes an open archive, by its path.</summary>
@@ -223,8 +553,9 @@ public partial class MainWindow : Window, IMessageHost
         AfterBundlesClosed();
     }
 
-    private void CloseAll_Click(object sender, RoutedEventArgs e)
+    private async void CloseAll_Click(object sender, RoutedEventArgs e)
     {
+        if (!await CloseProjectAsync()) return;
         _roots.Clear();
         AfterBundlesClosed();
     }
@@ -233,6 +564,11 @@ public partial class MainWindow : Window, IMessageHost
     {
         if (FolderTree.SelectedItem is not FolderNode node) return;
         while (node.Parent is not null) node = node.Parent;
+        if (node.IsProject)
+        {
+            _ = CloseProjectAsync();
+            return;
+        }
         _roots.Remove(node);
         AfterBundlesClosed();
     }
@@ -356,6 +692,8 @@ public partial class MainWindow : Window, IMessageHost
         if (FindParent<DataGridRow>(e.OriginalSource as DependencyObject)?.Item is not EntryItem item) return;
         if (item.Entry is StringsEntry strings)
             StringsWindow.Open(strings.FullPath, this);
+        else if (item.Entry is LooseScriptEntry { IsScript: false } && XmlWindow.CanOpen(item.Name))
+            _ = OpenXmlAsync(item);
         else if (item.IsPreviewable)
             _ = PreviewAsync(item);
         else if (XmlWindow.CanOpen(item.Name))
@@ -383,6 +721,11 @@ public partial class MainWindow : Window, IMessageHost
     {
         GridExternalItem.IsEnabled = Highlighted().Any(i => i.IsPreviewable);
         GridXmlItem.Visibility = Highlighted().Any(i => XmlWindow.CanOpen(i.Name)) ? Visibility.Visible : Visibility.Collapsed;
+        var project = ProjectWorkspace.Current;
+        var loose = Highlighted().Select(i => i.Entry).OfType<LooseScriptEntry>().ToList();
+        GridAddToProjectItem.Visibility = project is not null && loose.Any(l => !project.Contains(l.FullPath)) ? Visibility.Visible : Visibility.Collapsed;
+        GridRemoveFromProjectItem.Visibility = project is not null && loose.Any(l => project.Include.Any(s => project.Resolve(s).Equals(l.FullPath, StringComparison.OrdinalIgnoreCase)))
+            ? Visibility.Visible : Visibility.Collapsed;
     }
 
     /// <summary>
@@ -759,6 +1102,16 @@ public partial class MainWindow : Window, IMessageHost
             OpenStubGenerator();
             e.Handled = true;
         }
+        else if (Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && e.Key == Key.O)
+        {
+            OpenProjectDialog();
+            e.Handled = true;
+        }
+        else if (Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && e.Key == Key.N)
+        {
+            _ = NewProjectAsync();
+            e.Handled = true;
+        }
         else if (ctrl && e.Key == Key.O)
         {
             OpenBundles_Click(sender, e);
@@ -880,6 +1233,7 @@ public partial class MainWindow : Window, IMessageHost
             return;
         }
         PreviewWindow.SkipUnsavedCheck = true;
+        SaveWorkspaceState();
         _extractCts?.Cancel();
         StoreExtractOptions();
         _settings.Save();

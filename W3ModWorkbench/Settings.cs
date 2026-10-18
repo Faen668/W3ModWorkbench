@@ -69,8 +69,17 @@ public sealed class Settings
     public bool FindRegex { get; set; }
     public bool FindSubfolders { get; set; } = true;
 
-    /// <summary>Where each script project's compiled blob was last saved, keyed by the project's scripts folder.</summary>
+    /// <summary>Where each scripts folder's compiled blob was last saved, from before projects had a .w3bench file. A new project picks its entry up.</summary>
     public Dictionary<string, string> CompileOutputs { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>The project files opened most recently, newest first.</summary>
+    public List<string> RecentProjects { get; set; } = [];
+
+    /// <summary>The project that was open when the tool closed, opened again at the next start. Empty when none was.</summary>
+    public string LastProject { get; set; } = "";
+
+    /// <summary>Open the project that was open last time when the tool starts.</summary>
+    public bool ReopenLastProject { get; set; } = true;
 
     readonly static JsonSerializerOptions? _sOptions = new() { WriteIndented = true };
 

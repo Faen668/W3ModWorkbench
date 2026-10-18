@@ -27,11 +27,14 @@ public sealed class FolderNode : INotifyPropertyChanged
     public List<FolderNode> Children { get; private set; } = [];
     public List<EntryItem> Files { get; } = [];
     public int TotalFiles { get; private set; }
-    /// <summary>A script project: loose scripts that can be edited and compiled, marked out in the tree from the read-only archives.</summary>
-    public bool IsProject => IsBundle && Archive is ScriptFolder folder && !ScriptFolder.IsGameScripts(folder.FilePath);
+    /// <summary>The open project's files, marked out in the tree from the read-only archives and from loose scripts.</summary>
+    public bool IsProject => IsBundle && Archive is ScriptFolder { Project: not null };
+    /// <summary>Loose scripts opened without a project: they can be read, and edited once they are added to one.</summary>
+    public bool IsLooseScripts => IsBundle && Archive is ScriptFolder { Project: null } folder && !ScriptFolder.IsGameScripts(folder.FilePath);
     public string Detail => IsBundle ? Archive.Name : "";
-    public string Glyph => !IsBundle ? "\uE8B7" : IsProject ? "\uE821" : Archive is ScriptArchive ? "\uE943" : Archive is StringsFolder ? "\uE8D2" : "\uE7B8";
-    public string ToolTip => IsProject ? $"Script project: its files can be edited, saved and compiled\n{Archive.FilePath}"
+    public string Glyph => !IsBundle ? "\uE8B7" : IsProject ? "\uE821" : IsLooseScripts ? "\uE8A5" : Archive is ScriptArchive ? "\uE943" : Archive is StringsFolder ? "\uE8D2" : "\uE7B8";
+    public string ToolTip => IsBundle && Archive is ScriptFolder { Project: { } project } ? $"Project {project.Name}: its files can be edited, saved and compiled\n{project.FilePath}"
+        : IsLooseScripts ? $"Loose scripts, not in a project: editing them offers to add them to one\n{Archive.FilePath}"
         : IsBundle ? Archive.FilePath : FullPath;
 
     public string FullPath => Parent is null || Parent.IsBundle ? Name : Parent.FullPath + "\\" + Name;

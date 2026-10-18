@@ -7,6 +7,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using Microsoft.Win32;
 using W3ModWorkbench.Core;
+using W3ModWorkbench.Core.Projects;
 using W3ModWorkbench.Core.Scripts;
 using W3ModWorkbench.Core.Scripts.Navigation;
 
@@ -47,6 +48,7 @@ public partial class PreviewWindow : Window, IMessageHost
         UpdateHistoryButtons();
         DisabledLook.Apply(this);
         OpenWindows.Add(this);
+        ProjectWorkspace.Changed += UpdateHeader;
         Results.Open += OpenResult;
         Results.Closed += CloseResultsPanel;
         Results.FindRequested += Results_FindRequested;
@@ -76,6 +78,7 @@ public partial class PreviewWindow : Window, IMessageHost
         Closed += (_, _) =>
         {
             OpenWindows.Remove(this);
+            ProjectWorkspace.Changed -= UpdateHeader;
             _search?.Cancel();
             _compile?.Cancel();
             foreach (var doc in AllDocuments)
@@ -1012,7 +1015,7 @@ public partial class PreviewWindow : Window, IMessageHost
         bool project = owner is not null;
         ProjectBadge.Visibility = project ? Visibility.Visible : Visibility.Collapsed;
         ProjectBadgeText.Text = owner is null ? "" : $"PROJECT · {owner.Owner.ToUpperInvariant()}";
-        ProjectBadge.ToolTip = owner is null ? null : $"In the script project {owner.Owner}: its files can be edited, saved and compiled\n{owner.FilePath}";
+        ProjectBadge.ToolTip = owner is null ? null : $"In the project {owner.Owner}: its files can be edited, saved and compiled\n{owner.Project?.FilePath}";
         CompileButton.Visibility = project ? Visibility.Visible : Visibility.Collapsed;
         var compiler = CurrentCompiler();
         CompileButton.IsEnabled = project && compiler is not null && _compile is null;
@@ -1104,9 +1107,33 @@ public partial class PreviewWindow : Window, IMessageHost
 
     // ---------------------------------------------------------------- script projects
 
-    /// <summary>The script project a file belongs to, when it's one of a project's files.</summary>
+    /// <summary>The open project's files, when the file is one of the project's. Null for anything else, including a script that is loose.</summary>
     public static ScriptFolder? ProjectOf(PreviewDocument doc) =>
-        doc.Item.Script is { } script && doc.Item.Workspace?.ArchiveOf(script) is ScriptFolder { } folder && !ScriptFolder.IsGameScripts(folder.FilePath) ? folder : null;
+        doc.Item.DiskPath is { } disk && ProjectWorkspace.IsMember(disk) ? (Application.Current.MainWindow as MainWindow)?.ProjectArchive : null;
+
+    /// <summary>The files open in previews that <paramref name="member"/> accepts, in the order they were opened, and the one in front.</summary>
+    public static (List<string> Files, string? Active) OpenFilesIn(Func<string, bool> member)
+    {
+        var files = AllOpenDocuments().Select(d => d.Item.DiskPath).OfType<string>().Where(member)
+            .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        string? active = OpenWindows.FirstOrDefault()?.Current?.Item.DiskPath;
+        return (files, active is not null && member(active) ? active : null);
+    }
+
+    /// <summary>Adds the file to the open project, asked for by the file's own prompt.</summary>
+    public Task<bool> AddToProjectAsync(PreviewDocument doc) =>
+        Application.Current.MainWindow is MainWindow main && doc.Item.DiskPath is { } disk ? main.AddToProjectAsync([disk]) : Task.FromResult(false);
+
+    /// <summary>Starts a project for the scripts the file is in. True once there is a project open that has the file.</summary>
+    public async Task<bool> CreateProjectForAsync(PreviewDocument doc)
+    {
+        if (Application.Current.MainWindow is not MainWindow main || doc.Item.DiskPath is not { } disk) return false;
+        string drive = Path.GetPathRoot(disk)!;
+        string scripts = ScriptFolder.RootOf(disk, drive);
+        if (scripts.Equals(drive.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase)) scripts = Path.GetDirectoryName(disk)!;
+        await main.CreateProjectFromScriptsAsync(scripts);
+        return ProjectWorkspace.IsMember(disk);
+    }
 
     /// <summary>Whether the file is a decompiled script, whose mod's scripts can be saved as a project to edit.</summary>
     public bool CanEditAsProject(PreviewDocument doc) =>
@@ -1121,7 +1148,7 @@ public partial class PreviewWindow : Window, IMessageHost
         if (doc.Item.Script is not { } script || doc.Item.Workspace?.ArchiveOf(script) is not ScriptArchive blob
             || Application.Current.MainWindow is not MainWindow main) return;
 
-        var dialog = new OpenFolderDialog { Title = $"Choose a folder for {blob.Owner}'s scripts. They go in a scripts folder inside it" };
+        var dialog = new OpenFolderDialog { Title = $"Choose the project folder for {blob.Owner}. Its scripts go in a scripts folder inside it" };
         if (dialog.ShowDialog(this) != true) return;
         await SaveAsProjectAsync(doc, blob, main, dialog.FolderName);
     }
@@ -1134,6 +1161,12 @@ public partial class PreviewWindow : Window, IMessageHost
         {
             _ = doc.ShowCard("That folder has a scripts folder already",
                 $"Choose an empty folder, or one without a scripts folder, so nothing in {scripts} is overwritten.", MessageKind.Warning, primary: "OK");
+            return;
+        }
+        if (WorkbenchProject.FileIn(folder) is { } existing)
+        {
+            _ = doc.ShowCard("That folder is a project already",
+                $"{Path.GetFileName(existing)} is in it. Choose another folder for {blob.Owner}.", MessageKind.Warning, primary: "OK");
             return;
         }
 
@@ -1156,11 +1189,21 @@ public partial class PreviewWindow : Window, IMessageHost
             return;
         }
 
-        if (await main.OpenScriptProjectAsync(scripts) is not { } project) return;
+        WorkbenchProject made;
+        try
+        {
+            made = WorkbenchProject.Create(folder, blob.Owner, "scripts");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _ = doc.ShowCard("The project could not be made", ex.Message, MessageKind.Warning, primary: "OK");
+            return;
+        }
+        if (!await main.OpenProjectAsync(made.FilePath) || main.ProjectArchive is not { } project) return;
         main.CloseArchive(blob.FilePath);
         foreach (var window in OpenWindows.ToList()) window.SwapForProject(blob, project, main);
-        _ = Current?.ShowCard($"{blob.Owner} is a script project now",
-            $"{entries.Count} scripts were saved to {scripts}, and the tabs show them there: they can be edited and saved. "
+        _ = Current?.ShowCard($"{blob.Owner} is a project now",
+            $"{entries.Count} scripts were saved to {scripts} and {Path.GetFileName(made.FilePath)} keeps track of them. The tabs show the project's files: they can be edited and saved. "
             + "Compile builds them into a .rsblob with REDkit's wcc_lite, or the built-in compiler.", MessageKind.Info, primary: "OK");
     }
 
@@ -1216,11 +1259,12 @@ public partial class PreviewWindow : Window, IMessageHost
             if (!SaveAll(unsaved)) return;
         }
 
-        if (chooseOutput || !App.Settings.CompileOutputs.TryGetValue(project.FilePath, out string? output)
-            || !Directory.Exists(Path.GetDirectoryName(output)))
+        var definition = project.Project!;
+        string? output = definition.CompileOutputPath;
+        if (chooseOutput || output is null || !Directory.Exists(Path.GetDirectoryName(output)))
         {
-            string start = App.Settings.CompileOutputs.TryGetValue(project.FilePath, out string? before) && Path.GetDirectoryName(before) is { } dir
-                && Directory.Exists(dir) ? dir : Path.GetDirectoryName(project.FilePath) ?? "";
+            string start = definition.CompileOutputPath is { } before && Path.GetDirectoryName(before) is { } dir
+                && Directory.Exists(dir) ? dir : definition.Root;
             var dialog = new SaveFileDialog
             {
                 Title = $"Where should {project.Owner}'s compiled scripts go?",
@@ -1230,8 +1274,15 @@ public partial class PreviewWindow : Window, IMessageHost
             };
             if (dialog.ShowDialog(this) != true) return;
             output = dialog.FileName;
-            App.Settings.CompileOutputs[project.FilePath] = output;
-            App.Settings.Save();
+            definition.CompileOutput = definition.ToStored(output);
+            try
+            {
+                definition.Save();
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                _ = doc.ShowCard("The project could not be saved", $"Compiling goes ahead, but {Path.GetFileName(definition.FilePath)} wasn't updated with where the scripts go. {ex.Message}", MessageKind.Warning, primary: "OK");
+            }
         }
 
         var cancel = _compile = new CancellationTokenSource();

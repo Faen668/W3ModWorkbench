@@ -6,6 +6,7 @@ using System.Windows;
 using System.Windows.Input;
 using Microsoft.Win32;
 using W3ModWorkbench.Core;
+using W3ModWorkbench.Core.Projects;
 using W3ModWorkbench.Core.Scripts;
 using W3ModWorkbench.Core.Scripts.Navigation;
 
@@ -58,8 +59,7 @@ public partial class FindInFilesWindow : Window
         if (scripts is not null) _scopes.Add(new Scope("Game scripts", () => [Game()]));
         if (mods is not null) _scopes.Add(new Scope("Installed mods", () => [Mods()]));
         if (redkit is not null) _scopes.Add(new Scope("REDkit scripts", () => [new SearchRoot(redkit, "REDkit scripts", false)]));
-        _scopes.Add(new Scope("Open script projects", () => [.. main.OpenArchives().OfType<ScriptFolder>()
-            .Select(a => new SearchRoot(a.FilePath, a.Owner, !ScriptFolder.IsGameScripts(a.FilePath)))]));
+        _scopes.Add(new Scope(ProjectScope, () => [.. ProjectRoots(main)]));
         _choose = new Scope("A folder…", () => [], Choose: true);
         _scopes.Add(_choose);
         ScopeBox.DisplayMemberPath = nameof(Scope.Label);
@@ -108,6 +108,23 @@ public partial class FindInFilesWindow : Window
         if (!string.IsNullOrEmpty(text)) _instance.FindBox.Text = text;
         _instance.FindBox.Focus();
         _instance.FindBox.SelectAll();
+    }
+
+    private const string ProjectScope = "The open project and loose scripts";
+
+    /// <summary>The open project's scripts folder and folders, then any loose script folders open in the main window.</summary>
+    private static IEnumerable<SearchRoot> ProjectRoots(MainWindow main)
+    {
+        var roots = new List<SearchRoot>();
+        if (ProjectWorkspace.Current is { } project)
+        {
+            roots.Add(new SearchRoot(project.ScriptsPath, project.Name, true));
+            foreach (string stored in project.Include)
+                if (Directory.Exists(project.Resolve(stored))) roots.Add(new SearchRoot(project.Resolve(stored), project.Name, true));
+        }
+        foreach (var loose in main.OpenArchives().OfType<ScriptFolder>().Where(a => a.Project is null && !ScriptFolder.IsGameScripts(a.FilePath)))
+            roots.Add(new SearchRoot(loose.FilePath, loose.Owner, true));
+        return roots;
     }
 
     /// <summary>REDkit's own scripts (r4data\scripts), next to the wcc_lite.exe set in Settings.</summary>
@@ -175,7 +192,7 @@ public partial class FindInFilesWindow : Window
     {
         var roots = _current?.Roots() ?? [];
         ScopeText.Text = roots.Count > 0 ? string.Join("   ·   ", roots.Select(r => r.Folder))
-            : _current?.Label == "Open script projects" ? "No script project is open: open a folder of scripts in the main window first."
+            : _current?.Label == ProjectScope ? "No project is open: use Project > Open project in the main window first."
             : noGame ? "The game folder isn't set. Set it in Settings, or choose a folder."
             : "";
     }
