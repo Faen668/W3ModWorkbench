@@ -43,7 +43,9 @@
 - **Thumbnails and a preview pane**: **View** switches the file list to small, medium or large thumbnails, and the preview pane (`Alt+P`) shows the highlighted file beside the list: a picture, or highlighted script, XML or text.
 - **Fast**: the entire game, about 365,000 files, loads in around a second.
 - **Browse and search**: folder tree, sortable file list, and a search box that matches words anywhere in the path or wildcards on the file name (`*.redswf`, `*_icon??.xbm`).
-- **Extract exactly what you need**: tick files across several archives at once, or extract everything shown, a single folder or a quick selection, with or without the original folder structure.
+- **Extract exactly what you need**: tick files across several archives at once, or extract everything shown, a single folder or a quick selection, with or without the original folder structure. Meshes come with their `.buffer` files, and textures can be written as PNG.
+- **Compare and track down copies**: compare two files side by side, or list every open copy of a file in load order, with the one the game uses marked and whether the others really differ.
+- **Know what you're looking at**: every file says what kind it is (mesh, buffer, entity, quest phase…); copy its path or name, show it in Explorer, or export the list as CSV. Recent folders and files are a click away.
 - **Handles every compression the game uses**: stored, zlib and LZ4 HC, plus LZ4 and Snappy.
 
 ### Compiled scripts
@@ -187,6 +189,9 @@ Double-click any text file or decompiled script to preview it. To edit scripts, 
 | `Space` | Tick or untick the highlighted rows |
 | `Enter` | Preview the highlighted text file |
 | `Alt+P` | Show or hide the preview pane |
+| `Ctrl+D` | Compare the two highlighted files |
+| `Ctrl+Shift+D` | Other copies of the highlighted file |
+| `Shift+Alt+R` | Show the highlighted files in Explorer |
 | `Ctrl+,` | Settings |
 | `Ctrl+Shift+F` | Find in files |
 | `Ctrl+Shift+G` | Search the game's strings |

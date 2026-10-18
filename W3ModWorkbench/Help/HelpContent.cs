@@ -55,6 +55,10 @@ The whole game is around 365,000 files and takes about a second to load, so don'
 
 You can also drop files or folders anywhere on the window.
 
+## Recent
+
+The clock button beside **Open folder** lists the folders and files you opened last, newest first, and the start screen shows the latest few. Click one to open it again. Ones that were moved or deleted drop off the list, and **Clear the list** at the bottom empties it.
+
 ## How things are named
 
 Most mods name their bundle `blob0.bundle`, which isn't much help when twenty of them are open at once. So each entry in the tree is labelled with the folder it came from: the mod, DLC or content folder. The file name is shown greyed out next to it. Hover over an entry to see its full path.
@@ -83,6 +87,16 @@ Click any column header to sort by it. Columns can be resized and reordered by d
 - **Zlib**, **LZ4**, **LZ4 HC** or **Snappy**: compressed. The explorer unpacks these for you when you extract.
 - **Decompiled**: a script the explorer rebuilt from a compiled blob (see the Advanced section).
 - **Script**: a loose script, read straight from disk.
+
+Rest the mouse on a file's name to see its path and what kind of file it is: a mesh, a data buffer, an entity, a quest phase, a Flash panel, and so on. The preview pane says the same for files it can't show.
+
+## The right-click menu
+
+- **Compare the two** (Ctrl+D), with two files highlighted: text files open side by side in the preview, with the lines that differ marked (F8 steps through them). Other files are compared byte for byte, and a message says whether they're the same and where they first differ.
+- **Other copies of this file** (Ctrl+Shift+D): every open archive that has a file at the same path, in load order: mod.io mods, then DLC, then mods by their `mods.settings` priority, then the game's own files. The copy the game uses is marked, and each one says whether its content is the same as the highlighted copy, with buttons to compare it, open it, or show it in Explorer. Open the whole `mods` folder first to see every mod's copy.
+- **Copy**: the file's **Path** in the game (Ctrl+C), as XML and scripts refer to it; its **Name** (Ctrl+Shift+C); its **Folder**; or its **Location on disk**, the bundle or cache it's in.
+- **Show in Explorer** (Shift+Alt+R): opens the folder of the bundle, compiled script or cache the file is in with it selected, or the file itself when it's a loose file. Right-click an entry in the tree for the same.
+- **Export the list as CSV**: saves the files listed (or the highlighted ones, when there are several) as a table for Excel or any spreadsheet: name, path, kind, sizes, format, mod, archive and location.
 
 ## Thumbnails
 
@@ -132,9 +146,19 @@ Turn it off to drop everything straight into one folder. If two files share a na
 
 > Existing files with the same name in the output folder are overwritten. Extract into an empty folder if you want to be sure nothing gets replaced.
 
+## Include .buffer files
+
+A mesh and some other files keep their bulk data in numbered `.buffer` files: `wsteel.w2mesh` goes with `wsteel.w2mesh.1.buffer`, and neither is any use without the other. The game packs the buffers in bundles of their own (`buffers0.bundle` beside `blob0.bundle`). With **Include .buffer files** on, extracting a file takes its buffers along from any bundle open in the same folder, and extracting a buffer takes the file it belongs to. The status bar says how many were added.
+
+## Textures as PNG
+
+Textures are extracted as `.dds` files with every mip level, which texture tools and the game's cooker read. Turn on **Textures as PNG** to get a picture instead: the full-size image with its transparency, as `name.xbm.png`. It applies to textures from a texture cache and to `.dds` files in bundles.
+
 ## While it runs
 
-Extraction runs in the background, with a progress bar in the status bar. **Cancel** stops it after the current file. Files that fail (very rare) are listed at the end with the reason, and everything else still gets written. If **Open folder when done** is on, Explorer opens the output folder for you.
+Extraction runs in the background, with a progress bar in the status bar. **Cancel** stops it after the current file. Files that fail (very rare) are listed at the end with the reason, and everything else still gets written. If **Open folder when done** is on, Explorer opens the folder with the new files selected.
+
+Right-click a file you've extracted and choose **Show extracted file** to find the copy again later.
 """),
 
         new(Basics, "Previewing text files", "", """
@@ -563,6 +587,10 @@ Inside a script preview, Ctrl+Shift+F still searches from there, through the scr
 - **Enter**: preview the highlighted text file
 - **Alt+P**: show or hide the preview pane
 - **Ctrl+C**: copy the highlighted files' paths
+- **Ctrl+Shift+C**: copy their names
+- **Ctrl+D**: compare the two highlighted files
+- **Ctrl+Shift+D**: other copies of the highlighted file
+- **Shift+Alt+R**: show the highlighted files in Explorer
 - **Ctrl+A**: highlight every row
 
 ## In the XML editor

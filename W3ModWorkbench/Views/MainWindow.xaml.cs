@@ -36,6 +36,9 @@ public partial class MainWindow : Window, IMessageHost
     private bool _statusQueued;
     private CancellationTokenSource? _extractCts;
 
+    /// <summary>Where each file extracted this session was written, for Show extracted file.</summary>
+    private readonly Dictionary<ArchiveEntry, string> _extracted = new(ReferenceEqualityComparer.Instance);
+
     public MainWindow(string[] args)
     {
         InitializeComponent();
@@ -52,6 +55,8 @@ public partial class MainWindow : Window, IMessageHost
         OutputBox.Text = _settings.OutputFolder;
         KeepStructureCheck.IsChecked = _settings.KeepStructure;
         OpenWhenDoneCheck.IsChecked = _settings.OpenWhenDone;
+        CompanionsCheck.IsChecked = _settings.ExtractCompanions;
+        PngCheck.IsChecked = _settings.ExtractTexturesAsPng;
 
         UpdateProjectUi();
         FileThumbs.ContextMenu = FileGrid.ContextMenu;
@@ -59,6 +64,7 @@ public partial class MainWindow : Window, IMessageHost
         _previewTimer.Tick += (_, _) => { _previewTimer.Stop(); _ = UpdatePreviewAsync(); };
         ApplyView();
         ApplyPreviewPane();
+        UpdateRecentList();
         if (args.Length > 0)
             Loaded += async (_, _) => await LoadPathsAsync(args);
         else if (_settings.ReopenLastProject && File.Exists(_settings.LastProject))
@@ -80,6 +86,7 @@ public partial class MainWindow : Window, IMessageHost
         };
         if (dialog.ShowDialog(this) != true) return;
         _settings.LastOpenFolder = Path.GetDirectoryName(dialog.FileNames[0]) ?? "";
+        RememberRecent(dialog.FileNames);
         await LoadPathsAsync(dialog.FileNames);
     }
 
@@ -92,7 +99,71 @@ public partial class MainWindow : Window, IMessageHost
         };
         if (dialog.ShowDialog(this) != true) return;
         _settings.LastOpenFolder = dialog.FolderName;
+        RememberRecent([dialog.FolderName]);
         await LoadPathsAsync([dialog.FolderName]);
+    }
+
+    // ---------------------------------------------------------------- recent
+
+    private void RememberRecent(IEnumerable<string> paths)
+    {
+        RecentItem.Remember(_settings.RecentPaths, paths);
+        UpdateRecentList();
+    }
+
+    private List<RecentItem> RecentItems() => [.. _settings.RecentPaths.Select(p => new RecentItem(p)).Where(r => r.Exists)];
+
+    /// <summary>The start screen's list of what was opened before.</summary>
+    private void UpdateRecentList()
+    {
+        var items = RecentItems().Take(6).ToList();
+        RecentList.ItemsSource = items;
+        RecentPanel.Visibility = items.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        RecentButton.IsEnabled = items.Count > 0;
+    }
+
+    private void Recent_Click(object sender, RoutedEventArgs e)
+    {
+        var menu = new ContextMenu { PlacementTarget = RecentButton, Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom };
+        foreach (var recent in RecentItems())
+        {
+            var header = new StackPanel { Orientation = Orientation.Horizontal };
+            header.Children.Add(new TextBlock { Text = recent.Name, VerticalAlignment = VerticalAlignment.Center });
+            header.Children.Add(new TextBlock { Text = recent.Folder, Opacity = 0.55, FontSize = 12, Margin = new Thickness(12, 0, 0, 0), MaxWidth = 380,
+                TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center });
+            var item = new MenuItem { Header = header, ToolTip = recent.Path, Icon = new TextBlock { Style = (Style)FindResource("IconText"), Text = recent.Glyph } };
+            string path = recent.Path;
+            item.Click += (_, _) => _ = OpenRecentAsync(path);
+            menu.Items.Add(item);
+        }
+        if (menu.Items.Count == 0) return;
+        menu.Items.Add(new Separator());
+        var clear = new MenuItem { Header = "Clear the list" };
+        clear.Click += (_, _) =>
+        {
+            _settings.RecentPaths.Clear();
+            UpdateRecentList();
+        };
+        menu.Items.Add(clear);
+        menu.IsOpen = true;
+    }
+
+    private void RecentItem_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.Tag is string path) _ = OpenRecentAsync(path);
+    }
+
+    private async Task OpenRecentAsync(string path)
+    {
+        if (!File.Exists(path) && !Directory.Exists(path))
+        {
+            _settings.RecentPaths.RemoveAll(p => p.Equals(path, StringComparison.OrdinalIgnoreCase));
+            UpdateRecentList();
+            ShowError($"{path} isn't there any more.\n\nIt was moved or deleted, so it's been taken off the list.");
+            return;
+        }
+        RememberRecent([path]);
+        await LoadPathsAsync([path]);
     }
 
     private void Window_DragOver(object sender, DragEventArgs e)
@@ -104,7 +175,10 @@ public partial class MainWindow : Window, IMessageHost
     private async void Window_Drop(object sender, DragEventArgs e)
     {
         if (e.Data.GetData(DataFormats.FileDrop) is string[] paths)
+        {
+            RememberRecent(paths);
             await LoadPathsAsync(paths);
+        }
     }
 
     /// <param name="asFolders">Folders open as they are, as one archive each, instead of being searched for what's in them.</param>
@@ -767,8 +841,17 @@ public partial class MainWindow : Window, IMessageHost
     }
 
     /// <summary>An .xbm in a bundle: the texture's description, whose pixels are in a texture.cache under the same path.</summary>
-    private static bool IsTextureHeader(EntryItem item) =>
-        item.Entry is not TextureEntry and not LooseScriptEntry && item.Name.EndsWith(".xbm", StringComparison.OrdinalIgnoreCase);
+    private static bool IsTextureHeader(EntryItem item) => item.IsTextureHeader;
+
+    /// <summary>Each cache's textures by path, made the first time a cache is looked in, so finding one is quick.</summary>
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<TextureCacheArchive, Dictionary<string, TextureEntry>> CacheIndex = [];
+
+    private static TextureEntry? FindInCache(TextureCacheArchive cache, string path)
+    {
+        var index = CacheIndex.GetValue(cache, c => c.Entries.OfType<TextureEntry>()
+            .GroupBy(e => e.Path, StringComparer.OrdinalIgnoreCase).ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase));
+        return index.GetValueOrDefault(path);
+    }
 
     /// <summary>Shows a picture file from a bundle or a project (PNG, JPEG, BMP, GIF, TIFF, DDS) in the texture viewer.</summary>
     private async Task OpenPictureAsync(EntryItem item)
@@ -829,7 +912,7 @@ public partial class MainWindow : Window, IMessageHost
                     if (cache is not null) caches.Add(cache);
                 }
             }
-            return caches.Select(c => c.Entries.OfType<TextureEntry>().FirstOrDefault(e => e.Path.Equals(item.Path, StringComparison.OrdinalIgnoreCase))).FirstOrDefault(e => e is not null);
+            return caches.Select(c => FindInCache(c, item.Path)).FirstOrDefault(e => e is not null);
         });
     }
 
@@ -853,6 +936,7 @@ public partial class MainWindow : Window, IMessageHost
 
     private void FileGrid_ContextMenuOpening(object sender, ContextMenuEventArgs e)
     {
+        UpdateFileMenu();
         GridExternalItem.IsEnabled = Highlighted().Any(i => i.IsPreviewable);
         GridXmlItem.Visibility = Highlighted().Any(i => XmlWindow.CanOpen(i.Name)) ? Visibility.Visible : Visibility.Collapsed;
         var project = ProjectWorkspace.Current;
@@ -1199,7 +1283,10 @@ public partial class MainWindow : Window, IMessageHost
         if (item.ThumbnailRequested || !item.CanHaveThumbnail) return;
         item.ThumbnailRequested = true;
         bool Wanted() => ReferenceEquals(cell.Content, item);
-        var picture = await EntryImages.LoadAsync(item.Entry, 192, wanted: Wanted);
+        // an .xbm in a bundle shows the texture it describes, found in a cache under the same path
+        ArchiveEntry? source = item.IsTextureHeader ? await FindTextureForHeaderAsync(item) : item.Entry;
+        if (source is null) return;
+        var picture = await EntryImages.LoadAsync(source, 192, wanted: Wanted);
         if (picture is not null) item.Thumbnail = picture.Image;
         else if (!Wanted()) item.ThumbnailRequested = false;
     }
@@ -1260,7 +1347,7 @@ public partial class MainWindow : Window, IMessageHost
         var cts = _previewCts = new CancellationTokenSource();
         var token = cts.Token;
         PreviewName.Text = item.Name;
-        string detail = $"{item.Entry.FormatText}  ·  {item.SizeText}  ·  {item.Folder}";
+        string detail = (item.Kind is { } fileKind ? fileKind.Name + "  ·  " : "") + $"{item.Entry.FormatText}  ·  {item.SizeText}  ·  {item.Folder}";
         PreviewDetail.Text = detail;
         try
         {
@@ -1314,6 +1401,8 @@ public partial class MainWindow : Window, IMessageHost
                 if (token.IsCancellationRequested) return;
                 ShowPreview(item.Glyph, null, text: text, name: item.Name);
             }
+            else if (item.Kind is { } kind)
+                ShowPreview(item.Glyph, $"{kind.Name}\n\n{kind.Description}\n\nThere's no preview for this kind of file; check it and extract it.");
             else
                 ShowPreview(item.Glyph, "No preview for this kind of file. Check it and extract it, or double-click for what the tool can do with it.");
         }
@@ -1523,6 +1612,7 @@ public partial class MainWindow : Window, IMessageHost
         string output = OutputBox.Text.Trim();
         bool keepStructure = KeepStructureCheck.IsChecked == true;
         bool openWhenDone = OpenWhenDoneCheck.IsChecked == true;
+        bool asPng = PngCheck.IsChecked == true;
         try
         {
             output = Path.GetFullPath(output);
@@ -1534,9 +1624,14 @@ public partial class MainWindow : Window, IMessageHost
             return;
         }
 
+        var entries = items.Select(i => i.Entry).ToList();
+        int companions = 0;
+        var open = _roots.Select(r => r.Archive).ToList();
+        if (CompanionsCheck.IsChecked == true) entries = await Task.Run(() => Companions.With(entries, open, out companions));
+
         _extractCts = new CancellationTokenSource();
         SetBusy(true);
-        ExtractProgressBar.Maximum = items.Count;
+        ExtractProgressBar.Maximum = entries.Count;
         ExtractProgressBar.Value = 0;
         var progress = new Progress<ExtractProgress>(p =>
         {
@@ -1544,12 +1639,11 @@ public partial class MainWindow : Window, IMessageHost
             SetStatus($"Extracting {p.Done:N0} of {p.Total:N0}  ·  {p.CurrentPath}");
         });
 
-        var entries = items.Select(i => i.Entry).ToList();
         var token = _extractCts.Token;
         ExtractResult result;
         try
         {
-            result = await Task.Run(() => Extractor.Extract(entries, output, keepStructure, progress, token));
+            result = await Task.Run(() => Extractor.Extract(entries, output, keepStructure, progress, token, asPng ? EntryImages.ToPng : null));
         }
         finally
         {
@@ -1558,7 +1652,9 @@ public partial class MainWindow : Window, IMessageHost
             SetBusy(false);
         }
 
-        string summary = $"{(result.Cancelled ? "Cancelled after extracting" : "Extracted")} {Format.Count(result.Extracted, "file")} ({Format.Bytes(result.Bytes)}) to {output}";
+        foreach (var (entry, path) in result.Written) _extracted[entry] = path;
+        string summary = $"{(result.Cancelled ? "Cancelled after extracting" : "Extracted")} {Format.Count(result.Extracted, "file")} ({Format.Bytes(result.Bytes)}) to {output}"
+            + (companions > 0 ? $", with {Format.Count(companions, "companion file")} the others need" : "");
         SetStatus(summary);
 
         if (result.Failures.Count > 0)
@@ -1570,10 +1666,11 @@ public partial class MainWindow : Window, IMessageHost
 
         if (openWhenDone && result.Extracted > 0)
         {
-            string target = output;
-            if (entries.Count == 1 && keepStructure)
-                target = Path.GetDirectoryName(Path.Combine(output, entries[0].Path)) ?? output;
-            Process.Start(new ProcessStartInfo("explorer.exe", $"\"{target}\"") { UseShellExecute = true });
+            // the files just written, selected, in their folder (the output folder when they're spread over many)
+            var written = result.Written.Values.ToList();
+            var folders = written.Select(Path.GetDirectoryName).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            if (folders.Count == 1 && written.Count <= 200) ShellReveal.Show(written);
+            else ShellReveal.Open(output);
         }
     }
 
@@ -1682,11 +1779,45 @@ public partial class MainWindow : Window, IMessageHost
             CopyHighlightedPaths();
             e.Handled = true;
         }
+        else if (FilesFocused && Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && e.Key == Key.C)
+        {
+            GridCopyName_Click(sender, e);
+            e.Handled = true;
+        }
+        else if (FilesFocused && ctrl && e.Key == Key.D)
+        {
+            _ = CompareHighlightedAsync();
+            e.Handled = true;
+        }
+        else if (FilesFocused && Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && e.Key == Key.D)
+        {
+            ShowOtherCopies();
+            e.Handled = true;
+        }
+        else if (FilesFocused && Keyboard.Modifiers == (ModifierKeys.Shift | ModifierKeys.Alt) && (e.Key == Key.System ? e.SystemKey : e.Key) == Key.R)
+        {
+            RevealHighlighted();
+            e.Handled = true;
+        }
         else if (SearchBox.IsKeyboardFocusWithin && e.Key == Key.Escape)
         {
             SearchBox.Clear();
             e.Handled = true;
         }
+    }
+
+    private void Window_SizeChanged(object sender, SizeChangedEventArgs e) => FitToolbar(e.NewSize.Width);
+
+    /// <summary>
+    /// A narrow window keeps the toolbar on one line: the buttons whose icons say enough drop their labels (their
+    /// tooltips still name them), so the search box keeps its room.
+    /// </summary>
+    private void FitToolbar(double width)
+    {
+        var narrow = width < 1320 ? Visibility.Collapsed : Visibility.Visible;
+        var narrower = width < 1080 ? Visibility.Collapsed : Visibility.Visible;
+        SettingsLabel.Visibility = HelpLabel.Visibility = narrow;
+        CloseAllLabel.Visibility = ToolsLabel.Visibility = ViewLabel.Visibility = narrower;
     }
 
     private void FolderTree_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
@@ -1757,6 +1888,8 @@ public partial class MainWindow : Window, IMessageHost
         _settings.OutputFolder = OutputBox.Text.Trim();
         _settings.KeepStructure = KeepStructureCheck.IsChecked == true;
         _settings.OpenWhenDone = OpenWhenDoneCheck.IsChecked == true;
+        _settings.ExtractCompanions = CompanionsCheck.IsChecked == true;
+        _settings.ExtractTexturesAsPng = PngCheck.IsChecked == true;
     }
 
     private bool _closeConfirmed;

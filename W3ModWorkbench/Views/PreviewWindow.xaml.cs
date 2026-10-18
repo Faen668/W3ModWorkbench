@@ -951,6 +951,23 @@ public partial class PreviewWindow : Window, IMessageHost
         await CompareAsync(doc, open);
     }
 
+    /// <summary>
+    /// Opens two files side by side, <paramref name="older"/> on the other side of the split, with the lines that differ
+    /// marked: Compare in the main window's file list.
+    /// </summary>
+    public static async Task ShowComparedAsync(PreviewItem newer, PreviewItem older, Window owner)
+    {
+        Show(newer, owner);
+        if (FindOpen(newer.Key) is not { Host: { } host } doc || host.PaneOf(doc) is not { } pane) return;
+        if (FindOpen(older.Key) is not { } open)
+        {
+            open = CreateDocument(older);
+            host.OtherPane(pane).Insert(open);
+        }
+        if (open.Host == host && host.PaneOf(open) is { } other) other.Select(open, focus: false);
+        await host.CompareAsync(doc, open);
+    }
+
     /// <summary>Marks the lines that differ in both files, side by side when they're in the same window.</summary>
     private async Task CompareAsync(PreviewDocument newer, PreviewDocument older)
     {

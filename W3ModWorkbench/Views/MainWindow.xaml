@@ -6,15 +6,15 @@
         xmlns:avalonEdit="http://icsharpcode.net/sharpdevelop/avalonedit"
         Title="W3 Mod Workbench"
         Icon="pack://application:,,,/W3ModWorkbench;component/Assets/app.ico"
-        Width="1240" Height="780" MinWidth="860" MinHeight="500"
+        Width="1260" Height="780" MinWidth="860" MinHeight="500"
         WindowStartupLocation="CenterScreen"
         AllowDrop="True" DragOver="Window_DragOver" Drop="Window_Drop"
-        PreviewKeyDown="Window_PreviewKeyDown" PreviewMouseDown="Window_PreviewMouseDown" Deactivated="Window_Deactivated" Closing="Window_Closing">
+        PreviewKeyDown="Window_PreviewKeyDown" PreviewMouseDown="Window_PreviewMouseDown" SizeChanged="Window_SizeChanged" Deactivated="Window_Deactivated" Closing="Window_Closing">
 
     <Window.Resources>
         <DataTemplate x:Key="ThumbCell" DataType="{x:Type vm:EntryItem}">
             <Border x:Name="Cell" Margin="2" Padding="4,4,4,2" CornerRadius="6" BorderThickness="2" BorderBrush="Transparent" Background="Transparent"
-                    ToolTip="{Binding Path}">
+                    ToolTip="{Binding ToolTip}">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
@@ -88,6 +88,11 @@
             <Setter Property="TextTrimming" Value="CharacterEllipsis" />
             <Setter Property="Margin" Value="4,0" />
         </Style>
+        <!-- the name says what kind of file it is when the mouse rests on it -->
+        <Style x:Key="NameCellText" TargetType="TextBlock" BasedOn="{StaticResource CellText}">
+            <Setter Property="ToolTip" Value="{Binding ToolTip}" />
+            <Setter Property="ToolTipService.InitialShowDelay" Value="600" />
+        </Style>
         <Style x:Key="DimCellText" TargetType="TextBlock" BasedOn="{StaticResource CellText}">
             <Setter Property="Opacity" Value="0.7" />
         </Style>
@@ -128,7 +133,7 @@
         </Grid.RowDefinitions>
 
         <!-- Toolbar -->
-        <DockPanel Grid.Row="0" Margin="14,12,14,10" LastChildFill="False">
+        <DockPanel Grid.Row="0" Margin="14,12,14,10" LastChildFill="True">
             <StackPanel Orientation="Horizontal" DockPanel.Dock="Left">
                 <Button x:Name="OpenBundlesButton" Click="OpenBundles_Click" ToolTip="Open .bundle or .rsblob files (Ctrl+O)">
                     <StackPanel Orientation="Horizontal">
@@ -142,6 +147,12 @@
                         <TextBlock Margin="8,0,0,0" Text="Open folder" />
                     </StackPanel>
                 </Button>
+                <Button x:Name="RecentButton" Margin="2,0,0,0" Padding="8,6" Click="Recent_Click" ToolTip="Open a folder or file you opened before">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Style="{StaticResource IconText}" Text="&#xE81C;" Margin="0,1,0,0" />
+                        <TextBlock Style="{StaticResource IconText}" Text="&#xE70D;" FontSize="9" Margin="6,2,0,0" />
+                    </StackPanel>
+                </Button>
                 <Button x:Name="ProjectButton" Margin="6,0,0,0" Click="Project_Click"
                         ToolTip="New project, open a project (Ctrl+Shift+O), project properties, add files to the project">
                     <StackPanel Orientation="Horizontal">
@@ -153,21 +164,21 @@
                 <Button x:Name="CloseAllButton" Margin="6,0,0,0" Click="CloseAll_Click" IsEnabled="False" ToolTip="Close the project and everything else that's open">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Style="{StaticResource IconText}" Text="&#xE894;" Margin="0,2,0,0" />
-                        <TextBlock Margin="8,0,0,0" Text="Close all" />
+                        <TextBlock x:Name="CloseAllLabel" Margin="8,0,0,0" Text="Close all" />
                     </StackPanel>
                 </Button>
                 <Button x:Name="ToolsButton" Margin="6,0,0,0" Click="Tools_Click"
                         ToolTip="Find in files, browse the game's scripts and mods, search the game's strings, generate stubs, build a mod menu, compare mods">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Style="{StaticResource IconText}" Text="&#xE90F;" Margin="0,1,0,0" />
-                        <TextBlock Margin="8,0,0,0" Text="Tools" />
+                        <TextBlock x:Name="ToolsLabel" Margin="8,0,0,0" Text="Tools" />
                         <TextBlock Style="{StaticResource IconText}" Text="&#xE70D;" FontSize="9" Margin="8,2,0,0" />
                     </StackPanel>
                 </Button>
                 <Button x:Name="ViewButton" Margin="6,0,0,0" Click="View_Click" ToolTip="Show the files as a list or as thumbnails, and turn the preview pane on or off (Alt+P)">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Style="{StaticResource IconText}" Text="&#xE8FD;" Margin="0,1,0,0" />
-                        <TextBlock Margin="8,0,0,0" Text="View" />
+                        <TextBlock x:Name="ViewLabel" Margin="8,0,0,0" Text="View" />
                         <TextBlock Style="{StaticResource IconText}" Text="&#xE70D;" FontSize="9" Margin="8,2,0,0" />
                     </StackPanel>
                 </Button>
@@ -180,16 +191,22 @@
             <Button DockPanel.Dock="Right" Margin="6,0,0,0" Click="Help_Click" ToolTip="How everything works (F1)">
                 <StackPanel Orientation="Horizontal">
                     <TextBlock Style="{StaticResource IconText}" Text="&#xE897;" Margin="0,2,0,0" />
-                    <TextBlock Margin="8,0,0,0" Text="Help" />
+                    <TextBlock x:Name="HelpLabel" Margin="8,0,0,0" Text="Help" />
                 </StackPanel>
             </Button>
             <Button DockPanel.Dock="Right" Margin="6,0,0,0" Click="Settings_Click" ToolTip="Settings (Ctrl+,)">
                 <StackPanel Orientation="Horizontal">
                     <TextBlock Style="{StaticResource IconText}" Text="&#xE713;" Margin="0,1,0,0" />
-                    <TextBlock Margin="8,0,0,0" Text="Settings" />
+                    <TextBlock x:Name="SettingsLabel" Margin="8,0,0,0" Text="Settings" />
                 </StackPanel>
             </Button>
-            <Grid DockPanel.Dock="Right" Width="340">
+            <!-- fills what the buttons leave, up to 340, so a narrow window squeezes the search box rather than overlapping the buttons -->
+            <Grid Margin="12,0,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" MinWidth="150" MaxWidth="340" />
+                </Grid.ColumnDefinitions>
+              <Grid Grid.Column="1">
                 <TextBox x:Name="SearchBox" VerticalContentAlignment="Center" Padding="34,6,30,6"
                          TextChanged="SearchBox_TextChanged" ToolTip="Words must all appear in the path. Use * and ? to match file names, e.g. *.redswf" />
                 <TextBlock Style="{StaticResource IconText}" Text="&#xE721;" Margin="12,0,0,0" Opacity="0.6"
@@ -200,6 +217,7 @@
                         Background="Transparent" BorderThickness="0" Visibility="Collapsed" Click="ClearSearch_Click" ToolTip="Clear search">
                     <TextBlock Style="{StaticResource IconText}" FontSize="11" Text="&#xE711;" />
                 </Button>
+              </Grid>
             </Grid>
         </DockPanel>
 
@@ -260,6 +278,9 @@
                                 <MenuItem x:Name="TreeRefreshItem" Header="Refresh the project" Click="ProjectRefresh_Click" Visibility="Collapsed" />
                                 <MenuItem x:Name="TreeRevealItem" Header="Open the project folder" Click="ProjectReveal_Click" Visibility="Collapsed" />
                                 <Separator x:Name="TreeProjectSeparator" Visibility="Collapsed" />
+                                <MenuItem x:Name="TreeRevealArchiveItem" Header="Show in Explorer" Click="TreeReveal_Click">
+                                    <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE838;" /></MenuItem.Icon>
+                                </MenuItem>
                                 <MenuItem Header="Extract this folder" Click="TreeExtract_Click">
                                     <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE896;" /></MenuItem.Icon>
                                 </MenuItem>
@@ -299,7 +320,7 @@
                                     </DataTemplate>
                                 </DataGridTemplateColumn.CellTemplate>
                             </DataGridTemplateColumn>
-                            <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="3*" MinWidth="140" ElementStyle="{StaticResource CellText}" />
+                            <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="3*" MinWidth="140" ElementStyle="{StaticResource NameCellText}" />
                             <DataGridTextColumn Header="Folder" Binding="{Binding Folder}" Width="3*" MinWidth="120" ElementStyle="{StaticResource DimCellText}" />
                             <DataGridTextColumn Header="Size" Binding="{Binding SizeText}" SortMemberPath="Size" Width="90" ElementStyle="{StaticResource RightText}" />
                             <DataGridTextColumn Header="Packed" Binding="{Binding PackedText}" SortMemberPath="PackedSize" Width="90" ElementStyle="{StaticResource RightText}" />
@@ -323,15 +344,38 @@
                                 <MenuItem x:Name="GridExternalItem" Header="Open in external editor" Click="GridExternal_Click">
                                     <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE8A7;" /></MenuItem.Icon>
                                 </MenuItem>
+                                <MenuItem x:Name="GridCompareItem" Header="Compare the two" InputGestureText="Ctrl+D" Click="GridCompare_Click">
+                                    <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE8F1;" /></MenuItem.Icon>
+                                </MenuItem>
+                                <MenuItem x:Name="GridCopiesItem" Header="Other copies of this file…" InputGestureText="Ctrl+Shift+D" Click="GridCopies_Click">
+                                    <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE8B9;" /></MenuItem.Icon>
+                                </MenuItem>
+                                <Separator />
                                 <MenuItem Header="Extract highlighted" Click="GridExtract_Click">
                                     <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE896;" /></MenuItem.Icon>
                                 </MenuItem>
-                                <Separator />
                                 <MenuItem Header="Check highlighted" InputGestureText="Space" Click="GridCheck_Click" />
                                 <MenuItem Header="Uncheck highlighted" Click="GridUncheck_Click" />
                                 <Separator />
-                                <MenuItem Header="Copy path" InputGestureText="Ctrl+C" Click="GridCopyPath_Click">
+                                <MenuItem Header="Copy">
                                     <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE8C8;" /></MenuItem.Icon>
+                                    <MenuItem Header="Path" InputGestureText="Ctrl+C" Click="GridCopyPath_Click"
+                                              ToolTip="The game path, as XML and scripts refer to it: dlc\wiecej\data\parts\wsteel\wsteel.w2mesh" />
+                                    <MenuItem Header="Name" InputGestureText="Ctrl+Shift+C" Click="GridCopyName_Click" />
+                                    <MenuItem Header="Folder" Click="GridCopyFolder_Click" ToolTip="The game path of the folder it's in" />
+                                    <MenuItem Header="Location on disk" Click="GridCopyLocation_Click"
+                                              ToolTip="The bundle, compiled script or cache it's in, or the file itself for loose files" />
+                                </MenuItem>
+                                <MenuItem x:Name="GridRevealItem" Header="Show in Explorer" InputGestureText="Shift+Alt+R" Click="GridReveal_Click">
+                                    <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE838;" /></MenuItem.Icon>
+                                </MenuItem>
+                                <MenuItem x:Name="GridRevealExtractedItem" Header="Show extracted file" Click="GridRevealExtracted_Click" Visibility="Collapsed">
+                                    <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE8DA;" /></MenuItem.Icon>
+                                </MenuItem>
+                                <Separator />
+                                <MenuItem Header="Export the list as CSV…" Click="GridExportCsv_Click"
+                                          ToolTip="Save the files shown (or the highlighted ones) as a spreadsheet: name, path, sizes, format and where each one is from">
+                                    <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE9F9;" /></MenuItem.Icon>
                                 </MenuItem>
                             </ContextMenu>
                         </DataGrid.ContextMenu>
@@ -397,6 +441,24 @@
                             <Run Text="New here?" />
                             <Hyperlink Click="Help_Click">Read the guide</Hyperlink>
                         </TextBlock>
+                        <StackPanel x:Name="RecentPanel" Margin="0,24,0,0" Visibility="Collapsed">
+                            <TextBlock Text="RECENT" FontSize="11.5" FontWeight="SemiBold" Opacity="0.6" Margin="0,0,0,6" />
+                            <ItemsControl x:Name="RecentList">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type vm:RecentItem}">
+                                        <Button Click="RecentItem_Click" Tag="{Binding Path}" ToolTip="{Binding Path}" Padding="6,4" Margin="-6,0,0,0"
+                                                Background="Transparent" BorderThickness="0" HorizontalAlignment="Left" HorizontalContentAlignment="Left" Cursor="Hand">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Style="{StaticResource IconText}" Text="{Binding Glyph}" Margin="0,1,10,0" Opacity="0.75" />
+                                                <TextBlock Text="{Binding Name}" Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}" VerticalAlignment="Center" />
+                                                <TextBlock Text="{Binding Folder}" Opacity="0.55" Margin="10,0,0,0" FontSize="12" VerticalAlignment="Center"
+                                                           TextTrimming="CharacterEllipsis" MaxWidth="340" />
+                                            </StackPanel>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
                     </StackPanel>
                 </StackPanel>
             </Border>
@@ -428,11 +490,23 @@
                         <TextBlock Style="{StaticResource IconText}" Text="&#xE8DA;" />
                     </Button>
                 </Grid>
-                <StackPanel Grid.Column="2" Orientation="Vertical" Margin="16,0,8,0" VerticalAlignment="Center">
+                <Grid Grid.Column="2" Margin="16,0,8,0" VerticalAlignment="Center">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
                     <CheckBox x:Name="KeepStructureCheck" Content="Keep folder structure" MinHeight="0" Padding="6,0,0,0"
                               ToolTip="Recreate the bundle's paths, e.g. gameplay\gui_new\swf\…" />
-                    <CheckBox x:Name="OpenWhenDoneCheck" Content="Open folder when done" MinHeight="0" Padding="6,0,0,0" Margin="0,4,0,0" />
-                </StackPanel>
+                    <CheckBox x:Name="OpenWhenDoneCheck" Grid.Row="1" Content="Open folder when done" MinHeight="0" Padding="6,0,0,0" Margin="0,4,0,0" />
+                    <CheckBox x:Name="CompanionsCheck" Grid.Column="1" Content="Include .buffer files" MinHeight="0" Padding="6,0,0,0" Margin="16,0,0,0"
+                              ToolTip="A mesh or other resource keeps its data in .buffer files beside it, and neither works without the other. Extract them together." />
+                    <CheckBox x:Name="PngCheck" Grid.Row="1" Grid.Column="1" Content="Textures as PNG" MinHeight="0" Padding="6,0,0,0" Margin="16,4,0,0"
+                              ToolTip="Write textures from a texture cache, and .dds files, as PNG pictures (the full size) instead of .dds" />
+                </Grid>
                 <Button x:Name="ExtractShownButton" Grid.Column="3" Margin="8,0,0,0" Padding="14,7" Click="ExtractShown_Click"
                         IsEnabled="False" ToolTip="Extract every file in the list">
                     <TextBlock x:Name="ExtractShownText" Text="Extract shown" />

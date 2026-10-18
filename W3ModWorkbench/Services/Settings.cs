@@ -23,6 +23,15 @@ public sealed class Settings
     public bool KeepStructure { get; set; } = true;
     public bool OpenWhenDone { get; set; } = true;
 
+    /// <summary>Extract a file's companions with it: a mesh's .buffer files, or the mesh a buffer belongs to.</summary>
+    public bool ExtractCompanions { get; set; } = true;
+
+    /// <summary>Write textures (from a texture cache, and .dds files) as PNG pictures instead of .dds.</summary>
+    public bool ExtractTexturesAsPng { get; set; }
+
+    /// <summary>Bundles, files and folders opened most recently, newest first.</summary>
+    public List<string> RecentPaths { get; set; } = [];
+
     /// <summary>The Witcher 3 install whose script sources name enum values in decompiled scripts.</summary>
     public string GameFolder { get; set; } = "";
 

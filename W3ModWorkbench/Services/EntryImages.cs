@@ -85,6 +85,22 @@ public static class EntryImages
         return new EntryPicture(bitmap, description + (level > 0 ? $"  ·  showing {image.Width}x{image.Height}" : ""));
     }
 
+    /// <summary>
+    /// For extracting textures as pictures: a texture from a cache, or a .dds file, as a PNG of its full size (the colour
+    /// with its transparency). Anything else, or a format that can't be decoded, is left as it is.
+    /// </summary>
+    public static (string Extension, byte[] Data)? ToPng(ArchiveEntry entry, byte[] data)
+    {
+        if (entry is not TextureEntry && !Path.GetExtension(entry.Path).Equals(".dds", StringComparison.OrdinalIgnoreCase)) return null;
+        if (!Dds.TryRead(data, out var info, out var pixels) || TextureDecoder.Decode(info, pixels, 0) is not { } image) return null;
+        var bitmap = BitmapSource.Create(image.Width, image.Height, 96, 96, PixelFormats.Bgra32, null, image.Bgra, image.Width * 4);
+        var encoder = new PngBitmapEncoder();
+        encoder.Frames.Add(BitmapFrame.Create(bitmap));
+        using var stream = new MemoryStream();
+        encoder.Save(stream);
+        return (".png", stream.ToArray());
+    }
+
     /// <summary>A picture file's bytes, shrunk to <paramref name="max"/> while it's decoded.</summary>
     public static EntryPicture? FromFile(string name, byte[] data, int max)
     {

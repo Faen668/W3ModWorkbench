@@ -35,6 +35,12 @@ public sealed class EntryItem : INotifyPropertyChanged
     public string PackedText => Format.Bytes(Entry.PackedSize);
     public string CompressionText => Entry.FormatText;
 
+    /// <summary>What kind of file it is, in a few words, when that's known.</summary>
+    public FileKind? Kind => FileKinds.Of(Name);
+
+    /// <summary>The file's path, and what kind of file it is.</summary>
+    public string ToolTip => Kind is { } kind ? $"{Path}\n{kind.Name}: {kind.Description}" : Path;
+
     /// <summary>Text files open in the preview window; everything else is extract-only.</summary>
     public bool IsPreviewable => TextExtensions.Contains(System.IO.Path.GetExtension(Name));
 
@@ -52,8 +58,12 @@ public sealed class EntryItem : INotifyPropertyChanged
         _ => "",
     };
 
-    /// <summary>Whether a picture of the file's contents can be made without looking anything up: a texture or a picture file.</summary>
-    public bool CanHaveThumbnail => EntryImages.IsPicture(Entry);
+    /// <summary>Whether a picture of the file's contents can be made: a texture, a picture file, or an .xbm whose texture is in a cache.</summary>
+    public bool CanHaveThumbnail => EntryImages.IsPicture(Entry) || IsTextureHeader;
+
+    /// <summary>An .xbm in a bundle: the texture's description, whose pixels are in a texture.cache under the same path.</summary>
+    public bool IsTextureHeader => Entry is not Core.Textures.TextureEntry and not Core.Scripts.LooseScriptEntry
+        && Name.EndsWith(".xbm", StringComparison.OrdinalIgnoreCase);
 
     private System.Windows.Media.ImageSource? _thumbnail;
 
