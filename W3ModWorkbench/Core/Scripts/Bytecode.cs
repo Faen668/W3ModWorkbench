@@ -29,6 +29,8 @@ public enum Op : byte
     DynamicCast = 0x64,
     TheGame = 0x65, ThePlayer = 0x66, TheCamera = 0x67, TheHud = 0x68, TheSound = 0x69, TheDebug = 0x6A, TheTimer = 0x6B,
     TheInput = 0x6C, TheTelemetry = 0x6D,
+    // maps, which the Remastered's scripts use; each takes a type, then the map and its arguments (0x73 is never written)
+    MapClear = 0x6E, MapSize = 0x6F, MapContains = 0x70, MapErase = 0x71, MapElement = 0x72, MapKey = 0x74,
 }
 
 /// <summary>One decoded instruction. <see cref="Rt"/> is its offset in the game's in-memory layout, which jumps use.</summary>
@@ -79,6 +81,8 @@ public static class Bytecode
     {
         for (int op = (int)Op.ArrayClear; op <= (int)Op.ArrayElement; op++)
             Operands[(Op)op] = "t";
+        foreach (var op in new[] { Op.MapClear, Op.MapSize, Op.MapContains, Op.MapErase, Op.MapElement, Op.MapKey })
+            Operands[op] = "t";
     }
 
     public static bool IsKnown(byte op) => Enum.IsDefined(typeof(Op), op);

@@ -132,7 +132,7 @@ public partial class SourceInspectorWindow : Window, IMessageHost
             existing.Activate();
             return;
         }
-        _open = new SourceInspectorWindow { Owner = owner };
+        _open = new SourceInspectorWindow().Standalone(owner);
         _open.Closed += (_, _) => _open = null;
         _open.Show();
     }

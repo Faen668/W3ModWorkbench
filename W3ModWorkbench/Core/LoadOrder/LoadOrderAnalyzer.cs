@@ -37,17 +37,10 @@ public sealed class LoadOrderAnalyzer
         }
     }
 
-    public static async Task<LoadOrderReport> RunAsync(LoadOrderOptions options, IProgress<string>? progress, CancellationToken token)
+    /// <summary>Every mod.io mod, DLC and mod, in the order the game loads them (first = highest priority).</summary>
+    public static List<ModEntry> DiscoverMods(LoadOrderOptions options, Dictionary<string, (bool Enabled, int? Priority)>? settings = null)
     {
-        var started = DateTime.UtcNow;
-        string? gameScripts = null;
-        string? gameFolder = options.GameFolder ?? Path.GetDirectoryName(options.ModsFolder.TrimEnd('\\', '/'));
-        if (gameFolder is not null && Directory.Exists(Path.Combine(gameFolder, "content", "content0", "scripts")))
-            gameScripts = Path.Combine(gameFolder, "content", "content0", "scripts");
-
-        var report = new LoadOrderReport { ModsFolder = options.ModsFolder, SettingsFile = options.SettingsFile, GameScriptsFolder = gameScripts };
-        var settings = ModScanner.ReadSettings(options.SettingsFile);
-
+        settings ??= ModScanner.ReadSettings(options.SettingsFile);
         // every folder under mods\ (and dlc\), each one a mod
         var entries = new List<ModEntry>();
         void Discover(string root, bool dlc)
@@ -68,15 +61,32 @@ public sealed class LoadOrderAnalyzer
         if (options.IncludeDlc && Path.GetDirectoryName(options.ModsFolder.TrimEnd('\\', '/')) is { } parent)
             Discover(Path.Combine(parent, "dlc"), true);
         Discover(options.ModsFolder, false);
+        foreach (var m in ModioLocator.InstalledMods())
+            entries.Add(new ModEntry { Name = m.Name, Folder = m.Folder, IsDlc = false, IsModio = true, Enabled = m.Enabled ?? true, Priority = m.Priority });
 
-        // DLC first, then mods; within each the lowest priority number first, then the mods mods.settings doesn't list, by name
+        // mod.io mods first, then DLC, then mods; within each the lowest priority number first, then the mods mods.settings doesn't list, by name
         var ordered = entries
-            .OrderBy(e => e.IsDlc ? 0 : 1)
+            .OrderBy(e => e.IsModio ? 0 : e.IsDlc ? 1 : 2)
             .ThenBy(e => e.Priority is null ? 1 : 0)
             .ThenBy(e => e.Priority ?? 0)
             .ThenBy(e => e.Name, StringComparer.OrdinalIgnoreCase)
             .ToList();
         for (int i = 0; i < ordered.Count; i++) ordered[i].Order = i + 1;
+        return ordered;
+    }
+
+    public static async Task<LoadOrderReport> RunAsync(LoadOrderOptions options, IProgress<string>? progress, CancellationToken token)
+    {
+        var started = DateTime.UtcNow;
+        string? gameScripts = null;
+        string? gameFolder = options.GameFolder ?? Path.GetDirectoryName(options.ModsFolder.TrimEnd('\\', '/'));
+        if (gameFolder is not null && Directory.Exists(Path.Combine(gameFolder, "content", "content0", "scripts")))
+            gameScripts = Path.Combine(gameFolder, "content", "content0", "scripts");
+
+        var report = new LoadOrderReport { ModsFolder = options.ModsFolder, SettingsFile = options.SettingsFile, GameScriptsFolder = gameScripts };
+        var settings = ModScanner.ReadSettings(options.SettingsFile);
+
+        var ordered = DiscoverMods(options, settings);
 
         progress?.Report($"Reading {Format.Count(ordered.Count, "mod")}…");
         var scanned = new ScannedMod[ordered.Count];
@@ -493,7 +503,7 @@ public sealed class LoadOrderAnalyzer
                         $"{user.Entry.Name} uses {Format.Count(what.Count, "thing")} that only {provider.Entry.Name} provides, and mods.settings has {provider.Entry.Name} switched off.",
                         [user, provider], examples, $"Enable {provider.Entry.Name}, or disable {user.Entry.Name} too.");
                 }
-                else if (provider.Entry.Order < user.Entry.Order && !provider.Entry.IsDlc)
+                else if (provider.Entry.Order < user.Entry.Order && !provider.Entry.HasFixedPlace)
                 {
                     // scripts compile in reverse load order, so what a mod builds on has to load after it
                     Add(Severity.Error, "Load order", $"{provider.Entry.Name} loads before {user.Entry.Name}, which builds on it",
@@ -502,7 +512,7 @@ public sealed class LoadOrderAnalyzer
                         + "\"Unknown base class\" or \"different number of parameters\" errors when the game starts.",
                         [user, provider], examples, FixOrder(provider, user));
                 }
-                else if (provider.Entry.Priority is null != user.Entry.Priority is null && !provider.Entry.IsDlc)
+                else if (provider.Entry.Priority is null != user.Entry.Priority is null && !provider.Entry.HasFixedPlace)
                 {
                     var set = provider.Entry.Priority is null ? user : provider;
                     Add(Severity.Warning, "Load order", $"Only one of {user.Entry.Name} and {provider.Entry.Name} has a priority",
@@ -589,7 +599,7 @@ public sealed class LoadOrderAnalyzer
                 else if (!found.Entry.Enabled)
                     Add(Severity.Error, "Dependency", $"{mod.Entry.Name} needs {found.Entry.Name}, which is disabled",
                         "The mod's info.json lists it as a dependency.", [mod, found], [], $"Enable {found.Entry.Name} in the mod manager.");
-                else if (found.Entry.Order < mod.Entry.Order && !found.Entry.IsDlc)
+                else if (found.Entry.Order < mod.Entry.Order && !found.Entry.HasFixedPlace)
                     Add(Severity.Error, "Load order", $"{found.Entry.Name} loads before {mod.Entry.Name}, which declares it as a dependency",
                         $"{mod.Entry.Name} is #{mod.Entry.Order} and {found.Entry.Name} #{found.Entry.Order}. Scripts compile in reverse load order, so a dependency has to load after the mods that use it.",
                         [mod, found], [], FixOrder(found, mod));
@@ -691,13 +701,13 @@ public sealed class LoadOrderAnalyzer
             _report.Warnings.Add("mods.settings wasn't found (Documents\\The Witcher 3), so priorities are mod folder order. Run the game once, or set the file in the box above.");
         else
         {
-            var unlisted = _all.Where(m => !m.Entry.IsDlc && m.Entry.Priority is null).ToList();
+            var unlisted = _all.Where(m => !m.Entry.HasFixedPlace && m.Entry.Priority is null).ToList();
             if (unlisted.Count > 0)
                 Add(Severity.Info, "Priority", $"{Format.Count(unlisted.Count, "mod")} not listed in mods.settings",
                     "mods.settings gives each mod a priority. These have none, so they load after the listed mods, in folder name order. For script mods leaving priorities out is the recommended way.",
                     unlisted, unlisted.Select(m => m.Entry.Name), "Nothing, unless one of them also needs a priority: a mod with a priority and a dependency without one is flagged separately.");
 
-            var ties = _all.Where(m => m.Entry.Priority is not null && !m.Entry.IsDlc).GroupBy(m => m.Entry.Priority!.Value).Where(g => g.Count() > 1);
+            var ties = _all.Where(m => m.Entry.Priority is not null && !m.Entry.HasFixedPlace).GroupBy(m => m.Entry.Priority!.Value).Where(g => g.Count() > 1);
             foreach (var g in ties)
                 Add(Severity.Info, "Priority", $"{g.Count()} mods share priority {g.Key}",
                     "Equal priorities fall back to folder name order.", g, g.Select(m => m.Entry.Name), "Give each a different number if it matters which one wins.");
@@ -726,7 +736,7 @@ public sealed class LoadOrderAnalyzer
         sb.Append($"{Format.Count(r.Mods.Count, "mod")}: {r.Count(Severity.Error)} problems, {r.Count(Severity.Warning)} warnings, {r.Count(Severity.Info)} notes.\n\n");
         sb.Append("## Load order\n\n| # | Mod | Priority | State | Contents |\n|---|---|---|---|---|\n");
         foreach (var m in r.Mods)
-            sb.Append($"| {m.Order} | {m.Name}{(m.IsDlc ? " (DLC)" : "")} | {(m.Priority?.ToString() ?? "–")} | {(m.Enabled ? "on" : "off")} | {m.Contents} |\n");
+            sb.Append($"| {m.Order} | {m.Name}{(m.IsDlc ? " (DLC)" : m.IsModio ? " (mod.io)" : "")} | {(m.Priority?.ToString() ?? "–")} | {(m.Enabled ? "on" : "off")} | {m.Contents} |\n");
         foreach (var sev in new[] { Severity.Error, Severity.Warning, Severity.Info })
         {
             var list = r.Findings.Where(f => f.Severity == sev).ToList();

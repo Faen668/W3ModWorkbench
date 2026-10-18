@@ -53,6 +53,9 @@ public sealed class Settings
     /// <summary>REDkit's wcc_lite.exe, which compiles a script project into a .rsblob. Compiling is off while it's empty.</summary>
     public string WccLitePath { get; set; } = "";
 
+    /// <summary>Compile with the built-in compiler even when wcc_lite is set. It needs only the game's scripts, and is quicker.</summary>
+    public bool PreferBuiltInCompiler { get; set; }
+
     /// <summary>Script Merger Remastered's exe, opened from the load order analyser to merge clashing scripts and bundle files. Empty when not set.</summary>
     public string ScriptMergerPath { get; set; } = "";
 

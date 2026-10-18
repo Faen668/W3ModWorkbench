@@ -24,7 +24,7 @@ public partial class PreviewWindow : Window, IMessageHost
     private readonly List<PreviewPane> _panes = [];
     private PreviewPane _active;
     private readonly bool _takesTabs;
-    private PreviewWindow? _opener;
+    private Window? _opener;
 
     /// <summary>Where go to definition jumped from, for Alt+Left. The files can be in any window by now.</summary>
     private readonly Stack<(PreviewDocument Doc, int Offset)> _back = new();
@@ -69,9 +69,9 @@ public partial class PreviewWindow : Window, IMessageHost
                 _ = ConfirmCloseWindowAsync();
                 return;
             }
-            // without this, Windows can hand the focus to another app when an owned window closes,
+            // without this, Windows can hand the focus to another app when a window closes,
             // and the explorer drops behind it as if it had been minimized
-            (_opener is { IsVisible: true } opener ? opener : Owner)?.Activate();
+            (_opener is { IsVisible: true } opener ? opener : Application.Current.MainWindow)?.Activate();
         };
         Closed += (_, _) =>
         {
@@ -113,7 +113,7 @@ public partial class PreviewWindow : Window, IMessageHost
             window.BringForward();
             return;
         }
-        var created = new PreviewWindow { Owner = owner };
+        var created = new PreviewWindow().Standalone(owner);
         created.Add(CreateDocument(item));
         created.Show();
     }
@@ -135,7 +135,7 @@ public partial class PreviewWindow : Window, IMessageHost
             window.BringForward();
             return;
         }
-        var created = new PreviewWindow { Owner = owner };
+        var created = new PreviewWindow().Standalone(owner);
         created.Add(doc);
         created.Show();
     }
@@ -143,7 +143,8 @@ public partial class PreviewWindow : Window, IMessageHost
     /// <summary>A file in a window of its own that other files don't open in, like the licence from Settings.</summary>
     public static void ShowAlone(PreviewItem item, Window owner)
     {
-        var window = new PreviewWindow(takesTabs: false) { Owner = owner };
+        var window = new PreviewWindow(takesTabs: false).Standalone(owner);
+        window._opener = owner; // closing it hands the focus back to the window that opened it
         window.Add(new PreviewDocument(item));
         window.Show();
     }
@@ -461,7 +462,6 @@ public partial class PreviewWindow : Window, IMessageHost
         var dpi = VisualTreeHelper.GetDpi(this);
         var window = new PreviewWindow
         {
-            Owner = Owner,
             WindowStartupLocation = WindowStartupLocation.Manual,
             Left = at is { } p ? p.X / dpi.DpiScaleX - 120 : Left + 32,
             Top = at is { } q ? q.Y / dpi.DpiScaleY - 24 : Top + 32,
@@ -619,7 +619,6 @@ public partial class PreviewWindow : Window, IMessageHost
         {
             var window = new PreviewWindow
             {
-                Owner = Owner,
                 _opener = this,
                 WindowStartupLocation = WindowStartupLocation.Manual,
                 Left = Left + 32,
@@ -1015,13 +1014,15 @@ public partial class PreviewWindow : Window, IMessageHost
         ProjectBadgeText.Text = owner is null ? "" : $"PROJECT · {owner.Owner.ToUpperInvariant()}";
         ProjectBadge.ToolTip = owner is null ? null : $"In the script project {owner.Owner}: its files can be edited, saved and compiled\n{owner.FilePath}";
         CompileButton.Visibility = project ? Visibility.Visible : Visibility.Collapsed;
-        bool wcc = ScriptCompiler.IsWccLite(App.Settings.WccLitePath);
-        CompileButton.IsEnabled = project && wcc && _compile is null;
+        var compiler = CurrentCompiler();
+        CompileButton.IsEnabled = project && compiler is not null && _compile is null;
         CompileText.Text = _compile is null ? "Compile" : "Compiling…";
-        CompileButton.ToolTip = !wcc
-            ? "Compiling needs REDkit's wcc_lite.exe. Set it in Settings (Ctrl+, in the main window), or press Find automatically there"
-            : _compile is not null ? "Compiling this project's scripts with wcc_lite…"
-            : "Compile this project's scripts into a .rsblob with REDkit's wcc_lite (Ctrl+Shift+B). Right-click to choose where it goes";
+        CompileButton.ToolTip = compiler is null
+            ? CompilerChoice.NothingToCompileWith
+            : _compile is not null ? $"Compiling this project's scripts with {compiler.Name}…"
+            : compiler.Kind == CompilerKind.WccLite
+                ? "Compile this project's scripts into a .rsblob with REDkit's wcc_lite (Ctrl+Shift+B). Right-click to choose where it goes"
+                : "Compile this project's scripts into a .rsblob with the built-in compiler (Ctrl+Shift+B). Right-click to choose where it goes";
     }
 
     /// <summary>A file's changes were saved, or it was changed after a save: its tab and, when it's in use, the header show it.</summary>
@@ -1160,7 +1161,7 @@ public partial class PreviewWindow : Window, IMessageHost
         foreach (var window in OpenWindows.ToList()) window.SwapForProject(blob, project, main);
         _ = Current?.ShowCard($"{blob.Owner} is a script project now",
             $"{entries.Count} scripts were saved to {scripts}, and the tabs show them there: they can be edited and saved. "
-            + "Compile builds them into a .rsblob with REDkit's wcc_lite.", MessageKind.Info, primary: "OK");
+            + "Compile builds them into a .rsblob with REDkit's wcc_lite, or the built-in compiler.", MessageKind.Info, primary: "OK");
     }
 
     /// <summary>Puts the project's version of each of the blob's files open here in its place, keeping the caret and scroll.</summary>
@@ -1184,20 +1185,23 @@ public partial class PreviewWindow : Window, IMessageHost
     /// <summary>The compile running from this window, if one is.</summary>
     private CancellationTokenSource? _compile;
 
+    /// <summary>The compiler that would build a project now: wcc_lite when it's set, else the built-in one when the game's scripts are found.</summary>
+    private static CompilerChoice? CurrentCompiler() =>
+        CompilerChoice.Pick(App.Settings.WccLitePath, App.Settings.GameFolder, App.Settings.PreferBuiltInCompiler);
+
     /// <summary>What the results panel shows now: a search, or a compile. Progress from an older one is dropped.</summary>
     private object? _resultsShowing;
 
     /// <summary>
-    /// Ctrl+Shift+B: saves the project's changed files, then compiles the project with wcc_lite into the file chosen for it
+    /// Ctrl+Shift+B: saves the project's changed files, then compiles the project with wcc_lite (or the built-in compiler) into the file chosen for it
     /// (asked the first time, or when <paramref name="chooseOutput"/>), and lists its warnings and errors under the files.
     /// </summary>
     private async Task CompileAsync(PreviewDocument doc, bool chooseOutput)
     {
         if (ProjectOf(doc) is not { } project || _compile is not null) return;
-        string wcc = App.Settings.WccLitePath;
-        if (!ScriptCompiler.IsWccLite(wcc))
+        if (CurrentCompiler() is not { } compiler)
         {
-            _ = doc.ShowCard("REDkit's wcc_lite isn't set", "Set wcc_lite.exe in Settings to compile scripts. It's in REDkit's bin\\x64_RedKit folder.",
+            _ = doc.ShowCard("Nothing to compile with", "Set REDkit's wcc_lite.exe in Settings (it's in REDkit's bin\\x64_RedKit folder), or set the game folder there so the built-in compiler can read the game's scripts.",
                 MessageKind.Info, primary: "OK");
             return;
         }
@@ -1206,7 +1210,7 @@ public partial class PreviewWindow : Window, IMessageHost
         if (unsaved.Count > 0)
         {
             if (!await doc.ShowCard(unsaved.Count == 1 ? $"Save {unsaved[0].FileName} first?" : $"Save {unsaved.Count} files first?",
-                    "wcc_lite compiles the files as they are on disk. " + (unsaved.Count == 1 ? "" : Names(unsaved) + " have changes."),
+                    $"{(compiler.Kind == CompilerKind.WccLite ? "wcc_lite" : "The compiler")} compiles the files as they are on disk. " + (unsaved.Count == 1 ? "" : Names(unsaved) + " have changes."),
                     MessageKind.Question, primary: "Save and compile", secondary: "Cancel"))
                 return;
             if (!SaveAll(unsaved)) return;
@@ -1238,16 +1242,17 @@ public partial class PreviewWindow : Window, IMessageHost
         OpenResultsPanel();
         if (Results.IsFind) Results.HideFind();
         Results.SetActions();
-        Results.ShowBusy(title, "Starting wcc_lite…");
+        Results.ShowBusy(title, compiler.Kind == CompilerKind.WccLite ? "Starting wcc_lite…" : "Starting the built-in compiler…");
+        string slow = compiler.Kind == CompilerKind.WccLite ? "  It takes about a minute." : "";
         var progress = new Progress<string>(text =>
         {
-            if (_resultsShowing == cancel) Results.ShowBusy(title, text + "  It takes about a minute.");
+            if (_resultsShowing == cancel) Results.ShowBusy(title, text + slow);
         });
         var watch = Stopwatch.StartNew();
         try
         {
-            var result = await ScriptCompiler.CompileAsync(wcc, project.FilePath, output, progress, cancel.Token);
-            ShowCompileResult(title, project, result, output, watch.Elapsed);
+            var result = await compiler.CompileAsync(project.FilePath, output, progress, cancel.Token);
+            ShowCompileResult(title, project, result, output, watch.Elapsed, compiler);
         }
         catch (OperationCanceledException)
         {
@@ -1255,7 +1260,7 @@ public partial class PreviewWindow : Window, IMessageHost
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
         {
-            if (_resultsShowing == cancel) Results.ShowRows(title, "Failed", [], "wcc_lite couldn't be run: " + ex.Message);
+            if (_resultsShowing == cancel) Results.ShowRows(title, "Failed", [], $"{compiler.Name} couldn't be run: " + ex.Message);
         }
         finally
         {
@@ -1265,7 +1270,7 @@ public partial class PreviewWindow : Window, IMessageHost
     }
 
     /// <summary>The compiler's warnings and errors, grouped by file, each opening its line. The log is a button away.</summary>
-    private void ShowCompileResult(string title, ScriptFolder project, CompileResult result, string output, TimeSpan took)
+    private void ShowCompileResult(string title, ScriptFolder project, CompileResult result, string output, TimeSpan took, CompilerChoice compiler)
     {
         if (Results.Visibility != Visibility.Visible) OpenResultsPanel();
         int errors = result.Messages.Count(m => m.IsError), warnings = result.Messages.Count - errors;
@@ -1282,7 +1287,7 @@ public partial class PreviewWindow : Window, IMessageHost
                 IsHeader = true,
                 Glyph = ResultRow.FileGlyph,
                 Before = group.Key.Length == 0 ? "File not named" : Path.GetFileName(group.Key),
-                Detail = group.Key.Length == 0 ? "    wcc_lite didn't say which file, and it couldn't be worked out. The line numbers are right"
+                Detail = group.Key.Length == 0 ? $"    {compiler.Name} didn't say which file, and it couldn't be worked out. The line numbers are right"
                     : folder.Length > 0 ? "    " + folder : "",
                 Count = list.Count.ToString(),
             });
@@ -1305,19 +1310,21 @@ public partial class PreviewWindow : Window, IMessageHost
             }
         }
 
-        string seconds = $"{took.TotalSeconds:0} s";
+        string seconds = took.TotalSeconds < 10 ? $"{took.TotalSeconds:0.0} s" : $"{took.TotalSeconds:0} s";
         string summary = result.Success
             ? warnings == 0 ? $"Compiled in {seconds}" : $"Compiled in {seconds}, {Format.Count(warnings, "warning")}"
             : errors > 0 ? $"Failed: {Format.Count(errors, "error")}" + (warnings > 0 ? $", {Format.Count(warnings, "warning")}" : "")
             : "Failed";
-        string empty = result.Success ? $"Compiled with no warnings, and saved to {output}." : result.Failure ?? "wcc_lite didn't compile the scripts.";
+        string empty = result.Success ? $"Compiled with no warnings, and saved to {output}." : result.Failure ?? $"{compiler.Name} didn't compile the scripts.";
         Results.ShowRows(title, summary, rows, empty);
 
         var actions = new List<(string, Action)>();
         if (result.Success)
             actions.Add(("Show in folder", () => Process.Start("explorer.exe", $"/select,\"{output}\"")));
-        actions.Add(("Show log", () => ShowAlone(new PreviewItem("wcc_lite.log", title, System.Text.Encoding.UTF8.GetBytes(result.Log)), this)));
-        Results.SetActions(result.Success ? $"Saved to {output}" : "Nothing was saved. wcc_lite's own log has every line it wrote:", [.. actions]);
+        string logName = compiler.Kind == CompilerKind.WccLite ? "wcc_lite.log" : "compiler.log";
+        actions.Add(("Show log", () => ShowAlone(new PreviewItem(logName, title, System.Text.Encoding.UTF8.GetBytes(result.Log)), this)));
+        Results.SetActions(result.Success ? $"Saved to {output}" + (compiler.Kind == CompilerKind.BuiltIn ? ", compiled by the built-in compiler" : "")
+            : compiler.Kind == CompilerKind.WccLite ? "Nothing was saved. wcc_lite's own log has every line it wrote:" : "Nothing was saved. The compiler's log lists any game scripts it couldn't read:", [.. actions]);
     }
 
 

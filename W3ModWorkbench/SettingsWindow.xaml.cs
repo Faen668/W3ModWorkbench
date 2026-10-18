@@ -40,9 +40,10 @@ public partial class SettingsWindow : Window, IMessageHost
         (settings.PreviewOpenIn == "Windows" ? OpenInWindows : OpenInTabs).IsChecked = true;
         (settings.PreviewSplit == "Down" ? SplitDown : SplitRight).IsChecked = true;
         PeekCheck.IsChecked = settings.PeekDefinitions;
-        GameFolderBox.TextChanged += (_, _) => UpdateGameStatus();
+        GameFolderBox.TextChanged += (_, _) => { UpdateGameStatus(); UpdateWccStatus(); };
         UpdateGameStatus();
         WccBox.Text = settings.WccLitePath;
+        BuiltInCheck.IsChecked = settings.PreferBuiltInCompiler;
         WccBox.TextChanged += (_, _) => UpdateWccStatus();
         UpdateWccStatus();
         MergerBox.Text = settings.ScriptMergerPath;
@@ -216,7 +217,9 @@ public partial class SettingsWindow : Window, IMessageHost
         {
             WccIcon.Text = ""; // info
             WccIcon.ClearValue(ForegroundProperty);
-            WccStatus.Text = "Not set, so Compile is off. Scripts can still be edited and saved.";
+            WccStatus.Text = CompilerChoice.Pick("", GameFolderBox.Text.Trim(), preferBuiltIn: true) is not null
+                ? "Not set. Compile uses the built-in compiler, which reads the game's scripts."
+                : "Not set, and the game's scripts weren't found, so Compile is off. Scripts can still be edited and saved.";
         }
         else if (ScriptCompiler.IsWccLite(path))
         {
@@ -293,6 +296,7 @@ public partial class SettingsWindow : Window, IMessageHost
         _settings.PreviewSplit = SplitDown.IsChecked == true ? "Down" : "Right";
         _settings.PeekDefinitions = PeekCheck.IsChecked == true;
         _settings.WccLitePath = WccBox.Text.Trim().Trim('"');
+        _settings.PreferBuiltInCompiler = BuiltInCheck.IsChecked == true;
         _settings.ScriptMergerPath = MergerBox.Text.Trim().Trim('"');
         _settings.Save();
         PreviewWindow.ApplySettings();

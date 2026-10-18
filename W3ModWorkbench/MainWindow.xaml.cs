@@ -470,6 +470,7 @@ public partial class MainWindow : Window, IMessageHost
         Add("Stub generator…", "Ctrl+Shift+W", OpenStubGenerator);
         Add("Source inspector…", "Ctrl+Shift+I", () => SourceInspectorWindow.Open(this));
         Add("Load order analyser…", "Ctrl+Shift+L", () => LoadOrderWindow.Open(this));
+        Add("View XML overrides…", "", () => XmlOverridesWindow.Open(this));
         menu.Items.Add(new Separator());
         Add("New mod menu…", "", () => XmlWindow.OpenNewMenu(this));
         Add("Open an XML file…", "", OpenXmlFile);

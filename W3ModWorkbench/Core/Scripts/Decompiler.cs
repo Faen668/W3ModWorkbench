@@ -570,6 +570,8 @@ public sealed class Decompiler(ScriptBlob blob, EnumResolver enums)
 
             case >= Op.ArrayClear and <= Op.ArrayElement:
                 return ArrayOp(ins.Op);
+            case Op.MapClear or Op.MapSize or Op.MapContains or Op.MapErase or Op.MapElement or Op.MapKey:
+                return MapOperation(ins.Op);
 
             case >= Op.StaticArraySize and <= Op.StaticArrayElement:
                 return StaticArrayOp(ins.Op);
@@ -685,6 +687,20 @@ public sealed class Decompiler(ScriptBlob blob, EnumResolver enums)
         if ((symbol is "&&" or "||") && b.Prec == prec && b.Text.Contains(symbol, StringComparison.Ordinal))
             right = b.Text;
         return new($"{left} {symbol} {right}", prec);
+    }
+
+    private Expr MapOperation(Op op)
+    {
+        string m = Wrap(ParseExpr(), Precedence.Primary);
+        return op switch
+        {
+            Op.MapClear => new($"{m}.Clear()", Precedence.Primary),
+            Op.MapSize => new($"{m}.Size()", Precedence.Primary),
+            Op.MapContains => new($"{m}.Contains({ParseExpr().Text})", Precedence.Primary),
+            Op.MapErase => new($"{m}.Erase({ParseExpr().Text})", Precedence.Primary),
+            Op.MapKey => new($"{m}.Key({ParseExpr().Text})", Precedence.Primary),
+            _ => new($"{m}[{ParseExpr().Text}]", Precedence.Primary), // MapElement
+        };
     }
 
     private Expr ArrayOp(Op op)

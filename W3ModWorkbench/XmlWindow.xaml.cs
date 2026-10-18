@@ -128,7 +128,7 @@ public partial class XmlWindow : Window, IMessageHost
             if (owner is IMessageHost host) _ = host.ShowMessage($"{Path.GetFileName(path)} could not be opened", ex.Message, MessageKind.Error);
             return;
         }
-        var window = new XmlWindow(Path.GetFileName(path), Path.GetDirectoryName(path) ?? "") { Owner = owner, _path = path };
+        var window = new XmlWindow(Path.GetFileName(path), Path.GetDirectoryName(path) ?? "") { _path = path }.Standalone(owner);
         window.Load(data);
         window.Show();
     }
@@ -136,7 +136,7 @@ public partial class XmlWindow : Window, IMessageHost
     /// <summary>Opens XML from inside an archive: a copy to read and edit, which Save as writes out.</summary>
     public static void OpenData(string name, string source, byte[] data, Window owner)
     {
-        var window = new XmlWindow(name, source) { Owner = owner };
+        var window = new XmlWindow(name, source).Standalone(owner);
         window.Load(data);
         window.Show();
     }
@@ -144,7 +144,7 @@ public partial class XmlWindow : Window, IMessageHost
     /// <summary>A new mod menu, with a page and a few settings to start from, in the builder.</summary>
     public static void OpenNewMenu(Window owner)
     {
-        var window = new XmlWindow("New mod menu.xml", "Not saved yet") { Owner = owner };
+        var window = new XmlWindow("New mod menu.xml", "Not saved yet").Standalone(owner);
         window.Editor.Text = MenuFile.Starter().ToXml();
         window._edited = true;
         window.Loaded += (_, _) => window.EnterBuilder(askAboutLoss: false);

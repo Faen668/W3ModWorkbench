@@ -201,7 +201,7 @@ The installed mods' scripts are only in these searches once they've been read fo
 """),
 
         new(Basics, "Editing and compiling scripts", "\uE70F", """
-The preview is also a script editor. Scripts in a **script project** can be changed and saved, with highlighting, go to definition, the definition popup and the outline all keeping up as you type, and a whole project can be compiled into a `precompiled.rsblob` with REDkit's own compiler.
+The preview is also a script editor. Scripts in a **script project** can be changed and saved, with highlighting, go to definition, the definition popup and the outline all keeping up as you type, and a whole project can be compiled into a `precompiled.rsblob`, with REDkit's own compiler or, without REDkit, the one built into the tool.
 
 ## Script projects
 
@@ -224,14 +224,20 @@ In testing, a decompiled mod compiled again without changes, though a mod that u
 
 ## Compiling
 
-**Compile** (**Ctrl+Shift+B**) builds the project into a `.rsblob` with REDkit's `wcc_lite.exe`, the same compiler REDkit uses to publish. It needs REDkit, which is free on Steam and GOG for owners of the game: set wcc_lite in **Settings**, or let **Find automatically** look for it. Until it's set, the button is greyed out, and resting the mouse on it says why. You can still edit and save scripts without it.
+**Compile** (**Ctrl+Shift+B**) builds the project into a `.rsblob`. Two compilers can do it:
 
-- Changed files are saved first, since wcc_lite compiles what's on disk. It asks before saving them.
+- **REDkit's `wcc_lite.exe`**, the same compiler REDkit uses to publish. REDkit is free on Steam and GOG for owners of the game: set wcc_lite in **Settings**, or let **Find automatically** look for it. It is used whenever it's set.
+- **The built-in compiler**, for when REDkit isn't installed. It reads the game's own scripts (from the game folder in **Settings**, or REDkit's, whichever is found) and the mods you have installed, so a project built on Shared Utils finds it there, and writes the same kind of blob in about a second. Tick **Always use the built-in compiler** in Settings to use it even when wcc_lite is set, which is handy while you're trying changes.
+
+Until one of them can run, the button is greyed out, and resting the mouse on it says why. You can still edit and save scripts without it.
+
+- Changed files are saved first, since both compilers read what's on disk. It asks before saving them.
 - The first time, it asks where the compiled blob goes, and remembers that for the project. Right-click **Compile** and choose **Compile to another file** to change it. For a mod, that's usually `content\precompiled.rsblob` in the mod's folder.
-- It compiles the game's scripts and then yours on top, the way REDkit does, which takes about a minute.
+- wcc_lite compiles the game's scripts and then yours on top, the way REDkit does, which takes about a minute. The built-in compiler only reads the game's scripts for what they declare, so it takes a second.
+- The built-in compiler checks your scripts the way the game's compiler does, but it is newer and less tested. Its output was compared with wcc_lite's on real mods and on about ten thousand of the game's own functions, and it matched on nearly all of them, but for a release, compile with wcc_lite when you can. Maps (`map<K, V>`) are supported, by the compiler and the decompiler.
 - Warnings and errors are listed under the files, grouped by file. Click one to go to its line. When it fails, nothing is written, so an older blob that works is left alone.
 - wcc_lite often leaves out which file a message is about when a project has more than one. The explorer works it out from the name the message mentions and the line it's on, and marks those **file guessed**. If it can't tell, the message is listed under **File not named**, with its line number.
-- **Show log** opens everything wcc_lite wrote, and **Show in folder** opens the folder the blob was saved to.
+- **Show log** opens everything the compiler wrote, and **Show in folder** opens the folder the blob was saved to.
 """),
 
         new(Basics, "Editing strings", "\uE8D2", """
@@ -351,7 +357,7 @@ You can leave it empty if you only open scripts from inside the game's `mods` fo
 
 ## Script compiler (optional)
 
-REDkit's `wcc_lite.exe`, which **Compile** uses to build a script project into a `.rsblob`. It's in REDkit's `bin\x64_RedKit` folder. **Find automatically** looks for REDkit in your Steam and GOG libraries, or use the folder button to pick it. A tick under the box means it found wcc_lite and the game scripts REDkit compiles against (`r4data\scripts`). Leave it empty and **Compile** stays off; editing and saving scripts work either way.
+REDkit's `wcc_lite.exe`, which **Compile** uses to build a script project into a `.rsblob`. It's in REDkit's `bin\x64_RedKit` folder. **Find automatically** looks for REDkit in your Steam and GOG libraries, or use the folder button to pick it. A tick under the box means it found wcc_lite and the game scripts REDkit compiles against (`r4data\scripts`). Leave it empty and **Compile** uses the built-in compiler, as long as the game's scripts are found; editing and saving scripts work either way.
 
 ## Script merger (optional)
 
@@ -547,13 +553,13 @@ See **Enum names** in the Advanced section. The usual fix is to set the game fol
 
 ## Compile is greyed out
 
-Rest the mouse on it to see why. Usually wcc_lite isn't set in **Settings**. If it is set but the box under it shows a warning, the file isn't wcc_lite, or REDkit's `r4data\scripts` folder isn't where it should be, two folders up from it. Reinstalling or verifying REDkit fixes that.
+Rest the mouse on it to see why. Neither compiler can run: wcc_lite isn't set in **Settings**, and the game's scripts weren't found for the built-in compiler. Set the game folder (or wcc_lite) there. If wcc_lite is set but the box under it shows a warning, the file isn't wcc_lite, or REDkit's `r4data\scripts` folder isn't where it should be, two folders up from it. Reinstalling or verifying REDkit fixes that.
 
 Compile only shows for a script project's files. For a decompiled script, use **Edit as project** first.
 
 ## A compile fails with errors I can't find
 
-Check the line wcc_lite names. When the file is marked **file guessed**, the explorer worked it out from the message; **Show log** has wcc_lite's own words. Errors in the game's scripts are left out, since they come from REDkit itself, so every error listed is in your project.
+Check the line it names. When the file is marked **file guessed**, the explorer worked it out from wcc_lite's message; **Show log** has the compiler's own words. Errors in the game's scripts are left out, since they come from REDkit itself, so every error listed is in your project. If the built-in compiler stops on something wcc_lite accepts, compile with wcc_lite and tell me about the script.
 
 ## A script can't be typed in
 
@@ -591,9 +597,9 @@ W3 Mod Workbench is an unofficial fan-made tool. It is not affiliated with, endo
 - **AvalonEdit** by the SharpDevelop team: the code view in the preview window.
 - **Aelto**: his own decompiler project, tw3-cahirb (github.com/Aelto/tw3-cahirb), filled real gaps in this one. The full list of the script engine's built-in operators, several rarely used instructions, and a sample from an older REDkit build that showed up property hints, array defaults and `do`/`while` loops all came from comparing notes with his work.
 
-WebSpam's grammar and AvalonEdit are MIT licensed, and their full licence texts are in `THIRD-PARTY-NOTICES.md` next to the exe, and under About (the i button at the top right of the main window). No code was copied from tw3-cahirb, only facts about the file format.
+WebSpam's grammar and AvalonEdit are MIT licensed, and their full licence texts are in `THIRD-PARTY-NOTICES.md` next to the exe, and under About (the i button at the top right of the main window). The built-in compiler is a port of the WitcherScript-to-`.rsblob` compiler that **WebSpam** wrote for tw3-cahirb (github.com/Aelto/tw3-cahirb, pull request 1), extended and checked against wcc_lite's output on real mods. Apart from that, no code was copied from tw3-cahirb, only facts about the file format.
 
-The bundle reader, the LZ4 and Snappy decoders and the script decompiler are all written for this tool. Compiling uses REDkit's own `wcc_lite.exe` from your REDkit install; nothing of REDkit's is shipped with the tool.
+The bundle reader, the LZ4 and Snappy decoders and the script decompiler are all written for this tool. Compiling uses REDkit's own `wcc_lite.exe` from your REDkit install when you have one; nothing of REDkit's is shipped with the tool. Without it, the built-in compiler reads the game's own scripts from your game install. The tool carries a list of the engine's native classes and enums (made with the game's own `-dumprtti` option) so it knows what the scripts can name.
 """),
 
         new(Advanced, "How bundles work", "", """

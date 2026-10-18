@@ -22,6 +22,12 @@ public sealed class ModEntry
     public required string Folder { get; init; }
     public required bool IsDlc { get; init; }
 
+    /// <summary>Installed by the in-game mod.io hub, outside the game folder. The game loads these before everything else.</summary>
+    public bool IsModio { get; init; }
+
+    /// <summary>DLC and mod.io mods have a fixed place, so mods.settings priorities don't apply to them.</summary>
+    public bool HasFixedPlace => IsDlc || IsModio;
+
     /// <summary>The mod's own name from its info.json, when it has one.</summary>
     public string Title { get; set; } = "";
     public string Version { get; set; } = "";

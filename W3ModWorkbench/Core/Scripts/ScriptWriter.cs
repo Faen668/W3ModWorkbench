@@ -268,8 +268,32 @@ public static class ScriptWriter
         sb.Append(pad).Append("}\n\n");
     }
 
+    /// <summary>One type from the text, then past the comma after it. An array or map brings two numbers and its own types.</summary>
+    private static string ParseType(string t, ref int at)
+    {
+        bool map = t.AsSpan(at).StartsWith("map:", StringComparison.Ordinal);
+        if (map || t.AsSpan(at).StartsWith("array:", StringComparison.Ordinal))
+        {
+            at += map ? 4 : 6;
+            for (int numbers = 0; numbers < 2; numbers++) at = t.IndexOf(',', at) + 1;
+            if (!map) return $"array<{ParseType(t, ref at)}>";
+            string key = ParseType(t, ref at);
+            return $"map<{key}, {ParseType(t, ref at)}>";
+        }
+        int end = t.IndexOf(',', at);
+        if (end < 0) end = t.Length;
+        string plain = t[at..end];
+        at = Math.Min(end + 1, t.Length);
+        return FormatType(plain);
+    }
+
     public static string FormatType(string t)
     {
+        if (t.StartsWith("map:", StringComparison.Ordinal))
+        {
+            int at = 0;
+            return ParseType(t, ref at); // "map:2,0,Int32,Float" is map<int, float>
+        }
         if (t.StartsWith("array:", StringComparison.Ordinal))
         {
             int comma = t.IndexOf(',', t.IndexOf(',') + 1);

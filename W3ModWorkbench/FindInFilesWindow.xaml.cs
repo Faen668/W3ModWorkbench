@@ -40,7 +40,7 @@ public partial class FindInFilesWindow : Window
         InitializeComponent();
         DisabledLook.Apply(this);
         _main = main;
-        Owner = main;
+        this.Standalone(main);
         Results.HideClose();
         Results.Open += OpenResult;
 

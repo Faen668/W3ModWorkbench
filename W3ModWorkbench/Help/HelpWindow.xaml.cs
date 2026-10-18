@@ -17,7 +17,7 @@ public partial class HelpWindow : Window
     {
         if (_open is null)
         {
-            _open = new HelpWindow { Owner = owner };
+            _open = new HelpWindow().Standalone(owner);
             _open.Closed += (_, _) => _open = null;
             _open.Show();
         }

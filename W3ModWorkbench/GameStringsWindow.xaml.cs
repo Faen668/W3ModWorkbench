@@ -63,7 +63,7 @@ public partial class GameStringsWindow : Window, IMessageHost
                 _ = host.ShowMessage("The game folder isn't set", "Searching the game's strings needs The Witcher 3's folder. Set it in Settings, or let Settings find it.", MessageKind.Info);
             return;
         }
-        var window = new GameStringsWindow(gameFolder, handle) { Owner = owner };
+        var window = new GameStringsWindow(gameFolder, handle).Standalone(owner);
         if (query is not null) window.SearchBox.Text = query;
         window.Show();
     }

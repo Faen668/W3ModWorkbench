@@ -403,7 +403,7 @@
                             <TextBlock Style="{StaticResource AboutHint}"
                                        Text="Developed with AI assistance (Claude, by Anthropic), most of all in reverse-engineering the compiled script format and building the decompiler. The results were checked against real mods and their original source." />
                             <TextBlock Style="{StaticResource AboutHint}">
-                                <Run Text="WitcherScript syntax highlighting by WebSpam, from his witcherscript-vscode extension, used with permission. Code view by AvalonEdit. Decompiler gaps filled with help from Aelto's tw3-cahirb." />
+                                <Run Text="WitcherScript syntax highlighting by WebSpam, from his witcherscript-vscode extension, used with permission. Code view by AvalonEdit. Decompiler gaps filled with help from Aelto's tw3-cahirb, and the built-in compiler is a port of the one WebSpam wrote for it." />
                                 <Hyperlink Click="AboutNotices_Click">Third-party notices</Hyperlink>
                             </TextBlock>
                             <TextBlock Style="{StaticResource AboutHint}"

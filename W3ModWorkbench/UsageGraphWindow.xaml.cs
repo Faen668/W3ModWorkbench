@@ -64,7 +64,7 @@ public partial class UsageGraphWindow : Window
     /// <param name="modActions">The buttons that add the installed mods' scripts, given what to run afterwards.</param>
     public static void Open(PreviewWindow host, PreviewDocument from, IReadOnlyList<ScriptSymbol> targets, ParsedScript parsed,
         IReadOnlyList<ScriptIndex> layers, Func<Task<IReadOnlyList<ScriptIndex>?>> reload, Func<Func<Task>, (string Label, Action Run)[]> modActions) =>
-        new UsageGraphWindow(host, from, targets, parsed, layers, reload, modActions) { Owner = host }.Show();
+        new UsageGraphWindow(host, from, targets, parsed, layers, reload, modActions).Standalone(host).Show();
 
     private int Levels => LevelsBox.SelectedItem is int n ? n : 3;
 

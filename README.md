@@ -26,7 +26,7 @@
 |---|---|---|
 | 📦 | **Bundle explorer** | Opens the whole game or any mod, browse, search and extract. |
 | 🧩 | **Script decompiler** | `precompiled.rsblob` back into tidy, readable WitcherScript. |
-| ✏️ | **Script editor** | Edit script projects with go to definition, an outline and highlighting (XML gets an outline and folding too), and compile with REDkit's own compiler. |
+| ✏️ | **Script editor** | Edit script projects with go to definition, an outline and highlighting (XML gets an outline and folding too), and compile with REDkit's compiler, or the built-in one when you don't have REDkit. |
 | 🔤 | **Strings** | Read and edit `.w3strings`, update translations in minutes, search every string the game has. |
 | 🗂️ | **Mod menu builder** | Build `user_config_matrix` menus with forms, with the strings and the script that reads them. |
 | 🪄 | **Stub generator** | Exact `@wrapMethod`, `@replaceMethod`, `@addMethod` and `@addField` code from the game's scripts. |
@@ -65,7 +65,7 @@
 ### Script editor
 - **Script projects**: open a folder of `.ws` files (a REDkit project's `workspace\scripts`, say) and edit its scripts with highlighting, go to definition and the definition popup, all following your edits. Unsaved files are marked and nothing closes without asking.
 - **Edit decompiled mods**: *Edit as project* saves a compiled mod's decompiled scripts to a folder and opens them for editing.
-- **Compile**: builds a project into a `.rsblob` with REDkit's own `wcc_lite.exe` (Ctrl+Shift+B), with its errors listed and linked to their lines. Needs REDkit, which is free for owners of the game; point Settings at `wcc_lite.exe` or let it find it.
+- **Compile**: builds a project into a `.rsblob` (Ctrl+Shift+B), with its errors listed and linked to their lines. It uses REDkit's own `wcc_lite.exe` when you have it (free for owners of the game; point Settings at it or let it find it). **No REDkit? No problem**: the built-in compiler reads the game's scripts and your installed mods (Shared Utils, say) and compiles in about a second, and on real mods its output matches wcc_lite's.
 - **Projects stand out**: script projects carry a **PROJECT** badge in the tree and beside the file name in the preview, so you can tell what you can edit from what's read-only.
 - **Open in external editor**: right-click a text file or a preview tab to open it in your usual editor. A project's file opens itself; a file inside a bundle opens as a read-only copy.
 
@@ -222,7 +222,7 @@ The only NuGet package is [AvalonEdit](https://github.com/icsharpcode/AvalonEdit
 | Folder | What's in it |
 |---|---|
 | `Core/` | Bundle reader, LZ4 and Snappy decoders, extraction, game folder detection |
-| `Core/Scripts/` | The `.rsblob` reader, bytecode decoder, operator table, decompiler and WitcherScript writer; script projects and the wcc_lite compile runner |
+| `Core/Scripts/` | The `.rsblob` reader, bytecode decoder, operator table, decompiler and WitcherScript writer; script projects, the wcc_lite compile runner and the built-in compiler (`Standalone/`) |
 | `Core/Inspector/` | The source inspector: scanner, script and XML analysers, matching and scoring, coding style, and the report writer |
 | `Core/Strings/` | The .w3strings reader and writer, and the index of the game's strings |
 | `Core/Menu/` | The mod menu model: reading and writing the XML, checks, keys and script |
@@ -235,7 +235,7 @@ The only NuGet package is [AvalonEdit](https://github.com/icsharpcode/AvalonEdit
 ## 🙏 Credits
 
 - **[WebSpam](https://github.com/webspam)**: the WitcherScript syntax highlighting comes from his VS Code extension, [witcherscript-vscode](https://github.com/webspam/witcherscript-vscode), used with his permission. Well worth installing if you write WitcherScript in VS Code.
-- **[Aelto](https://github.com/Aelto)**: his decompiler project [tw3-cahirb](https://github.com/Aelto/tw3-cahirb) filled real gaps in this one. That covers the full list of the engine's built-in operators, several rarely used instructions, and a test blob from an older REDkit build. No code was copied, only facts about the format.
+- **[Aelto](https://github.com/Aelto)**: his decompiler project [tw3-cahirb](https://github.com/Aelto/tw3-cahirb) filled real gaps in this one. That covers the full list of the engine's built-in operators, several rarely used instructions, and a test blob from an older REDkit build. The built-in compiler is a port of the one **[WebSpam](https://github.com/webspam)** wrote for tw3-cahirb ([pull request 1](https://github.com/Aelto/tw3-cahirb/pull/1)); the rest of this tool uses only facts about the format, no code.
 - **[relapse12](https://www.nexusmods.com/witcher3/mods/13076)**: author of Script Merger Remastered, which the load order analyser suggests for clashes it can't settle. It's a separate download; this tool only starts it.
 - **[AvalonEdit](https://github.com/icsharpcode/AvalonEdit)** by the SharpDevelop team: the code view in the preview window.
 

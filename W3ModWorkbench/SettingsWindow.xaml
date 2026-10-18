@@ -266,7 +266,7 @@
                             <Run Text="(optional)" FontWeight="Normal" FontSize="13" />
                         </TextBlock>
                         <TextBlock TextWrapping="Wrap"
-                                   Text="REDkit's wcc_lite.exe, which compiles a script project into a precompiled.rsblob, the same way publishing from REDkit does. Compile stays off until it's set." />
+                                   Text="REDkit's wcc_lite.exe compiles a script project into a precompiled.rsblob, the same way publishing from REDkit does. Without it, the built-in compiler does the job from the game's own scripts." />
                         <Grid Margin="0,10,0,0">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
@@ -289,8 +289,11 @@
                             <TextBlock x:Name="WccIcon" Style="{StaticResource Icon}" Margin="0,0,8,0" />
                             <TextBlock x:Name="WccStatus" TextWrapping="Wrap" />
                         </StackPanel>
+                        <CheckBox x:Name="BuiltInCheck" Margin="0,12,0,0"
+                                  Content="Always use the built-in compiler, even when wcc_lite is set"
+                                  ToolTip="It takes a second instead of a minute. wcc_lite is still the game's own compiler, so use it for a release" />
                         <TextBlock Style="{StaticResource Hint}" Margin="0,10,0,0"
-                                   Text="REDkit is free on Steam and GOG for owners of the game. wcc_lite is in its bin\x64_RedKit folder. Without it you can still edit and save scripts; only compiling needs it." />
+                                   Text="REDkit is free on Steam and GOG for owners of the game. wcc_lite is in its bin\x64_RedKit folder. The built-in compiler needs the game folder above (or REDkit's scripts) so it can read the game's scripts." />
                     </StackPanel>
                 </Border>
 

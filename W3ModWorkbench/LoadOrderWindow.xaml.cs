@@ -27,7 +27,7 @@ public sealed class ModItem(ModEntry mod)
         get
         {
             string state = mod.Enabled ? "" : "disabled · ";
-            string kind = mod.IsDlc ? "DLC · " : mod.Priority is { } p ? $"priority {p} · " : "";
+            string kind = mod.IsDlc ? "DLC · " : mod.IsModio ? "mod.io · " : mod.Priority is { } p ? $"priority {p} · " : "";
             return state + kind + mod.Contents;
         }
     }
@@ -109,7 +109,7 @@ public partial class LoadOrderWindow : Window, IMessageHost
             existing.Activate();
             return;
         }
-        _open = new LoadOrderWindow { Owner = owner };
+        _open = new LoadOrderWindow().Standalone(owner);
         _open.Closed += (_, _) => _open = null;
         _open.Show();
     }

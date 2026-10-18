@@ -66,7 +66,7 @@ public partial class StubWindow : Window, IMessageHost
                 _ = host.ShowMessage("The game's scripts weren't found", "The stub generator reads the game's own scripts (content\\content0\\scripts). Set the game folder in Settings.", MessageKind.Info);
             return;
         }
-        var window = new StubWindow(scripts) { Owner = owner };
+        var window = new StubWindow(scripts).Standalone(owner);
         window.KindRadio(kind).IsChecked = true;
         if (query is not null) window.SearchBox.Text = query;
         window.Show();

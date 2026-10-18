@@ -76,6 +76,15 @@ internal static class Operators
         ["LogicAnd"] = ("&&", Precedence.And), ["LogicOr"] = ("||", Precedence.Or), ["LogicNot"] = ("!", Precedence.Unary),
     };
 
+    private static Dictionary<string, int>? _index;
+
+    /// <summary>Where the engine's operator called <paramref name="name"/> is in its table, or -1.</summary>
+    public static int IndexOf(string name)
+    {
+        _index ??= Names.Select((n, i) => (n, i)).ToDictionary(p => p.n, p => p.i);
+        return _index.GetValueOrDefault(name, -1);
+    }
+
     /// <summary>The symbol and precedence for operator id <paramref name="id"/> (-2 and below).</summary>
     public static bool TryGet(int id, out string symbol, out int prec)
     {

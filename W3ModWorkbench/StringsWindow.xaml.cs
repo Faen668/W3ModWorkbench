@@ -190,7 +190,7 @@ public partial class StringsWindow : Window, IMessageHost
     /// <summary>Opens a .w3strings file or a strings CSV in a window of its own.</summary>
     public static void Open(string path, Window owner)
     {
-        var window = new StringsWindow { Owner = owner };
+        var window = new StringsWindow().Standalone(owner);
         try
         {
             window.Load(path);
