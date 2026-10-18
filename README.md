@@ -252,10 +252,6 @@ The only NuGet package is [AvalonEdit](https://github.com/icsharpcode/AvalonEdit
 
 Licence texts for the third-party parts are in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 
-## 🤖 How it was made
-
-W3 Mod Workbench was developed with AI assistance (Claude, by Anthropic), most of all in reverse-engineering the undocumented `.rsblob` format and building the decompiler. Nothing was taken on trust: the format work was checked against mods whose original source was available, and every decompiled function's size is verified against what the compiler recorded.
-
 ## 📄 Licence
 
 Released under the [MIT Licence](LICENSE). Copyright © 2026 Faen90.
