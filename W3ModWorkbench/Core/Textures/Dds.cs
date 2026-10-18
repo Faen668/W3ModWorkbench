@@ -54,4 +54,49 @@ public static class Dds
         Buffer.BlockCopy(pixels, 0, file, body, chain);
         return file;
     }
+
+    /// <summary>
+    /// Reads a .dds file's header and gives its pixels (every mip level, one after another). False for a format that isn't
+    /// understood: cube maps, volumes, BC2 and the like.
+    /// </summary>
+    public static bool TryRead(byte[] file, out TextureInfo info, out byte[] pixels)
+    {
+        info = null!;
+        pixels = [];
+        if (file.Length < 128 || BinaryPrimitives.ReadUInt32LittleEndian(file) != Magic) return false;
+        uint U(int at) => BinaryPrimitives.ReadUInt32LittleEndian(file.AsSpan(at));
+        int height = (int)U(12), width = (int)U(16), mips = Math.Max(1, (int)U(28));
+        uint flags = U(80), fourCc = U(84);
+        int body = 128;
+        TextureFormat format = TextureFormat.Unknown;
+        if ((flags & FourCc) != 0)
+        {
+            switch (fourCc)
+            {
+                case 0x31545844: format = TextureFormat.Bc1; break;
+                case 0x35545844: format = TextureFormat.Bc3; break;
+                case 0x31495441: case 0x55344342: format = TextureFormat.Bc4; break;
+                case 0x32495441: case 0x55354342: format = TextureFormat.Bc5; break;
+                case 0x30315844:
+                    if (file.Length < 148) return false;
+                    format = U(128) switch { 71 => TextureFormat.Bc1, 77 => TextureFormat.Bc3, 80 => TextureFormat.Bc4, 83 => TextureFormat.Bc5, 98 => TextureFormat.Bc7, _ => TextureFormat.Unknown };
+                    body = 148;
+                    break;
+            }
+        }
+        else if ((flags & Rgb) != 0 && U(88) == 32 && U(92) == 0x00FF0000 && U(96) == 0x0000FF00 && U(100) == 0x000000FF)
+            format = TextureFormat.Bgra8;
+        if (format == TextureFormat.Unknown || width <= 0 || height <= 0) return false;
+        info = new TextureInfo(width, height, mips, 1, 0, format, 16, 0, file.Length, file.Length - body);
+        int chain = TextureDecoder.ChainSize(info);
+        if (file.Length - body < chain)
+        {
+            // a file cut short still shows what it has: the levels that fit
+            while (info.Mips > 1 && file.Length - body < TextureDecoder.ChainSize(info)) info = info with { Mips = info.Mips - 1 };
+            chain = TextureDecoder.ChainSize(info);
+            if (file.Length - body < chain) return false;
+        }
+        pixels = file.AsSpan(body, chain).ToArray();
+        return true;
+    }
 }

@@ -738,6 +738,8 @@ public partial class MainWindow : Window, IMessageHost
             TextureWindow.Open(texture, this);
         else if (IsTextureHeader(item))
             _ = OpenTextureHeaderAsync(item);
+        else if (TextureWindow.CanShow(item.Name))
+            _ = OpenPictureAsync(item);
         else if (item.Entry is LooseScriptEntry { IsScript: false } && XmlWindow.CanOpen(item.Name))
             _ = OpenXmlAsync(item);
         else if (item.IsPreviewable)
@@ -751,6 +753,27 @@ public partial class MainWindow : Window, IMessageHost
     /// <summary>An .xbm in a bundle: the texture's description, whose pixels are in a texture.cache under the same path.</summary>
     private static bool IsTextureHeader(EntryItem item) =>
         item.Entry is not TextureEntry and not LooseScriptEntry && item.Name.EndsWith(".xbm", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Shows a picture file from a bundle or a project (PNG, JPEG, BMP, GIF, TIFF, DDS) in the texture viewer.</summary>
+    private async Task OpenPictureAsync(EntryItem item)
+    {
+        try
+        {
+            var entry = item.Entry;
+            byte[] data = await Task.Run(() =>
+            {
+                if (!entry.Archive.ReadsFromDisk) return entry.Read(null);
+                using var fs = new FileStream(entry.Archive.FilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                return entry.Read(fs);
+            });
+            if (!TextureWindow.Open(item.Name, $"{item.BundleName}  ·  {entry.Path}", data, this))
+                ShowError($"{item.Name} can't be shown.\n\nIt isn't a picture this viewer understands. It may be a .dds in a format that isn't supported yet (cube maps, BC2, and some others).");
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
+        {
+            ShowError($"{item.Name} could not be read.\n\n{ex.Message}");
+        }
+    }
 
     /// <summary>Texture caches found beside a bundle or in the game folder, kept so the next texture doesn't read the index again.</summary>
     private static readonly Dictionary<string, TextureCacheArchive?> SideCaches = new(StringComparer.OrdinalIgnoreCase);
@@ -792,10 +815,11 @@ public partial class MainWindow : Window, IMessageHost
 
     private void GridPreview_Click(object sender, RoutedEventArgs e)
     {
-        if (Highlighted().FirstOrDefault(i => i.IsPreviewable || i.Entry is StringsEntry or TextureEntry || IsTextureHeader(i)) is not { } item) return;
+        if (Highlighted().FirstOrDefault(i => i.IsPreviewable || i.Entry is StringsEntry or TextureEntry || IsTextureHeader(i) || TextureWindow.CanShow(i.Name)) is not { } item) return;
         if (item.Entry is StringsEntry strings) StringsWindow.Open(strings.FullPath, this);
         else if (item.Entry is TextureEntry texture) TextureWindow.Open(texture, this);
         else if (IsTextureHeader(item)) _ = OpenTextureHeaderAsync(item);
+        else if (TextureWindow.CanShow(item.Name)) _ = OpenPictureAsync(item);
         else _ = PreviewAsync(item);
     }
 

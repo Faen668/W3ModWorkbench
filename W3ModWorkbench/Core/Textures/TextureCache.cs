@@ -21,6 +21,9 @@ public enum TextureFormat
 /// <summary>What a texture.cache entry says about its texture.</summary>
 public sealed record TextureInfo(int Width, int Height, int Mips, int Slices, int RawFormat, TextureFormat Format, int Alignment, long DataOffset, int PackedSize, int UnpackedSize)
 {
+    /// <summary>The format, size and mip count in a few words: BC1 2048x1024 ×12.</summary>
+    public string Description => $"{FormatName} {Width}x{Height}" + (Mips > 1 ? $" ×{Mips}" : "");
+
     /// <summary>The format as the game writes it, for what's not understood yet.</summary>
     public string FormatName => Format == TextureFormat.Unknown ? $"format {RawFormat}" : Format switch
     {
@@ -39,7 +42,7 @@ public sealed class TextureEntry : ArchiveEntry
 
     public override string ExtractPath => Path.EndsWith(".dds", StringComparison.OrdinalIgnoreCase) ? Path : Path + ".dds";
 
-    public override string FormatText => $"{Info.FormatName} {Info.Width}x{Info.Height}" + (Info.Mips > 1 ? $" ×{Info.Mips}" : "");
+    public override string FormatText => Info.Description;
 
     /// <summary>The texture as a .dds file: all of its mip levels, of the first slice.</summary>
     public override byte[] Read(Stream? archiveStream)
