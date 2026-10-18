@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.6.0
 
 - **Meshes extract with their `.buffer` files**: a mesh keeps its shape in numbered `.buffer` files, which the game packs in their own bundle (`buffers0.bundle` beside `blob0.bundle`). With **Include .buffer files** (on by default, in the extract bar) extracting a file takes its buffers along from any bundle open in the same folder, and extracting a buffer takes the file it belongs to.
 - **Textures as PNG**: a new extract option writes textures from a texture cache, and `.dds` files, as full-size PNG pictures instead of `.dds`.
