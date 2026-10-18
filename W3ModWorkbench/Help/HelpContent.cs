@@ -104,7 +104,7 @@ Rest the mouse on a file's name to see its path and what kind of file it is: a m
 
 ## The preview pane
 
-**View > Preview pane** (Alt+P) shows the highlighted file beside the list, without opening it: textures and pictures as images (an `.xbm` finds its texture in a cache), scripts with WitcherScript colouring, XML with XML colouring, and other text as it is. With several files highlighted it says how many and their size. Drag the bar between the list and the pane to resize it.
+**View > Preview pane** (Alt+P) shows the highlighted file beside the list, without opening it: textures and pictures as images (an `.xbm` finds its texture in a cache), meshes in 3D with their textures, scripts with WitcherScript colouring, XML with XML colouring, and other text as it is. With several files highlighted it says how many and their size. Drag the bar between the list and the pane to resize it.
 
 ## Searching
 
@@ -193,8 +193,8 @@ In a script, hold **Ctrl** and click a name to jump to where it's declared, the 
 
 Rest the mouse on an underlined name for a moment to see its declaration in a popup, coloured like the preview, with the file and line it's on, and what it belongs to: the class of a method or variable, or the number behind an enum value, which is what compiled code shows. That way you can tell where a click will take you before you go. When several declarations fit, the popup shows the first few. You can turn the popup off in **Settings**.
 
-- It looks in the script's own archive first, then in every other archive open in the main window, then in the game's scripts, which it finds the same way as for enum names (see **Settings**). Open a library's archive alongside the mod that uses it to jump into the library.
-- Some mods, such as Shared Utils, install as loose scripts with no archive to open. When a name isn't found, click **Search Now** in the message to search the loose scripts of every mod in the game's `mods` folder. If that finds nothing either, a second message offers to search inside every installed mod's compiled scripts, which are decompiled first. Either way they're then searched for every definition until the explorer is closed. Loose files that replace one of the game's scripts are left out, and so is any mod whose archive is open, since many ship the same scripts both ways.
+- It looks in the script's own archive first, then in every other archive open in the main window, then in every mod installed in the game's `mods` folder, then in the game's scripts, which it finds the same way as for enum names (see **Settings**).
+- The installed mods are read in the background as soon as a script opens: their compiled scripts, decompiled (well under a second for most installs), and the loose scripts of mods that ship them that way, such as Shared Utils. They're read once and kept until the explorer is closed. Loose files that replace one of the game's scripts are left out, and so is any mod whose archive is open, since many ship the same scripts both ways.
 - Functions, events, classes, states, structs, enums and their values, member variables, and the function's own parameters and local variables all work.
 - For `a.b`, it follows the declared type of `a` through variables, function return types and casts, and up the class's `extends` chain. `this`, `super`, `parent` and `virtual_parent` work too.
 - Click the name of a `@wrapMethod` or `@replaceMethod` function, or `wrappedMethod`, to see the original: the game's, or the `@addMethod` of the mod that added it. Click a method's own name to see the one it overrides.
@@ -222,10 +222,10 @@ These open a list under the files. Click a line, or press Enter, to go there; ho
 - **Find all references** (**Shift+F12**): every place that uses the name at the cursor, worked out the same way as go to definition, so a method called `Init` in one class isn't mixed up with another class's. Lines marked **maybe** are calls where the type before the dot couldn't be worked out.
 - **Who else changes this** (**Ctrl+Shift+F12**): for a function, every `@wrapMethod` and `@replaceMethod` that changes it and every class that overrides it. For a class, the methods and variables mods add to it, and any mod that declares it again. For one of the game's scripts, the mods whose loose copy of the file replaces it outright.
 - **Show type hierarchy** (**Shift+Alt+H**): a class's base classes, the classes that extend it however far down, and a statemachine's states. On a method, the base versions it overrides and the ones that override it.
-- **Show usage graph** (right-click menu): a picture of how a function, event, variable or type is used. The thing itself is on the right, the functions that use it are to its left, and the functions that use those further left, up to six levels out (the **Levels** box). Click a box to light up its chain of calls down to the target, double-click it to open it (**Ctrl** for the other group), and click the label on a line to open the call, or hover it to read the lines of code. Right-click a box for **Show usage graph of this**, which starts again from that function. Drag with either mouse button to pan, **Ctrl+wheel** to zoom, **Fit** to see it all, and **Stretch** to fill the window. Steps with many callers wrap into several columns. Like go to definition, it offers to read the installed mods' loose and compiled scripts when the name isn't declared anywhere searched yet, and a bar above the graph does the same when they aren't included yet.
+- **Show usage graph** (right-click menu): a picture of how a function, event, variable or type is used. The thing itself is on the right, the functions that use it are to its left, and the functions that use those further left, up to six levels out (the **Levels** box). Click a box to light up its chain of calls down to the target, double-click it to open it (**Ctrl** for the other group), and click the label on a line to open the call, or hover it to read the lines of code. Right-click a box for **Show usage graph of this**, which starts again from that function. Drag with either mouse button to pan, **Ctrl+wheel** to zoom, **Fit** to see it all, and **Stretch** to fill the window. Steps with many callers wrap into several columns.
 - **Find in files** (**Ctrl+Shift+F**): plain text, whole words or a regular expression, through every script that's searched, comments and strings included.
 
-The installed mods' scripts are only in these searches once they've been read for go to definition. Until then, a strip under the list says so, and its **Loose scripts** and **Compiled scripts** buttons read them and search again.
+These search the installed mods' scripts too, loose and compiled, as go to definition does.
 
 ## Comparing
 
@@ -253,19 +253,102 @@ Extracting a texture from the file list writes it as `name.xbm.dds`.
 Formats it reads: BC1 and BC3 (colour, with and without alpha), BC4 (single-channel masks), BC5 and BC7 (normal maps and the Remastered's high quality textures), plain 32-bit colour and float data (light probes). A texture in another format is listed, but the viewer says it can't show it yet. Cube maps and texture arrays show their first slice. Normal maps are shown as stored, with the blue worked out for BC5.
 """),
 
-        new(Basics, "Projects", "\uE821", """
-A **project** is how the tool knows which files are your mod's. It is a small `.w3bench` file (plain JSON) that lives in the mod's folder and keeps:
+        new(Basics, "Meshes", "", """
+Double-click a `.w2mesh`, or select it and press **Enter**, to see it in 3D with its textures. The preview pane shows it too, smaller, and it turns there the same way. A mesh file on disk (one you extracted, or one of REDkit's own in `r4data`) opens from **Open files** or by dropping it on the window.
 
-- the mod's **scripts folder**: every `.ws` file in it is part of the project, and it's what **Compile** builds;
+A mesh keeps its shape in its `.buffer` files and its look in its materials and textures, which are all in other files. The tool finds them the way the game would: in the archives you have open first, then in the bundles beside the mesh's own (the game keeps buffers in `buffers.bundle`), then in the game's bundles and texture caches, mods and DLC before the base game. So a mesh in the game's `blob.bundle` shows with its textures without opening anything else, and a mod's mesh shows the mod's textures when the mod is open.
+
+## Looking around
+
+- Drag with the left button to turn around the mesh, with the right button (or **Shift** and the left) to move it, and turn the wheel to come closer. Double-click, or press **F**, to fit it to the view.
+- **Front**, **Side** and **Top** (or **1**, **2**, **3**) look at it from those sides.
+- **LOD** picks the level of detail: 0 is the one used up close, and each one after it says how many triangles it has and from how far away the game uses it.
+- **Textures** (**T**) turns the textures off, to see the shape in plain grey. **Wireframe** (**W**) draws the triangles' edges over it.
+
+## Chunks and materials
+
+A mesh is split into **chunks**, each drawn with one of its **materials**. Untick a chunk to hide it, for instance to see what's under a cloak.
+
+Each material says where it's from: kept in the mesh, or a material instance (`.w2mi`), and what it's based on, down to the shader (`pbr_std`, `pbr_skin`…). **Textures** lists every texture it uses with the parameter it's in (Diffuse, Normal, TintMask…), its own and those it takes from its bases. **Colour texture** picks which of them is drawn, which is how you look at a normal map or a mask on the mesh itself.
+
+- **Other texture…** puts any texture on the material's chunks: type part of its path. With nothing typed, it lists the textures beside the mesh and its own.
+- **Other material…** draws the chunks with another material instance (`.w2mi`), with its textures.
+- **Back to its own** puts the mesh's material back, undoing the changes that aren't saved.
+
+## Changing materials
+
+Open **Parameters** on a material to see every parameter its shader has: textures, numbers, colours (`#RRGGBB`, or `#RRGGBBAA` with alpha) and vectors (`x, y, z, w`). Those in bold are the material's own; the rest it takes from its base or the shader, which the tip says. Type a new value and press **Enter**, or pick a texture with **…**, and the parameter becomes the material's own; the undo button beside it takes its own value away again. A new colour texture shows on the mesh straight away. Other changes (colours, numbers) don't show, since the viewer doesn't run the game's shaders, but they're saved.
+
+**Save to project** (Ctrl+S) saves the changes into the open project, never over the files they came from. Each file goes to its game path in the project's **workspace**, which Build packs into the mod's bundle, so the mod uses it in place of the game's:
+
+- A material kept in the mesh is saved in the mesh, which goes to the project with its `.buffer` files.
+- A material of its own (`.w2mi`) can be used by other meshes too, so saving asks: a **new material for this mesh**, or **change it for every mesh**, which puts a changed copy of the `.w2mi` in the project.
+- A mesh that points straight at a shader (`.w2mg`) gets a new material instance of it, as the shader has nothing of its own to change.
+- **Other material…** points the mesh at that `.w2mi` when it's saved.
+
+**Save as new material…** saves a material, with its changes, as a new `.w2mi` wherever you choose in the project's game files, and uses it for those chunks; save the mesh afterwards to keep that.
+
+With no project open, saving asks you to make one or open one first. Once saved, the project's copies are what the tool finds first, so opening the mesh again, from the project or from the game's bundles, shows your version. Closing the window with changes that aren't saved asks about them.
+
+## Export OBJ
+
+**Export OBJ** saves the LOD shown, with the chunks that are ticked, as a Wavefront `.obj` and `.mtl`, with each material's colour texture as a PNG beside them. Blender, 3ds Max and most other tools read it. It's turned to stand up as those tools expect.
+
+## What it shows and what it doesn't
+
+The colour is the texture alone, lit from where you look. The game's shaders do more: tinting, colour shifts, detail maps, transparency and skin. So some armour shows in the raw colours of its tint mask, and hair and foliage cards show as solid sheets. Skinned meshes are shown in their bind pose, without a skeleton. Textures that are missing from every cache, or in texture arrays, show as plain grey, and the material says why.
+
+The game's cooked meshes (CR2W versions 162 to 164: the original game, and the Remastered with its DLC) and REDkit's uncooked ones are read.
+"""),
+
+        new(Basics, "Projects", "\uE821", """
+A **project** is where you make your mod. It's a folder of your own, outside the game, with a small `.w3bench` file (plain JSON) in it:
+
+```
+My Project\
+  My Project.w3bench
+  scripts\        the mod's scripts
+  workspace\      copies of the game's files you change, each at its game path
+  build\
+    modThisIsMyMod\   what Build makes, ready to install
+```
+
+The `.w3bench` file keeps:
+
+- the mod's **scripts folder**: every `.ws` file in it is part of the project, and it's what **Compile scripts** and **Build** compile;
+- the mod's **workspace** (`workspace` unless the `.w3bench` says otherwise): meshes, materials, XML and other game files at their game paths, which Build packs into the mod's bundle;
+- the **mod name**, the folder Build makes and Install puts in the game's mods folder (`modThisIsMyMod`; the game only loads folders that start with `mod`);
 - the project's **other files and folders**: menus, strings, notes, anything you add;
 - **where Compile writes** the `.rsblob`;
 - a name, author, version and description.
+
+## The game's files are never changed
+
+Everything that comes from the game is read-only, everywhere in the tool: files inside bundles, texture caches and compiled scripts, and every file in the game's folder, its DLC and the installed mods (other people's work, and your own mod's installed copy, which the next Install replaces). REDkit's own files (its `r4data` and its programs) are read-only too, and so is the project's `build` folder, which Build makes new each time. Typing in one of these says why and offers **Copy to project**; saving one asks where in your project it goes; extracting into the game's folders, or making a project there, is refused.
+
+**Copy to project** (right-click files in the list, or the offer in an editor) puts a copy in your project at the same game path: a script in the project's scripts folder (`content0\scripts\game\x.ws` becomes `scripts\game\x.ws`), anything else in the workspace, with a mesh's `.buffer` files along with it. The copy opens, ready to change. A file the project has already is left as it is, so nothing of yours is overwritten. Textures in a texture cache aren't copied yet, as their pixels aren't a game file of their own.
+
+Your own files anywhere else (a folder of scripts in Documents, say) can be edited as before.
+
+Two things do write into the game's folder, and only because you asked: **Install** (below), into the mod's own folder under `mods`, and Compile, when the project is set to write its `.rsblob` into an installed mod's folder. The scripting tools' key binding helper can also change the game's `input.xml`, after asking, keeping a `.bak` copy.
+
+## Build and Install
+
+**Project > Build** (Ctrl+Shift+B) makes the mod in the project's `build` folder, ready to install:
+
+- the scripts are compiled into `content\precompiled.rsblob`, the way REDkit publishes a mod, and if any don't compile, nothing is built and **Show errors** lists them, each opening its line. They can also go in `content\scripts` as they are: on their own, for the game to compile when it starts, or beside the compiled ones as the mod's source, with an `info.json` that tells the game to run the compiled ones. The first build asks which; **Project properties** changes it later (**When the mod is built**);
+- the workspace's files are packed into `content\blob0.bundle` (and `buffers0.bundle` for meshes' buffers) with the `metadata.store` the game needs, by REDkit's `wcc_lite` (set where it is in Settings; REDkit is free on Steam and GOG). A mod with only scripts doesn't need it;
+- the project's `.w3strings` files go in `content`.
+
+Build packs files, it doesn't cook them. Files copied from the game's bundles (with Copy to project, or changed in the mesh viewer) are cooked already, and XML and other text files need no cooking, so they work. REDkit's source files (from its `r4data`, or a REDkit project's workspace) aren't cooked, and the game can't load them; nor does it see pictures (`.png`, `.dds`…) meant as textures, which go in a mod's own texture cache. Before it builds, Build lists any of these in the workspace and asks whether to go on, and Copy to project says so when a copy isn't cooked. A file is cooked when the game's cook has marked its objects, which is how WolvenKit tells them apart too.
+
+**Project > Install** copies the build to the game's `mods` folder under the mod's name, after saying where. It replaces only that one folder. If a folder of that name is there and wasn't installed from this project (someone else's mod of the same name, or one copied in by hand), it asks before replacing it. A small `w3bench-install.json` in the installed folder records which project installed it.
 
 Paths in it are relative to the file, so the folder can be moved, zipped or kept in git and the project still opens. Which tabs you had open is kept separately, in the tool's own settings folder, not in the `.w3bench` file, so sharing a project doesn't share your tabs.
 
 ## Making and opening a project
 
-**Project > New project** asks for a name, the mod's folder and the scripts folder (it looks for `scripts`, `content\scripts` and `workspace\scripts` in the folder), and makes `Name.w3bench`. **Project > Open project** (**Ctrl+Shift+O**), a `.w3bench` file dropped on the window or opened from Open files, or a folder with one in it, opens an existing one. **Recent projects** lists the last ten. One project is open at a time: opening another closes the first, asking about unsaved changes. When the tool starts it opens the project you had last, with the scripts that were open (turn this off in Settings).
+**Project > New project** asks for a name, the mod name (made from the name until you change it), the project's folder (`Documents\W3 Mod Workbench\Name` unless you choose another) and the scripts folder, and makes `Name.w3bench` with `scripts` and `workspace` folders. A folder inside the game's or REDkit's folders isn't accepted. **Project > Open project** (**Ctrl+Shift+O**), a `.w3bench` file dropped on the window or opened from Open files, or a folder with one in it, opens an existing one. **Recent projects** lists the last ten. One project is open at a time: opening another closes the first, asking about unsaved changes. When the tool starts it opens the project you had last, with the scripts that were open (turn this off in Settings).
 
 To turn a folder of loose scripts into a project, right-click its entry in the tree and choose **Create a project from these scripts**. The project goes in the mod's folder above the scripts, and the name and scripts folder are filled in for you. **Edit as project** on a decompiled mod makes one as well.
 
@@ -274,6 +357,8 @@ To turn a folder of loose scripts into a project, right-click its entry in the t
 The project is the first entry in the tree, with a `PROJECT` badge and its name. Under it are its scripts and its other files, laid out as they are in the mod's folder. Loose scripts opened with Open folder or by dropping a `.ws` file are listed separately and aren't part of it. The game's scripts and mods are never part of a project.
 
 Right-click the project for **Project properties**, **Add files to the project**, **Refresh the project** (after files change outside the tool), **Open the project folder** and **Close project**. Right-click files in the list for **Add to project** (on loose files) or **Remove from project** (on files added by hand). Removing only takes the name off the list: the file is never deleted. XML files in a project open in the XML editor on double-click.
+
+**Add files to the project** links files where they are, and ones outside the project's folder are listed under **external**. A script (`.ws`) only compiles with the project from its scripts folder, so for a script from anywhere else it asks first: **Copy into scripts** puts a copy in the scripts folder, where it's compiled with the mod (the original is left alone, and a script with the same name there already isn't overwritten), while **Add where it is** links it as before, listed with the project but not compiled.
 
 ## Editing files that aren't in the project
 
@@ -307,6 +392,13 @@ Editing is done in a project: see the **Projects** page for how they work. In sh
 - When the same file is open twice, in both groups of a split, both show the same text, so an edit in one is in the other too.
 - After a save, go to definition, references and the other searches see the change everywhere.
 
+## Help while typing
+
+- **Names as you type**: after a dot, a list of what the thing before it has: its type's functions, events and variables, its base classes' too, and an array's built-in methods. Three letters into a name, it lists the locals, parameters, the class's own members, globals, types, enum values and keywords that begin the same way; not for a keyword typed in full (`if`, `for`, `return`…), a name being declared (after `var`, `function`, `class` and the like), or a name nothing else starts with. Keep typing to narrow it, then **Enter** or **Tab** to take the one picked; a bracket, dot, comma or semicolon takes it too and goes in after it. **Esc** or a space closes the list. **Ctrl+Space** opens it any time. Turn the list off while typing in **Settings**; Ctrl+Space still works.
+- **Snippets** (**Ctrl+J**, or **Insert snippet** on the right-click menu): common WitcherScript to start from: `@wrapMethod`, `@replaceMethod`, `@addMethod` and `@addField`, running code when the player spawns, a class, a statemachine with a state, a struct, an enum, a console command, a timer, a loop over an array, listening for a key, reading a menu setting, a log line, a notification, a fact check and giving the player an item. Typing a snippet's name on a line of its own and pressing **Tab** inserts it as well (`wrap`, `onspawned`, `timer`, `listen`…). The parts to fill in are picked out: type over the first, **Tab** to the next (**Shift+Tab** back), and after the last, Tab goes to where the snippet ends.
+- **Your own snippets**: save a `.ws` file in `%AppData%\W3ModWorkbench\snippets` and it's a snippet named after the file. A first line starting with `//` is its description. Write `${name}` where something should be typed, filled with `name` to start with, and `$0` where the caret goes at the end. One with the same name as a built-in snippet replaces it.
+- **Rename** (**F2**, or **Rename** on the right-click menu): gives a function, event, variable, type or enum value a new name everywhere the project uses it, worked out the way **Find all references** does, so another class's member with the same name is left alone. Only names your project declares can be renamed (and a function's locals and parameters, in its own file): renaming one of the game's or another mod's would break what uses it there. Open files keep the change unsaved so you can look it over; files that aren't open are saved. Uses where the type before the dot couldn't be worked out are counted, and you choose whether to rename them too. The list under the files shows every place that changed.
+
 ## Editing a decompiled mod
 
 Decompiled scripts are read-only, since they live inside the blob. To change one, press **Edit as project** at the top of the window (typing in one offers it too) and choose a folder. The mod's scripts are saved to a `scripts` folder inside it, every file but `all.ws`, which only repeats the others. A `.w3bench` project is made in that folder, named after the mod, and opens in place of the blob; the open tabs switch to its files, at the same place, now editable. The folder must not have a `scripts` folder with anything in it already, or a project file, so nothing is overwritten.
@@ -315,15 +407,15 @@ In testing, a decompiled mod compiled again without changes, though a mod that u
 
 ## Compiling
 
-**Compile** (**Ctrl+Shift+B**) builds the project into a `.rsblob`. Two compilers can do it:
+**Project > Compile scripts** compiles the project's scripts into a `.rsblob` to check them or try them, with any errors listed under a preview, each opening its line. **Build** compiles them into the mod as well, so you don't need both. Two compilers can do it:
 
 - **REDkit's `wcc_lite.exe`**, the same compiler REDkit uses to publish. REDkit is free on Steam and GOG for owners of the game: set wcc_lite in **Settings**, or let **Find automatically** look for it. It is used whenever it's set.
 - **The built-in compiler**, for when REDkit isn't installed. It reads the game's own scripts (from the game folder in **Settings**, or REDkit's, whichever is found) and the mods you have installed, so a project built on Shared Utils finds it there, and writes the same kind of blob in about a second. Tick **Always use the built-in compiler** in Settings to use it even when wcc_lite is set, which is handy while you're trying changes.
 
-Until one of them can run, the button is greyed out, and resting the mouse on it says why. You can still edit and save scripts without it.
+Until one of them can run, compiling says why. You can still edit and save scripts without it.
 
 - Changed files are saved first, since both compilers read what's on disk. It asks before saving them.
-- The first time, it asks where the compiled blob goes, and keeps that in the project's `.w3bench` file (also in Project > Project properties). Right-click **Compile** and choose **Compile to another file** to change it. For a mod, that's usually `content\precompiled.rsblob` in the mod's folder.
+- The first time, it asks where the compiled blob goes, and keeps that in the project's `.w3bench` file (also in Project > Project properties). **Project > Compile scripts to…** asks again.
 - wcc_lite compiles the game's scripts and then yours on top, the way REDkit does, which takes about a minute. The built-in compiler only reads the game's scripts for what they declare, so it takes a second.
 - The built-in compiler checks your scripts the way the game's compiler does, but it is newer and less tested. Its output was compared with wcc_lite's on real mods and on about ten thousand of the game's own functions, and it matched on nearly all of them, but for a release, compile with wcc_lite when you can. Maps (`map<K, V>`) are supported, by the compiler and the decompiler.
 - Warnings and errors are listed under the files, grouped by file. Click one to go to its line. When it fails, nothing is written, so an older blob that works is left alone.
@@ -431,6 +523,35 @@ Search by class, function or both: `W3PlayerWitcher OnSpawned`. Each result show
 Events keep `event`, and states are named the way the compiler does, as in `CR4PlayerStateIdle`. **Note where it's from** adds the game's file and line as a comment. **Copy** puts it on the clipboard.
 """),
 
+        new(Basics, "Scripting tools", "\uE90F", """
+Five tools in the **Tools** menu for working on a mod's scripts. The first three read the game's scripts, the installed mods and the open project, straight from disk, with nothing open first. Each mod's compiled scripts are decompiled (well under a second for most installs), and a mod without any is read from its loose scripts; untick **Installed mods** to leave the mods out. A mod's loose copy of one of the game's files isn't listed twice. Double-click a line, or press Enter, to open the script at that place.
+
+## Console commands
+
+Every `exec function`: the functions the game's debug console runs by name. Search by name, parameter or mod. Each shows what to type, with names and strings in quotes (`additem('itemName')`), its parameters and which can be left out, and where it's declared. **Copy** puts the command on the clipboard; **Include optional parameters** adds the ones that can be left out. The console needs debug scripts on: `DBGConsoleOn=true` under `[General]` in `dx12user.settings` or `user.settings` in `Documents\The Witcher 3`.
+
+## Quest facts
+
+Every fact the scripts set or read with `FactsAdd`, `FactsSet`, `FactsSubstract`, `FactsRemove`, `FactsQuerySum`, `FactsQuerySumSince`, `FactsQueryLatestValue` and `FactsDoesExist`, and each place that does, with the calls that set it marked. The filter shows only facts the project or a mod uses, facts that are set but no script reads (or read but no script sets), or the calls whose fact name the code builds rather than writes out. Quests and scenes use facts too, but they're compiled resources, so a fact "no script sets" may well be set by a quest. **Name** and **FactsQuerySum** copy the fact's name, or the call that reads it.
+
+## Scripts log
+
+Follows `Documents\The Witcher 3\scriptslog.txt` while the game runs, which it writes when debug scripts are on (`-debugscripts`). New lines appear as they're written, **Follow** keeps the newest in view, **Pause** stops for a moment, and **Clear** hides what's there so far without changing the file. When the game starts again with a new log, the list starts again. Narrow it with words (`!word` leaves lines out), a channel (the name `LogChannel` was given) or **Problems**, which keeps asserts and lines that mention an error or a warning. **Open log…** watches any other log file.
+
+Double-click a line, or press Enter, to find the script that wrote it: the `LogChannel` call on that channel whose text matches the line best, followed through the small functions the game logs some channels with, such as `LogBoat`.
+
+## Key binding helper
+
+Gives a mod's action a key. Fill in the action's name, the key (every key the engine knows is listed, keyboard and mouse first), whether it fires when **held**, and the contexts it works in (exploring, combat, on a horse, swimming…; **Show every context** lists the rest). It writes the lines for `input.settings`, the `input.xml` entry that puts the action in the game's key bindings menu, and the script that listens for it. Your `input.settings` is read to say whether the key is free in those contexts, and what it's bound to if not. **input.settings**, **input.xml** and **Script** copy each part, for your code and your mod's readme. **Add to my game** puts the lines in your `input.settings` to try the key, keeping a `.bak` copy; close the game first, as it writes `input.settings` when it quits. Then, since the game's `input.xml` is one of the game's own files, it asks separately before adding the entry there for the key bindings menu (with an `input.xml.bak` copy). **Leave it** keeps the game folder as it is; the key still works, it just isn't listed in the menu.
+
+## Hashes and IDs
+
+- **Hash a name**: the hash the game stores a name as: in CR2W files (FNV-1a 32 with the name's closing zero), as a `.w3strings` key, as a Wwise ID for sounds, and plain FNV-1a 32 and 64 and CRC-32.
+- **Find the name behind a hash**: looks through every name in the game's scripts and every string key the game has, with each kind of hash. Type it in decimal or with `0x` in front.
+- **Read a number**: as hex, as signed and as float bits, its bytes as a file stores them, and for a string ID in the `211…` range, the Nexus mod ID and string number it's made of.
+- **String IDs for a mod**: the block of 1000 IDs a Nexus mod ID gives by the usual convention: 211, then the four-digit ID, then 000 to 999.
+"""),
+
         new(Basics, "Settings", "", """
 Open **Settings** from the toolbar, or press Ctrl+, (comma).
 
@@ -466,6 +587,7 @@ The path to **Script Merger Remastered** by relapse12, a separate download on Ne
 - **Open files in**: tabs in one preview window, or a separate window for each file. Go to definition follows the same choice.
 - **Split view**: whether a split puts the second group of tabs beside the first or below it.
 - **Show a name's declaration when the mouse rests on it**: the definition popup in scripts.
+- **Suggest names while typing**: the list of names that fit, after a dot and at the start of a name, in a script you can edit. Ctrl+Space shows it either way.
 
 ## Where settings live
 
@@ -585,6 +707,7 @@ Inside a script preview, Ctrl+Shift+F still searches from there, through the scr
 - **Ctrl+Shift+W**: stub generator
 - **Ctrl+Shift+I**: source inspector
 - **Ctrl+Shift+L**: load order analyser
+- **Ctrl+Shift+B**: build the open project's mod
 - **Ctrl+,**: settings
 - **F1**: this help
 
@@ -616,13 +739,16 @@ Inside a script preview, Ctrl+Shift+F still searches from there, through the scr
 - **F3** / **Shift+F3**: next or previous match
 - **Ctrl+S**: save, or save as for a read-only file
 - **Ctrl+Shift+S**: save every changed file
-- **Ctrl+Shift+B**: compile the project
+- **Ctrl+Shift+B**: build the open project's mod
 - **Ctrl+Shift+N** and **Ctrl+Shift+O** (main window): new project, open project
 - **Ctrl+Z** / **Ctrl+Y**: undo or redo
 - **Ctrl+click** or **F12**: go to definition (scripts)
 - **Ctrl+Alt+click** or **Ctrl+F12**: open the definition in the other group
 - **Shift+F12**: find all references
 - **Ctrl+Shift+F12**: who else changes this
+- **F2**: rename (names the project declares)
+- **Ctrl+Space**: suggest names
+- **Ctrl+J**: insert a snippet; a snippet's name and **Tab** inserts it too
 - **Shift+Alt+H**: type hierarchy
 - **Ctrl+T**: go to any symbol
 - **Ctrl+Shift+O**: show or hide the outline

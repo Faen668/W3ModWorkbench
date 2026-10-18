@@ -41,6 +41,7 @@ public partial class SettingsWindow : Window, IMessageHost
         (settings.PreviewOpenIn == "Windows" ? OpenInWindows : OpenInTabs).IsChecked = true;
         (settings.PreviewSplit == "Down" ? SplitDown : SplitRight).IsChecked = true;
         PeekCheck.IsChecked = settings.PeekDefinitions;
+        CompleteCheck.IsChecked = settings.SuggestNames;
         GameFolderBox.TextChanged += (_, _) => { UpdateGameStatus(); UpdateWccStatus(); };
         UpdateGameStatus();
         WccBox.Text = settings.WccLitePath;
@@ -297,6 +298,7 @@ public partial class SettingsWindow : Window, IMessageHost
         _settings.PreviewOpenIn = OpenInWindows.IsChecked == true ? "Windows" : "Tabs";
         _settings.PreviewSplit = SplitDown.IsChecked == true ? "Down" : "Right";
         _settings.PeekDefinitions = PeekCheck.IsChecked == true;
+        _settings.SuggestNames = CompleteCheck.IsChecked == true;
         _settings.WccLitePath = WccBox.Text.Trim().Trim('"');
         _settings.PreferBuiltInCompiler = BuiltInCheck.IsChecked == true;
         _settings.ScriptMergerPath = MergerBox.Text.Trim().Trim('"');

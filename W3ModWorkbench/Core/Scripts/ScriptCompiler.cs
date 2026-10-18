@@ -65,6 +65,10 @@ public static partial class ScriptCompiler
         if (GameScriptsFor(wccLite) is not { } gameScripts)
             return new CompileResult(false, [], "", "REDkit's game scripts (r4data\\scripts) weren't found next to wcc_lite.");
 
+        // the game's files are never written: a compiled blob goes in a mod's own folder, or anywhere of yours
+        try { Projects.FileSafety.CheckInstallWrite(output); }
+        catch (Projects.ProtectedFileException ex) { return new CompileResult(false, [], "", ex.Message); }
+
         string work = Path.Combine(Path.GetTempPath(), "W3ModWorkbench", "compile-" + Guid.NewGuid().ToString("N")[..8]);
         Directory.CreateDirectory(work);
         var log = new StringBuilder();

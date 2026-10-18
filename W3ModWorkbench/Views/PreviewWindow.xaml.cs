@@ -121,11 +121,15 @@ public partial class PreviewWindow : Window, IMessageHost
         created.Show();
     }
 
-    /// <summary>Shows a file as <see cref="Show"/> does, with a place in it selected.</summary>
+    /// <summary>
+    /// Shows a file as <see cref="Show"/> does, with a place in it selected. Closing the window afterwards hands the
+    /// focus back to <paramref name="owner"/>, such as the tool window the file was opened from.
+    /// </summary>
     public static void ShowAt(PreviewItem item, Window owner, int offset, int length)
     {
         if (FindOpen(item.Key) is { Host: { } host } open)
         {
+            host._opener = owner;
             host.ShowDocument(open);
             open.Reveal(offset, length);
             return;
@@ -134,11 +138,13 @@ public partial class PreviewWindow : Window, IMessageHost
         doc.Reveal(offset, length);
         if (OpensTabs && OpenWindows.FirstOrDefault(w => w._takesTabs) is { } window)
         {
+            window._opener = owner;
             window.Add(doc);
             window.BringForward();
             return;
         }
         var created = new PreviewWindow().Standalone(owner);
+        created._opener = owner;
         created.Add(doc);
         created.Show();
     }
@@ -180,6 +186,9 @@ public partial class PreviewWindow : Window, IMessageHost
         if (item.IsEditable && FindOpen(item.Key) is { } open) doc.ShareTextWith(open);
         return doc;
     }
+
+    /// <summary>The open view of a file, by its <see cref="PreviewItem.Key"/>, in any preview window.</summary>
+    public static PreviewDocument? OpenDocument(string key) => FindOpen(key);
 
     private static PreviewDocument? FindOpen(string key) =>
         OpenWindows.SelectMany(w => w.AllDocuments).FirstOrDefault(d => d.Item.Key == key);
@@ -721,10 +730,12 @@ public partial class PreviewWindow : Window, IMessageHost
     }
 
     /// <summary>Shows the box to type in over the top of the window.</summary>
-    public void ShowPicker(string placeholder, Func<string, IReadOnlyList<QuickPickItem>> filter, Action<QuickPickItem> chosen, string? note = null)
+    /// <param name="text">What the box starts with, selected so typing replaces it.</param>
+    public void ShowPicker(string placeholder, Func<string, IReadOnlyList<QuickPickItem>> filter, Action<QuickPickItem> chosen, string? note = null,
+        string? text = null)
     {
         foreach (var doc in AllDocuments) doc.CloseOverlays();
-        Picker.Show(placeholder, filter, chosen, note);
+        Picker.Show(placeholder, filter, chosen, note, text);
     }
 
     // ---------------------------------------------------------------- go to symbol
@@ -1033,16 +1044,6 @@ public partial class PreviewWindow : Window, IMessageHost
         ProjectBadge.Visibility = project ? Visibility.Visible : Visibility.Collapsed;
         ProjectBadgeText.Text = owner is null ? "" : $"PROJECT · {owner.Owner.ToUpperInvariant()}";
         ProjectBadge.ToolTip = owner is null ? null : $"In the project {owner.Owner}: its files can be edited, saved and compiled\n{owner.Project?.FilePath}";
-        CompileButton.Visibility = project ? Visibility.Visible : Visibility.Collapsed;
-        var compiler = CurrentCompiler();
-        CompileButton.IsEnabled = project && compiler is not null && _compile is null;
-        CompileText.Text = _compile is null ? "Compile" : "Compiling…";
-        CompileButton.ToolTip = compiler is null
-            ? CompilerChoice.NothingToCompileWith
-            : _compile is not null ? $"Compiling this project's scripts with {compiler.Name}…"
-            : compiler.Kind == CompilerKind.WccLite
-                ? "Compile this project's scripts into a .rsblob with REDkit's wcc_lite (Ctrl+Shift+B). Right-click to choose where it goes"
-                : "Compile this project's scripts into a .rsblob with the built-in compiler (Ctrl+Shift+B). Right-click to choose where it goes";
     }
 
     /// <summary>A file's changes were saved, or it was changed after a save: its tab and, when it's in use, the header show it.</summary>
@@ -1141,6 +1142,15 @@ public partial class PreviewWindow : Window, IMessageHost
     public Task<bool> AddToProjectAsync(PreviewDocument doc) =>
         Application.Current.MainWindow is MainWindow main && doc.Item.DiskPath is { } disk ? main.AddToProjectAsync([disk]) : Task.FromResult(false);
 
+    /// <summary>Whether the file can be copied into a project to change it: it has a game path, and the main window is there to do it.</summary>
+    public bool CanCopyToProject(PreviewDocument doc) => doc.Item.GamePath is not null && Application.Current.MainWindow is MainWindow;
+
+    /// <summary>Copies a read-only file (the game's, an installed mod's, or one in an archive) into the project at its game path, and opens the copy.</summary>
+    public Task<bool> CopyToProjectAsync(PreviewDocument doc) =>
+        Application.Current.MainWindow is MainWindow main && doc.Item.GamePath is { } gamePath
+            ? main.CopyToProjectAsync([(gamePath, () => doc.Item.Data)], open: true)
+            : Task.FromResult(false);
+
     /// <summary>Starts a project for the scripts the file is in. True once there is a project open that has the file.</summary>
     public async Task<bool> CreateProjectForAsync(PreviewDocument doc)
     {
@@ -1173,6 +1183,11 @@ public partial class PreviewWindow : Window, IMessageHost
     /// <summary>The work of <see cref="EditAsProjectAsync"/> once the folder is chosen.</summary>
     internal async Task SaveAsProjectAsync(PreviewDocument doc, ScriptArchive blob, MainWindow main, string folder)
     {
+        if (FileSafety.Protection(Path.Combine(folder, "_")) is { } protection)
+        {
+            _ = doc.ShowCard("Choose a folder of your own", protection + " A project goes somewhere of your own, such as Documents.", MessageKind.Warning, primary: "OK");
+            return;
+        }
         string scripts = Path.Combine(folder, "scripts");
         if (Directory.Exists(scripts) && Directory.EnumerateFileSystemEntries(scripts).Any())
         {
@@ -1196,6 +1211,7 @@ public partial class PreviewWindow : Window, IMessageHost
                 {
                     string path = Path.Combine(folder, entry.Path);
                     Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+                    FileSafety.CheckWrite(path);
                     File.WriteAllBytes(path, entry.Read(null));
                 }
             });
@@ -1246,7 +1262,7 @@ public partial class PreviewWindow : Window, IMessageHost
     private CancellationTokenSource? _compile;
 
     /// <summary>The compiler that would build a project now: wcc_lite when it's set, else the built-in one when the game's scripts are found.</summary>
-    private static CompilerChoice? CurrentCompiler() =>
+    public static CompilerChoice? CurrentCompiler() =>
         CompilerChoice.Pick(App.Settings.WccLitePath, App.Settings.GameFolder, App.Settings.PreferBuiltInCompiler);
 
     /// <summary>What the results panel shows now: a search, or a compile. Progress from an older one is dropped.</summary>
@@ -1337,6 +1353,44 @@ public partial class PreviewWindow : Window, IMessageHost
         }
     }
 
+    /// <summary>
+    /// Project > Compile scripts: compiles the open project in a preview window, where its warnings and errors are listed, each
+    /// opening its line. One of the project's files that's open already is used, or its first script is opened for it.
+    /// </summary>
+    public static async Task CompileProjectAsync(MainWindow main, bool chooseOutput)
+    {
+        if (await ProjectDocumentAsync(main) is not { Host: { } host } doc) return;
+        host.BringForward();
+        await host.CompileAsync(doc, chooseOutput);
+    }
+
+    /// <summary>A build whose scripts didn't compile: the errors in a preview window, as Compile scripts lists them.</summary>
+    public static async Task ShowCompileErrorsAsync(MainWindow main, CompileResult result, string output, CompilerChoice compiler)
+    {
+        if (await ProjectDocumentAsync(main) is not { Host: { } host } doc || ProjectOf(doc) is not { } project) return;
+        host.BringForward();
+        host._resultsShowing = result;
+        host._resultsFrom = doc;
+        host.ShowCompileResult($"Build {project.Owner}", project, result, output, TimeSpan.Zero, compiler);
+    }
+
+    /// <summary>A view of one of the open project's scripts: an open one, or its first script opened for it. Null when it has none.</summary>
+    private static async Task<PreviewDocument?> ProjectDocumentAsync(MainWindow main)
+    {
+        if (main.ProjectArchive is not { } archive) return null;
+        var open = OpenWindows.SelectMany(w => w.AllDocuments)
+            .FirstOrDefault(d => ProjectOf(d) is { } p && p.FilePath.Equals(archive.FilePath, StringComparison.OrdinalIgnoreCase));
+        if (open is not null) return open;
+        if (archive.Entries.OfType<LooseScriptEntry>().FirstOrDefault(e => e.IsScript) is not { } entry)
+        {
+            await main.ShowMessage("The project has no scripts yet", $"Add .ws files to {archive.FilePath} and they're compiled with the project.", MessageKind.Info);
+            return null;
+        }
+        var item = main.PreviewItemFor(entry, await Task.Run(() => entry.Read(null)));
+        Show(item, main);
+        return FindOpen(item.Key);
+    }
+
     /// <summary>The compiler's warnings and errors, grouped by file, each opening its line. The log is a button away.</summary>
     private void ShowCompileResult(string title, ScriptFolder project, CompileResult result, string output, TimeSpan took, CompilerChoice compiler)
     {
@@ -1424,16 +1478,6 @@ public partial class PreviewWindow : Window, IMessageHost
         if (Current is { } doc) _ = EditAsProjectAsync(doc);
     }
 
-    private void Compile_Click(object sender, RoutedEventArgs e)
-    {
-        if (Current is { } doc) _ = CompileAsync(doc, chooseOutput: false);
-    }
-
-    private void CompileTo_Click(object sender, RoutedEventArgs e)
-    {
-        if (Current is { } doc) _ = CompileAsync(doc, chooseOutput: true);
-    }
-
     private void FocusPane(int index)
     {
         if (index >= _panes.Count || _panes[index].Selected is not { } doc) return;
@@ -1459,7 +1503,8 @@ public partial class PreviewWindow : Window, IMessageHost
             SaveAll(AllOpenDocuments().Where(d => d.IsDirty));
         else if (key == Key.B && mods == (ModifierKeys.Control | ModifierKeys.Shift))
         {
-            if (doc is not null && ProjectOf(doc) is not null) _ = CompileAsync(doc, chooseOutput: false);
+            // builds the mod, as Project > Build does in the main window
+            if (Application.Current.MainWindow is MainWindow main && ProjectWorkspace.Current is not null) _ = main.BuildModAsync();
         }
         else if (key is Key.W or Key.F4 && mods == ModifierKeys.Control)
         {

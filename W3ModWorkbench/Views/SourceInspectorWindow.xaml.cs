@@ -12,6 +12,7 @@ using Microsoft.Win32;
 using W3ModWorkbench.Core;
 using W3ModWorkbench.Core.Inspector;
 using W3ModWorkbench.Highlighting;
+using W3ModWorkbench.Core.Projects;
 
 namespace W3ModWorkbench;
 
@@ -628,6 +629,7 @@ public partial class SourceInspectorWindow : Window, IMessageHost
         try
         {
             string text = html ? ReportWriter.Html(_report) : ReportWriter.Markdown(_report);
+            FileSafety.CheckWrite(dialog.FileName);
             await File.WriteAllTextAsync(dialog.FileName, text, new UTF8Encoding(false));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)

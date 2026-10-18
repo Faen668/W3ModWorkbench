@@ -321,7 +321,7 @@ public partial class FindInFilesWindow : Window
             PreviewItem item = entry is not null ? _main.PreviewItemFor(entry, data)
                 : archive is not null ? new PreviewItem(file.Path, file.Source, data, file, ScriptWorkspace.For(archive, _main.OpenArchives))
                 : new PreviewItem(file.Path, file.Source, data);
-            PreviewWindow.ShowAt(item, _main, row.Offset, row.Length);
+            PreviewWindow.ShowAt(item, this, row.Offset, row.Length);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {

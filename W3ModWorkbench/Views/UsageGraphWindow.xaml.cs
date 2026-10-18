@@ -19,8 +19,6 @@ public partial class UsageGraphWindow : Window
     private readonly PreviewWindow _host;
     private readonly PreviewDocument _from;
     private IReadOnlyList<ScriptIndex> _layers;
-    private readonly Func<Task<IReadOnlyList<ScriptIndex>?>> _reload;
-    private readonly Func<Func<Task>, (string Label, Action Run)[]> _modActions;
     private IReadOnlyList<ScriptSymbol> _targets;
     private ParsedScript _parsed;
     private CancellationTokenSource? _run;
@@ -43,11 +41,9 @@ public partial class UsageGraphWindow : Window
     private MouseButton _panButton;
 
     private UsageGraphWindow(PreviewWindow host, PreviewDocument from, IReadOnlyList<ScriptSymbol> targets, ParsedScript parsed,
-        IReadOnlyList<ScriptIndex> layers, Func<Task<IReadOnlyList<ScriptIndex>?>> reload, Func<Func<Task>, (string Label, Action Run)[]> modActions)
+        IReadOnlyList<ScriptIndex> layers)
     {
         InitializeComponent();
-        _reload = reload;
-        _modActions = modActions;
         _host = host;
         _from = from;
         _targets = targets;
@@ -60,11 +56,9 @@ public partial class UsageGraphWindow : Window
     }
 
     /// <summary>Opens the graph for a declaration, drawn from the scripts in <paramref name="layers"/>.</summary>
-    /// <param name="reload">Gets the scripts to look in again, once more of them are read.</param>
-    /// <param name="modActions">The buttons that add the installed mods' scripts, given what to run afterwards.</param>
     public static void Open(PreviewWindow host, PreviewDocument from, IReadOnlyList<ScriptSymbol> targets, ParsedScript parsed,
-        IReadOnlyList<ScriptIndex> layers, Func<Task<IReadOnlyList<ScriptIndex>?>> reload, Func<Func<Task>, (string Label, Action Run)[]> modActions) =>
-        new UsageGraphWindow(host, from, targets, parsed, layers, reload, modActions).Standalone(host).Show();
+        IReadOnlyList<ScriptIndex> layers) =>
+        new UsageGraphWindow(host, from, targets, parsed, layers).Standalone(host).Show();
 
     private int Levels => LevelsBox.SelectedItem is int n ? n : 3;
 
@@ -95,7 +89,6 @@ public partial class UsageGraphWindow : Window
             if (cancel.IsCancellationRequested) return;
             BusyText.Visibility = Visibility.Collapsed;
             Show(graph);
-            ShowModsNotice();
         }
         catch (OperationCanceledException)
         {
@@ -105,46 +98,6 @@ public partial class UsageGraphWindow : Window
         {
             BusyText.Text = "The graph couldn't be built: " + ex.Message;
         }
-    }
-
-    // ---------------------------------------------------------------- mods
-
-    /// <summary>
-    /// Asks, as go to definition does, whether to search the installed mods' scripts too, while they aren't
-    /// yet: callers in them are missing from the graph until they are.
-    /// </summary>
-    private void ShowModsNotice()
-    {
-        var actions = _modActions(ReloadAsync);
-        ModsNotice.Visibility = actions.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
-        if (actions.Length == 0) return;
-        ModsNoticeText.Text = "Only the open archives and the game's scripts were searched, so callers in the installed mods aren't shown. "
-            + "Once read, the mods' scripts stay in every search until the explorer is closed.";
-        ModsButtons.Children.Clear();
-        foreach (var (label, run) in actions)
-        {
-            var button = new Button { Content = "Search " + label.ToLowerInvariant(), Padding = new Thickness(14, 5, 14, 5), Margin = new Thickness(8, 0, 0, 0) };
-            button.Click += (_, _) =>
-            {
-                foreach (Button other in ModsButtons.Children) other.IsEnabled = false;
-                ModsNoticeText.Text = label == "Compiled scripts"
-                    ? "Decompiling the mods' scripts, which can take a little while…"
-                    : "Reading the mods' loose scripts…";
-                run();
-            };
-            ModsButtons.Children.Add(button);
-        }
-    }
-
-    /// <summary>Takes up the scripts that were just read, and builds the graph again with them.</summary>
-    private Task ReloadAsync()
-    {
-        _run?.Cancel();
-        return Dispatcher.InvokeAsync(async () =>
-        {
-            if (await _reload() is { } layers) _layers = layers;
-            Refresh();
-        }).Task.Unwrap();
     }
 
     // ---------------------------------------------------------------- drawing

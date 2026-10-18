@@ -9,6 +9,7 @@ using W3ModWorkbench.Core.Scripts;
 using W3ModWorkbench.Core.Strings;
 using W3ModWorkbench.Core.Textures;
 using W3ModWorkbench.ViewModels;
+using W3ModWorkbench.Core.Projects;
 
 namespace W3ModWorkbench;
 
@@ -185,6 +186,7 @@ public partial class MainWindow
                 csv.Append(string.Join(",", fields.Select(Quote))).Append("\r\n");
             }
             // with a BOM, so Excel reads accented names correctly
+            FileSafety.CheckWrite(dialog.FileName);
             File.WriteAllText(dialog.FileName, csv.ToString(), new UTF8Encoding(true));
             SetStatus($"Saved a list of {Format.Count(items.Count, "file")} to {dialog.FileName}");
         }

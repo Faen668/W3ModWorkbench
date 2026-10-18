@@ -13,6 +13,7 @@ using W3ModWorkbench.Core;
 using W3ModWorkbench.Core.Menu;
 using W3ModWorkbench.Core.Strings;
 using W3ModWorkbench.Highlighting;
+using W3ModWorkbench.Core.Projects;
 
 namespace W3ModWorkbench;
 
@@ -667,6 +668,7 @@ public partial class MenuBuilderPanel : UserControl
                 used.Add(id);
                 id++;
             }
+            FileSafety.CheckWrite(path);
             File.WriteAllText(path, sb.ToString(), new UTF8Encoding(false));
             ReadCsv(path);
             _keys.Clear();

@@ -33,6 +33,7 @@
 | 🕵️ | **Source inspector** | Compare two mods and see how much of one was copied from the other, even with everything renamed. |
 | 🧭 | **Load order analyser** | Reads every installed mod and checks the load order: collisions, missing targets, missing or mis-ordered dependencies. |
 | 🔎 | **Find in files** | Search the text of the game's scripts, your installed mods or any folder, like Notepad++, with nothing open first. |
+| 🧰 | **Scripting tools** | Every console command, every quest fact and where it's set, a live scripts log that leads to the line that wrote it, a key binding helper, and hashes and string IDs. |
 
 ## ✨ Features
 
@@ -44,6 +45,8 @@
 - **Fast**: the entire game, about 365,000 files, loads in around a second.
 - **Browse and search**: folder tree, sortable file list, and a search box that matches words anywhere in the path or wildcards on the file name (`*.redswf`, `*_icon??.xbm`).
 - **Extract exactly what you need**: tick files across several archives at once, or extract everything shown, a single folder or a quick selection, with or without the original folder structure. Meshes come with their `.buffer` files, and textures can be written as PNG.
+- **Make a mod without touching the game**: a project is a folder of your own with your scripts and a workspace of copied game files. Everything from the game, its DLC, installed mods and REDkit is read-only; **Copy to project** puts a copy at the same game path to change. **Build** makes `modYourMod`, ready to install (packing the workspace with REDkit's wcc_lite), and **Install** copies it to the game's mods folder.
+- **See meshes in 3D**: a `.w2mesh` opens with its textures, found in the game's bundles and caches without opening anything else. Pick a LOD, hide chunks, see the wireframe, swap a material's texture or the whole material while you look, and export it as OBJ with its textures.
 - **Compare and track down copies**: compare two files side by side, or list every open copy of a file in load order, with the one the game uses marked and whether the others really differ.
 - **Know what you're looking at**: every file says what kind it is (mesh, buffer, entity, quest phase…); copy its path or name, show it in Explorer, or export the list as CSV. Recent folders and files are a click away.
 - **Handles every compression the game uses**: stored, zlib and LZ4 HC, plus LZ4 and Snappy.
@@ -62,7 +65,7 @@
 - **Read text files without extracting**: decompiled scripts, plus `.xml`, `.csv`, `.ws`, `.json` and `.txt` files inside bundles.
 - **WitcherScript syntax highlighting**, using the grammar from WebSpam's VS Code extension.
 - **Line numbers and search** (Ctrl+F) with match case, whole word and regex, and F3 to jump between matches.
-- **Go to definition**: Ctrl+click (or F12) any function, class, enum value or variable in a script to open where it's declared, in the same mod or in the game's own scripts. A `@wrapMethod` leads to the game's original, and calls the mod wraps offer both. Alt+Left goes back.
+- **Go to definition**: Ctrl+click (or F12) any function, class, enum value or variable in a script to open where it's declared: in the same mod, any installed mod (compiled or loose) or the game's own scripts. A `@wrapMethod` leads to the game's original, and calls the mod wraps offer both. Alt+Left goes back.
 - **Definition popup**: rest the mouse on a name to see its declaration, highlighted, before you jump.
 - **Tabs and split view**: files open as tabs (or separate windows, if you prefer), and `Ctrl+\` splits the preview to read two files, or two parts of one, side by side. Drag tabs between groups and windows.
 
@@ -70,8 +73,11 @@
 - **Projects**: a `.w3bench` file in the mod's folder names its scripts folder, lists its other files (menus, strings, notes) and remembers where it compiles to. **Project > New project** makes one, **Open project** opens one, and the tool reopens the last project with the scripts that were open. Its scripts edit with highlighting, go to definition and the definition popup, all following your edits. Unsaved files are marked and nothing closes without asking.\n- **Loose files ask first**: scripts that aren't in the open project can be read, and the first time you type in one the editor offers to add it to the project (or make a project for it). The XML and strings editors offer the same when you save.
 - **Texture caches**: open a `texture.cache` (the game's, a DLC's or a mod's) and preview its textures, each mip level and channel, then save them as PNG or DDS. An `.xbm` in a bundle opens the texture it describes from the matching cache, and PNG, JPEG, BMP, GIF, TIFF and DDS files open in the same viewer.
 - **Edit decompiled mods**: *Edit as project* saves a compiled mod's decompiled scripts to a folder, makes a project for it and opens the scripts for editing.
-- **Compile**: builds a project into a `.rsblob` (Ctrl+Shift+B), with its errors listed and linked to their lines. It uses REDkit's own `wcc_lite.exe` when you have it (free for owners of the game; point Settings at it or let it find it). **No REDkit? No problem**: the built-in compiler reads the game's scripts and your installed mods (Shared Utils, say) and compiles in about a second, and on real mods its output matches wcc_lite's.
+- **Compile**: **Project > Compile scripts** builds the scripts into a `.rsblob`, with its errors listed and linked to their lines, and **Build** compiles them into the mod's `content\precompiled.rsblob`, with the loose scripts too if you like (Project properties). It uses REDkit's own `wcc_lite.exe` when you have it (free for owners of the game; point Settings at it or let it find it). **No REDkit? No problem**: the built-in compiler reads the game's scripts and your installed mods (Shared Utils, say) and compiles in about a second, and on real mods its output matches wcc_lite's.
 - **Projects stand out**: the open project carries a **PROJECT** badge in the tree and beside the file name in the preview, so you can tell what you can edit from what's read-only.
+- **Help while typing**: after a dot, the members of the type before it; starting a name, the locals, members, globals and types that fit (Ctrl+Space any time).
+- **Snippets**: Ctrl+J, or a snippet's name and Tab, for `@wrapMethod` and the other annotations, a statemachine, a timer, a key listener, a menu setting and more, with Tab between the parts to fill in. Add your own as `.ws` files.
+- **Rename** (F2): a function, variable or type your project declares, everywhere the project uses it, worked out like Find all references.
 - **Open in external editor**: right-click a text file or a preview tab to open it in your usual editor. A project's file opens itself; a file inside a bundle opens as a read-only copy.
 
 ### Strings
@@ -88,6 +94,15 @@
 
 ### Stub generator
 - Pick a game function and get the `@wrapMethod` (with the right `wrappedMethod(...)` call), `@replaceMethod` (starting from the original code), `@addMethod` or `@addField` code, with its exact signature, from the game's own scripts. Also on a script's right-click menu.
+
+### Scripting tools
+In the Tools menu, reading the game's scripts, the installed mods (compiled and loose) and the open project straight from disk:
+
+- **Console commands**: every `exec function`, searchable, with what to type in the console (`additem('itemName')`), its parameters and where it's declared.
+- **Quest facts**: every fact the scripts set or read with `FactsAdd`, `FactsQuerySum` and the rest, and each place that does. Filter to the facts your mods use, or to those that are set but never read by a script.
+- **Scripts log**: follows `scriptslog.txt` while the game runs, with filters by words and channel. Double-click a line to open the `LogChannel` call that wrote it.
+- **Key binding helper**: the `input.settings` lines, the `input.xml` entry and the listener script for a new key, with a check that the key is free in the contexts you pick, and a button to add it to your game to try.
+- **Hashes and IDs**: a name's hash as CR2W files, `.w3strings` keys and Wwise store it, the name behind a hash, a number as hex and float bits, and a Nexus mod ID's block of string IDs.
 
 ### Find in files
 Tools > Find in files (`Ctrl+Shift+F`) searches the text of files in folders, with no project, archive or script open first.
@@ -198,6 +213,9 @@ Double-click any text file or decompiled script to preview it. To edit scripts, 
 | `Ctrl+Shift+W` | Stub generator |
 | `Ctrl+Shift+I` | Source inspector |
 | `Ctrl+Shift+L` | Load order analyser |
+| `F2` | Rename, in a script |
+| `Ctrl+Space` | Suggest names, in a script |
+| `Ctrl+J` | Insert a snippet, in a script |
 | `F1` | Help |
 
 ## 📝 About decompiled scripts

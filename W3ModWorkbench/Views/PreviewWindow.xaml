@@ -44,17 +44,6 @@
                         <TextBlock Margin="8,0,0,0" Text="Edit as project" />
                     </StackPanel>
                 </Button>
-                <Button x:Name="CompileButton" Margin="6,0,0,0" Click="Compile_Click" Visibility="Collapsed" ToolTipService.ShowOnDisabled="True">
-                    <Button.ContextMenu>
-                        <ContextMenu>
-                            <MenuItem Header="Compile to another file…" Click="CompileTo_Click" />
-                        </ContextMenu>
-                    </Button.ContextMenu>
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE768;" VerticalAlignment="Center" />
-                        <TextBlock x:Name="CompileText" Margin="8,0,0,0" Text="Compile" />
-                    </StackPanel>
-                </Button>
                 <Button Margin="6,0,0,0" Click="Copy_Click" ToolTip="Copy the whole text">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE8C8;" VerticalAlignment="Center" />

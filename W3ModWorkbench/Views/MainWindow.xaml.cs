@@ -13,6 +13,7 @@ using W3ModWorkbench.Core;
 using W3ModWorkbench.Core.Projects;
 using W3ModWorkbench.Core.Scripts;
 using W3ModWorkbench.Core.Strings;
+using W3ModWorkbench.Core.Meshes;
 using W3ModWorkbench.Core.Textures;
 using W3ModWorkbench.Highlighting;
 using ICSharpCode.AvalonEdit.Document;
@@ -78,9 +79,9 @@ public partial class MainWindow : Window, IMessageHost
         var dialog = new OpenFileDialog
         {
             Title = "Open projects, bundles, scripts or strings",
-            Filter = "Projects, bundles, scripts, strings and XML (*.w3bench;*.bundle;*.rsblob;*.cache;*.ws;*.w3strings;*.csv;*.xml)|*.w3bench;*.bundle;*.rsblob;*.cache;*.ws;*.w3strings;*.csv;*.xml|"
+            Filter = "Projects, bundles, scripts, strings, XML and meshes (*.w3bench;*.bundle;*.rsblob;*.cache;*.ws;*.w3strings;*.csv;*.xml;*.w2mesh)|*.w3bench;*.bundle;*.rsblob;*.cache;*.ws;*.w3strings;*.csv;*.xml;*.w2mesh|"
                    + "Projects (*.w3bench)|*.w3bench|Bundles (*.bundle)|*.bundle|Compiled scripts (*.rsblob)|*.rsblob|Texture caches (*.cache)|*.cache|Loose scripts (*.ws)|*.ws|"
-                   + "Strings (*.w3strings;*.csv)|*.w3strings;*.csv|XML, opened in the XML editor (*.xml)|*.xml|All files (*.*)|*.*",
+                   + "Strings (*.w3strings;*.csv)|*.w3strings;*.csv|XML, opened in the XML editor (*.xml)|*.xml|Meshes, opened in the mesh viewer (*.w2mesh)|*.w2mesh|All files (*.*)|*.*",
             Multiselect = true,
             InitialDirectory = Directory.Exists(_settings.LastOpenFolder) ? _settings.LastOpenFolder : "",
         };
@@ -203,7 +204,11 @@ public partial class MainWindow : Window, IMessageHost
         var xml = paths.Where(p => File.Exists(p) && XmlWindow.CanOpen(p)).ToList();
         foreach (string path in xml) XmlWindow.Open(path, this);
         paths = [.. paths.Except(xml)];
-        if ((strings.Count > 0 || xml.Count > 0) && !paths.Any()) return;
+        // and meshes, which open in the mesh viewer
+        var meshes = paths.Where(p => File.Exists(p) && MeshWindow.CanShow(p)).ToList();
+        foreach (string path in meshes) MeshWindow.OpenFile(path, new ResourceLocator(OpenArchives(), null, GameLocator.Resolve(null), ProjectFiles), this);
+        paths = [.. paths.Except(meshes)];
+        if ((strings.Count > 0 || xml.Count > 0 || meshes.Count > 0) && !paths.Any()) return;
 
         var files = new List<string>();
         foreach (var path in paths)
@@ -410,6 +415,9 @@ public partial class MainWindow : Window, IMessageHost
         UpdateEmptyState();
         node.IsSelected = true;
         if (FolderTree.SelectedItem is null) RefreshView();
+        // a project kept inside the game's folders can't be changed there: say so once, now
+        if (FileSafety.Protection(project.FilePath) is { } protection)
+            ShowError($"{project.Name} is inside the game's folders\n\n{protection}\n\nIts files open read-only there. Move the project's folder somewhere of your own, such as Documents, and open it from there to work on it.");
         SetStatus(Directory.Exists(project.ScriptsPath)
             ? $"Opened {project.Name}: {Format.Count(node.TotalFiles, "file")}"
             : $"Opened {project.Name}, but its scripts folder {project.ScriptsFolder} isn't there. Project properties can point it somewhere else.");
@@ -555,6 +563,12 @@ public partial class MainWindow : Window, IMessageHost
         Add("Refresh the project", "", () => _ = ReloadProjectAsync(), project is not null);
         Add("Open the project folder", "", () => ProjectReveal_Click(this, new RoutedEventArgs()), project is not null);
         menu.Items.Add(new Separator());
+        Add("Compile scripts", "", () => _ = PreviewWindow.CompileProjectAsync(this, chooseOutput: false), project is not null)
+            .ToolTip = "Compile the project's scripts to check them, listing any errors with links to their lines. Build compiles them into the mod as well";
+        Add("Compile scripts to…", "", () => _ = PreviewWindow.CompileProjectAsync(this, chooseOutput: true), project is not null);
+        Add(project is null ? "Build mod" : $"Build {project.ModFolderName.Replace("_", "__")}", "Ctrl+Shift+B", () => _ = BuildModAsync(), project is not null);
+        Add(project is null ? "Install mod…" : $"Install {project.ModFolderName.Replace("_", "__")}…", "", () => _ = InstallModAsync(), project is not null);
+        menu.Items.Add(new Separator());
         Add("Close project", "", () => _ = CloseProjectAsync(), project is not null);
         menu.IsOpen = true;
     }
@@ -569,11 +583,66 @@ public partial class MainWindow : Window, IMessageHost
         else ProjectWorkspace.NotifyChanged();
     }
 
-    private void ProjectAddFiles_Click(object sender, RoutedEventArgs e)
+    private async void ProjectAddFiles_Click(object sender, RoutedEventArgs e)
     {
         if (ProjectWorkspace.Current is not { } project) return;
         var dialog = new OpenFileDialog { Title = "Add files to the project", Multiselect = true, InitialDirectory = Directory.Exists(project.Root) ? project.Root : "" };
-        if (dialog.ShowDialog(this) == true) _ = AddToProjectAsync(dialog.FileNames);
+        if (dialog.ShowDialog(this) != true) return;
+
+        // a script only compiles with the project from inside its scripts folder: one from anywhere else is copied in, when you agree
+        string scripts = Path.GetFullPath(project.ScriptsPath).TrimEnd('\\') + "\\";
+        var outside = dialog.FileNames.Where(f => f.EndsWith(".ws", StringComparison.OrdinalIgnoreCase)
+            && !Path.GetFullPath(f).StartsWith(scripts, StringComparison.OrdinalIgnoreCase)).ToList();
+        var rest = dialog.FileNames.Except(outside).ToList();
+        if (outside.Count > 0)
+        {
+            string which = outside.Count == 1 ? Path.GetFileName(outside[0]) : $"{outside.Count} scripts";
+            var choice = await Message.Ask($"Copy {which} into the project's scripts folder?",
+                $"Scripts are compiled with the project from its scripts folder ({project.ScriptsPath}). Copied there, {(outside.Count == 1 ? "it's" : "they're")} "
+                + "part of the mod and compiled with it, and the original is left as it is. Added where "
+                + (outside.Count == 1 ? "it is, it's" : "they are, they're") + " listed with the project but not compiled.",
+                MessageKind.Question, "Copy into scripts", "Add where it is");
+            if (choice == MessageChoice.Cancel) return;
+            if (choice == MessageChoice.Secondary) rest.AddRange(outside);
+            else if (!await CopyScriptsInAsync(project, outside)) return;
+        }
+        if (rest.Count > 0) await AddToProjectAsync(rest);
+    }
+
+    /// <summary>
+    /// Copies scripts into the root of the project's scripts folder, where they're compiled with it. A script with the same
+    /// name there already is left alone and said so, since two copies of a class wouldn't compile.
+    /// </summary>
+    private async Task<bool> CopyScriptsInAsync(WorkbenchProject project, List<string> files)
+    {
+        var copied = new List<string>();
+        var skipped = new List<string>();
+        try
+        {
+            Directory.CreateDirectory(project.ScriptsPath);
+            foreach (string file in files)
+            {
+                string target = Path.Combine(project.ScriptsPath, Path.GetFileName(file));
+                if (File.Exists(target)) skipped.Add(Path.GetFileName(file));
+                else
+                {
+                    File.Copy(file, target);
+                    copied.Add(Path.GetFileName(file));
+                }
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            ShowError($"The scripts could not be copied into the project.\n\n{ex.Message}");
+            return false;
+        }
+        if (copied.Count > 0) await ReloadProjectAsync();
+        if (skipped.Count > 0)
+            await ShowMessage("Some scripts weren't copied", $"The scripts folder has a file with the same name already: {string.Join(", ", skipped)}. "
+                + "Rename the file you're adding, or open the one in the project.", MessageKind.Warning);
+        if (copied.Count > 0)
+            SetStatus($"Copied {string.Join(", ", copied)} into {project.Name}'s scripts folder");
+        return true;
     }
 
     private void AddFolderToProject()
@@ -612,9 +681,134 @@ public partial class MainWindow : Window, IMessageHost
         TreeCloseItem.Header = project ? "Close project" : loose ? "Close scripts" : root is { IsGroup: true } ? "Close mod" : "Close bundle";
     }
 
+    // ---------------------------------------------------------------- copying into the project
+
+    /// <summary>
+    /// What a file in the list would be copied into a project as: its game path, and how to read it. Null for a file that
+    /// isn't copied: one already yours to edit (a project's, or a loose file outside the game), a texture from a cache,
+    /// whose pixels aren't a game file, or strings, which the strings editor saves where you choose.
+    /// </summary>
+    private static (string GamePath, Func<byte[]> Read)? CopySource(EntryItem item)
+    {
+        var entry = item.Entry;
+        if (entry is TextureEntry or StringsEntry) return null;
+        if (entry is LooseScriptEntry loose)
+        {
+            if (FileSafety.CanEdit(loose.FullPath)) return null;
+            // a loose game file keeps its place under the game's content; a game script its place under the scripts folder
+            string? gamePath = FileSafety.GamePathOf(loose.FullPath)
+                ?? (loose.IsScript && entry.Archive is ScriptFolder ? entry.Path : null);
+            return gamePath is null ? null : (gamePath, () => File.ReadAllBytes(loose.FullPath));
+        }
+        return (entry.Path, () =>
+        {
+            if (!entry.Archive.ReadsFromDisk) return entry.Read(null);
+            using var fs = new FileStream(entry.Archive.FilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            return entry.Read(fs);
+        });
+    }
+
+    private async void GridCopyToProject_Click(object sender, RoutedEventArgs e)
+    {
+        var items = Highlighted();
+        // a mesh is no use without its buffers, so they come along, as when extracting
+        var entries = items.Select(i => i.Entry).Where(en => en is not LooseScriptEntry).ToList();
+        var withCompanions = await Task.Run(() => Companions.With(entries, OpenArchives(), out _));
+        var sources = items.Where(i => i.Entry is LooseScriptEntry).Select(CopySource)
+            .Concat(withCompanions.Select(en => CopySource(new EntryItem(en, (_, _) => { }))))
+            .OfType<(string, Func<byte[]>)>().ToList();
+        if (sources.Count > 0) await CopyToProjectAsync(sources, open: items.Count == 1);
+    }
+
+    /// <summary>
+    /// The open project, to put files in. With none open, asks to make one or open one: the game's files are changed only
+    /// as copies in a project. Null when there's still none, or the project is somewhere files can't be written.
+    /// </summary>
+    public async Task<WorkbenchProject?> EnsureProjectAsync(string why, MessageCard? card = null)
+    {
+        if (ProjectWorkspace.Current is null)
+        {
+            var choice = await (card ?? Message).Ask("This needs a project", why + "\n\nMake a project for your mod, or open one.",
+                MessageKind.Question, "New project…", "Open project…");
+            if (choice == MessageChoice.Primary) await NewProjectAsync();
+            else if (choice == MessageChoice.Secondary)
+            {
+                var dialog = new OpenFileDialog { Title = "Open a project", Filter = "W3 Mod Workbench projects (*.w3bench)|*.w3bench" };
+                if (dialog.ShowDialog() == true) await OpenProjectAsync(dialog.FileName);
+            }
+        }
+        if (ProjectWorkspace.Current is not { } project) return null;
+        if (FileSafety.Protection(project.FilePath) is { } protection)
+        {
+            ShowError($"{project.Name} is inside the game's folders, where nothing is written.\n\n{protection}\n\nMove the project's folder somewhere of your own, such as Documents, and open it from there.");
+            return null;
+        }
+        return project;
+    }
+
+    /// <summary>
+    /// Copies files into the open project at their game paths: scripts into its scripts folder, everything else into its
+    /// workspace. A file the project has already is left as it is, so nothing of yours is overwritten. With <paramref name="open"/>
+    /// and one file, the copy opens. False when nothing was copied.
+    /// </summary>
+    public async Task<bool> CopyToProjectAsync(IReadOnlyList<(string GamePath, Func<byte[]> Read)> files, bool open = false)
+    {
+        if (await EnsureProjectAsync("Game files are changed as copies in a project, at the same game path, so the game's own are never touched.") is not { } project)
+            return false;
+        var copied = new List<string>();
+        var existing = new List<string>();
+        var failed = new List<string>();
+        await Task.Run(() =>
+        {
+            foreach (var (gamePath, read) in files)
+            {
+                string target = project.CopyPathFor(gamePath);
+                if (File.Exists(target)) { existing.Add(target); continue; }
+                try
+                {
+                    FileSafety.CheckWrite(target);
+                    Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+                    File.WriteAllBytes(target, read());
+                    copied.Add(target);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or NotSupportedException)
+                {
+                    failed.Add($"{gamePath}: {ex.Message}");
+                }
+            }
+        });
+        // the workspace is part of the project, so what's copied there is listed with it
+        if (copied.Concat(existing).Any(p => project.GamePathOf(p) is not null) && !project.Contains(project.WorkspacePath))
+            await AddToProjectAsync([project.WorkspacePath]);
+        else if (copied.Count > 0)
+            await ReloadProjectAsync();
+
+        SetStatus(copied.Count > 0
+            ? $"Copied {Format.Count(copied.Count, "file")} into {project.Name}" + (existing.Count > 0 ? $"; {Format.Count(existing.Count, "file")} it had already were left as they are" : "")
+            : existing.Count > 0 ? $"{project.Name} has {(existing.Count == 1 ? "that file" : "those files")} already; nothing was copied" : "Nothing was copied");
+        if (failed.Count > 0) ShowError("Some files could not be copied:\n\n" + string.Join("\n", failed.Take(15)));
+        // REDkit's source files can be copied, but the game can't load them uncooked: said now, not at the first build
+        var uncooked = copied.Where(p => project.GamePathOf(p) is not null && ModBuilder.IsUncooked(p)).ToList();
+        if (uncooked.Count > 0)
+            ShowError($"{(uncooked.Count == 1 ? "The copy isn't" : $"{uncooked.Count} of the copies aren't")} cooked\n\n"
+                + string.Join("\n", uncooked.Take(10).Select(p => "• " + project.GamePathOf(p)))
+                + "\n\nThey're REDkit source files, which the game can't load until they're cooked, and Build doesn't cook yet. The same files from the game's bundles are cooked already.");
+        if (open && copied.Concat(existing).FirstOrDefault() is { } first) OpenProjectFile(first);
+        return copied.Count > 0;
+    }
+
+    /// <summary>Opens one of the project's files the way double-clicking it in the list does.</summary>
+    public void OpenProjectFile(string path)
+    {
+        var item = ProjectNode?.AllFiles().FirstOrDefault(i => i.Entry is LooseScriptEntry l && l.FullPath.Equals(path, StringComparison.OrdinalIgnoreCase));
+        if (item is not null) OpenItem(item);
+        else if (MeshWindow.CanShow(path)) MeshWindow.OpenFile(path, new ResourceLocator(OpenArchives(), null, GameLocator.Resolve(null), ProjectFiles), this);
+        else if (XmlWindow.CanOpen(path)) XmlWindow.Open(path, this);
+    }
+
     private void GridAddToProject_Click(object sender, RoutedEventArgs e)
     {
-        var files = Highlighted().Select(i => i.Entry).OfType<LooseScriptEntry>().Select(l => l.FullPath).ToList();
+        var files = Highlighted().Select(i => i.Entry).OfType<LooseScriptEntry>().Select(l => l.FullPath).Where(FileSafety.CanEdit).ToList();
         if (files.Count > 0) _ = AddToProjectAsync(files);
     }
 
@@ -830,6 +1024,8 @@ public partial class MainWindow : Window, IMessageHost
             _ = OpenTextureHeaderAsync(item);
         else if (TextureWindow.CanShow(item.Name))
             _ = OpenPictureAsync(item);
+        else if (MeshWindow.CanShow(item.Name))
+            _ = OpenMeshAsync(item);
         else if (item.Entry is LooseScriptEntry { IsScript: false } && XmlWindow.CanOpen(item.Name))
             _ = OpenXmlAsync(item);
         else if (item.IsPreviewable)
@@ -843,14 +1039,38 @@ public partial class MainWindow : Window, IMessageHost
     /// <summary>An .xbm in a bundle: the texture's description, whose pixels are in a texture.cache under the same path.</summary>
     private static bool IsTextureHeader(EntryItem item) => item.IsTextureHeader;
 
-    /// <summary>Each cache's textures by path, made the first time a cache is looked in, so finding one is quick.</summary>
-    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<TextureCacheArchive, Dictionary<string, TextureEntry>> CacheIndex = [];
+    private static TextureEntry? FindInCache(TextureCacheArchive cache, string path) => ResourceLocator.FindInCache(cache, path);
 
-    private static TextureEntry? FindInCache(TextureCacheArchive cache, string path)
+    /// <summary>What finds a file's buffers, materials and textures: the archives open here, those beside it, and the game's.</summary>
+    private ResourceLocator LocatorFor(ArchiveEntry entry) => new(OpenArchives(), entry.Archive, GameLocator.Resolve(null), ProjectFiles);
+
+    /// <summary>The open project's workspace, which is looked in before anything else; null with no project open.</summary>
+    private static string? ProjectFiles() => ProjectWorkspace.Current?.WorkspacePath;
+
+    /// <summary>Shows a mesh in the mesh viewer, with its buffers, materials and textures found the way the game would.</summary>
+    private async Task OpenMeshAsync(EntryItem item)
     {
-        var index = CacheIndex.GetValue(cache, c => c.Entries.OfType<TextureEntry>()
-            .GroupBy(e => e.Path, StringComparer.OrdinalIgnoreCase).ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase));
-        return index.GetValueOrDefault(path);
+        // a mesh on disk (the project's own, or a loose one) opens from its file, so it knows where it is
+        if (item.Entry is LooseScriptEntry loose)
+        {
+            MeshWindow.OpenFile(loose.FullPath, LocatorFor(item.Entry), this);
+            return;
+        }
+        try
+        {
+            var entry = item.Entry;
+            byte[] data = await Task.Run(() =>
+            {
+                if (!entry.Archive.ReadsFromDisk) return entry.Read(null);
+                using var fs = new FileStream(entry.Archive.FilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                return entry.Read(fs);
+            });
+            MeshWindow.Open(entry.Path, item.BundleName, data, entry.Archive, LocatorFor(entry), this);
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
+        {
+            ShowError($"{item.Name} could not be read.\n\n{ex.Message}");
+        }
     }
 
     /// <summary>Shows a picture file from a bundle or a project (PNG, JPEG, BMP, GIF, TIFF, DDS) in the texture viewer.</summary>
@@ -920,8 +1140,9 @@ public partial class MainWindow : Window, IMessageHost
 
     private void GridPreview_Click(object sender, RoutedEventArgs e)
     {
-        if (Highlighted().FirstOrDefault(i => i.IsPreviewable || i.Entry is StringsEntry or TextureEntry || IsTextureHeader(i) || TextureWindow.CanShow(i.Name)) is not { } item) return;
+        if (Highlighted().FirstOrDefault(i => i.IsPreviewable || i.Entry is StringsEntry or TextureEntry || IsTextureHeader(i) || TextureWindow.CanShow(i.Name) || MeshWindow.CanShow(i.Name)) is not { } item) return;
         if (item.Entry is StringsEntry strings) StringsWindow.Open(strings.FullPath, this);
+        else if (MeshWindow.CanShow(item.Name)) _ = OpenMeshAsync(item);
         else if (item.Entry is TextureEntry texture) TextureWindow.Open(texture, this);
         else if (IsTextureHeader(item)) _ = OpenTextureHeaderAsync(item);
         else if (TextureWindow.CanShow(item.Name)) _ = OpenPictureAsync(item);
@@ -941,7 +1162,9 @@ public partial class MainWindow : Window, IMessageHost
         GridXmlItem.Visibility = Highlighted().Any(i => XmlWindow.CanOpen(i.Name)) ? Visibility.Visible : Visibility.Collapsed;
         var project = ProjectWorkspace.Current;
         var loose = Highlighted().Select(i => i.Entry).OfType<LooseScriptEntry>().ToList();
-        GridAddToProjectItem.Visibility = project is not null && loose.Any(l => !project.Contains(l.FullPath)) ? Visibility.Visible : Visibility.Collapsed;
+        // the game's files and installed mods' are copied into a project, not added to it: added, they'd still be read-only
+        GridAddToProjectItem.Visibility = project is not null && loose.Any(l => !project.Contains(l.FullPath) && FileSafety.CanEdit(l.FullPath)) ? Visibility.Visible : Visibility.Collapsed;
+        GridCopyToProjectItem.Visibility = Highlighted().Any(i => CopySource(i) is not null) ? Visibility.Visible : Visibility.Collapsed;
         GridRemoveFromProjectItem.Visibility = project is not null && loose.Any(l => project.Include.Any(s => project.Resolve(s).Equals(l.FullPath, StringComparison.OrdinalIgnoreCase)))
             ? Visibility.Visible : Visibility.Collapsed;
     }
@@ -1003,7 +1226,7 @@ public partial class MainWindow : Window, IMessageHost
                 using var fs = new FileStream(entry.Archive.FilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
                 return entry.Read(fs);
             });
-            XmlWindow.OpenData(item.Name, $"{item.BundleName}  ·  {entry.Path}", data, this);
+            XmlWindow.OpenData(item.Name, $"{item.BundleName}  ·  {entry.Path}", data, this, entry.Path);
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
         {
@@ -1317,14 +1540,16 @@ public partial class MainWindow : Window, IMessageHost
         return document;
     }
 
-    private void ShowPreview(string glyph, string? message, EntryPicture? picture = null, string? text = null, string? name = null)
+    private void ShowPreview(string glyph, string? message, EntryPicture? picture = null, string? text = null, string? name = null, MeshFile? mesh = null)
     {
+        PreviewMeshHost.Visibility = mesh is not null ? Visibility.Visible : Visibility.Collapsed;
+        if (!ReferenceEquals(PreviewMesh.Mesh, mesh)) PreviewMesh.Show(mesh);
         PreviewImageHost.Visibility = picture is not null ? Visibility.Visible : Visibility.Collapsed;
         PreviewImage.Source = picture?.Image;
         PreviewText.Visibility = text is not null ? Visibility.Visible : Visibility.Collapsed;
         if (text is not null) SetPreviewText(text, name);
         else SetPreviewDocument(new TextDocument());
-        PreviewEmpty.Visibility = picture is null && text is null ? Visibility.Visible : Visibility.Collapsed;
+        PreviewEmpty.Visibility = picture is null && text is null && mesh is null ? Visibility.Visible : Visibility.Collapsed;
         PreviewEmptyGlyph.Text = glyph;
         PreviewEmptyText.Text = message ?? "";
     }
@@ -1376,6 +1601,36 @@ public partial class MainWindow : Window, IMessageHost
                     PreviewDetail.Text = detail + "  ·  " + picture.Info;
                 }
             }
+            else if (MeshWindow.CanShow(item.Name))
+            {
+                ShowPreview(item.Glyph, "Reading the mesh…");
+                var entry = item.Entry;
+                var locator = LocatorFor(entry);
+                var mesh = await Task.Run(() =>
+                {
+                    byte[] data;
+                    if (!entry.Archive.ReadsFromDisk) data = entry.Read(null);
+                    else
+                    {
+                        using var fs = new FileStream(entry.Archive.FilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                        data = entry.Read(fs);
+                    }
+                    return MeshFile.Read(data, n => locator.ReadBuffer(entry.Path, n, entry.Archive));
+                }, token);
+                if (token.IsCancellationRequested) return;
+                ShowPreview(item.Glyph, null, mesh: mesh);
+                int triangles = MeshView.Drawn(mesh, 0).Sum(c => c.Triangles);
+                PreviewDetail.Text = detail + $"  ·  {triangles:N0} triangles, {mesh.LodCount} LOD{(mesh.LodCount == 1 ? "" : "s")}  ·  double-click to open";
+                // the colour textures, smaller than the viewer's, each put on as soon as it's read
+                for (int i = 0; i < mesh.Materials.Count; i++)
+                {
+                    int material = i;
+                    var picture = await Task.Run(() => MeshMaterial.Resolve(mesh.File, mesh.Materials[material], locator.ReadFile).Diffuse is { } diffuse
+                        ? MeshTextures.Load(locator, diffuse.Path, 512) : null, token);
+                    if (token.IsCancellationRequested || !ReferenceEquals(PreviewMesh.Mesh, mesh)) return;
+                    PreviewMesh.SetTexture(material, picture);
+                }
+            }
             else if (item.Entry is StringsEntry)
                 ShowPreview(item.Glyph, "Double-click to open it in the strings editor.");
             else if (item.IsPreviewable)
@@ -1409,7 +1664,7 @@ public partial class MainWindow : Window, IMessageHost
         catch (OperationCanceledException)
         {
         }
-        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
+        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or NotSupportedException)
         {
             if (!token.IsCancellationRequested) ShowPreview(item.Glyph, "It could not be read: " + ex.Message);
         }
@@ -1436,6 +1691,12 @@ public partial class MainWindow : Window, IMessageHost
         Add("Source inspector…", "Ctrl+Shift+I", () => SourceInspectorWindow.Open(this));
         Add("Load order analyser…", "Ctrl+Shift+L", () => LoadOrderWindow.Open(this));
         Add("View XML overrides…", "", () => XmlOverridesWindow.Open(this));
+        menu.Items.Add(new Separator());
+        Add("Console commands…", "", () => ConsoleCommandsWindow.Open(this));
+        Add("Quest facts…", "", () => FactsWindow.Open(this));
+        Add("Scripts log…", "", () => LogWindow.Open(this));
+        Add("Key binding helper…", "", () => InputBindingsWindow.Open(this));
+        Add("Hashes and IDs…", "", () => HashToolsWindow.Open(this));
         menu.Items.Add(new Separator());
         Add("New mod menu…", "", () => XmlWindow.OpenNewMenu(this));
         Add("Open an XML file…", "", OpenXmlFile);
@@ -1616,6 +1877,8 @@ public partial class MainWindow : Window, IMessageHost
         try
         {
             output = Path.GetFullPath(output);
+            // extracting into the game's folders would put files where the game reads them, or over its own
+            FileSafety.CheckFolder(output);
             Directory.CreateDirectory(output);
         }
         catch (Exception ex)
@@ -1730,6 +1993,11 @@ public partial class MainWindow : Window, IMessageHost
         else if (Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && e.Key == Key.L)
         {
             LoadOrderWindow.Open(this);
+            e.Handled = true;
+        }
+        else if (Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && e.Key == Key.B && ProjectWorkspace.Current is not null)
+        {
+            _ = BuildModAsync();
             e.Handled = true;
         }
         else if (Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && e.Key == Key.W)
@@ -1921,6 +2189,160 @@ public partial class MainWindow : Window, IMessageHost
     }
 
     private void SetStatus(string text) => StatusText.Text = text;
+
+    // ---------------------------------------------------------------- building and installing the mod
+
+    private bool _building;
+
+    /// <summary>wcc_lite, for packing the workspace: the one in Settings, or REDkit's where it's usually installed.</summary>
+    private string? WccLite() =>
+        ScriptCompiler.IsWccLite(_settings.WccLitePath) ? _settings.WccLitePath : ScriptCompiler.Find();
+
+    /// <summary>Builds the open project's mod into its build folder, ready to install. True when it was built.</summary>
+    public async Task<bool> BuildModAsync()
+    {
+        if (_building || ProjectWorkspace.Current is not { } project) return false;
+        // the build uses what's on disk: unsaved files of the project's are asked about first
+        var unsaved = PreviewWindow.UnsavedDocuments().Where(d => d.Item.DiskPath is { } p && project.Contains(p)).ToList();
+        if (unsaved.Count > 0)
+        {
+            var choice = await Message.Ask(unsaved.Count == 1 ? $"Save {unsaved[0].FileName} first?" : $"Save {unsaved.Count} files first?",
+                "The build uses the files as they are on disk.", MessageKind.Question, "Save and build", "Build without them");
+            if (choice == MessageChoice.Cancel || choice == MessageChoice.Primary && !PreviewWindow.SaveAll(unsaved)) return false;
+        }
+        // files the build would pack but the game wouldn't use: said before, not found out in the game
+        var issues = await Task.Run(() => ModBuilder.CheckWorkspace(project));
+        if (issues.Count > 0)
+        {
+            string list = string.Join("\n", issues.Take(10).Select(i => $"• {i.GamePath} {i.Problem}"))
+                + (issues.Count > 10 ? $"\n…and {issues.Count - 10} more" : "");
+            if (!await Message.Show(issues.Count == 1 ? "A file in the workspace won't work in the game" : $"{issues.Count} files in the workspace won't work in the game",
+                    list + "\n\nThe rest of the mod builds as usual. Files copied from the game's bundles with Copy to project are cooked already and work.",
+                    MessageKind.Warning, primary: "Build anyway", secondary: "Cancel"))
+                return false;
+        }
+        if (!await ChooseScriptsBuildAsync(project)) return false;
+        var compiler = PreviewWindow.CurrentCompiler();
+        _building = true;
+        try
+        {
+            var progress = new Progress<string>(text => SetStatus($"Building {project.ModFolderName}: {text}"));
+            var result = await ModBuilder.BuildAsync(project, WccLite(), compiler, progress, CancellationToken.None);
+            if (!result.Success)
+            {
+                SetStatus($"{project.ModFolderName} wasn't built");
+                if (result.Compiled is { Success: false } compiled && compiler is not null && compiled.Messages.Count > 0)
+                {
+                    // the errors are listed where each opens its line, as Compile scripts lists them
+                    if (await Message.Show($"{project.ModFolderName} wasn't built", result.Failure ?? "", MessageKind.Warning, primary: "Show errors", secondary: "Close"))
+                        await PreviewWindow.ShowCompileErrorsAsync(this, compiled, Path.Combine(result.ModFolder, "content", "precompiled.rsblob"), compiler);
+                    return false;
+                }
+                bool ok = await Message.Show($"{project.ModFolderName} wasn't built", result.Failure ?? "", MessageKind.Warning,
+                    primary: "OK", secondary: result.Log.Length > 0 ? "Show log" : null);
+                if (!ok && result.Log.Length > 0)
+                    PreviewWindow.ShowAlone(new PreviewItem("build.log", project.Name, System.Text.Encoding.UTF8.GetBytes(result.Log)), this);
+                return false;
+            }
+            SetStatus($"Built {project.ModFolderName} in {result.ModFolder}");
+            bool install = await Message.Show($"Built {project.ModFolderName}",
+                string.Join("\n", result.Made.Select(m => "• " + m)) + $"\n\nin {result.ModFolder}, ready to install.",
+                MessageKind.Info, primary: "Install…", secondary: "Done");
+            if (install) await InstallModAsync();
+            return true;
+        }
+        finally
+        {
+            _building = false;
+        }
+    }
+
+    /// <summary>
+    /// The first build of a project with scripts asks how they go in the mod: compiled into content\precompiled.rsblob,
+    /// as REDkit publishes, and whether the loose scripts go too. The answers are kept in the project (Project properties
+    /// changes them). False when it was cancelled.
+    /// </summary>
+    private async Task<bool> ChooseScriptsBuildAsync(WorkbenchProject project)
+    {
+        if (project.BuildCompiledScripts is not null && project.BuildLooseScripts is not null) return true;
+        if (!Directory.Exists(project.ScriptsPath) || !Directory.EnumerateFiles(project.ScriptsPath, "*.ws", SearchOption.AllDirectories).Any()) return true;
+
+        if (project.BuildCompiledScripts is null)
+        {
+            var compile = await Message.Ask("Compile the scripts into the mod?",
+                "Compiled, the scripts go in the mod as content\\precompiled.rsblob, the way REDkit publishes a mod: they're checked as the mod is built, "
+                + "and the game loads them as they are. Not compiled, they go in content\\scripts for the game to compile when it starts.\n\n"
+                + "This is kept in the project: Project properties changes it.",
+                MessageKind.Question, "Compile them", "Don't compile");
+            if (compile == MessageChoice.Cancel) return false;
+            project.BuildCompiledScripts = compile == MessageChoice.Primary;
+        }
+        if (project.BuildLooseScripts is null)
+        {
+            if (project.BuildCompiledScripts == true)
+            {
+                var loose = await Message.Ask("Ship the loose scripts too?",
+                    "Beside the compiled scripts, the .ws files can go in content\\scripts as the mod's source, for others to read or merge. "
+                    + "An info.json tells the game to run the compiled ones and leave the loose ones alone.",
+                    MessageKind.Question, "Compiled only", "Compiled and loose");
+                if (loose == MessageChoice.Cancel) return false;
+                project.BuildLooseScripts = loose == MessageChoice.Secondary;
+            }
+            else project.BuildLooseScripts = true;
+        }
+        try
+        {
+            project.Save();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            ShowError($"The project could not be saved\n\nThe build goes ahead, but the choice wasn't kept. {ex.Message}");
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// Copies the built mod into the game's mods folder, after saying where. Replacing a folder this project didn't
+    /// install (a mod of the same name, or one put there by hand) is asked about on its own.
+    /// </summary>
+    public async Task InstallModAsync()
+    {
+        if (ProjectWorkspace.Current is not { } project) return;
+        if (GameLocator.Resolve(null) is not { } game)
+        {
+            ShowError("The game folder isn't set\n\nInstalling puts the mod in the game's mods folder. Set where the game is in Settings.");
+            return;
+        }
+        if (!Directory.Exists(Path.Combine(project.BuiltModPath, "content")))
+        {
+            if (await Message.Show("There's no build to install yet", $"Build {project.ModFolderName} first, then install it.",
+                    MessageKind.Info, primary: "Build", secondary: "Cancel"))
+                await BuildModAsync();
+            return;
+        }
+        string target = ModBuilder.InstallPath(project, game);
+        bool go = ModBuilder.Installed(project, game) switch
+        {
+            InstalledState.Someone => await Message.Show($"Replace the {project.ModFolderName} that's installed?",
+                $"{target} is there already, and wasn't installed from this project: it may be someone else's mod of the same name, or one copied in by hand. Installing deletes it and puts this build in its place.",
+                MessageKind.Warning, primary: "Replace it", secondary: "Cancel"),
+            InstalledState.Ours => await Message.Show($"Install {project.ModFolderName} again?",
+                $"The build replaces the one installed before, in {target}.", MessageKind.Question, primary: "Install", secondary: "Cancel"),
+            _ => await Message.Show($"Install {project.ModFolderName}?",
+                $"The build is copied to {target}. That's the only place in the game's folder the tool writes.", MessageKind.Question, primary: "Install", secondary: "Cancel"),
+        };
+        if (!go) return;
+        try
+        {
+            string installed = await ModBuilder.InstallAsync(project, game);
+            SetStatus($"Installed {project.ModFolderName} in {installed}");
+            await ShowMessage($"Installed {project.ModFolderName}", $"It's in {installed}. Start the game to try it; build and install again after changes.", MessageKind.Info);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            ShowError($"{project.ModFolderName} could not be installed\n\n{ex.Message}");
+        }
+    }
 
     /// <summary>A warning; its first paragraph, when there's more than one, is its title.</summary>
     private void ShowError(string message)

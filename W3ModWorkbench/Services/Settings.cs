@@ -53,6 +53,9 @@ public sealed class Settings
     /// <summary>Show a declaration's code in a popup when the mouse rests on a name in a script.</summary>
     public bool PeekDefinitions { get; set; } = true;
 
+    /// <summary>Whether the script editor lists names that fit as you type: after a dot, and at the start of a name.</summary>
+    public bool SuggestNames { get; set; } = true;
+
     /// <summary>Show the outline side bar beside scripts.</summary>
     public bool ShowOutline { get; set; } = true;
 

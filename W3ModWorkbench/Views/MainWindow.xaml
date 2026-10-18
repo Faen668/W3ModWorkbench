@@ -335,6 +335,10 @@
                                 <MenuItem x:Name="GridXmlItem" Header="Open in XML editor" Click="GridXmlEditor_Click" Visibility="Collapsed">
                                     <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE70F;" /></MenuItem.Icon>
                                 </MenuItem>
+                                <MenuItem x:Name="GridCopyToProjectItem" Header="Copy to project" Click="GridCopyToProject_Click" Visibility="Collapsed"
+                                          ToolTip="Copy into the open project at the same game path (scripts into its scripts folder, the rest into its workspace), to change the copy">
+                                    <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE8C8;" /></MenuItem.Icon>
+                                </MenuItem>
                                 <MenuItem x:Name="GridAddToProjectItem" Header="Add to project" Click="GridAddToProject_Click" Visibility="Collapsed">
                                     <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE710;" /></MenuItem.Icon>
                                 </MenuItem>
@@ -405,6 +409,15 @@
                         <Grid>
                             <Border x:Name="PreviewImageHost" Background="{StaticResource Checker}" Visibility="Collapsed">
                                 <Image x:Name="PreviewImage" Stretch="Uniform" Margin="8" RenderOptions.BitmapScalingMode="HighQuality" />
+                            </Border>
+                            <Border x:Name="PreviewMeshHost" Visibility="Collapsed">
+                                <Border.Background>
+                                    <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                        <GradientStop Color="#FF4A4F57" Offset="0" />
+                                        <GradientStop Color="#FF2A2D32" Offset="1" />
+                                    </LinearGradientBrush>
+                                </Border.Background>
+                                <local:MeshView x:Name="PreviewMesh" />
                             </Border>
                             <avalonEdit:TextEditor x:Name="PreviewText" IsReadOnly="True" BorderThickness="0" Background="Transparent" Visibility="Collapsed"
                                                    FontFamily="Cascadia Mono, Consolas" FontSize="12" ShowLineNumbers="True" Padding="4,6,14,6"

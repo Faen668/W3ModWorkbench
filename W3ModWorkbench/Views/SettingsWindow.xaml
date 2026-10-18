@@ -200,6 +200,7 @@
                                    Text="Split (Ctrl+\) shows a second group of tabs, so you can read two files, or two parts of one, at once. Drag a tab onto the far side of the text to split there, onto another group to move it, or out of the window to give it a window of its own." />
 
                         <CheckBox x:Name="PeekCheck" Content="Show a name's declaration when the mouse rests on it in a script" Margin="0,14,0,0" />
+                        <CheckBox x:Name="CompleteCheck" Content="Suggest names while typing in a script (Ctrl+Space suggests them any time)" Margin="0,8,0,0" />
                     </StackPanel>
                 </Border>
 

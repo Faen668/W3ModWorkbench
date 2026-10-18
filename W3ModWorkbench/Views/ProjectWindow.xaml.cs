@@ -17,6 +17,8 @@ public partial class ProjectWindow : Window
     private readonly WorkbenchProject? _existing;
     private readonly ObservableCollection<string> _files = [];
     private bool _scriptsTouched;
+    private bool _rootTouched;
+    private bool _modTouched;
     private bool _setting;
 
     /// <summary>The project made or changed, once OK is clicked.</summary>
@@ -41,8 +43,10 @@ public partial class ProjectWindow : Window
         _setting = true;
         if (existing is null)
         {
-            RootBox.Text = root ?? (Directory.Exists(App.Settings.LastOpenFolder) ? App.Settings.LastOpenFolder : "");
+            RootBox.Text = root ?? "";
+            _rootTouched = root is not null;
             NameBox.Text = name ?? "";
+            ModBox.Text = WorkbenchProject.ModFolderFor(NameBox.Text);
             ScriptsBox.Text = scripts ?? (root is not null ? WorkbenchProject.DetectScriptsFolder(root) : null) ?? "scripts";
             _scriptsTouched = scripts is not null;
             FilesPanel.Visibility = Visibility.Collapsed;
@@ -58,9 +62,13 @@ public partial class ProjectWindow : Window
             RootBrowse.Visibility = Visibility.Collapsed;
             RootHint.Text = "Where the .w3bench file is. To move the project, move its folder and open the .w3bench file again.";
             NameBox.Text = existing.Name;
+            ModBox.Text = existing.ModFolderName;
+            _modTouched = true;
             ScriptsBox.Text = existing.ScriptsFolder;
             _scriptsTouched = true;
             OutputBox.Text = existing.CompileOutput ?? "";
+            BuildCompiledCheck.IsChecked = existing.BuildCompiledScripts ?? true;
+            BuildLooseCheck.IsChecked = existing.BuildLooseScripts ?? existing.BuildCompiledScripts == false;
             AuthorBox.Text = existing.Author;
             VersionBox.Text = existing.Version;
             DescriptionBox.Text = existing.Description;
@@ -88,6 +96,16 @@ public partial class ProjectWindow : Window
     {
         if (_setting) return;
         if (sender == ScriptsBox) _scriptsTouched = true;
+        if (sender == RootBox) _rootTouched = true;
+        if (sender == ModBox) _modTouched = true;
+        if (sender == NameBox && _existing is null)
+        {
+            // a new project's folder and mod name follow its name until they're changed
+            _setting = true;
+            if (!_modTouched) ModBox.Text = WorkbenchProject.ModFolderFor(NameBox.Text);
+            if (!_rootTouched) RootBox.Text = NameBox.Text.Trim().Length == 0 ? "" : Path.Combine(DefaultProjectsFolder, SafeFolderName(NameBox.Text));
+            _setting = false;
+        }
         if (sender == RootBox && !_scriptsTouched && _existing is null)
         {
             _setting = true;
@@ -97,12 +115,23 @@ public partial class ProjectWindow : Window
         Validate();
     }
 
+    /// <summary>Where new projects go unless you choose: Documents, in W3 Mod Workbench, beside your other work and outside the game.</summary>
+    private static string DefaultProjectsFolder =>
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "W3 Mod Workbench");
+
+    private static string SafeFolderName(string name) =>
+        string.Concat(name.Trim().Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '_' : c));
+
     /// <summary>What is wrong with the fields, or null. Shown under the buttons; OK waits for it to be null.</summary>
     private void Validate()
     {
         string? problem = null;
+        string mod = WorkbenchProject.ModFolderFor(ModBox.Text.Trim().Length > 0 ? ModBox.Text : NameBox.Text);
+        ModHint.Text = $"Build makes {mod}, ready to install in the game's mods folder.";
         if (NameBox.Text.Trim().Length == 0) problem = "Give the project a name.";
         else if (FullRoot() is not { } root) problem = "Choose the project's folder.";
+        else if (_existing is null && FileSafety.Protection(Path.Combine(root, "_")) is not null)
+            problem = "That folder is in the game's folders (or REDkit's), where nothing is written. Choose a folder of your own, such as Documents.";
         else if (!ScriptsInside(root, out _)) problem = "The scripts folder has to be inside the project folder.";
         else if (_existing is null && Directory.Exists(root) && WorkbenchProject.FileIn(root) is { } there)
             problem = $"{Path.GetFileName(there)} is in that folder already. Open it from Project > Open project.";
@@ -212,6 +241,9 @@ public partial class ProjectWindow : Window
             if (project is null)
             {
                 project = WorkbenchProject.Create(root, NameBox.Text, scripts);
+                // the workspace holds the game files the mod changes; it's part of the project from the start
+                Directory.CreateDirectory(project.WorkspacePath);
+                project.Add(project.WorkspacePath);
                 // a folder that was compiled before projects had files keeps the output it was given
                 if (OutputBox.Text.Trim().Length == 0 && App.Settings.CompileOutputs.TryGetValue(project.ScriptsPath, out string? before))
                     OutputBox.Text = Stored(before);
@@ -226,7 +258,12 @@ public partial class ProjectWindow : Window
                 Directory.CreateDirectory(project.ScriptsPath);
             }
             project.CompileOutput = OutputBox.Text.Trim().Length == 0 ? null : OutputBox.Text.Trim().Replace('\\', '/');
+            project.BuildCompiledScripts = BuildCompiledCheck.IsChecked == true;
+            project.BuildLooseScripts = BuildLooseCheck.IsChecked == true;
             project.Author = AuthorBox.Text.Trim();
+            // kept only when it isn't what the name gives anyway
+            string modName = WorkbenchProject.ModFolderFor(ModBox.Text.Trim().Length > 0 ? ModBox.Text : project.Name);
+            project.ModName = modName == WorkbenchProject.ModFolderFor(project.Name) ? null : modName;
             project.Version = VersionBox.Text.Trim();
             project.Description = DescriptionBox.Text.Trim();
             project.Save();

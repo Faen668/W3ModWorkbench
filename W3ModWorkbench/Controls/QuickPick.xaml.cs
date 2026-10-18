@@ -27,7 +27,9 @@ public partial class QuickPick : UserControl
 
     /// <param name="filter">The items for what's typed, best first.</param>
     /// <param name="note">A line under the list, such as a hint on what can be typed.</param>
-    public void Show(string placeholder, Func<string, IReadOnlyList<QuickPickItem>> filter, Action<QuickPickItem> chosen, string? note = null)
+    /// <param name="text">What the box starts with, selected so typing replaces it.</param>
+    public void Show(string placeholder, Func<string, IReadOnlyList<QuickPickItem>> filter, Action<QuickPickItem> chosen, string? note = null,
+        string? text = null)
     {
         _filter = filter;
         _chosen = chosen;
@@ -36,9 +38,13 @@ public partial class QuickPick : UserControl
         Note.Text = note ?? "";
         Note.Visibility = note is null ? Visibility.Collapsed : Visibility.Visible;
         Visibility = Visibility.Visible;
-        Box.Text = "";
+        Box.Text = text ?? "";
         Refresh();
-        Dispatcher.BeginInvoke(() => Box.Focus(), DispatcherPriority.Input);
+        Dispatcher.BeginInvoke(() =>
+        {
+            Box.Focus();
+            Box.SelectAll();
+        }, DispatcherPriority.Input);
     }
 
     public void Hide()

@@ -15,6 +15,7 @@ using ICSharpCode.AvalonEdit.Search;
 using Microsoft.Win32;
 using W3ModWorkbench.Core;
 using W3ModWorkbench.Core.Projects;
+using W3ModWorkbench.Core.Scripts;
 using W3ModWorkbench.Core.Scripts.Navigation;
 using W3ModWorkbench.Highlighting;
 
@@ -35,7 +36,31 @@ public sealed record PreviewItem(string Path, string Source, byte[] Data, Script
     /// <summary>The file on disk when it's in a script project: it can be edited and saved. Null for anything read-only.</summary>
     public string? DiskPath => Script?.DiskPath;
 
-    public bool IsEditable => DiskPath is not null;
+    private bool _checked;
+    private string? _protection;
+
+    /// <summary>Why the file on disk can't be changed (the game's, an installed mod's, REDkit's), or null when it can, or isn't on disk.</summary>
+    public string? Protection
+    {
+        get
+        {
+            if (!_checked)
+            {
+                _protection = DiskPath is { } disk ? FileSafety.Protection(disk) : null;
+                _checked = true;
+            }
+            return _protection;
+        }
+    }
+
+    /// <summary>On disk, and not one of the game's files: it can be edited and saved.</summary>
+    public bool IsEditable => DiskPath is not null && Protection is null;
+
+    /// <summary>
+    /// The file's game path, for a copy in a project: where it is in the game's folders for one on disk, or its path
+    /// in its archive. Null for a file that has none, such as a log.
+    /// </summary>
+    public string? GamePath => DiskPath is { } disk ? FileSafety.GamePathOf(disk) : Script is not null || Source.Contains('\\') ? Path : null;
 }
 
 /// <summary>
@@ -358,6 +383,7 @@ public partial class PreviewDocument : UserControl
         byte[] data = Encode(Editor.Text);
         try
         {
+            FileSafety.CheckWrite(Item.DiskPath!);
             File.WriteAllBytes(Item.DiskPath!, data);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -394,6 +420,16 @@ public partial class PreviewDocument : UserControl
         if (IsEditable && !InProject)
         {
             await AskToJoinProjectAsync(host);
+            return;
+        }
+        // the game's own files, and anything in an archive, are changed by copying them into a project
+        string? why = Item.Protection;
+        if (why is not null || !host.CanEditAsProject(this) && Item.GamePath is not null && host.CanCopyToProject(this))
+        {
+            if (await ShowCard(why is not null ? "This file is read-only" : "Files in archives are read-only",
+                    (why ?? "It's inside a bundle or compiled scripts, which are never changed.") + " A copy in your project, at the same game path, is what a mod changes.",
+                    MessageKind.Info, primary: "Copy to project", secondary: "Close", anchor: at))
+                _ = host.CopyToProjectAsync(this);
             return;
         }
         if (host.CanEditAsProject(this))
@@ -456,6 +492,7 @@ public partial class PreviewDocument : UserControl
         if (dialog.ShowDialog(Window.GetWindow(this)) != true) return false;
         try
         {
+            FileSafety.CheckWrite(dialog.FileName);
             File.WriteAllBytes(dialog.FileName, IsEditable ? Encode(Editor.Text) : Item.Data);
             return true;
         }
@@ -473,6 +510,7 @@ public partial class PreviewDocument : UserControl
         if (HintPopup.IsOpen) CloseHint();
         else if (Card.IsOpen) CloseCard(false);
         else if (!_search.IsClosed) _search.Close();
+        else if (_snippet is not null) EndSnippet();
         else return false;
         return true;
     }
@@ -493,6 +531,12 @@ public partial class PreviewDocument : UserControl
             _ = ShowChangesAsync();
         else if (scripts && key == Key.H && mods == (ModifierKeys.Shift | ModifierKeys.Alt))
             _ = ShowHierarchyAsync();
+        else if (scripts && key == Key.F2 && mods == ModifierKeys.None)
+            _ = RenameAsync();
+        else if (scripts && key == Key.J && mods == ModifierKeys.Control && !Editor.IsReadOnly)
+            ShowSnippetPicker();
+        else if (scripts && key == Key.Space && mods == ModifierKeys.Control && !Editor.IsReadOnly)
+            _ = ShowCompletionAsync(explicitly: true);
         else if (key == Key.O && mods == (ModifierKeys.Control | ModifierKeys.Shift) && OutlineBar.Visibility == Visibility.Visible)
             ToggleOutline();
         else if (key == Key.F8 && mods is ModifierKeys.None or ModifierKeys.Shift && HasDiff)
@@ -550,6 +594,15 @@ public partial class PreviewDocument : UserControl
             // right-click moves the caret, so the menu acts on the word under the mouse
             if (OffsetAtMouse() is { } offset && !IsInSelection(offset)) Editor.TextArea.Caret.Offset = offset;
         };
+        // Tab expands a snippet's name and moves between the places to type in one
+        Editor.TextArea.PreviewKeyDown += (_, e) =>
+        {
+            if (e.Key == Key.Tab && _completion is null && Keyboard.Modifiers is ModifierKeys.None or ModifierKeys.Shift && !Editor.IsReadOnly && TabInSnippet(Keyboard.Modifiers == ModifierKeys.Shift))
+                e.Handled = true;
+        };
+        Editor.TextArea.TextEntered += (_, e) => OnTextEntered(e.Text);
+        Editor.TextArea.TextEntering += (_, e) => OnTextEntering(e);
+        Editor.TextArea.Caret.PositionChanged += (_, _) => EndSnippetIfLeft();
     }
 
     private bool IsInSelection(int offset) =>
@@ -660,81 +713,8 @@ public partial class PreviewDocument : UserControl
                 _ = ShowCard($"No definition found for '{text}'", "The game's scripts weren't found. Set the game folder in Settings to look there too.",
                     MessageKind.Info, primary: "OK", anchor: word.Start);
             else
-                await SearchFurtherAsync(text, word.Start, fromMouse, toSide);
+                ShowNotFound(finder, text, word.Start, $"No definition found for '{text}'");
         }
-    }
-
-    /// <summary>
-    /// Nothing open declares the word. Offers the next place to look, one at a time: the installed mods'
-    /// loose scripts (Shared Utils installs that way, with no archive to open), then the compiled scripts
-    /// of every installed mod. Each is read once and stays in every lookup until the app closes.
-    /// </summary>
-    private async Task SearchFurtherAsync(string text, int offset, bool fromMouse, bool toSide)
-    {
-        var workspace = _workspace!;
-        while (workspace.ModsFolder is not null)
-        {
-            bool loose = !workspace.IncludesLooseMods;
-            if (!loose && workspace.IncludesCompiledMods) break;
-
-            string searched = loose ? "the open archives or the game's scripts" : "the open archives, the game's scripts or the mods' loose scripts";
-            string question = loose
-                ? "Search the loose scripts of the mods in the game's mods folder too?"
-                : "Search inside the compiled scripts of every mod in the game's mods folder too? They're decompiled first, which can take a little while.";
-            if (!await ShowCard($"No definition found for '{text}'",
-                    $"It isn't declared in {searched}. {question} Once read, they're searched for every definition until the explorer is closed.",
-                    MessageKind.Info, primary: "Search Now", secondary: "Close", anchor: offset))
-                return;
-
-            _ = ShowCard(null, loose ? "Reading the mods' loose scripts…" : "Decompiling the mods' scripts…", MessageKind.Busy, anchor: offset);
-            Cursor = Cursors.AppStarting;
-            await (loose ? workspace.IncludeLooseModsAsync() : workspace.IncludeCompiledModsAsync());
-            ClearValue(CursorProperty);
-            CloseCard(false);
-
-            if (Finder() is not { } finder) return;
-            var targets = finder.Find(offset, text.Length);
-            if (targets.Count == 1)
-            {
-                await NavigateAsync(targets[0], toSide);
-                return;
-            }
-            if (targets.Count > 1)
-            {
-                ShowChoices(targets, fromMouse, toSide);
-                return;
-            }
-        }
-        if (Finder() is { } last) ShowNotFound(last, text, offset, $"No definition found for '{text}'");
-    }
-
-    /// <summary>
-    /// Offers the next of the installed mods' scripts to search, as go to definition does when nothing declares a
-    /// name, and reads them if asked. True when some were added; false when there are none left to add; null when
-    /// the offer was turned down.
-    /// </summary>
-    private async Task<bool?> OfferModsAsync(string text, int offset)
-    {
-        var workspace = _workspace!;
-        if (workspace.ModsFolder is null) return false;
-        bool loose = !workspace.IncludesLooseMods;
-        if (!loose && workspace.IncludesCompiledMods) return false;
-
-        string searched = loose ? "the open archives or the game's scripts" : "the open archives, the game's scripts or the mods' loose scripts";
-        string question = loose
-            ? "Search the loose scripts of the mods in the game's mods folder too?"
-            : "Search inside the compiled scripts of every mod in the game's mods folder too? They're decompiled first, which can take a little while.";
-        if (!await ShowCard($"No definition found for '{text}'",
-                $"It isn't declared in {searched}. {question} Once read, they're searched for every definition until the explorer is closed.",
-                MessageKind.Info, primary: "Search Now", secondary: "Close", anchor: offset))
-            return null;
-
-        _ = ShowCard(null, loose ? "Reading the mods' loose scripts…" : "Decompiling the mods' scripts…", MessageKind.Busy, anchor: offset);
-        Cursor = Cursors.AppStarting;
-        await (loose ? workspace.IncludeLooseModsAsync() : workspace.IncludeCompiledModsAsync());
-        ClearValue(CursorProperty);
-        CloseCard(false);
-        return true;
     }
 
     /// <summary>
@@ -881,29 +861,6 @@ public partial class PreviewDocument : UserControl
         return targets.Count == 0 ? null : (finder, targets, text, word.Start);
     }
 
-    /// <summary>
-    /// Buttons for the results panel that add the installed mods' scripts to the search and run it again,
-    /// for whichever of them aren't searched yet.
-    /// </summary>
-    private (string Label, Action Run)[] IncludeModsActions(Func<Task> again)
-    {
-        if (_workspace is not { ModsFolder: not null } workspace) return [];
-        var actions = new List<(string, Action)>();
-        if (!workspace.IncludesLooseMods)
-            actions.Add(("Loose scripts", async () =>
-            {
-                await workspace.IncludeLooseModsAsync();
-                await again();
-            }));
-        if (!workspace.IncludesCompiledMods)
-            actions.Add(("Compiled scripts", async () =>
-            {
-                await workspace.IncludeCompiledModsAsync();
-                await again();
-            }));
-        return [.. actions];
-    }
-
     /// <summary>Shift+F12: every place that uses the name at the caret, in the results under the files.</summary>
     private async Task FindReferencesAsync(int? at = null)
     {
@@ -917,7 +874,7 @@ public partial class PreviewDocument : UserControl
         {
             var hits = ScriptSearch.References(targets, parsed, layers, cancel);
             return (ResultRow.ByFile(hits), PreviewWindow.Summary(hits, "reference", "references"));
-        }, $"Nothing in the scripts searched uses {what}.", IncludeModsActions(() => FindReferencesAsync(offset)));
+        }, $"Nothing in the scripts searched uses {what}.");
     }
 
     /// <summary>
@@ -955,7 +912,7 @@ public partial class PreviewDocument : UserControl
                 count += files.Count;
             }
             return (rows, count == 1 ? "1 change" : $"{count} changes");
-        }, "Nothing in the scripts searched changes it.", IncludeModsActions(() => ShowChangesAsync(offset)));
+        }, "Nothing in the scripts searched changes it.");
     }
 
     /// <summary>Shift+Alt+H: a class's bases, subtypes and states, or a function's base versions and overrides.</summary>
@@ -983,7 +940,7 @@ public partial class PreviewDocument : UserControl
             }
             int subtypes = related.Count(r => r.Group is "Subtypes" or "Overridden by");
             return (rows, $"{related.Count(r => r.Group is "Base types" or "Overrides")} above, {subtypes} below");
-        }, "", IncludeModsActions(() => ShowHierarchyAsync(offset)));
+        }, "");
     }
 
     /// <summary>A graph of what uses the name at the caret, what uses those, and so on, with the name itself at the end.</summary>
@@ -991,20 +948,7 @@ public partial class PreviewDocument : UserControl
     {
         int offset = at ?? Editor.CaretOffset;
         if (Host is null) return;
-        // a name nothing searched declares may be in the mods' scripts: offer them one kind at a time, as go to definition does
-        (DefinitionFinder Finder, IReadOnlyList<ScriptSymbol> Targets, string Word, int Start)? result;
-        while ((result = await TargetsAtCaretAsync(offset, quiet: true)) is null)
-        {
-            if (await FinderAsync() is not { } own || own.WordAt(offset) is not { } at2) return;
-            string name = Editor.Document.GetText(at2.Start, at2.Length);
-            if (await OfferModsAsync(name, at2.Start) is not bool added) return;
-            if (!added)
-            {
-                _ = ShowCard(null, $"'{name}' doesn't lead to a declaration in the scripts searched.", MessageKind.Info, anchor: at2.Start, autoClose: true);
-                return;
-            }
-        }
-        var found = result.Value;
+        if (await TargetsAtCaretAsync(offset) is not { } found) return;
         var targets = found.Targets.Where(t => t.Kind is not (SymbolKind.Local or SymbolKind.Parameter)).ToList();
         if (targets.Count == 0)
         {
@@ -1016,8 +960,7 @@ public partial class PreviewDocument : UserControl
         var shown = targets[0].Kind is SymbolKind.Function or SymbolKind.Event
             ? UsageGraphBuilder.Targets(targets[0], Parsed, found.Finder.Layers)
             : targets;
-        UsageGraphWindow.Open(Host, this, shown, Parsed, found.Finder.Layers,
-            async () => (await FinderAsync())?.Layers, IncludeModsActions);
+        UsageGraphWindow.Open(Host, this, shown, Parsed, found.Finder.Layers);
     }
 
     // ---------------------------------------------------------------- outline
@@ -1406,6 +1349,582 @@ public partial class PreviewDocument : UserControl
         }
     }
 
+    // ---------------------------------------------------------------- snippets
+
+    /// <summary>The snippet being filled in: the places to type in it, in order, the one the caret is on, and where it ends.</summary>
+    private sealed class SnippetSession
+    {
+        public required List<(TextAnchor Start, TextAnchor End)> Fields { get; init; }
+        public required TextAnchor Caret { get; init; }
+        public required TextAnchor Start { get; init; }
+        public required TextAnchor End { get; init; }
+        public int Current { get; set; }
+    }
+
+    private SnippetSession? _snippet;
+
+    /// <summary>Ctrl+J: the snippets, narrowed by what's typed, to insert at the caret.</summary>
+    private void ShowSnippetPicker()
+    {
+        if (Host is not { } host || Editor.IsReadOnly) return;
+        var snippets = Snippets.All();
+        host.ShowPicker("Insert a snippet: type its name", query =>
+        {
+            var shown = query.Length == 0 ? snippets : snippets.Where(s => s.Prefix.Contains(query, StringComparison.OrdinalIgnoreCase)
+                || s.Title.Contains(query, StringComparison.OrdinalIgnoreCase));
+            return [.. shown.OrderBy(s => s.Prefix.StartsWith(query, StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+                .Select(s => new QuickPickItem(s.IsOwn ? "" : "", s.Prefix, s.Title, s))];
+        }, item =>
+        {
+            if (item.Tag is Snippet s) InsertSnippet(s, Editor.SelectionStart, Editor.SelectionLength);
+        }, $"Type a name and press Tab in a script to insert one too. Add your own as .ws files in {Snippets.Folder}");
+    }
+
+    /// <summary>Puts a snippet in place of the text from <paramref name="offset"/>, indented like its line, and selects the first place to type.</summary>
+    private void InsertSnippet(Snippet snippet, int offset, int length)
+    {
+        EndSnippet();
+        var document = Editor.Document;
+        var line = document.GetLineByOffset(offset);
+        string lineText = document.GetText(line.Offset, line.Length);
+        string indent = lineText[..(lineText.Length - lineText.TrimStart().Length)];
+        string newline = TextUtilities.GetNewLineFromDocument(document, line.LineNumber);
+        var expanded = Snippets.Expand(snippet, indent, newline);
+
+        document.BeginUpdate();
+        document.Replace(offset, length, expanded.Text);
+        document.EndUpdate();
+
+        TextAnchor Anchor(int at, AnchorMovementType movement)
+        {
+            var anchor = document.CreateAnchor(at);
+            anchor.MovementType = movement;
+            return anchor;
+        }
+        var fields = expanded.Fields
+            .Select(f => (Anchor(offset + f.Offset, AnchorMovementType.BeforeInsertion), Anchor(offset + f.Offset + f.Length, AnchorMovementType.AfterInsertion)))
+            .ToList();
+        var caret = Anchor(offset + expanded.Caret, AnchorMovementType.AfterInsertion);
+        if (fields.Count == 0)
+        {
+            Editor.Select(caret.Offset, 0);
+            Editor.TextArea.Caret.Offset = caret.Offset;
+            return;
+        }
+        _snippet = new SnippetSession
+        {
+            Fields = fields,
+            Caret = caret,
+            Start = Anchor(offset, AnchorMovementType.BeforeInsertion),
+            End = Anchor(offset + expanded.Text.Length, AnchorMovementType.AfterInsertion),
+        };
+        SelectField(0);
+        Editor.TextArea.Focus();
+    }
+
+    private void SelectField(int index)
+    {
+        if (_snippet is not { } s) return;
+        s.Current = index;
+        var (start, end) = s.Fields[index];
+        Editor.Select(start.Offset, Math.Max(0, end.Offset - start.Offset));
+        Editor.TextArea.Caret.Offset = end.Offset;
+    }
+
+    /// <summary>
+    /// Tab in a script: in a snippet, to the next place to type (Shift+Tab, the one before), and after the last, to where
+    /// the snippet ends. Otherwise a snippet's name just before the caret is expanded. False when Tab should just indent.
+    /// </summary>
+    private bool TabInSnippet(bool back)
+    {
+        if (_snippet is { } s)
+        {
+            int next = s.Current + (back ? -1 : 1);
+            if (next >= 0 && next < s.Fields.Count)
+            {
+                SelectField(next);
+                return true;
+            }
+            if (next < 0) return true;
+            int caret = s.Caret.Offset;
+            EndSnippet();
+            Editor.Select(caret, 0);
+            Editor.TextArea.Caret.Offset = caret;
+            return true;
+        }
+        if (back || Editor.SelectionLength > 0) return false;
+        int at = Editor.CaretOffset;
+        var document = Editor.Document;
+        // only at the end of a word that stands alone, with nothing but space after it on the line
+        var line = document.GetLineByOffset(at);
+        if (document.GetText(at, line.EndOffset - at).Trim().Length > 0) return false;
+        int start = at;
+        while (start > line.Offset && ScriptParser.IsWordChar(document.GetCharAt(start - 1))) start--;
+        if (start == at || (start > line.Offset && !char.IsWhiteSpace(document.GetCharAt(start - 1)) && document.GetCharAt(start - 1) is not ('{' or '}' or ';'))) return false;
+        string word = document.GetText(start, at - start);
+        if (Snippets.All().FirstOrDefault(s => s.Prefix.Equals(word, StringComparison.OrdinalIgnoreCase)) is not { } snippet) return false;
+        InsertSnippet(snippet, start, at - start);
+        return true;
+    }
+
+    /// <summary>The caret went outside the snippet: it's done with.</summary>
+    private void EndSnippetIfLeft()
+    {
+        if (_snippet is not { } s) return;
+        int caret = Editor.CaretOffset;
+        if (s.Start.IsDeleted || s.End.IsDeleted || caret < s.Start.Offset || caret > s.End.Offset) EndSnippet();
+    }
+
+    private void EndSnippet() => _snippet = null;
+
+    private void Snippet_Click(object sender, RoutedEventArgs e) => ShowSnippetPicker();
+
+    // ---------------------------------------------------------------- rename
+
+    /// <summary>
+    /// F2: a new name for the function, variable, type or enum value at the caret, everywhere it's used. Only names the
+    /// open project declares (or a local in this file) are renamed, and only in the project's files: changing a name the
+    /// game or a mod declares would break what uses it there.
+    /// </summary>
+    private async Task RenameAsync(int? at = null)
+    {
+        int offset = at ?? Editor.CaretOffset;
+        if (Host is not { } host || await TargetsAtCaretAsync(offset) is not { } found) return;
+        var (finder, targets, word, start) = found;
+        bool local = targets.All(t => t.Kind is SymbolKind.Local or SymbolKind.Parameter);
+        bool Ours(ScriptFile file) => file.DiskPath is { } disk && ProjectWorkspace.IsMember(disk);
+        if (local ? !IsEditable || Editor.IsReadOnly : !targets.All(t => Ours(t.File)))
+        {
+            var elsewhere = targets.FirstOrDefault(t => !Ours(t.File));
+            _ = ShowCard($"'{word}' can't be renamed here",
+                local ? "This file can't be edited: open it from a project to change it."
+                : $"It's declared in {elsewhere?.File.Source ?? "a file outside the open project"}. Only names your project declares are renamed, so nothing the game or another mod uses breaks.",
+                MessageKind.Info, primary: "OK", anchor: start);
+            return;
+        }
+
+        var target = targets[0];
+        string what = local ? $"'{word}'" : target.Title;
+        host.ShowPicker($"New name for {what}", query =>
+        {
+            string name = query.Trim();
+            bool valid = name.Length > 0 && ScriptParser.IsWordStart(name[0]) && name.All(ScriptParser.IsWordChar);
+            if (!valid) return [new QuickPickItem("", name.Length == 0 ? "Type the new name" : $"'{name}' isn't a name", "Letters, digits and _, starting with a letter or _", null)];
+            if (name == word) return [new QuickPickItem("", "Type the new name", "It's the same as now", null)];
+            return [new QuickPickItem("", $"Rename to {name}", "Enter to see what changes", name)];
+        }, item =>
+        {
+            if (item.Tag is string name) _ = ApplyRenameAsync(finder, targets, word, name, start);
+        }, "Every use in the project's files is changed. Open files keep the change unsaved, so you can look it over; files that aren't open are saved.", text: word);
+    }
+
+    private async Task ApplyRenameAsync(DefinitionFinder finder, IReadOnlyList<ScriptSymbol> targets, string oldName, string newName, int anchor)
+    {
+        var parsed = Parsed;
+        var layers = finder.Layers;
+        _ = ShowCard(null, "Finding every use…", MessageKind.Busy, anchor: anchor);
+        List<ScriptHit> hits;
+        try
+        {
+            hits = await Task.Run(() => ScriptSearch.References(targets, parsed, layers, CancellationToken.None));
+        }
+        finally
+        {
+            CloseCard(false);
+        }
+        bool Ours(ScriptHit h) => h.File == Item.Script ? IsEditable : h.File.DiskPath is { } disk && ProjectWorkspace.IsMember(disk);
+        var ours = hits.Where(Ours).ToList();
+        var maybe = ours.Where(h => h.Label == "maybe").ToList();
+        int outside = hits.Count - ours.Count;
+        if (hits.Count >= ScriptSearch.MaxHits)
+        {
+            _ = ShowCard("Too many uses to rename", $"'{oldName}' is used in more than {ScriptSearch.MaxHits:N0} places.", MessageKind.Warning, primary: "OK");
+            return;
+        }
+
+        string files = Format.Count(ours.Select(h => h.File.Key).Distinct().Count(), "file");
+        string note = outside > 0 ? $"\n\n{Format.Count(outside, "use")} outside the project (in the game's or a mod's scripts) can't be changed and would stop compiling against the new name." : "";
+        bool includeMaybe = true;
+        if (maybe.Count > 0)
+        {
+            var choice = await Ask($"Rename {oldName} to {newName}?",
+                $"{Format.Count(ours.Count, "place")} in {files}. In {Format.Count(maybe.Count, "place")} the type before the dot couldn't be worked out, so that may be another member with the same name.{note}",
+                MessageKind.Question, $"Rename all {ours.Count}", $"Only the {ours.Count - maybe.Count} certain");
+            if (choice == MessageChoice.Cancel) return;
+            includeMaybe = choice == MessageChoice.Primary;
+        }
+        else if (!await ShowCard($"Rename {oldName} to {newName}?", $"{Format.Count(ours.Count, "place")} in {files}.{note}", MessageKind.Question, primary: "Rename", secondary: "Cancel"))
+            return;
+
+        var changes = ours.Where(h => includeMaybe || h.Label != "maybe").ToList();
+        var (changed, skipped, failed) = RenameIn(changes, oldName, newName);
+        if (failed is not null)
+        {
+            _ = ShowCard("Not every file could be changed", failed, MessageKind.Warning, primary: "OK");
+            return;
+        }
+        string summary = $"Renamed {Format.Count(changed.Count, "place")}" + (skipped > 0 ? $", skipped {skipped} that changed since they were read" : "");
+        Host?.ShowResults(this, $"Renamed {oldName} to {newName}", "", _ => (ResultRow.ByFile(changed), summary), "Nothing was renamed.");
+    }
+
+    /// <summary>
+    /// Writes the new name over each hit, in open views (as one undoable change each) or on disk. A hit whose text isn't the
+    /// old name any more (the file changed since it was read) is skipped.
+    /// </summary>
+    private (List<ScriptHit> Changed, int Skipped, string? Failed) RenameIn(List<ScriptHit> hits, string oldName, string newName)
+    {
+        var changed = new List<ScriptHit>();
+        int skipped = 0;
+        var archives = new HashSet<IArchive>();
+        foreach (var group in hits.GroupBy(h => h.File.Key))
+        {
+            var file = group.First().File;
+            var spots = group.OrderByDescending(h => h.Offset).ToList();
+            var open = file == Item.Script ? this : PreviewWindow.OpenDocument(file.Key);
+            if (open is not null)
+            {
+                var document = open.Editor.Document;
+                document.BeginUpdate();
+                foreach (var hit in spots)
+                {
+                    if (Fits(document.Text, hit.Offset, oldName))
+                    {
+                        document.Replace(hit.Offset, oldName.Length, newName);
+                        changed.Add(hit);
+                    }
+                    else skipped++;
+                }
+                document.EndUpdate();
+                continue;
+            }
+            if (file.DiskPath is not { } path) continue;
+            try
+            {
+                byte[] data = File.ReadAllBytes(path);
+                var encoding = EncodingOf(data);
+                string text = TextDecoding.Decode(data);
+                var sb = new StringBuilder(text);
+                foreach (var hit in spots)
+                {
+                    if (Fits(text, hit.Offset, oldName))
+                    {
+                        sb.Remove(hit.Offset, oldName.Length).Insert(hit.Offset, newName);
+                        changed.Add(hit);
+                    }
+                    else skipped++;
+                }
+                FileSafety.CheckWrite(path);
+                File.WriteAllBytes(path, [.. encoding.GetPreamble(), .. encoding.GetBytes(sb.ToString())]);
+                if (_workspace?.ArchiveOf(file) is { } archive) archives.Add(archive);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                return (changed, skipped, $"{file.Path} could not be changed: {ex.Message}. The files before it in the list were renamed.");
+            }
+        }
+        foreach (var archive in archives) ScriptWorkspace.Reindex(archive);
+        return ([.. changed.GroupBy(h => h.File.Key).SelectMany(Renamed)], skipped, null);
+
+        // where each place is now, with the new name in its line, in file order
+        IEnumerable<ScriptHit> Renamed(IEnumerable<ScriptHit> inFile)
+        {
+            int shift = 0, delta = newName.Length - oldName.Length;
+            int lineShift = 0, line = -1;
+            foreach (var hit in inFile.OrderBy(h => h.Offset))
+            {
+                if (hit.Line != line) (line, lineShift) = (hit.Line, 0);
+                int column = hit.Column + lineShift;
+                string text = hit.LineText.Length >= column + oldName.Length
+                    ? hit.LineText[..column] + newName + hit.LineText[(column + oldName.Length)..]
+                    : hit.LineText;
+                yield return hit with { Offset = hit.Offset + shift, Length = newName.Length, Column = column, LineText = text };
+                shift += delta;
+                lineShift += delta;
+            }
+        }
+    }
+
+    /// <summary>Whether the old name is still where the search found it, as a whole word.</summary>
+    private static bool Fits(string text, int offset, string name) =>
+        offset >= 0 && offset + name.Length <= text.Length
+        && string.Compare(text, offset, name, 0, name.Length, StringComparison.OrdinalIgnoreCase) == 0
+        && (offset == 0 || !ScriptParser.IsWordChar(text[offset - 1]))
+        && (offset + name.Length == text.Length || !ScriptParser.IsWordChar(text[offset + name.Length]));
+
+    private void Rename_Click(object sender, RoutedEventArgs e) => _ = RenameAsync();
+
+    // ---------------------------------------------------------------- completion
+
+    private ICSharpCode.AvalonEdit.CodeCompletion.CompletionWindow? _completion;
+
+    /// <summary>Typing a dot lists the members of what's before it; starting a name lists the names that fit there.</summary>
+    private void OnTextEntered(string text)
+    {
+        if (_completion is { } open)
+        {
+            // once nothing in the list fits what's typed it closes, so Enter is a new line again rather than a pick of nothing;
+            // and a keyword typed out in full (if, for, return…) is what was meant, so the list gets out of the way
+            Dispatcher.BeginInvoke(DispatcherPriority.Background, () =>
+            {
+                if (open.CompletionList.SelectedItem is null || Keyword(WordBeforeCaret())) open.Close();
+            });
+            return;
+        }
+        if (Editor.IsReadOnly || text.Length != 1 || !App.Settings.SuggestNames) return;
+        char c = text[0];
+        if (c == '.')
+        {
+            _ = ShowCompletionAsync(explicitly: false);
+            return;
+        }
+        if (!ScriptParser.IsWordChar(c)) return;
+        // a name, once three letters of it are typed: fewer and it's as likely to be if, i or a short local
+        string word = WordBeforeCaret();
+        if (word.Length != AutoCompleteAfter || !ScriptParser.IsWordStart(word[0]) || Keyword(word)) return;
+        int start = Editor.CaretOffset - word.Length;
+        if (start > 0 && Editor.Document.GetCharAt(start - 1) == '.') return; // after a dot, the list opened at the dot
+        if (NamingSomething(start)) return;
+        _ = ShowCompletionAsync(explicitly: false);
+    }
+
+    /// <summary>How many letters of a name open the list by themselves.</summary>
+    private const int AutoCompleteAfter = 3;
+
+    private static readonly HashSet<string> CompletionKeywords = new(StringComparer.Ordinal)
+    {
+        "if", "else", "for", "while", "do", "switch", "case", "default", "break", "continue", "return", "new", "delete", "true", "false", "NULL",
+        "var", "function", "event", "class", "struct", "enum", "state", "extends", "in", "this", "super", "parent", "virtual_parent",
+        "int", "float", "bool", "string", "name", "byte", "array", "out", "optional", "latent", "entry", "timer", "exec", "private", "protected",
+        "public", "import", "saved", "editable", "const", "final", "abstract", "statemachine", "autobind", "hint", "default", "defaults",
+    };
+
+    private static bool Keyword(string word) => CompletionKeywords.Contains(word);
+
+    /// <summary>The part of a name just before the caret.</summary>
+    private string WordBeforeCaret()
+    {
+        int end = Editor.CaretOffset, start = end;
+        while (start > 0 && ScriptParser.IsWordChar(Editor.Document.GetCharAt(start - 1))) start--;
+        return Editor.Document.GetText(start, end - start);
+    }
+
+    /// <summary>
+    /// The name at <paramref name="start"/> is one being made up, not one being used: after var, function, event, class
+    /// and the rest, or after the comma of var a, b. Nothing to suggest there.
+    /// </summary>
+    private bool NamingSomething(int start)
+    {
+        var line = Editor.Document.GetLineByOffset(start);
+        string before = Editor.Document.GetText(line.Offset, start - line.Offset);
+        return DeclaringName().IsMatch(before);
+    }
+
+    [System.Text.RegularExpressions.GeneratedRegex(@"(?:\b(?:var|function|event|class|struct|enum|state|statemachine|autobind)\s+(?:\w+\s*,\s*)*|@\w+\s*\(\s*\w*\s*\)\s*)$")]
+    private static partial System.Text.RegularExpressions.Regex DeclaringName();
+
+    /// <summary>
+    /// While the list is open, a bracket, dot or other punctuation takes the name picked in it when it starts with what's
+    /// typed, then goes in after it, as in other editors. A space just closes the list.
+    /// </summary>
+    private void OnTextEntering(TextCompositionEventArgs e)
+    {
+        if (_completion is not { } list || e.Text.Length == 0 || ScriptParser.IsWordChar(e.Text[0])) return;
+        if (e.Text[0] is '(' or ')' or '.' or ';' or ',' or '[' or ']' && list.CompletionList.SelectedItem is CompletionItem item
+            && Editor.CaretOffset >= list.StartOffset
+            && item.Text.StartsWith(Editor.Document.GetText(list.StartOffset, Editor.CaretOffset - list.StartOffset), StringComparison.OrdinalIgnoreCase)
+            && Editor.CaretOffset > list.StartOffset)
+            list.CompletionList.RequestInsertion(e);
+        else list.Close();
+    }
+
+    /// <summary>
+    /// Opens the completion list at the caret: after a dot, the members of the type before it; elsewhere, locals,
+    /// the class's members, globals, types and keywords. Not inside comments and strings.
+    /// </summary>
+    private async Task ShowCompletionAsync(bool explicitly)
+    {
+        if (Editor.IsReadOnly || Item.Script is null || _workspace is null) return;
+        if (!_workspace.IsReady)
+        {
+            if (!explicitly) return;
+            await _workspace.Ready;
+        }
+        if (Finder() is not { } finder) return;
+        int caret = Editor.CaretOffset;
+        string code = Parsed.Code;
+        if (caret > code.Length) return;
+        // inside a comment or a string the code is blanked out
+        if (caret > 0 && code[caret - 1] == ' ' && Editor.Document.GetCharAt(caret - 1) != ' ') return;
+
+        int start = caret;
+        while (start > 0 && ScriptParser.IsWordChar(code[start - 1])) start--;
+        int before = start - 1;
+        while (before >= 0 && char.IsWhiteSpace(code[before])) before--;
+        bool member = before >= 0 && code[before] == '.';
+        string prefix = Editor.Document.GetText(start, caret - start);
+
+        var items = new List<CompletionItem>();
+        if (member)
+        {
+            if (finder.MembersAfter(before) is not { } found) return;
+            items.AddRange(found.Members.Select(s => new CompletionItem(s)));
+            items.AddRange(found.BuiltIn.Select(n => new CompletionItem(n, "array method")));
+        }
+        else
+        {
+            if (!explicitly && prefix.Length == 0) return;
+            var (symbols, words) = finder.NamesAt(caret);
+            items.AddRange(symbols.Where(s => prefix.Length == 0 || s.Name.StartsWith(prefix[..1], StringComparison.OrdinalIgnoreCase)).Select(s => new CompletionItem(s)));
+            items.AddRange(words.Where(w => prefix.Length == 0 || w.StartsWith(prefix[..1], StringComparison.OrdinalIgnoreCase)).Select(w => new CompletionItem(w, "keyword")));
+            // opened by typing: only when something starts with what's there, so a new name of your own gets no list
+            if (!explicitly && !items.Any(i => i.Text.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) && !i.Text.Equals(prefix, StringComparison.OrdinalIgnoreCase)))
+                return;
+        }
+        if (items.Count == 0 || Editor.CaretOffset != caret) return;
+
+        var window = new ICSharpCode.AvalonEdit.CodeCompletion.CompletionWindow(Editor.TextArea)
+        {
+            StartOffset = start,
+            EndOffset = caret,
+            CloseWhenCaretAtBeginning = !explicitly,
+            Width = 460,
+        };
+        StyleCompletion(window);
+        var data = window.CompletionList.CompletionData;
+        foreach (var item in items.OrderBy(i => i.Rank).ThenBy(i => i.Text, StringComparer.OrdinalIgnoreCase)) data.Add(item);
+        window.Closed += (_, _) =>
+        {
+            if (_completion == window) _completion = null;
+        };
+        _completion = window;
+        ClosePeek();
+        CloseHint();
+        window.Show();
+        if (prefix.Length > 0) window.CompletionList.SelectItem(prefix);
+    }
+
+    /// <summary>
+    /// The completion list as a card like the app's menus and the definition popup: rounded, in the theme's colours, with a
+    /// shadow, and its declaration beside it in a card too, instead of AvalonEdit's plain window and Windows' blue.
+    /// </summary>
+    private void StyleCompletion(ICSharpCode.AvalonEdit.CodeCompletion.CompletionWindow window)
+    {
+        window.WindowStyle = WindowStyle.None;
+        window.AllowsTransparency = true;
+        window.Background = Brushes.Transparent;
+        window.BorderThickness = new Thickness(0);
+
+        var list = window.CompletionList;
+        list.ListBox.ItemContainerStyle = (Style)FindResource("CompletionItem");
+        list.ListBox.Background = Brushes.Transparent;
+        list.ListBox.BorderThickness = new Thickness(0);
+        list.ListBox.Padding = new Thickness(0);
+        list.ListBox.FontSize = 13;
+        window.Content = null;
+        var card = new Border
+        {
+            Child = list,
+            CornerRadius = new CornerRadius(8),
+            BorderThickness = new Thickness(1),
+            Padding = new Thickness(4),
+            Margin = new Thickness(0, 0, 14, 14),
+            Effect = new System.Windows.Media.Effects.DropShadowEffect { BlurRadius = 14, ShadowDepth = 3, Opacity = 0.3 },
+        };
+        card.SetResourceReference(Border.BackgroundProperty, "SolidBackgroundFillColorBaseBrush");
+        card.SetResourceReference(Border.BorderBrushProperty, "SurfaceStrokeColorFlyoutBrush");
+        window.Content = card;
+
+        // AvalonEdit keeps the declaration's tooltip to itself
+        if (typeof(ICSharpCode.AvalonEdit.CodeCompletion.CompletionWindow)
+                .GetField("toolTip", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.GetValue(window) is ToolTip tip)
+            tip.Style = (Style)FindResource("CompletionTip");
+    }
+
+    private void Complete_Click(object sender, RoutedEventArgs e) => _ = ShowCompletionAsync(explicitly: true);
+
+    /// <summary>A name in the completion list, with what it is beside it and its declaration as the tooltip.</summary>
+    private sealed class CompletionItem : ICSharpCode.AvalonEdit.CodeCompletion.ICompletionData
+    {
+        private readonly string _kind;
+        private readonly ScriptSymbol? _symbol;
+
+        public CompletionItem(ScriptSymbol symbol)
+        {
+            _symbol = symbol;
+            Text = symbol.Name;
+            _kind = symbol.Kind switch
+            {
+                SymbolKind.Local or SymbolKind.Parameter => symbol.Type is { } t ? $"{t}  ·  {(symbol.Kind == SymbolKind.Local ? "local" : "parameter")}" : "local",
+                SymbolKind.Field => symbol.Type ?? "field",
+                SymbolKind.Function => symbol.Type is { } r ? $"function : {r}" : "function",
+                SymbolKind.Event => "event",
+                SymbolKind.EnumMember => symbol.Owner ?? "enum value",
+                SymbolKind.State => $"state in {symbol.Owner}",
+                _ => symbol.Kind.ToString().ToLowerInvariant(),
+            };
+            Rank = symbol.Kind switch
+            {
+                SymbolKind.Local or SymbolKind.Parameter => 0,
+                SymbolKind.Field or SymbolKind.Function or SymbolKind.Event when symbol.Owner is not null => 1,
+                _ => 2,
+            };
+        }
+
+        public CompletionItem(string word, string kind)
+        {
+            Text = word;
+            _kind = kind;
+            Rank = 3;
+        }
+
+        public string Text { get; }
+
+        /// <summary>Locals first, then the class's members, then globals, then keywords.</summary>
+        public int Rank { get; }
+
+        public double Priority => -Rank;
+
+        public ImageSource? Image => null;
+
+        public object Content
+        {
+            get
+            {
+                var kind = new Run("   " + _kind) { FontSize = 11.5 };
+                kind.SetResourceReference(TextElement.ForegroundProperty, "TextFillColorTertiaryBrush");
+                return new TextBlock { Inlines = { new Run(Text), kind }, TextTrimming = TextTrimming.CharacterEllipsis };
+            }
+        }
+
+        public object Description
+        {
+            get
+            {
+                var panel = new StackPanel();
+                panel.Children.Add(new TextBlock
+                {
+                    Text = _symbol?.Title ?? Text,
+                    FontFamily = new FontFamily("Cascadia Mono, Consolas"),
+                    FontSize = 12.5,
+                    TextWrapping = TextWrapping.Wrap,
+                });
+                var where = new TextBlock
+                {
+                    Text = _symbol is null ? _kind : $"{_symbol.File.Source}  ·  {_symbol.File.Path} : {_symbol.Line}",
+                    FontSize = 11.5,
+                    Margin = new Thickness(0, 3, 0, 0),
+                    TextWrapping = TextWrapping.Wrap,
+                };
+                where.SetResourceReference(TextBlock.ForegroundProperty, "TextFillColorSecondaryBrush");
+                panel.Children.Add(where);
+                return panel;
+            }
+        }
+
+        public void Complete(ICSharpCode.AvalonEdit.Editing.TextArea textArea, ISegment completionSegment, EventArgs insertionRequestEventArgs) =>
+            textArea.Document.Replace(completionSegment, Text);
+    }
+
     // ---------------------------------------------------------------- menu
 
     private void FindReferences_Click(object sender, RoutedEventArgs e) => _ = FindReferencesAsync();
@@ -1530,6 +2049,7 @@ public partial class PreviewDocument : UserControl
             ? "Only for a mod's loose copy of one of the game's scripts"
             : "Opens the game's version beside this one and marks what the mod changed";
         CompareOpenMenuItem.IsEnabled = Host?.HasOtherFiles(this) == true;
+        SnippetMenuItem.IsEnabled = CompleteMenuItem.IsEnabled = !Editor.IsReadOnly;
         NextDiffMenuItem.Visibility = ClearDiffMenuItem.Visibility = HasDiff ? Visibility.Visible : Visibility.Collapsed;
     }
 

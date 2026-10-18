@@ -8,6 +8,7 @@ using System.Windows.Data;
 using System.Windows.Input;
 using Microsoft.Win32;
 using W3ModWorkbench.Core;
+using W3ModWorkbench.Core.Projects;
 using W3ModWorkbench.Core.Strings;
 
 namespace W3ModWorkbench;
@@ -647,14 +648,22 @@ public partial class StringsWindow : Window, IMessageHost
     private async Task<bool> SaveAsync(string? path)
     {
         if (Strings() is not { } strings) return false;
+        // the game's own strings, and an installed mod's, are never saved over: they're saved somewhere of your own
+        if (path is not null && FileSafety.Protection(path) is { } protection)
+        {
+            await ShowMessage($"{Path.GetFileName(path)} is read-only",
+                protection + " Save it into your project, or anywhere of your own, from the next window.", MessageKind.Info);
+            path = null;
+        }
         if (path is null)
         {
+            string near = Path.GetDirectoryName(_path ?? _sourcePath) ?? "";
             var dialog = new SaveFileDialog
             {
                 Title = "Save strings",
                 Filter = "Witcher 3 strings (*.w3strings)|*.w3strings",
                 FileName = $"{StringsLanguage.Handle}.w3strings",
-                InitialDirectory = Path.GetDirectoryName(_path ?? _sourcePath) ?? "",
+                InitialDirectory = FileSafety.CanEdit(Path.Combine(near, "_")) ? near : ProjectWorkspace.Current?.Root ?? "",
             };
             if (dialog.ShowDialog(this) != true) return false;
             path = dialog.FileName;
@@ -673,6 +682,8 @@ public partial class StringsWindow : Window, IMessageHost
         try
         {
             byte[] data = W3Strings.Write(strings, StringsLanguage, _version);
+            FileSafety.CheckWrite(path);
+            foreach (string copy in copies) FileSafety.CheckWrite(copy);
             File.WriteAllBytes(path, data);
             foreach (string copy in copies) File.WriteAllBytes(copy, data);
         }
@@ -705,6 +716,7 @@ public partial class StringsWindow : Window, IMessageHost
         if (dialog.ShowDialog(this) != true) return;
         try
         {
+            FileSafety.CheckWrite(dialog.FileName);
             File.WriteAllText(dialog.FileName, W3Strings.ToCsv(new W3StringsFile(StringsLanguage, _version, strings)), new UTF8Encoding(false));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)

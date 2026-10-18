@@ -1,0 +1,111 @@
+<Window x:Class="W3ModWorkbench.HashToolsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:W3ModWorkbench"
+        Title="Hashes and IDs" Icon="pack://application:,,,/W3ModWorkbench;component/Assets/app.ico"
+        Width="900" Height="760" MinWidth="640" MinHeight="460"
+        WindowStartupLocation="CenterOwner" PreviewKeyDown="Window_PreviewKeyDown">
+    <Window.Resources>
+        <Style x:Key="Card" TargetType="Border">
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="14,12" />
+            <Setter Property="Margin" Value="0,0,0,10" />
+            <Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}" />
+            <Setter Property="Background" Value="{DynamicResource CardBackgroundFillColorDefaultBrush}" />
+        </Style>
+        <Style x:Key="Heading" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+        <Style x:Key="Note" TargetType="TextBlock">
+            <Setter Property="Opacity" Value="0.65" />
+            <Setter Property="Margin" Value="0,2,0,8" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+        <Style x:Key="Mono" TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+            <Setter Property="FontFamily" Value="Cascadia Mono, Consolas" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Padding" Value="8,6" />
+        </Style>
+        <!-- a value that can be selected and copied, without looking like a box to type in -->
+        <Style x:Key="Value" TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+            <Setter Property="IsReadOnly" Value="True" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="FontFamily" Value="Cascadia Mono, Consolas" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <DataTemplate x:Key="ValueRow" DataType="{x:Type local:HashRow}">
+            <Grid Margin="0,3">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="150" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="{Binding Label}" VerticalAlignment="Center" Opacity="0.8" ToolTip="{Binding Note}" />
+                <TextBox Grid.Column="1" Style="{StaticResource Value}" Text="{Binding Value, Mode=OneWay}" ToolTip="{Binding Note}" />
+                <Button Grid.Column="2" Padding="8,3" MinHeight="0" Click="CopyRow_Click" Tag="{Binding CopyText}" ToolTip="Copy">
+                    <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE8C8;" FontSize="12" />
+                </Button>
+            </Grid>
+        </DataTemplate>
+    </Window.Resources>
+
+    <Grid>
+        <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="14,12,14,4">
+            <StackPanel>
+                <StackPanel Margin="0,0,0,10">
+                    <TextBlock Text="Hashes and IDs" FontSize="16" FontWeight="SemiBold" />
+                    <TextBlock Opacity="0.65" Margin="0,2,0,0" TextWrapping="Wrap"
+                               Text="Hash a name the way the game stores it, find the name behind a hash, and read numbers and string IDs" />
+                </StackPanel>
+
+                <Border Style="{StaticResource Card}">
+                    <StackPanel>
+                        <TextBlock Text="Hash a name" Style="{StaticResource Heading}" />
+                        <TextBlock Style="{StaticResource Note}" Text="Each hash in decimal and hex. Rest on a row to see what uses it." />
+                        <TextBox x:Name="TextBox" Style="{StaticResource Mono}" TextChanged="Text_Changed" />
+                        <ItemsControl x:Name="HashList" Margin="0,8,0,0" ItemTemplate="{StaticResource ValueRow}" />
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource Card}">
+                    <StackPanel>
+                        <TextBlock Text="Find the name behind a hash" Style="{StaticResource Heading}" />
+                        <TextBlock x:Name="LookupNote" Style="{StaticResource Note}"
+                                   Text="Looks through every name in the game's scripts and every string key the game has, with each kind of hash." />
+                        <TextBox x:Name="LookupBox" Style="{StaticResource Mono}" TextChanged="Lookup_Changed"
+                                 ToolTip="Decimal, or hex with 0x in front (0x1a2b3c4d)" />
+                        <TextBlock x:Name="LookupStatus" Margin="0,8,0,0" Opacity="0.75" TextWrapping="Wrap" />
+                        <ItemsControl x:Name="LookupList" Margin="0,4,0,0" ItemTemplate="{StaticResource ValueRow}" />
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource Card}">
+                    <StackPanel>
+                        <TextBlock Text="Read a number" Style="{StaticResource Heading}" />
+                        <TextBlock Style="{StaticResource Note}"
+                                   Text="Decimal, or hex with 0x in front. Shows it as hex, as signed and float bits, its bytes as they're stored, and for a string ID in the 211… range, the mod ID it's made from." />
+                        <TextBox x:Name="NumberBox" Style="{StaticResource Mono}" TextChanged="Number_Changed" />
+                        <ItemsControl x:Name="NumberList" Margin="0,8,0,0" ItemTemplate="{StaticResource ValueRow}" />
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource Card}">
+                    <StackPanel>
+                        <TextBlock Text="String IDs for a mod" Style="{StaticResource Heading}" />
+                        <TextBlock Style="{StaticResource Note}"
+                                   Text="By the usual convention a mod's strings use 211, its Nexus mod ID as four digits, then 000 to 999. Type the mod's ID to get its block." />
+                        <TextBox x:Name="NexusBox" Style="{StaticResource Mono}" Width="160" HorizontalAlignment="Left" TextChanged="Nexus_Changed" />
+                        <ItemsControl x:Name="NexusList" Margin="0,8,0,0" ItemTemplate="{StaticResource ValueRow}" />
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+
+        <local:MessageCard x:Name="Message" IsModal="True" />
+    </Grid>
+</Window>

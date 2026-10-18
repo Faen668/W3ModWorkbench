@@ -36,6 +36,9 @@ public static class StandaloneCompiler
     {
         var log = new System.Text.StringBuilder();
         var messages = new List<CompileMessage>();
+        // the game's files are never written: a compiled blob goes in a mod's own folder, or anywhere of yours
+        try { Projects.FileSafety.CheckInstallWrite(output); }
+        catch (Projects.ProtectedFileException ex) { return new CompileResult(false, [], "", ex.Message); }
         try
         {
             if (!Directory.Exists(gameScripts))

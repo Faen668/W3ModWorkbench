@@ -68,6 +68,13 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTI
 USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
+## Mesh format research: WolvenKit 7
+
+The CR2W reader and the mesh decoder (`Core/Meshes`) were written for this tool, using WolvenKit's Witcher 3 sources as a guide to the format: the class and property names of meshes and materials (`CMesh`, `SMeshCookedData`, `CMaterialInstance` and their properties), and an early description of the cooked chunk table. The rest of the chunk table, the vertex streams, the Remastered's CR2W 164 files and REDkit's uncooked meshes were worked out from the game's own files. No WolvenKit code is included, so its GPL licence doesn't apply to this tool; thank you to the WolvenKit team, and to jlouis, whose witcherconverter WolvenKit credits for its first mesh reader.
+
+- Project: https://github.com/WolvenKit/WolvenKit-7
+- Licence: GPL-3.0 (not included; only facts about the file format were used)
+
 ## AvalonEdit
 
 The code view in the preview window (line numbers, search, fast scrolling) is AvalonEdit.

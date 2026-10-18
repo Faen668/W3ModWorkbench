@@ -12,6 +12,12 @@
 
             <FontFamily x:Key="IconFont">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
             <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
+
+            <!-- A tooltip takes the font of what it's on, so one on an icon (drawn in IconFont) would show its text as boxes.
+                 Every tooltip uses the ordinary text font instead. -->
+            <Style TargetType="ToolTip" BasedOn="{StaticResource {x:Type ToolTip}}">
+                <Setter Property="FontFamily" Value="{x:Static SystemFonts.MessageFontFamily}" />
+            </Style>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

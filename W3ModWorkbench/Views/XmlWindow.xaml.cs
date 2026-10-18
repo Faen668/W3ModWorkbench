@@ -12,6 +12,7 @@ using ICSharpCode.AvalonEdit.Folding;
 using ICSharpCode.AvalonEdit.Search;
 using Microsoft.Win32;
 using W3ModWorkbench.Core;
+using W3ModWorkbench.Core.Projects;
 using W3ModWorkbench.Core.Menu;
 using W3ModWorkbench.Highlighting;
 
@@ -35,6 +36,9 @@ public partial class XmlWindow : Window, IMessageHost
     private readonly FoldingManager _folding;
     private readonly XmlFoldingStrategy _foldingStrategy = new() { ShowAttributesWhenFolded = true };
     private string? _path;
+
+    /// <summary>The file's game path, for one of the game's (in a bundle or its folders): where a copy goes in a project.</summary>
+    private string? _gamePath;
     private bool _edited;
     private bool _closeConfirmed;
     private bool _syncing;
@@ -128,15 +132,18 @@ public partial class XmlWindow : Window, IMessageHost
             if (owner is IMessageHost host) _ = host.ShowMessage($"{Path.GetFileName(path)} could not be opened", ex.Message, MessageKind.Error);
             return;
         }
-        var window = new XmlWindow(Path.GetFileName(path), Path.GetDirectoryName(path) ?? "") { _path = path }.Standalone(owner);
+        var window = new XmlWindow(Path.GetFileName(path), Path.GetDirectoryName(path) ?? "") { _path = path, _gamePath = FileSafety.GamePathOf(path) }.Standalone(owner);
         window.Load(data);
         window.Show();
     }
 
-    /// <summary>Opens XML from inside an archive: a copy to read and edit, which Save as writes out.</summary>
-    public static void OpenData(string name, string source, byte[] data, Window owner)
+    /// <summary>
+    /// Opens XML from inside an archive: a copy to read and edit. Saving puts it in the project at <paramref name="gamePath"/>,
+    /// where the mod uses it in place of the game's, or Save as writes it anywhere of your own.
+    /// </summary>
+    public static void OpenData(string name, string source, byte[] data, Window owner, string? gamePath = null)
     {
-        var window = new XmlWindow(name, source).Standalone(owner);
+        var window = new XmlWindow(name, source) { _gamePath = gamePath }.Standalone(owner);
         window.Load(data);
         window.Show();
     }
@@ -385,6 +392,33 @@ public partial class XmlWindow : Window, IMessageHost
             _writeTimer.Stop();
             WriteModel();
         }
+        // the game's own file, or a copy from a bundle: it goes into the project, never back where it came from
+        string? protection = path is not null ? FileSafety.Protection(path) : _gamePath is not null ? "It came from inside a bundle, which is never changed." : null;
+        if (protection is not null && _gamePath is not null)
+        {
+            var choice = await Message.Ask($"Save {Path.GetFileName(_gamePath)} into your project?",
+                $"{protection} Saved into your project at its game path ({_gamePath}), the mod uses it in place of the game's.",
+                MessageKind.Question, "Save to project", "Save as…");
+            if (choice == MessageChoice.Cancel) return false;
+            path = null;
+            if (choice == MessageChoice.Primary)
+            {
+                if (Application.Current.MainWindow is not MainWindow main
+                    || await main.EnsureProjectAsync("Game files are changed as copies in a project, so the game's own are never touched.", Message) is not { } project)
+                    return false;
+                path = project.CopyPathFor(_gamePath);
+                if (File.Exists(path) && !await Message.Show($"{project.Name} has {Path.GetFileName(path)} already",
+                        $"Replace the project's copy, {path}, with this one?", MessageKind.Question, primary: "Replace", secondary: "Cancel"))
+                    return false;
+                Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+                if (!project.Contains(path) && !project.Contains(project.WorkspacePath)) _ = main.AddToProjectAsync([project.WorkspacePath]);
+            }
+        }
+        else if (protection is not null)
+        {
+            await ShowMessage($"{Path.GetFileName(path)} is read-only", protection + " Save as puts a copy somewhere of your own.", MessageKind.Info);
+            path = null;
+        }
         if (path is null)
         {
             var dialog = new SaveFileDialog
@@ -412,6 +446,7 @@ public partial class XmlWindow : Window, IMessageHost
             byte[] data = new byte[preamble.Length + body.Length];
             preamble.CopyTo(data, 0);
             body.CopyTo(data, preamble.Length);
+            FileSafety.CheckWrite(path);
             await File.WriteAllBytesAsync(path, data);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)

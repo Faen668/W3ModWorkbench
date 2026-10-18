@@ -1,0 +1,143 @@
+<Window x:Class="W3ModWorkbench.InputBindingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:W3ModWorkbench"
+        xmlns:avalonEdit="http://icsharpcode.net/sharpdevelop/avalonedit"
+        Title="Key binding helper" Icon="pack://application:,,,/W3ModWorkbench;component/Assets/app.ico"
+        Width="1180" Height="760" MinWidth="820" MinHeight="500"
+        WindowStartupLocation="CenterOwner" PreviewKeyDown="Window_PreviewKeyDown">
+    <Window.Resources>
+        <Style x:Key="Card" TargetType="Border">
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}" />
+            <Setter Property="Background" Value="{DynamicResource CardBackgroundFillColorDefaultBrush}" />
+        </Style>
+        <Style x:Key="IconText" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="{StaticResource IconFont}" />
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style x:Key="Label" TargetType="TextBlock">
+            <Setter Property="Opacity" Value="0.75" />
+            <Setter Property="Margin" Value="0,10,0,4" />
+        </Style>
+        <Style x:Key="Mono" TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+            <Setter Property="FontFamily" Value="Cascadia Mono, Consolas" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Padding" Value="8,6" />
+        </Style>
+    </Window.Resources>
+
+    <Grid>
+        <Grid Margin="14,12,14,10">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <StackPanel Margin="0,0,0,10">
+                <TextBlock Text="Key binding helper" FontSize="16" FontWeight="SemiBold" />
+                <TextBlock Opacity="0.65" Margin="0,2,0,0" TextTrimming="CharacterEllipsis"
+                           Text="Give your mod a key: the input.settings lines, the input.xml entry for the key bindings menu, and the script that listens for it" />
+            </StackPanel>
+
+            <Grid Grid.Row="1">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="400" MinWidth="320" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" MinWidth="320" />
+                </Grid.ColumnDefinitions>
+
+                <Border Style="{StaticResource Card}" Padding="14,4,14,12">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,0,6,0">
+                        <StackPanel>
+                            <TextBlock Text="Action" Style="{StaticResource Label}" ToolTip="The name scripts listen for. One word, letters and digits." />
+                            <TextBox x:Name="ActionBox" Style="{StaticResource Mono}" Text="MyModAction" TextChanged="Input_Changed" />
+
+                            <TextBlock Text="Key" Style="{StaticResource Label}" />
+                            <ComboBox x:Name="KeyBox" IsEditable="True" IsTextSearchEnabled="True" FontFamily="Cascadia Mono, Consolas"
+                                      TextBoxBase.TextChanged="Input_Changed" SelectionChanged="Key_SelectionChanged" />
+                            <TextBlock x:Name="KeyNote" Margin="0,6,0,0" TextWrapping="Wrap" FontSize="12.5" />
+
+                            <CheckBox x:Name="HoldCheck" Content="Hold the key down" MinWidth="0" Margin="0,10,0,0" Click="Input_Changed"
+                                      ToolTip="State=Duration: fires once the key has been held for half a second, rather than as soon as it's pressed" />
+
+                            <TextBlock Text="Works in" Style="{StaticResource Label}" />
+                            <ItemsControl x:Name="ContextList">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type local:ContextChoice}">
+                                        <CheckBox Content="{Binding Name}" IsChecked="{Binding IsChecked}" MinWidth="0" Margin="0,0,12,4" Click="Input_Changed" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <CheckBox x:Name="AllContextsCheck" Content="Show every context" MinWidth="0" Margin="0,2,0,0" Opacity="0.8" Click="AllContexts_Click" />
+
+                            <TextBlock Text="Name in the key bindings menu" Style="{StaticResource Label}"
+                                       ToolTip="A string key: add it to your mod's strings so the menu shows its text" />
+                            <TextBox x:Name="DisplayBox" Style="{StaticResource Mono}" Text="mymod_action" TextChanged="Input_Changed" />
+
+                            <TextBlock Text="Event in your script" Style="{StaticResource Label}" />
+                            <TextBox x:Name="ListenerBox" Style="{StaticResource Mono}" Text="OnMyModAction" TextChanged="Input_Changed" />
+
+                            <TextBlock x:Name="ActionNote" Margin="0,12,0,0" TextWrapping="Wrap" FontSize="12.5" Opacity="0.8" />
+                        </StackPanel>
+                    </ScrollViewer>
+                </Border>
+
+                <GridSplitter Grid.Column="1" Width="8" HorizontalAlignment="Center" Background="Transparent" Focusable="False" />
+
+                <Grid Grid.Column="2">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <Border Style="{StaticResource Card}" Padding="0,6,0,0" ClipToBounds="True">
+                        <avalonEdit:TextEditor x:Name="Output" IsReadOnly="True" ShowLineNumbers="False"
+                                               FontFamily="Cascadia Mono, Consolas, Courier New" FontSize="13" Padding="10,0,0,0"
+                                               HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"
+                                               Background="Transparent" Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                    </Border>
+                    <WrapPanel Grid.Row="1" Margin="0,10,0,0" HorizontalAlignment="Right">
+                        <Button Padding="12,6" Click="CopySettings_Click" ToolTip="Copy the input.settings lines, for your mod's readme">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Style="{StaticResource IconText}" Text="&#xE8C8;" FontSize="13" />
+                                <TextBlock Margin="8,0,0,0" Text="input.settings" />
+                            </StackPanel>
+                        </Button>
+                        <Button Margin="6,0,0,0" Padding="12,6" Click="CopyMenu_Click" ToolTip="Copy the input.xml entry">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Style="{StaticResource IconText}" Text="&#xE8C8;" FontSize="13" />
+                                <TextBlock Margin="8,0,0,0" Text="input.xml" />
+                            </StackPanel>
+                        </Button>
+                        <Button Margin="6,0,0,0" Padding="12,6" Click="CopyScript_Click" ToolTip="Copy the script that listens for the key">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Style="{StaticResource IconText}" Text="&#xE8C8;" FontSize="13" />
+                                <TextBlock Margin="8,0,0,0" Text="Script" />
+                            </StackPanel>
+                        </Button>
+                        <Button x:Name="AddButton" Margin="14,0,0,0" Padding="12,6" Click="Add_Click" Style="{DynamicResource AccentButtonStyle}"
+                                ToolTip="Adds the lines to your input.settings, then asks before adding the entry to the game's own input.xml. Keeps a .bak copy of each.">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Style="{StaticResource IconText}" Text="&#xE710;" FontSize="13" />
+                                <TextBlock Margin="8,0,0,0" Text="Add to my game" />
+                            </StackPanel>
+                        </Button>
+                    </WrapPanel>
+                </Grid>
+            </Grid>
+
+            <DockPanel Grid.Row="2" Margin="2,10,2,0">
+                <Button DockPanel.Dock="Right" Padding="10,4" Content="Change…" Click="ChangeFile_Click" ToolTip="Read another input.settings" />
+                <TextBlock x:Name="FileText" Opacity="0.75" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Margin="0,0,12,0" />
+            </DockPanel>
+        </Grid>
+
+        <local:MessageCard x:Name="Message" IsModal="True" />
+    </Grid>
+</Window>

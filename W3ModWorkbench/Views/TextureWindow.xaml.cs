@@ -7,6 +7,7 @@ using System.Windows.Media.Imaging;
 using Microsoft.Win32;
 using W3ModWorkbench.Core;
 using W3ModWorkbench.Core.Textures;
+using W3ModWorkbench.Core.Projects;
 
 namespace W3ModWorkbench;
 
@@ -215,6 +216,7 @@ public partial class TextureWindow : Window, IMessageHost
             var bitmap = BitmapSource.Create(_image.Width, _image.Height, 96, 96, PixelFormats.Bgra32, null, Channels(_image), _image.Width * 4);
             var encoder = new PngBitmapEncoder();
             encoder.Frames.Add(BitmapFrame.Create(bitmap));
+            FileSafety.CheckWrite(dialog.FileName);
             using var stream = File.Create(dialog.FileName);
             encoder.Save(stream);
         }
@@ -231,6 +233,7 @@ public partial class TextureWindow : Window, IMessageHost
         if (dialog.ShowDialog(this) != true) return;
         try
         {
+            FileSafety.CheckWrite(dialog.FileName);
             File.WriteAllBytes(dialog.FileName, Dds.Wrap(_info!, _pixels));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException or InvalidDataException)

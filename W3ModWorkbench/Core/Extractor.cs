@@ -30,6 +30,9 @@ public static class Extractor
         var written = new Dictionary<ArchiveEntry, string>(ReferenceEqualityComparer.Instance);
         var usedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         string root = Path.GetFullPath(outputDir);
+        // never into the game's folders, REDkit's or a build: checked once for the folder, as every file goes under it
+        if (Projects.FileSafety.Protection(Path.Combine(root, "_")) is { } protection)
+            return new ExtractResult(0, 0, [.. entries.Select(e => (e.Path, protection))], false, written);
         int done = 0;
         long bytes = 0;
         long lastReport = 0;

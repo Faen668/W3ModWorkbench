@@ -437,6 +437,80 @@ public sealed partial class DefinitionFinder(ParsedScript doc, IReadOnlyList<Scr
         }
     }
 
+    // ---------------------------------------------------------------- completion
+
+    /// <summary>The methods every array has, which no script declares.</summary>
+    private static readonly string[] ArrayMethods =
+        ["Size", "PushBack", "PopBack", "Clear", "Remove", "Erase", "EraseFast", "Insert", "Contains", "FindFirst", "FindLast", "Resize", "Grow", "Last"];
+
+    /// <summary>
+    /// What can follow the dot at <paramref name="dot"/>: the members of the type before it and its bases, nearest first,
+    /// each name once. Null when the type can't be worked out; an array's built-in methods as plain names.
+    /// </summary>
+    public (IReadOnlyList<ScriptSymbol> Members, IReadOnlyList<string> BuiltIn)? MembersAfter(int dot)
+    {
+        var fn = _doc.FunctionAt(dot);
+        string? self = fn?.Symbol.Owner ?? _doc.TypeAt(dot)?.Symbol.TypeKey;
+        if (TypeOf(dot, fn, self, 0) is not { } type) return null;
+        if (type.StartsWith("array<", StringComparison.OrdinalIgnoreCase)) return ([], ArrayMethods);
+        if (IsBuiltIn(type)) return ([], []);
+        return (MembersOfChain(type), []);
+    }
+
+    /// <summary>The names that can be written at <paramref name="offset"/> without a dot: locals and parameters, the class's members, then globals and types.</summary>
+    public (IReadOnlyList<ScriptSymbol> Symbols, IReadOnlyList<string> Words) NamesAt(int offset)
+    {
+        var fn = _doc.FunctionAt(offset);
+        string? self = fn?.Symbol.Owner ?? _doc.TypeAt(offset)?.Symbol.TypeKey;
+        var result = new List<ScriptSymbol>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        void Add(ScriptSymbol s)
+        {
+            if (seen.Add(s.Name)) result.Add(s);
+        }
+
+        if (fn is not null) foreach (var local in Locals(fn, offset)) Add(local);
+        if (self is not null)
+        {
+            foreach (var member in MembersOfChain(self)) Add(member);
+            if (StateOwner(self) is { } owner) foreach (var member in MembersOfChain(owner)) Add(member);
+        }
+        foreach (var layer in _layers)
+            foreach (var s in layer.All)
+                if (s.IsType || s.Kind == SymbolKind.EnumMember || (s.IsMember && s.Owner is null && s.Annotation is null)) Add(s);
+        return (result, [.. EngineGlobals.Keys, .. Keywords]);
+    }
+
+    private Dictionary<string, List<ScriptSymbol>>? _byOwner;
+
+    /// <summary>The members of a type and its bases, nearest first, each name once: an override hides what it overrides.</summary>
+    private List<ScriptSymbol> MembersOfChain(string type)
+    {
+        _byOwner ??= _layers.SelectMany(l => l.All).Where(s => s.IsMember && s.Owner is not null)
+            .GroupBy(s => s.Owner!, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var result = new List<ScriptSymbol>();
+        foreach (string key in Chain(type))
+            if (_byOwner.TryGetValue(key, out var members))
+                foreach (var m in members.OrderBy(m => m.Annotation is null ? 0 : 1))
+                    if (seen.Add(m.Name)) result.Add(m);
+        return result;
+    }
+
+    /// <summary>The function's parameters and the variables declared in its body before <paramref name="offset"/>.</summary>
+    private IEnumerable<ScriptSymbol> Locals(FunctionScope fn, int offset)
+    {
+        foreach (var (regex, from, to, kind) in new[] { (Param(), fn.ParamsStart, fn.ParamsEnd, SymbolKind.Parameter), (LocalVar(), fn.BodyStart, Math.Min(fn.BodyEnd, offset), SymbolKind.Local) })
+        {
+            if (to <= from) continue;
+            for (var m = regex.Match(_code, from, to - from); m.Success; m = m.NextMatch())
+                foreach (Capture capture in m.Groups["name"].Captures)
+                    if (!Keywords.Contains(capture.Value))
+                        yield return new ScriptSymbol(capture.Value, kind, null, ScriptParser.Squash(m.Groups["type"].Value), _doc.File, capture.Index, _doc.LineOf(capture.Index));
+        }
+    }
+
     // ---------------------------------------------------------------- helpers
 
     /// <summary>Everything declared with this name. Exact-case matches win over the others.</summary>

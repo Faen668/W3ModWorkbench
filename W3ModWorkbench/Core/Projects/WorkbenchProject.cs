@@ -36,6 +36,31 @@ public sealed class WorkbenchProject
     /// <summary>Where Compile writes the .rsblob: relative to the project file, or a full path. Asked for the first time when empty.</summary>
     public string? CompileOutput { get; set; }
 
+    /// <summary>
+    /// Whether Build compiles the scripts into the mod's <c>content\precompiled.rsblob</c>, as REDkit publishes a mod.
+    /// Null until it's chosen: Build asks the first time.
+    /// </summary>
+    public bool? BuildCompiledScripts { get; set; }
+
+    /// <summary>
+    /// Whether Build puts the scripts in the mod's <c>content\scripts</c> as they are: for the game to compile when there's no
+    /// blob, or as the mod's source beside one. Null until it's chosen: Build asks the first time.
+    /// </summary>
+    public bool? BuildLooseScripts { get; set; }
+
+    /// <summary>
+    /// The mod's workspace: its game files (meshes, materials, XML and the like), each at its game path under it, as
+    /// REDkit keeps a project's. Build packs them into the mod's bundle. Relative to the project file; <c>workspace</c>
+    /// when it isn't set.
+    /// </summary>
+    public string? WorkspaceFolder { get; set; }
+
+    /// <summary>
+    /// The name of the mod Build makes, which is its folder under the game's mods folder: <c>modThisIsMyMod</c>. Made
+    /// from the project's name when it isn't set. The game only loads folders that start with "mod".
+    /// </summary>
+    public string? ModName { get; set; }
+
     /// <summary>The project's other files and folders (menus, strings, notes…), relative to the project file or full paths.</summary>
     public List<string> Include { get; set; } = [];
 
@@ -47,6 +72,51 @@ public sealed class WorkbenchProject
 
     /// <summary>The scripts folder, as a full path.</summary>
     [JsonIgnore] public string ScriptsPath => Resolve(ScriptsFolder);
+
+    /// <summary>The workspace, as a full path.</summary>
+    [JsonIgnore] public string WorkspacePath => Resolve(string.IsNullOrWhiteSpace(WorkspaceFolder) ? "workspace" : WorkspaceFolder);
+
+    /// <summary>Where a game file goes in the project: its game path under the workspace.</summary>
+    public string GameFilePath(string gamePath) => Path.Combine(WorkspacePath, gamePath.Replace('/', '\\'));
+
+    /// <summary>The game path of a file in the workspace, or null for a file that isn't in it.</summary>
+    public string? GamePathOf(string path)
+    {
+        string full = Path.GetFullPath(path);
+        return Under(WorkspacePath, full) ? Path.GetRelativePath(WorkspacePath, full) : null;
+    }
+
+    /// <summary>Where a copy of a game file goes in the project: a script in the scripts folder, anything else in the workspace.</summary>
+    public string CopyPathFor(string gamePath)
+    {
+        string path = gamePath.Replace('/', '\\').TrimStart('\\');
+        if (!path.EndsWith(".ws", StringComparison.OrdinalIgnoreCase)) return GameFilePath(path);
+        // a script's game path starts at the scripts folder: content\scripts\game\x.ws and scripts\game\x.ws are game\x.ws
+        foreach (string start in new[] { @"content\scripts\", @"scripts\" })
+            if (path.StartsWith(start, StringComparison.OrdinalIgnoreCase)) { path = path[start.Length..]; break; }
+        return Path.Combine(ScriptsPath, path);
+    }
+
+    /// <summary>The mod's folder name: <see cref="ModName"/>, or one made from the project's name, starting with "mod".</summary>
+    [JsonIgnore] public string ModFolderName => ModFolderFor(string.IsNullOrWhiteSpace(ModName) ? Name : ModName);
+
+    /// <summary>Where Build puts what it makes. Everything in it is made again by each build.</summary>
+    [JsonIgnore] public string BuildPath => Path.Combine(Root, "build");
+
+    /// <summary>The mod Build makes, ready to install, in the build folder under its mod name.</summary>
+    [JsonIgnore] public string BuiltModPath => Path.Combine(BuildPath, ModFolderName);
+
+    /// <summary>
+    /// A mod folder name from a name as people write it: "This is my mod" gives modThisIsMyMod. Only letters, digits
+    /// and underscores, and "mod" in front unless it's there already.
+    /// </summary>
+    public static string ModFolderFor(string name)
+    {
+        var words = System.Text.RegularExpressions.Regex.Split(name.Trim(), "[^A-Za-z0-9_]+").Where(w => w.Length > 0).ToList();
+        string joined = string.Concat(words.Select(w => char.ToUpperInvariant(w[0]) + w[1..]));
+        if (joined.Length == 0) joined = "Mod";
+        return joined.StartsWith("mod", StringComparison.OrdinalIgnoreCase) ? "mod" + joined[3..] : "mod" + joined;
+    }
 
     /// <summary>The compiled scripts' file, as a full path, or null while none is chosen.</summary>
     [JsonIgnore] public string? CompileOutputPath => string.IsNullOrWhiteSpace(CompileOutput) ? null : Resolve(CompileOutput);

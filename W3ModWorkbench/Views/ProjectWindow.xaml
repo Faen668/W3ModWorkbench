@@ -32,13 +32,17 @@
         <StackPanel>
             <TextBlock x:Name="HeadingText" Text="New project" FontSize="20" FontWeight="SemiBold" />
             <TextBlock x:Name="IntroText" Style="{StaticResource Hint}"
-                       Text="A project is a .w3bench file in your mod's folder. It remembers the mod's scripts folder, the other files that belong to it and where its compiled scripts go, so the same project opens the same way every time." />
+                       Text="A project is where you make your mod: a folder of your own with a .w3bench file, the mod's scripts, and its workspace, where copies of the game's files you change go at their game paths. Build makes the mod from it, ready to install. The game's own files are never changed." />
         </StackPanel>
 
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="0,0,-14,0">
             <StackPanel Margin="0,0,14,0">
                 <TextBlock Style="{StaticResource Label}" Text="Name" Margin="0,10,0,5" />
                 <TextBox x:Name="NameBox" Padding="8,6" TextChanged="Field_Changed" />
+
+                <TextBlock Style="{StaticResource Label}" Text="Mod name" />
+                <TextBox x:Name="ModBox" Padding="8,6" TextChanged="Field_Changed" />
+                <TextBlock x:Name="ModHint" Style="{StaticResource Hint}" Text="The name of the mod's folder under the game's mods folder. The game only loads folders that start with mod." />
 
                 <TextBlock Style="{StaticResource Label}" Text="Project folder" />
                 <Grid>
@@ -48,7 +52,7 @@
                         <TextBlock Style="{StaticResource Icon}" Text="&#xE8DA;" />
                     </Button>
                 </Grid>
-                <TextBlock x:Name="RootHint" Style="{StaticResource Hint}" Text="The .w3bench file is saved here. Everything else in the project is found relative to this folder." />
+                <TextBlock x:Name="RootHint" Style="{StaticResource Hint}" Text="A folder of your own, outside the game's folders. The .w3bench file is saved here, with the scripts and workspace folders in it." />
 
                 <TextBlock Style="{StaticResource Label}" Text="Scripts folder" />
                 <Grid>
@@ -68,7 +72,14 @@
                         <TextBlock Style="{StaticResource Icon}" Text="&#xE8DA;" />
                     </Button>
                 </Grid>
-                <TextBlock Style="{StaticResource Hint}" Text="Where Compile writes the .rsblob, usually content\precompiled.rsblob in the mod's folder. Leave it empty to be asked at the first compile." />
+                <TextBlock Style="{StaticResource Hint}" Text="Where Project > Compile scripts writes the .rsblob, to check the scripts or try them. Leave it empty to be asked at the first compile." />
+
+                <TextBlock Style="{StaticResource Label}" Text="When the mod is built" />
+                <CheckBox x:Name="BuildCompiledCheck" Content="Compile the scripts into content\precompiled.rsblob" IsChecked="True" MinWidth="0" Margin="0,2,0,0"
+                          ToolTip="The way REDkit publishes a mod: the scripts are checked as the mod is built, and the game loads them as they are" />
+                <CheckBox x:Name="BuildLooseCheck" Content="Ship the loose scripts in content\scripts" MinWidth="0" Margin="0,6,0,0"
+                          ToolTip="Without compiled scripts, the game compiles these when it starts. Beside them, they're the mod's source, and an info.json tells the game to run the compiled ones" />
+                <TextBlock Style="{StaticResource Hint}" Text="Build asks the first time when these haven't been chosen. At least one is needed for the scripts to go in the mod." />
 
                 <TextBlock Style="{StaticResource Label}" Text="Author and version" />
                 <Grid>

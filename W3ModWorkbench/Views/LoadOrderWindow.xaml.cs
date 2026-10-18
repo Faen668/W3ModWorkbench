@@ -7,6 +7,7 @@ using System.Windows.Threading;
 using Microsoft.Win32;
 using W3ModWorkbench.Core;
 using W3ModWorkbench.Core.LoadOrder;
+using W3ModWorkbench.Core.Projects;
 
 namespace W3ModWorkbench;
 
@@ -328,6 +329,7 @@ public partial class LoadOrderWindow : Window, IMessageHost
         if (dialog.ShowDialog(this) != true) return;
         try
         {
+            FileSafety.CheckWrite(dialog.FileName);
             await File.WriteAllTextAsync(dialog.FileName, LoadOrderAnalyzer.ToMarkdown(_report));
             _ = Message.Show(null, "Report saved.", MessageKind.Info, autoClose: true);
         }

@@ -6,9 +6,9 @@ namespace W3ModWorkbench.Core.Scripts.Navigation;
 /// <summary>
 /// The scripts a preview can jump into: every .ws file in the same archive, then those in the other
 /// archives open in the main window, then the game's own scripts. Each is indexed in the background once,
-/// the first time a preview needs it. The loose scripts of the game's installed mods (Shared Utils ships
-/// that way), and after them the mods' compiled script blobs, join in before the game's only once the user
-/// asks for them. Each is read once and kept until the app closes.
+/// the first time a preview needs it. The game's installed mods are searched too, before the game: their
+/// compiled script blobs, decompiled, and the loose scripts of mods without one (Shared Utils ships that way).
+/// Each is read once and kept until the app closes.
 /// </summary>
 public sealed class ScriptWorkspace
 {
@@ -18,8 +18,6 @@ public sealed class ScriptWorkspace
     private static readonly Dictionary<string, Task<List<(string Mod, ScriptIndex Index)>>> ModsCache = new(StringComparer.OrdinalIgnoreCase);
     private static readonly Dictionary<string, Task<List<(string Mod, ScriptIndex Index)>>> BlobsCache = new(StringComparer.OrdinalIgnoreCase);
     private static readonly Lock CacheLock = new();
-    private static bool _looseModsWanted;
-    private static bool _compiledModsWanted;
 
     private readonly IArchive _own;
     private readonly Func<IEnumerable<IArchive>> _openArchives;
@@ -34,6 +32,9 @@ public sealed class ScriptWorkspace
         _game = GameScriptsFolder is null ? Task.FromResult(ScriptIndex.Empty) : GameIndex(GameScriptsFolder);
         ModsFolder = GameScriptsFolder is null ? null : Path.GetFullPath(Path.Combine(GameScriptsFolder, "..", "..", "..", "mods"));
         if (ModsFolder is not null && !Directory.Exists(ModsFolder)) ModsFolder = null;
+        // reading the mods takes well under a second for most installs, so it starts straight away
+        _ = Mods();
+        _ = Blobs();
     }
 
     /// <param name="openArchives">The archives open right now, read each time the layers are asked for (on the UI thread).</param>
@@ -45,26 +46,6 @@ public sealed class ScriptWorkspace
 
     /// <summary>The game's mods folder, or null when there isn't one.</summary>
     public string? ModsFolder { get; }
-
-    /// <summary>Whether the installed mods' loose scripts are searched. Once asked for, they stay in until the app closes.</summary>
-    public bool IncludesLooseMods => _looseModsWanted && ModsFolder is not null;
-
-    /// <summary>Adds the installed mods' loose scripts to every preview's lookups, and waits for them to be read.</summary>
-    public Task IncludeLooseModsAsync()
-    {
-        _looseModsWanted = true;
-        return Ready;
-    }
-
-    /// <summary>Whether the installed mods' compiled script blobs are searched. Once asked for, they stay in until the app closes.</summary>
-    public bool IncludesCompiledMods => _compiledModsWanted && ModsFolder is not null;
-
-    /// <summary>Adds the installed mods' compiled scripts to every preview's lookups, and waits for them to be decompiled and read.</summary>
-    public Task IncludeCompiledModsAsync()
-    {
-        _compiledModsWanted = true;
-        return Ready;
-    }
 
     /// <summary>The archive's own scripts. Read again after a file in it is saved, so it's looked up each time.</summary>
     private Task<ScriptIndex> OwnIndex => ArchiveIndex(_own);
@@ -82,13 +63,13 @@ public sealed class ScriptWorkspace
     public Task Ready => Task.WhenAll([OwnIndex, _game, .. Mods() is { } mods ? [mods] : Array.Empty<Task>(),
         .. Blobs() is { } blobs ? [blobs] : Array.Empty<Task>(), .. Others()]);
 
-    private Task<List<(string Mod, ScriptIndex Index)>>? Mods() => IncludesLooseMods ? ModsIndex(GameScriptsFolder!, ModsFolder!) : null;
+    private Task<List<(string Mod, ScriptIndex Index)>>? Mods() => ModsFolder is not null ? ModsIndex(GameScriptsFolder!, ModsFolder) : null;
 
-    private Task<List<(string Mod, ScriptIndex Index)>>? Blobs() => IncludesCompiledMods ? BlobsIndex(ModsFolder!) : null;
+    private Task<List<(string Mod, ScriptIndex Index)>>? Blobs() => ModsFolder is not null ? BlobsIndex(ModsFolder) : null;
 
     /// <summary>
     /// The archive's scripts, then the other open archives' in the order they were opened, then the installed
-    /// mods' compiled scripts and then their loose scripts (only for mods without a blob) when asked for, then the game's. Empty until <see cref="Ready"/>.
+    /// mods' compiled scripts and then their loose scripts (only for mods without a blob), then the game's. Empty until <see cref="Ready"/>.
     /// Opening or closing an archive changes it.
     /// </summary>
     public IReadOnlyList<ScriptIndex> Layers => IsReady
