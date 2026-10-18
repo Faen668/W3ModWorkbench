@@ -210,6 +210,8 @@ Double-click a texture, or select it and press **Enter**, to open the viewer:
 - **Fit** shows the whole picture in the window; turn it off to see it at its own size, and hold **Ctrl** and turn the wheel to zoom.
 - **Save PNG** writes the level and channel shown. **Save DDS** writes the whole texture with every mip level, for tools that read `.dds`.
 
+The same viewer opens picture files from bundles and projects: PNG, JPEG, BMP, GIF, TIFF and DDS (BC1 to BC7). A DDS keeps its mip levels.
+
 An `.xbm` inside a bundle only describes its texture. Double-click one and the tool looks for the pixels in a texture cache under the same path: one that's open, the one beside the bundle, or the game's own, and says so if none has it.
 
 Extracting a texture from the file list writes it as `name.xbm.dds`.
