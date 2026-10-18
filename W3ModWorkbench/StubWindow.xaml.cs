@@ -112,9 +112,14 @@ public partial class StubWindow : Window, IMessageHost
             more = found.Count > MaxShown;
             items = [.. found.Take(MaxShown).Select(c => new StubItem(c.Name, c.Base is null ? (c.IsState ? "state" : "class") : $"extends {c.Base}", null, c))];
         }
+        var before = (ResultList.SelectedItem as StubItem)?.Function;
         ResultList.ItemsSource = items;
-        if (items.Count > 0) ResultList.SelectedIndex = 0;
-        else Output.Text = "";
+        // switching between wrap and replace keeps the function that was picked
+        int keep = before is null ? -1 : items.FindIndex(i => ReferenceEquals(i.Function, before));
+        if (items.Count > 0) ResultList.SelectedIndex = Math.Max(keep, 0);
+        // the selection may not have changed, so the output has to be written again for the new kind
+        RefreshOutput();
+        if (keep > 0) ResultList.ScrollIntoView(items[keep]);
         StatusText.Text = items.Count == 0 ? "Nothing matches"
             : more ? $"First {MaxShown} shown: add more words to narrow it down"
             : (kind is StubKind.Wrap or StubKind.Replace ? Format.Count(items.Count, "function") : Format.Count(items.Count, "class", "classes"));

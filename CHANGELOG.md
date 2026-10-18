@@ -3,6 +3,10 @@
 ## Unreleased
 
 - **Show usage graph** on the script right-click menu: right-click a function, event, variable or type and get a graph of how it's used. The thing itself is on the right, the functions that use it are to its left, and the functions that use those further left, up to six levels out. Click a box to light up its chain of calls down to the target, double-click it to open it (Ctrl for the other side), and hover or click the label on a line to see the lines of code that make the call. Right-click a box to start a new graph from it. Drag with either mouse button to pan and Ctrl+wheel to zoom; **Fit** shows the whole graph and **Stretch** fills the window. Steps with many callers wrap into several columns. It offers to search the installed mods' loose and compiled scripts when they aren't included yet, so callers in other mods show up too.
+- Usage graph boxes have a third line in the accent colour naming the mod the script is from, or **Game Script** for the game's own scripts.
+- Go to definition, find usages, find all references and the usage graph now **prefer a mod's compiled scripts over its loose ones**. A mod that ships both is listed once, from the compiled blob; mods without a blob fall back to their loose scripts.
+- Fixed: in the stub generator, switching between Wrap, Replace and the other kinds did nothing until you left it and came back. The output now updates straight away and keeps the selected function.
+- The menu builder's **Script** tab now has WitcherScript syntax highlighting and line numbers.
 
 ## 1.5.2
 

@@ -6,11 +6,13 @@ using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Threading;
 using Microsoft.Win32;
 using W3ModWorkbench.Core;
 using W3ModWorkbench.Core.Menu;
 using W3ModWorkbench.Core.Strings;
+using W3ModWorkbench.Highlighting;
 
 namespace W3ModWorkbench;
 
@@ -76,11 +78,29 @@ public partial class MenuBuilderPanel : UserControl
     /// <summary>The model changed: the XML needs writing again.</summary>
     public event Action? ModelChanged;
 
+    private bool _highlighted;
+
     public MenuBuilderPanel()
     {
         InitializeComponent();
         KindBox.ItemsSource = Kinds;
         KeyGrid.ItemsSource = _keys;
+        Loaded += (_, _) =>
+        {
+            if (_highlighted) return;
+            _highlighted = true;
+            bool dark = TryFindResource("TextFillColorPrimaryBrush") is SolidColorBrush b
+                        && 0.299 * b.Color.R + 0.587 * b.Color.G + 0.114 * b.Color.B > 128;
+            ScriptBox.TextArea.TextView.LineTransformers.Insert(0, new WitcherScriptColorizer(ScriptBox.Document, dark) { View = ScriptBox.TextArea.TextView });
+            if (TryFindResource("AccentFillColorDefaultBrush") is SolidColorBrush accent)
+            {
+                var selection = new SolidColorBrush(Color.FromArgb(0x66, accent.Color.R, accent.Color.G, accent.Color.B));
+                selection.Freeze();
+                ScriptBox.TextArea.SelectionBrush = selection;
+                ScriptBox.TextArea.SelectionBorder = null;
+                ScriptBox.TextArea.SelectionForeground = null;
+            }
+        };
         _refreshTimer.Tick += (_, _) =>
         {
             _refreshTimer.Stop();

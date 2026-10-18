@@ -14,7 +14,7 @@ namespace W3ModWorkbench;
 /// </summary>
 public partial class UsageGraphWindow : Window
 {
-    private const double NodeWidth = 270, NodeHeight = 54, MinColumnGap = 96, RowGap = 14, Margin_ = 24;
+    private const double NodeWidth = 270, NodeHeight = 70, MinColumnGap = 96, RowGap = 14, Margin_ = 24;
 
     private readonly PreviewWindow _host;
     private readonly PreviewDocument _from;
@@ -288,6 +288,9 @@ public partial class UsageGraphWindow : Window
         var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
         text.Children.Add(title);
         text.Children.Add(detail);
+        var origin = new TextBlock { Text = OriginOf(node.File), FontSize = 11, FontWeight = FontWeights.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis };
+        origin.SetResourceReference(TextBlock.ForegroundProperty, node.IsTarget ? "TextOnAccentFillColorPrimaryBrush" : "AccentTextFillColorPrimaryBrush");
+        text.Children.Add(origin);
         var row = new DockPanel { Margin = new Thickness(12, 0, 10, 0) };
         DockPanel.SetDock(glyph, Dock.Left);
         row.Children.Add(glyph);
@@ -315,6 +318,17 @@ public partial class UsageGraphWindow : Window
             e.Handled = true;
         };
         return box;
+    }
+
+    /// <summary>The mod a box's file belongs to, or "Game Script" for the game's own scripts.</summary>
+    private static string OriginOf(ScriptFile file)
+    {
+        if (file.Source.Equals("Game scripts", StringComparison.OrdinalIgnoreCase) || W3ModWorkbench.Core.Scripts.ScriptFolder.IsGameScripts(file.SourceKey)) return "Game Script";
+        string name = file.Source;
+        int slash = name.IndexOf('\\');
+        if (slash > 0) name = name[..slash];
+        const string loose = " (loose scripts)";
+        return name.EndsWith(loose, StringComparison.OrdinalIgnoreCase) ? name[..^loose.Length] : name;
     }
 
     private static ToolTip SitesTip(UsageEdge edge)

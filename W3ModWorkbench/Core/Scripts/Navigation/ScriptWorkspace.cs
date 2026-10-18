@@ -88,22 +88,24 @@ public sealed class ScriptWorkspace
 
     /// <summary>
     /// The archive's scripts, then the other open archives' in the order they were opened, then the installed
-    /// mods' loose scripts and then their compiled scripts when asked for, then the game's. Empty until <see cref="Ready"/>.
+    /// mods' compiled scripts and then their loose scripts (only for mods without a blob) when asked for, then the game's. Empty until <see cref="Ready"/>.
     /// Opening or closing an archive changes it.
     /// </summary>
     public IReadOnlyList<ScriptIndex> Layers => IsReady
-        ? [Result(OwnIndex), .. Others().Select(Result), .. NotOpen(Mods()), .. NotOpen(Blobs()), Result(_game)]
+        ? [Result(OwnIndex), .. Others().Select(Result), .. NotOpen(Blobs()), .. NotOpen(Mods(), Blobs()), Result(_game)]
         : [];
 
     /// <summary>
     /// Installed mods' scripts, leaving out mods with an archive open: those are searched already, and often
-    /// ship the same scripts loose as well.
+    /// ship the same scripts loose as well. A mod with a compiled blob in <paramref name="preferred"/> is left out
+    /// too: the blob is what the game runs, so its loose copy is only the fallback for mods without one.
     /// </summary>
-    private IEnumerable<ScriptIndex> NotOpen(Task<List<(string Mod, ScriptIndex Index)>>? scripts)
+    private IEnumerable<ScriptIndex> NotOpen(Task<List<(string Mod, ScriptIndex Index)>>? scripts, Task<List<(string Mod, ScriptIndex Index)>>? preferred = null)
     {
-        var open = _openArchives().Append(_own).Select(a => a.Owner).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var skip = _openArchives().Append(_own).Select(a => a.Owner).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (preferred is { IsCompletedSuccessfully: true } blobs) skip.UnionWith(blobs.Result.Select(b => b.Mod));
         var mods = scripts is { IsCompletedSuccessfully: true } task ? task.Result : [];
-        return mods.Where(m => !open.Contains(m.Mod)).Select(m => m.Index);
+        return mods.Where(m => !skip.Contains(m.Mod)).Select(m => m.Index);
     }
 
     private List<Task<ScriptIndex>> Others() =>
