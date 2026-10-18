@@ -315,6 +315,7 @@ public partial class SettingsWindow : Window, IMessageHost
             ? File.ReadAllBytes(path)
             : System.Text.Encoding.UTF8.GetBytes("THIRD-PARTY-NOTICES.md is missing from the app folder.\n\n"
                 + "WitcherScript grammar: witcherscript-vscode by webspam (MIT), https://github.com/webspam/witcherscript-vscode\n"
+                + "Built-in compiler: a port of the compiler webspam wrote for Aelto's tw3-cahirb (MIT), https://github.com/Aelto/tw3-cahirb/pull/1\n"
                 + "Code editor: AvalonEdit by AlphaSierraPapa for the SharpDevelop Team (MIT), https://github.com/icsharpcode/AvalonEdit\n");
         PreviewWindow.ShowAlone(new PreviewItem("THIRD-PARTY-NOTICES.md", "W3 Mod Workbench", text), owner);
     }

@@ -1,3 +1,6 @@
+// Part of the built-in compiler: a C# port of the .ws-to-rsblob compiler written by WebSpam for Aelto's tw3-cahirb (MIT).
+// https://github.com/Aelto/tw3-cahirb/pull/1
+
 namespace W3ModWorkbench.Core.Scripts.Standalone;
 
 /// <summary>Something wrong with the project's scripts: where, and what.</summary>

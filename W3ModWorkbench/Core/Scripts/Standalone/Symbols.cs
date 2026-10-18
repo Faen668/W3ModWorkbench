@@ -1,3 +1,6 @@
+// Part of the built-in compiler: a C# port of the .ws-to-rsblob compiler written by WebSpam for Aelto's tw3-cahirb (MIT).
+// https://github.com/Aelto/tw3-cahirb/pull/1
+
 namespace W3ModWorkbench.Core.Scripts.Standalone;
 
 public enum TyKind { Void, Bool, Int, Float, Byte, String, Name, Null, Primitive, Enum, Struct, Class, Array, Map }

@@ -34,10 +34,11 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 Aelto's own `.rsblob` decompiler project helped fill gaps in this tool's decompiler: the complete, ordered list of the script engine's built-in operators, several rarely used instructions, the imported-property table, and a test blob from an older REDkit build. No code from the decompiler is included; only facts about the file format were used, written up independently.
 
-The built-in script compiler (`Core/Scripts/Standalone`) is a C# port of the WitcherScript-to-`.rsblob` compiler that WebSpam contributed to tw3-cahirb in pull request 1 (lexer, parser, symbol table, code generator and blob writer), extended and checked against `wcc_lite` output on real mods. The engine class list it carries was produced by the game's own `-dumprtti` option.
+The built-in script compiler (`Core/Scripts/Standalone`) is based on the work of **WebSpam**. It is a C# port of the WitcherScript-to-`.rsblob` compiler that WebSpam contributed to tw3-cahirb in pull request 1 (lexer, parser, symbol table, code generator and blob writer), extended and checked against `wcc_lite` output on real mods. The engine class list it carries was produced by the game's own `-dumprtti` option.
 
 - Project: https://github.com/Aelto/tw3-cahirb
 - Pull request: https://github.com/Aelto/tw3-cahirb/pull/1
+- Licence: MIT, as tw3-cahirb
 
 ## AvalonEdit
 

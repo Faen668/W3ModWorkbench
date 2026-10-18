@@ -632,7 +632,7 @@ W3 Mod Workbench is an unofficial fan-made tool. It is not affiliated with, endo
 
 ## Credits
 
-- **WebSpam**: the WitcherScript syntax highlighting in the preview comes from his VS Code extension, witcherscript-vscode (github.com/webspam/witcherscript-vscode), used with his kind permission. If you write WitcherScript in VS Code, his extension is well worth a look.
+- **WebSpam**: the WitcherScript syntax highlighting in the preview comes from his VS Code extension, witcherscript-vscode (github.com/webspam/witcherscript-vscode), used with his kind permission. He also wrote the WitcherScript-to-`.rsblob` compiler for tw3-cahirb that the built-in compiler is a port of, which is what lets Compile work without REDkit. If you write WitcherScript in VS Code, his extension is well worth a look.
 - **AvalonEdit** by the SharpDevelop team: the code view in the preview window.
 - **Aelto**: his own decompiler project, tw3-cahirb (github.com/Aelto/tw3-cahirb), filled real gaps in this one. The full list of the script engine's built-in operators, several rarely used instructions, and a sample from an older REDkit build that showed up property hints, array defaults and `do`/`while` loops all came from comparing notes with his work.
 
