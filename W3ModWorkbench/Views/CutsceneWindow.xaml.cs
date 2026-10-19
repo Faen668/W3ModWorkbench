@@ -610,7 +610,7 @@ public partial class CutsceneWindow : Window, IMessageHost
         _time = time = Math.Clamp(time, 0, _playback.Duration);
         PoseCast();
         var camera = _playback.CameraAt(time);
-        if (CameraToggle.IsChecked == true && camera is { } through) View.LookThrough(through.Position, through.Forward, through.Up, through.FieldOfView);
+        if (CameraToggle.IsChecked == true && camera is { } through) View.LookThrough(through.Position, through.Forward, through.Up, through.FieldOfView, NearPlaneAt(time));
         Timeline.Playhead = time;
         TimeText.Text = $"{CutsceneTimeline.FormatTime(time)} / {CutsceneTimeline.FormatTime(_playback.Duration)}";
         _scrubbing = true;
@@ -619,6 +619,11 @@ public partial class CutsceneWindow : Window, IMessageHost
         ShowCamera(time, camera);
         LensText.Text = camera is { } lens ? $"FOV {lens.FieldOfView:0.0}°   DOF {CameraDof.Text}" : "";
     }
+
+    /// <summary>The near clipping plane the cutscene sets for its camera at a time: its last clipping-planes event's.</summary>
+    private double? NearPlaneAt(float time) =>
+        _cutscene?.SceneEvents.Where(e => e.ClassName == "CExtAnimCutsceneSetClippingPlanesEvent" && e.Start <= time + 1e-3f && e.Source is not null)
+            .OrderBy(e => e.Start).LastOrDefault() is { Source: { } clipping } ? CutsceneFile.NearPlane(clipping) : null;
 
     /// <summary>The Camera tab: where the camera is, its field of view, and the depth of field, clipping planes and fade at a time.</summary>
     private void ShowCamera(float time, CameraPose? camera)

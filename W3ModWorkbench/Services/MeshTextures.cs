@@ -33,6 +33,26 @@ public static class MeshTextures
         }
     }
 
+    /// <summary>
+    /// The texture with its alpha, for a material that's cut out by it (hair cards): null when it can't be read. Reads
+    /// from disk, so it belongs off the UI thread.
+    /// </summary>
+    public static BitmapSource? LoadWithAlpha(ResourceLocator locator, string xbmPath, int max)
+    {
+        if (locator.FindTexture(xbmPath) is not { } texture) return null;
+        try
+        {
+            if (EntryImages.FromTexture(texture, max)?.Image is not { } image) return null;
+            var withAlpha = new FormatConvertedBitmap(image, PixelFormats.Bgra32, null, 0);
+            withAlpha.Freeze();
+            return withAlpha;
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or NotSupportedException)
+        {
+            return null;
+        }
+    }
+
     /// <summary>A texture's full-size picture as a PNG, with its transparency, for exporting. Null when it can't be read.</summary>
     public static byte[]? Png(ResourceLocator locator, string xbmPath)
     {

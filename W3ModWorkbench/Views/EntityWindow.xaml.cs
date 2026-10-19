@@ -39,6 +39,8 @@ public partial class EntityWindow : Window, IMessageHost
     {
         _origin = origin;
         InitializeComponent();
+        // characters face +Y, so the view starts on that side, facing them, a little from above
+        View.StartFrom(180, 10);
         Resources["PropertyMenu"] = Menu(("Copy value", CopyValue_Click), ("Copy name", CopyName_Click), ("Copy name and value", CopyBoth_Click));
         Resources["FileMenu"] = Menu(("Copy path", CopyPath_Click));
         FloorToggle.IsChecked = View.ShowFloor = App.Settings.ShowEntityFloor;

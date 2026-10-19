@@ -49,8 +49,10 @@ public static class Skinning
 
     /// <summary>
     /// The matrix that moves each of a mesh's bones from where it was bound to where it is in a pose (the rig's bones
-    /// in the model). A bone found by name follows its own; one carried by a nearby joint moves as that joint has moved
-    /// from where it stands; one with neither stays where it was bound.
+    /// in the model). A bone found by name follows its own; one carried by a nearby joint moves just as that joint does,
+    /// as this mesh bound it when it binds it too (a jaw with the head: the mesh may have been bound in a pose a little
+    /// off the rig's, and going by the rig's would part the jaw from the face), else as the joint has moved from where
+    /// it stands in the rig; one with neither stays where it was bound.
     /// </summary>
     public static Matrix4x4[] BoneMatrices(MeshFile mesh, (int Bone, bool ByName)[] map, Matrix4x4[] rest, Matrix4x4[] pose)
     {
@@ -60,6 +62,8 @@ public static class Skinning
             var (bone, byName) = i < map.Length ? map[i] : (-1, false);
             if (bone < 0 || bone >= pose.Length) matrices[i] = Matrix4x4.Identity;
             else if (byName && i < mesh.BoneInverseBinds.Length) matrices[i] = mesh.BoneInverseBinds[i] * pose[bone];
+            else if (Array.FindIndex(map, m => m.Bone == bone && m.ByName) is int carrier and >= 0 && carrier < mesh.BoneInverseBinds.Length)
+                matrices[i] = mesh.BoneInverseBinds[carrier] * pose[bone];
             else matrices[i] = Matrix4x4.Invert(rest[bone], out var back) ? back * pose[bone] : Matrix4x4.Identity;
         }
         return matrices;
@@ -84,8 +88,10 @@ public static class Skinning
                 sum += Vector3.Transform(at, bones[bone]) * weight;
                 total += weight;
             }
-            // weights saved as bytes add up to about one; a vertex with none stays put
-            posed[v] = total > 0 ? sum / total : at;
+            // weights saved as bytes add up to about one. A vertex saved with none (some of Imlerith's face) goes wholly
+            // with its first bone, as the game draws it: left where it was bound, it would stretch across the scene
+            if (total > 0) posed[v] = sum / total;
+            else posed[v] = chunk.BoneIndices[v * per] is var first && first < bones.Length ? Vector3.Transform(at, bones[first]) : at;
         }
         return posed;
     }

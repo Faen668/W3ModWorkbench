@@ -104,7 +104,39 @@ public static class LookTextures
             paint.KeepGray = Parameter(resolved, "ColorShift_ KeepGray") is float and > 0;
             paint.BlendColors = Parameter(resolved, "ColorShift_ BlendColors") is float and > 0;
         }
-        return (paint.Does ? paint.Apply(picture) : picture, false);
+        var shown = paint.Does ? paint.Apply(picture) : picture;
+        // hair is cards cut out by the texture's alpha, as the game tests it: drawn whole they're solid sheets
+        if (IsHair(resolved) && MeshTextures.LoadWithAlpha(locator, diffuse.Path, Math.Max(shown.PixelWidth, shown.PixelHeight)) is { } alpha)
+            shown = CutOut(shown, alpha);
+        return (shown, false);
+    }
+
+    /// <summary>A picture with the parts another's alpha leaves out made transparent (under a fifth: a strand's soft edges count, as layered cards fill a beard out in the game), the rest solid.</summary>
+    private static BitmapSource CutOut(BitmapSource picture, BitmapSource alphaFrom)
+    {
+        var colour = picture.Format == PixelFormats.Bgr32 ? picture : new FormatConvertedBitmap(picture, PixelFormats.Bgr32, null, 0);
+        int width = colour.PixelWidth, height = colour.PixelHeight, stride = width * 4;
+        var pixels = new byte[stride * height];
+        colour.CopyPixels(pixels, stride, 0);
+        BitmapSource scaled = alphaFrom.PixelWidth == width && alphaFrom.PixelHeight == height ? alphaFrom
+            : new TransformedBitmap(alphaFrom, new ScaleTransform((double)width / alphaFrom.PixelWidth, (double)height / alphaFrom.PixelHeight));
+        var alpha = new FormatConvertedBitmap(scaled, PixelFormats.Bgra32, null, 0);
+        if (alpha.PixelWidth != width || alpha.PixelHeight != height) return picture;
+        var mask = new byte[stride * height];
+        alpha.CopyPixels(mask, stride, 0);
+        bool any = false;
+        for (int i = 3; i < pixels.Length; i += 4)
+        {
+            bool keep = mask[i] >= 51;
+            any |= !keep;
+            // premultiplied: a left-out pixel is all zero
+            if (keep) pixels[i] = 255;
+            else pixels[i - 3] = pixels[i - 2] = pixels[i - 1] = pixels[i] = 0;
+        }
+        if (!any) return picture;
+        var cut = BitmapSource.Create(width, height, 96, 96, PixelFormats.Pbgra32, null, pixels, stride);
+        cut.Freeze();
+        return cut;
     }
 
     private static object? Parameter(MeshMaterial material, string name) =>

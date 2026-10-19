@@ -124,6 +124,27 @@ public sealed class CutsceneFile
         return true;
     }
 
+    /// <summary>
+    /// The near clipping plane a clipping-planes event sets, in metres: one of the engine's steps, its custom distance,
+    /// or, left unset, the environment's (which isn't known here, so a typical 25 cm).
+    /// </summary>
+    public static float NearPlane(RedObject clipping)
+    {
+        string name = clipping["nearPlaneDistance"] is RedEnum near ? near.ToString() : "NP_DefaultEnv";
+        return name switch
+        {
+            "NP_VeryClose5cm" => 0.05f,
+            "NP_Close10cm" => 0.1f,
+            "NP_Medium25cm" => 0.25f,
+            "NP_Further40cm" => 0.4f,
+            "NP_Far60cm" => 0.6f,
+            "NP_VeryFar120cm" => 1.2f,
+            "NP_Extreme240cm" => 2.4f,
+            "NP_CustomValue" => clipping.Struct("customPlaneDistance")?.Float("nearPlaneDistance") is > 0 and var custom ? custom : 0.25f,
+            _ => 0.25f,
+        };
+    }
+
     /// <summary>Whether a file's name says it's a cutscene.</summary>
     public static bool IsCutscene(string name) => name.EndsWith(".w2cutscene", StringComparison.OrdinalIgnoreCase);
 
@@ -262,10 +283,13 @@ public sealed class CutsceneFile
                     Join(duration > 0 ? $"over {duration:0.##} s" : null, e.Struct("color") is { } c ? $"to #{c.Integer("Red"):X2}{c.Integer("Green"):X2}{c.Integer("Blue"):X2}" : null));
                 break;
             case "CExtAnimCutsceneSetClippingPlanesEvent":
-                string planes = e.Struct("customPlaneDistance") is { } custom
-                    ? custom.Float("farPlaneDistance") > 0 ? $"{custom.Float("nearPlaneDistance"):0.###} to {custom.Float("farPlaneDistance"):0.#} m" : $"near {custom.Float("nearPlaneDistance"):0.###} m"
-                    : Join(e["nearPlaneDistance"] is RedEnum near ? Humanize(near.ToString(), "NP_") : null, e["farPlaneDistance"] is RedEnum far ? Humanize(far.ToString(), "FP_") : null);
-                (kind, title, detail) = (CutsceneEventKind.Camera, "Clipping planes", planes.Length > 0 ? planes : "the default");
+                // the custom distances count only when a plane is set to its custom value; one left unset is the environment's
+                string nearName = e["nearPlaneDistance"] is RedEnum near ? near.ToString() : "NP_DefaultEnv";
+                string farName = e["farPlaneDistance"] is RedEnum far ? far.ToString() : "FP_DefaultEnv";
+                var custom = e.Struct("customPlaneDistance");
+                string nearText = nearName == "NP_CustomValue" ? $"near {custom?.Float("nearPlaneDistance") ?? 0:0.###} m" : "near: " + Humanize(nearName, "NP_");
+                string farText = farName == "FP_CustomValue" ? $"far {custom?.Float("farPlaneDistance") ?? 0:0.#} m" : "far: " + Humanize(farName, "FP_");
+                (kind, title, detail) = (CutsceneEventKind.Camera, "Clipping planes", $"{nearText}, {farText}");
                 break;
             case "CExtAnimCutsceneBokehDofEvent":
             case "CExtAnimCutsceneBokehDofBlendEvent":

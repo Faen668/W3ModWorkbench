@@ -139,6 +139,7 @@ public sealed class MeshView : Border
         _leftOut.Clear();
         _textures.Clear();
         _materials.Clear();
+        _sceneSphere = null;
         Rebuild();
         FitToView();
     }
@@ -179,9 +180,14 @@ public sealed class MeshView : Border
         int key = Key(part, material);
         _textures[key] = texture;
         _materials.Remove(key);
+        // a see-through texture (hair cut out by its alpha) is drawn after the solid ones, so what's behind it shows through
+        bool seeThrough = texture?.Format == PixelFormats.Pbgra32 || texture?.Format == PixelFormats.Bgra32;
         foreach (var (index, model) in _chunks)
             if (index >> 16 == part && part < _parts.Count && _parts[part].Mesh.Chunks[index & 0xFFFF].Material == material)
+            {
                 model.Material = model.BackMaterial = _highlighted.Contains(part) ? new MaterialGroup { Children = { MaterialFor(key), Glow } } : MaterialFor(key);
+                if (seeThrough && _models.Children.Remove(model)) _models.Children.Add(model);
+            }
     }
 
     /// <summary>
@@ -214,6 +220,7 @@ public sealed class MeshView : Border
     {
         _posed = posed;
         _posedPositions.Clear();
+        _sceneMoved = true;
         foreach (var (key, model) in _chunks)
             model.Geometry = PosedGeometry(key >> 16, _parts[key >> 16].Mesh.Chunks[key & 0xFFFF]);
         if (_wireframe) RebuildWires();
@@ -303,6 +310,7 @@ public sealed class MeshView : Border
     {
         _models.Children.Clear();
         _chunks.Clear();
+        var seeThrough = new List<GeometryModel3D>();
         for (int p = 0; p < _parts.Count; p++)
         {
             var (mesh, place) = _parts[p];
@@ -318,9 +326,13 @@ public sealed class MeshView : Border
                 var model = new GeometryModel3D(geometry, material) { BackMaterial = material };
                 if (transform is not null) model.Transform = transform;
                 _chunks[Key(p, chunk.Index)] = model;
-                _models.Children.Add(model);
+                if (_textured && _textures.GetValueOrDefault(Key(p, chunk.Material)) is { } texture
+                    && (texture.Format == PixelFormats.Pbgra32 || texture.Format == PixelFormats.Bgra32)) seeThrough.Add(model);
+                else _models.Children.Add(model);
             }
         }
+        // see-through ones after the solid ones, so what's behind them shows through
+        foreach (var model in seeThrough) _models.Children.Add(model);
         RebuildWires();
         RebuildFloor();
         RebuildDebug();
@@ -795,6 +807,17 @@ public sealed class MeshView : Border
         UpdateCamera();
     }
 
+    /// <summary>
+    /// The angle the view starts from, before anything is shown: round from -Y (0) and down from level, in degrees.
+    /// The game's characters face +Y, so 180 looks them in the face; a prop reads better from the default three-quarter view.
+    /// </summary>
+    public void StartFrom(double yaw, double pitch)
+    {
+        _yaw = yaw;
+        _pitch = pitch;
+        UpdateCamera();
+    }
+
     /// <summary>Looks from a side: the front (0), the right (90), the back (180), the left (270), or from above when <paramref name="top"/>.</summary>
     public void LookFrom(double yaw, bool top = false)
     {
@@ -811,15 +834,43 @@ public sealed class MeshView : Border
 
     /// <summary>
     /// Looks through a camera of the game's: from a point, along a direction with an up, in the game's Z-up space, with a
-    /// field of view across the width, in degrees, as the game's cameras have it. The mouse doesn't move it; <see cref="StopLookingThrough"/> gives
+    /// field of view up the height, in degrees, as the game's cameras have it (measured against REDkit's picture of the
+    /// same shot), so a wider picture shows more at the sides. The mouse doesn't move it; <see cref="StopLookingThrough"/> gives
     /// the view back to the mouse, where it was.
     /// </summary>
-    public void LookThrough(System.Numerics.Vector3 eye, System.Numerics.Vector3 forward, System.Numerics.Vector3 up, double fieldOfView)
+    public void LookThrough(System.Numerics.Vector3 eye, System.Numerics.Vector3 forward, System.Numerics.Vector3 up, double fieldOfView, double? nearPlane = null)
     {
         _lookingThrough = (ToView(eye), new Vector3D(forward.X, forward.Z, -forward.Y), new Vector3D(up.X, up.Z, -up.Y), fieldOfView);
-        _camera.NearPlaneDistance = 0.05;
-        _camera.FarPlaneDistance = 2000;
+        SetThroughPlanes(_lookingThrough.Value.Eye, nearPlane);
         UpdateCamera();
+    }
+
+    // where the scene is, kept for the planes through a camera: worked out again at most twice a second as it moves
+    private (Point3D Centre, double Radius)? _sceneSphere;
+    private bool _sceneMoved;
+    private long _sceneMeasuredAt;
+
+    /// <summary>
+    /// The near and far planes through a camera, fitted to the scene: the far one just past its far side, the near one
+    /// a small part of that. A fixed 5 cm to 2 km is more than the depth buffer can tell apart, and surfaces show
+    /// through one another.
+    /// </summary>
+    private void SetThroughPlanes(Point3D eye, double? nearPlane)
+    {
+        long now = Environment.TickCount64;
+        if (_sceneSphere is null || _sceneMoved && now - _sceneMeasuredAt > 500)
+        {
+            var (min, max) = Bounds();
+            _sceneSphere = (min + (max - min) / 2, Math.Max(1, (max - min).Length / 2));
+            _sceneMoved = false;
+            _sceneMeasuredAt = now;
+        }
+        var (centre, radius) = _sceneSphere.Value;
+        // a little past the far side, as actors move between measurements
+        double far = Math.Max(10, (eye - centre).Length + radius * 1.5);
+        _camera.FarPlaneDistance = far;
+        // the camera's own near plane where it has one (a cutscene's), cutting away what's too close to the lens as the game does
+        _camera.NearPlaneDistance = nearPlane is { } near ? Math.Max(near, far / 20000) : Math.Clamp(far / 4000, 0.02, 0.5);
     }
 
     /// <summary>Gives the view back to the mouse, looking from where it did before it looked through a camera.</summary>
@@ -873,8 +924,9 @@ public sealed class MeshView : Border
             _camera.Position = through.Eye;
             _camera.LookDirection = through.Forward;
             _camera.UpDirection = through.Up;
-            // across the width, as WPF has it too
-            _camera.FieldOfView = through.FieldOfView;
+            // the game's angle is up the height; WPF's is across the width, so it's worked out for the picture's shape
+            double shape = ActualWidth > 0 && ActualHeight > 0 ? ActualWidth / ActualHeight : 16.0 / 9;
+            _camera.FieldOfView = Math.Min(170, 2 * Math.Atan(Math.Tan(through.FieldOfView * Math.PI / 360) * shape) * 180 / Math.PI);
             _headlight.Direction = LightFrom(through.Forward);
             return;
         }
