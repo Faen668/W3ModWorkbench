@@ -109,7 +109,7 @@ public partial class EntityWindow : Window, IMessageHost
         var looks = new List<object> { "The entity alone" };
         looks.AddRange(e.Appearances.Select(a => a.Name));
         AppearanceBox.ItemsSource = looks;
-        AppearanceBox.SelectedIndex = e.Appearances.Count > 0 ? 1 : 0;
+        AppearanceBox.SelectedIndex = e.DefaultAppearance is { } shown ? e.Appearances.IndexOf(shown) + 1 : 0;
         InfoText.Text = $"{_path}   ·   {_source}   ·   CR2W {e.File.Version}, {Format.Count(e.Components.Count, "component")}, "
                       + $"{Format.Count(e.Appearances.Count, "appearance")}, {Format.Count(e.Includes.Count, "include")}";
     }
@@ -1084,7 +1084,7 @@ public partial class EntityWindow : Window, IMessageHost
         string source = entry is null ? "project" : entry.Archive.Name;
         string name = Path.GetFileName(path);
         if (MeshWindow.CanShow(path)) MeshWindow.Open(path, source, data, entry?.Archive, _locator, this);
-        else if (CutsceneWindow.CanShow(path)) CutsceneWindow.Open(path, source, data, _locator, this);
+        else if (CutsceneWindow.CanShow(path)) CutsceneWindow.Open(path, source, data, _locator, this, entry?.Archive);
         else if (SceneWindow.CanShow(path)) SceneWindow.Open(path, source, data, _locator, this);
         else if (CanShow(path)) Open(path, source, data, _locator, this, entry?.Archive);
         else if (BehTreeWindow.CanShow(path)) BehTreeWindow.Open(path, source, data, _locator, this, entry?.Archive);

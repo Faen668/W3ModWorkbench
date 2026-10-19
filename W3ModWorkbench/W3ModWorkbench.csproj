@@ -45,6 +45,7 @@
     <PackageReference Include="AvalonEdit" Version="6.3.1.120" />
     <!-- Opus decoder for the voice lines in the game's .w3speech files (BSD) -->
     <PackageReference Include="Concentus" Version="2.2.2" />
+    <PackageReference Include="NAudio.WinMM" Version="2.2.1" />
   </ItemGroup>
 
   <!-- Ship the licence, notices and readme next to the exe -->

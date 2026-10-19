@@ -4,7 +4,7 @@
         xmlns:local="clr-namespace:W3ModWorkbench"
         xmlns:vm="clr-namespace:W3ModWorkbench.ViewModels"
         Title="Cutscene" Icon="pack://application:,,,/W3ModWorkbench;component/Assets/app.ico"
-        Width="1280" Height="940" MinWidth="760" MinHeight="600"
+        Width="1440" Height="960" MinWidth="900" MinHeight="620"
         WindowStartupLocation="CenterOwner" PreviewKeyDown="Window_PreviewKeyDown">
 
     <Window.Resources>
@@ -23,6 +23,10 @@
             <Setter Property="FontWeight" Value="SemiBold" />
             <Setter Property="Margin" Value="2,4,0,8" />
         </Style>
+        <Style x:Key="Small" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
+        </Style>
         <Style x:Key="CellText" TargetType="TextBlock">
             <Setter Property="VerticalAlignment" Value="Center" />
             <Setter Property="TextTrimming" Value="CharacterEllipsis" />
@@ -36,7 +40,7 @@
         <Style x:Key="ResultCell" TargetType="DataGridCell">
             <Setter Property="OverridesDefaultStyle" Value="True" />
             <Setter Property="FocusVisualStyle" Value="{x:Null}" />
-            <Setter Property="MinHeight" Value="30" />
+            <Setter Property="MinHeight" Value="28" />
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="Template">
                 <Setter.Value>
@@ -54,7 +58,22 @@
                 </Setter.Value>
             </Setter>
         </Style>
-        <!-- a file the cutscene refers to, as a link: underlined under the mouse -->
+        <Style x:Key="Grid" TargetType="DataGrid" BasedOn="{StaticResource {x:Type DataGrid}}">
+            <Setter Property="AutoGenerateColumns" Value="False" />
+            <Setter Property="IsReadOnly" Value="True" />
+            <Setter Property="CanUserAddRows" Value="False" />
+            <Setter Property="HeadersVisibility" Value="Column" />
+            <Setter Property="GridLinesVisibility" Value="None" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="SelectionMode" Value="Single" />
+            <Setter Property="SelectionUnit" Value="FullRow" />
+            <Setter Property="CanUserResizeRows" Value="False" />
+            <Setter Property="CellStyle" Value="{StaticResource ResultCell}" />
+            <Setter Property="VirtualizingPanel.IsVirtualizing" Value="True" />
+            <Setter Property="VirtualizingPanel.VirtualizationMode" Value="Recycling" />
+        </Style>
+        <!-- a file the cutscene refers to, as a link -->
         <Style x:Key="LinkButton" TargetType="Button">
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="Template">
@@ -64,6 +83,78 @@
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
+        </Style>
+        <!-- list rows as tight as REDkit's -->
+        <Style x:Key="CompactItem" TargetType="ListBoxItem">
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+            <Setter Property="Padding" Value="6,4" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="Back" Background="Transparent" CornerRadius="4" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Back" Property="Background" Value="{DynamicResource SubtleFillColorTertiaryBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Back" Property="Background" Value="{DynamicResource SubtleFillColorSecondaryBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <!-- the side panel's tabs as a compact strip that wraps, as REDkit's are, rather than the theme's wide tabs that change rows -->
+        <Style x:Key="PanelTabs" TargetType="TabControl">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TabControl">
+                        <DockPanel>
+                            <WrapPanel DockPanel.Dock="Top" IsItemsHost="True" Margin="2,0,2,4" />
+                            <Border DockPanel.Dock="Top" Height="1" Background="{DynamicResource CardStrokeColorDefaultBrush}" Margin="0,0,0,2" />
+                            <ContentPresenter ContentSource="SelectedContent" TextElement.Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                        </DockPanel>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <!-- the header alone takes the tab's colours: the tab's own Foreground would pass on to everything in the tab -->
+        <Style x:Key="PanelTab" TargetType="TabItem">
+            <!-- what's in a tab takes its text colour from the tab: the theme's, not the plain black a tab has without the theme's style -->
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TabItem">
+                        <Border x:Name="Back" Padding="9,4" Margin="0,0,2,4" CornerRadius="5" Background="Transparent" Cursor="Hand"
+                                TextElement.Foreground="{DynamicResource TextFillColorSecondaryBrush}">
+                            <ContentPresenter ContentSource="Header" TextElement.FontSize="12.5" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Back" Property="Background" Value="{DynamicResource SubtleFillColorTertiaryBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Back" Property="Background" Value="{DynamicResource AccentFillColorDefaultBrush}" />
+                                <Setter TargetName="Back" Property="TextElement.Foreground" Value="{DynamicResource TextOnAccentFillColorPrimaryBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="ReadoutName" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
+            <Setter Property="Margin" Value="0,3,12,3" />
+        </Style>
+        <Style x:Key="ReadoutValue" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="Cascadia Mono, Consolas" />
+            <Setter Property="FontSize" Value="12.5" />
+            <Setter Property="Margin" Value="0,3,0,3" />
+            <Setter Property="TextWrapping" Value="Wrap" />
         </Style>
     </Window.Resources>
 
@@ -75,130 +166,227 @@
 
         <Grid x:Name="Body" Margin="14,12,14,0" Visibility="Hidden">
             <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="1.2*" MinHeight="200" />
+                <RowDefinition Height="1.25*" MinHeight="220" />
                 <RowDefinition Height="8" />
-                <RowDefinition Height="Auto" MinHeight="90" />
-                <RowDefinition Height="8" />
-                <RowDefinition Height="*" MinHeight="160" />
+                <RowDefinition Height="*" MinHeight="240" />
             </Grid.RowDefinitions>
 
-            <!-- which kinds of event are shown, and how wide a second is -->
-            <DockPanel Grid.Row="0" Margin="0,0,0,10" LastChildFill="True">
-                <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" VerticalAlignment="Top">
-                    <ToggleButton x:Name="FitToggle" Padding="12,5" IsChecked="True" Click="Fit_Click" ToolTip="Fit the whole cutscene to the width (F)">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Style="{StaticResource IconText}" Text="&#xE9A6;" />
-                            <TextBlock Margin="8,0,0,0" Text="Fit" />
-                        </StackPanel>
-                    </ToggleButton>
-                    <TextBlock Text="Zoom" VerticalAlignment="Center" Margin="14,0,8,0" Opacity="0.7" />
-                    <Slider x:Name="ZoomSlider" Width="160" Minimum="0" Maximum="1" VerticalAlignment="Center" ValueChanged="Zoom_ValueChanged"
-                            ToolTip="How wide a second is on the timeline (Ctrl+wheel over it)" />
-                </StackPanel>
-                <ItemsControl x:Name="KindFilters" Margin="0,0,12,0">
-                    <ItemsControl.ItemsPanel>
-                        <ItemsPanelTemplate>
-                            <WrapPanel />
-                        </ItemsPanelTemplate>
-                    </ItemsControl.ItemsPanel>
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate DataType="{x:Type vm:CutsceneKindItem}">
-                            <ToggleButton Padding="10,4" Margin="0,0,6,6" Tag="{Binding}" Click="KindFilter_Click" Loaded="KindFilter_Loaded"
-                                          ToolTip="Show or hide these events">
-                                <StackPanel Orientation="Horizontal">
-                                    <Border Width="9" Height="9" CornerRadius="2" Background="{Binding Swatch}" VerticalAlignment="Center" Margin="0,1,7,0" />
-                                    <TextBlock Text="{Binding Label}" />
-                                </StackPanel>
-                            </ToggleButton>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-            </DockPanel>
-
-            <!-- the actors as stick figures, played back -->
-            <Border Grid.Row="1" Style="{StaticResource Card}">
+            <!-- the actors as they are in the game, played back, as REDkit's cutscene editor shows them -->
+            <Border Grid.Row="0" Style="{StaticResource Card}">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="*" />
                         <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
-                    <local:CutsceneStage x:Name="Stage" Margin="1,1,1,0"
-                                         ToolTip="Drag to turn around, right-drag to move, wheel to come closer, double-click to see everyone" />
-                    <TextBlock x:Name="StageText" Text="Reading the animations…" HorizontalAlignment="Center" VerticalAlignment="Center"
-                               TextWrapping="Wrap" TextAlignment="Center" MaxWidth="520" Margin="16" Opacity="0.75" IsHitTestVisible="False" />
-                    <DockPanel Grid.Row="1" Margin="10,6,10,8" LastChildFill="True">
+                    <!-- through the cutscene's camera the picture is 16:9 (or the aspect ratio picked), with bars around it -->
+                    <Grid x:Name="StageArea" Margin="1,1,1,0" Background="Transparent" SizeChanged="StageArea_SizeChanged" ClipToBounds="True">
+                        <Border x:Name="Bars" Background="#E0000000" Visibility="Collapsed" />
+                        <local:MeshView x:Name="View" ShowFloor="True"
+                                        ToolTip="Drag to turn around, right-drag to move, wheel to come closer, double-click to see everyone" />
+                        <TextBlock x:Name="StageText" Text="Reading the actors…" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                   TextWrapping="Wrap" TextAlignment="Center" MaxWidth="560" Margin="16" Opacity="0.8" IsHitTestVisible="False" />
+                        <TextBlock x:Name="StageNotes" HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="12,0,12,10" MaxWidth="620"
+                                   TextWrapping="Wrap" FontSize="11.5" Opacity="0.7" IsHitTestVisible="False" />
+                    </Grid>
+                    <!-- the view's settings, as REDkit has them under its preview -->
+                    <DockPanel Grid.Row="1" Margin="10,6,10,0" LastChildFill="True">
+                        <StackPanel Orientation="Horizontal" DockPanel.Dock="Left">
+                            <TextBlock Text="FOV" VerticalAlignment="Center" Margin="0,0,6,0" Opacity="0.75" />
+                            <Slider x:Name="FovSlider" Width="90" Minimum="20" Maximum="100" Value="60" VerticalAlignment="Center" ValueChanged="Fov_ValueChanged"
+                                    ToolTip="The free camera's field of view (through the cutscene's camera, its own is used)" />
+                            <TextBlock x:Name="FovText" Width="34" Margin="6,0,0,0" VerticalAlignment="Center" FontFamily="Cascadia Mono, Consolas" FontSize="12" Text="60°" />
+                            <TextBlock Text="Aspect ratio" VerticalAlignment="Center" Margin="12,0,6,0" Opacity="0.75" />
+                            <ComboBox x:Name="AspectBox" Width="86" SelectionChanged="Aspect_SelectionChanged" ToolTip="The shape of the picture through the cutscene's camera">
+                                <ComboBoxItem Content="16:9" IsSelected="True" />
+                                <ComboBoxItem Content="21:9" />
+                                <ComboBoxItem Content="2.39:1" />
+                                <ComboBoxItem Content="4:3" />
+                            </ComboBox>
+                            <TextBlock Text="Light position" VerticalAlignment="Center" Margin="12,0,6,0" Opacity="0.75" />
+                            <Slider x:Name="LightSlider" Width="110" Minimum="-180" Maximum="180" Value="0" VerticalAlignment="Center" ValueChanged="Light_ValueChanged"
+                                    ToolTip="Where the light comes from, round the actors" />
+                            <TextBlock Text="Camera" VerticalAlignment="Center" Margin="12,0,6,0" Opacity="0.75" />
+                            <ComboBox x:Name="CameraBox" Width="110" SelectionChanged="CameraBox_SelectionChanged" IsEnabled="False"
+                                      ToolTip="Which of the cutscene's cameras to look through" />
+                        </StackPanel>
+                        <TextBlock x:Name="LensText" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="12,0,0,0" FontFamily="Cascadia Mono, Consolas"
+                                   FontSize="12" Opacity="0.75" TextTrimming="CharacterEllipsis"
+                                   ToolTip="What the cutscene's camera has at the time shown: its field of view and the depth of field in force" />
+                    </DockPanel>
+                    <DockPanel Grid.Row="2" Margin="10,6,10,8" LastChildFill="True">
                         <Button x:Name="PlayButton" DockPanel.Dock="Left" Padding="10,5" Click="Play_Click" IsEnabled="False" ToolTip="Play or pause (Space)">
                             <TextBlock x:Name="PlayIcon" Style="{StaticResource IconText}" Text="&#xE768;" />
                         </Button>
-                        <TextBlock x:Name="TimeText" DockPanel.Dock="Left" Width="104" Margin="10,0,6,0" VerticalAlignment="Center"
-                                   FontFamily="Cascadia Mono, Consolas" FontSize="12.5" Text="0.0 s" />
-                        <ToggleButton x:Name="CameraToggle" DockPanel.Dock="Right" Padding="12,5" Margin="10,0,0,0" IsEnabled="False" Click="CameraToggle_Click"
-                                      ToolTip="See it through the cutscene's camera (C)">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Style="{StaticResource IconText}" Text="&#xE722;" />
-                                <TextBlock Margin="8,0,0,0" Text="Through the camera" />
-                            </StackPanel>
+                        <Button x:Name="StartButton" DockPanel.Dock="Left" Margin="4,0,0,0" Padding="10,5" Click="Start_Click" IsEnabled="False" ToolTip="Back to the start (Home)">
+                            <TextBlock Style="{StaticResource IconText}" Text="&#xE892;" />
+                        </Button>
+                        <ToggleButton x:Name="LoopToggle" DockPanel.Dock="Left" Margin="4,0,0,0" Padding="10,5" ToolTip="Play it again from the start when it ends (L)">
+                            <TextBlock Style="{StaticResource IconText}" Text="&#xE8EE;" />
                         </ToggleButton>
+                        <ToggleButton x:Name="TrackToggle" DockPanel.Dock="Left" Margin="4,0,0,0" Padding="10,5" IsChecked="True" IsEnabled="False" Click="TrackToggle_Click"
+                                      ToolTip="Play its recorded music and effects (M turns all its sound on or off)">
+                            <TextBlock Style="{StaticResource IconText}" Text="&#xE8D6;" />
+                        </ToggleButton>
+                        <ToggleButton x:Name="VoicesToggle" DockPanel.Dock="Left" Margin="4,0,0,0" Padding="10,5" IsChecked="True" IsEnabled="False" Click="VoicesToggle_Click"
+                                      ToolTip="Play the dialog lines' voices (V)">
+                            <TextBlock Style="{StaticResource IconText}" Text="&#xE720;" />
+                        </ToggleButton>
+                        <TextBlock x:Name="TimeText" DockPanel.Dock="Left" Width="116" Margin="10,0,6,0" VerticalAlignment="Center"
+                                   FontFamily="Cascadia Mono, Consolas" FontSize="12.5" Text="0.0 s" />
+                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                            <ToggleButton x:Name="CameraToggle" Padding="12,5" Margin="10,0,0,0" IsEnabled="False" Click="CameraToggle_Click"
+                                          ToolTip="See it through the cutscene's camera (C)">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Style="{StaticResource IconText}" Text="&#xE722;" />
+                                    <TextBlock Margin="8,0,0,0" Text="Through the camera" />
+                                </StackPanel>
+                            </ToggleButton>
+                            <Button Margin="6,0,0,0" Padding="10,5" Click="FitView_Click" ToolTip="See everyone (double-click the view)">
+                                <TextBlock Style="{StaticResource IconText}" Text="&#xE9A6;" />
+                            </Button>
+                            <ToggleButton x:Name="TexturedToggle" Margin="6,0,0,0" Padding="10,5" IsChecked="True" Click="Textured_Click" ToolTip="Textures">
+                                <TextBlock Style="{StaticResource IconText}" Text="&#xE790;" />
+                            </ToggleButton>
+                            <ToggleButton x:Name="WireToggle" Margin="6,0,0,0" Padding="10,5" Click="Wire_Click" ToolTip="Wireframe">
+                                <TextBlock Style="{StaticResource IconText}" Text="&#xE80A;" />
+                            </ToggleButton>
+                            <ToggleButton x:Name="FloorToggle" Margin="6,0,0,0" Padding="10,5" IsChecked="True" Click="Floor_Click" ToolTip="The floor grid">
+                                <TextBlock Style="{StaticResource IconText}" Text="&#xE80F;" />
+                            </ToggleButton>
+                        </StackPanel>
                         <Slider x:Name="ScrubSlider" VerticalAlignment="Center" Minimum="0" Maximum="1" IsEnabled="False" ValueChanged="Scrub_ValueChanged"
                                 ToolTip="Where in the cutscene" />
                     </DockPanel>
                 </Grid>
             </Border>
 
-            <GridSplitter Grid.Row="2" Height="8" HorizontalAlignment="Stretch" Background="Transparent" ResizeBehavior="PreviousAndNext" />
+            <GridSplitter Grid.Row="1" Height="8" HorizontalAlignment="Stretch" Background="Transparent" ResizeBehavior="PreviousAndNext" />
 
-            <Border Grid.Row="3" Style="{StaticResource Card}" MaxHeight="340">
-                <ScrollViewer x:Name="TimelineScroller" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" Padding="0,4"
-                              PreviewMouseWheel="Timeline_PreviewMouseWheel">
-                    <local:CutsceneTimeline x:Name="Timeline" EventClicked="Timeline_EventClicked" Seeked="Timeline_Seeked" />
-                </ScrollViewer>
-            </Border>
-
-            <GridSplitter Grid.Row="4" Height="8" HorizontalAlignment="Stretch" Background="Transparent" ResizeBehavior="PreviousAndNext" />
-
-            <Grid Grid.Row="5">
+            <Grid Grid.Row="2">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="360" MinWidth="240" />
+                    <ColumnDefinition Width="*" MinWidth="360" />
                     <ColumnDefinition Width="8" />
-                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="500" MinWidth="320" />
                 </Grid.ColumnDefinitions>
 
-                <Border Grid.Column="0" Style="{StaticResource Card}">
-                    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="12,10">
-                        <StackPanel>
-                            <DockPanel>
-                                <Button x:Name="AllActorsButton" DockPanel.Dock="Right" Padding="10,2" Content="Show all" Click="AllActors_Click" Visibility="Collapsed"
-                                        ToolTip="Show every actor's events again" />
-                                <TextBlock Style="{StaticResource Heading}" Text="Actors" />
-                            </DockPanel>
-                            <ListBox x:Name="ActorList" BorderThickness="0" Background="Transparent" SelectionChanged="ActorList_SelectionChanged"
-                                     ScrollViewer.HorizontalScrollBarVisibility="Disabled" PreviewMouseWheel="Nested_PreviewMouseWheel">
-                                <ListBox.ItemTemplate>
-                                    <DataTemplate DataType="{x:Type vm:CutsceneActorItem}">
-                                        <StackPanel Margin="0,2" ToolTip="{Binding Animations}">
-                                            <TextBlock TextTrimming="CharacterEllipsis">
-                                                <Run Text="{Binding Name, Mode=OneWay}" FontWeight="SemiBold" />
-                                                <Run Text="{Binding Type, Mode=OneWay}" Foreground="{DynamicResource TextFillColorSecondaryBrush}" FontSize="11" />
-                                            </TextBlock>
-                                            <Button Style="{StaticResource LinkButton}" Click="ActorTemplate_Click" Tag="{Binding Template}" HorizontalAlignment="Left"
-                                                    ToolTip="{Binding Template}">
-                                                <TextBlock Text="{Binding TemplateName}" FontSize="12" TextTrimming="CharacterEllipsis"
-                                                           Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}" />
-                                            </Button>
-                                            <TextBlock Text="{Binding Detail}" Visibility="{Binding DetailVisibility}" FontSize="11" TextWrapping="Wrap"
-                                                       Foreground="{DynamicResource TextFillColorTertiaryBrush}" />
+                <!-- the timeline, the scene's lane and one for each actor -->
+                <DockPanel Grid.Column="0">
+                    <DockPanel DockPanel.Dock="Top" Margin="0,0,0,8" LastChildFill="True">
+                        <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" VerticalAlignment="Top">
+                            <ToggleButton x:Name="FitToggle" Padding="12,5" IsChecked="True" Click="Fit_Click" ToolTip="Fit the whole cutscene to the width (F)">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Style="{StaticResource IconText}" Text="&#xE9A6;" />
+                                    <TextBlock Margin="8,0,0,0" Text="Fit" />
+                                </StackPanel>
+                            </ToggleButton>
+                            <TextBlock Text="Zoom" VerticalAlignment="Center" Margin="12,0,8,0" Opacity="0.7" />
+                            <Slider x:Name="ZoomSlider" Width="130" Minimum="0" Maximum="1" VerticalAlignment="Center" ValueChanged="Zoom_ValueChanged"
+                                    ToolTip="How wide a second is on the timeline (Ctrl+wheel over it)" />
+                        </StackPanel>
+                        <ItemsControl x:Name="KindFilters" Margin="0,0,12,0">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <WrapPanel />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate DataType="{x:Type vm:CutsceneKindItem}">
+                                    <ToggleButton Padding="9,3" Margin="0,0,6,6" Tag="{Binding}" Click="KindFilter_Click" Loaded="KindFilter_Loaded"
+                                                  ToolTip="Show or hide these events">
+                                        <StackPanel Orientation="Horizontal">
+                                            <Border Width="9" Height="9" CornerRadius="2" Background="{Binding Swatch}" VerticalAlignment="Center" Margin="0,1,7,0" />
+                                            <TextBlock Text="{Binding Label}" FontSize="12.5" />
                                         </StackPanel>
-                                    </DataTemplate>
-                                </ListBox.ItemTemplate>
-                            </ListBox>
+                                    </ToggleButton>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </DockPanel>
+                    <Border Style="{StaticResource Card}">
+                        <ScrollViewer x:Name="TimelineScroller" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" Padding="0,4"
+                                      PreviewMouseWheel="Timeline_PreviewMouseWheel">
+                            <local:CutsceneTimeline x:Name="Timeline" EventClicked="Timeline_EventClicked" Seeked="Timeline_Seeked" />
+                        </ScrollViewer>
+                    </Border>
+                </DockPanel>
 
-                            <StackPanel x:Name="EffectsPanel">
-                                <TextBlock Style="{StaticResource Heading}" Text="Effects" Margin="2,16,0,8" />
-                                <ItemsControl x:Name="EffectList">
-                                    <ItemsControl.ItemTemplate>
+                <GridSplitter Grid.Column="1" Width="8" HorizontalAlignment="Stretch" Background="Transparent" />
+
+                <!-- what REDkit's cutscene editor has beside its timeline, and the tool's own lists of events and files -->
+                <Border Grid.Column="2" Style="{StaticResource Card}" Padding="6,6,6,6">
+                    <TabControl x:Name="Tabs" Style="{StaticResource PanelTabs}" ItemContainerStyle="{StaticResource PanelTab}">
+                        <TabItem x:Name="PropertiesTab" Header="Properties">
+                            <DockPanel Margin="4,8,4,4">
+                                <StackPanel DockPanel.Dock="Top" Margin="0,0,0,6">
+                                    <TextBlock x:Name="EventTitle" FontWeight="SemiBold" TextWrapping="Wrap" Text="Click an event on the timeline or in Events" />
+                                    <TextBlock x:Name="EventDetail" Style="{StaticResource Small}" TextWrapping="Wrap" />
+                                </StackPanel>
+                                <local:PropertyListView x:Name="EventProperties" NameColumnWidth="180" TypeColumnWidth="0" LinkClicked="Properties_LinkClicked" />
+                            </DockPanel>
+                        </TabItem>
+
+                        <TabItem Header="Cutscene">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="6,8,6,4">
+                                <StackPanel>
+                                    <DockPanel>
+                                        <Button x:Name="AllActorsButton" DockPanel.Dock="Right" Padding="10,2" Content="Show all" Click="AllActors_Click" Visibility="Collapsed"
+                                                ToolTip="Show every actor's events again" />
+                                        <TextBlock Style="{StaticResource Heading}" Text="Actors" />
+                                    </DockPanel>
+                                    <ListBox x:Name="ActorList" ItemContainerStyle="{StaticResource CompactItem}" BorderThickness="0" Background="Transparent"
+                                             SelectionChanged="ActorList_SelectionChanged" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                             PreviewMouseWheel="Nested_PreviewMouseWheel" local:ListSelection.ClickToUnselect="True">
+                                        <ListBox.ItemTemplate>
+                                            <DataTemplate DataType="{x:Type vm:CutsceneActorItem}">
+                                                <StackPanel Margin="0,1">
+                                                    <TextBlock TextTrimming="CharacterEllipsis">
+                                                        <Run Text="{Binding Name, Mode=OneWay}" FontWeight="SemiBold" />
+                                                        <Run Text="{Binding Type, Mode=OneWay}" Foreground="{DynamicResource TextFillColorSecondaryBrush}" FontSize="11" />
+                                                    </TextBlock>
+                                                    <Button Style="{StaticResource LinkButton}" Click="ActorTemplate_Click" Tag="{Binding Template}" HorizontalAlignment="Left"
+                                                            ToolTip="{Binding Template}">
+                                                        <TextBlock Text="{Binding TemplateName}" FontSize="12" TextTrimming="CharacterEllipsis"
+                                                                   Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}" />
+                                                    </Button>
+                                                    <TextBlock Text="{Binding Detail}" Visibility="{Binding DetailVisibility}" FontSize="11" TextWrapping="Wrap"
+                                                               Foreground="{DynamicResource TextFillColorTertiaryBrush}" />
+                                                    <TextBlock Text="{Binding Animations}" FontSize="11" TextWrapping="Wrap" Margin="0,2,0,0"
+                                                               Foreground="{DynamicResource TextFillColorTertiaryBrush}" FontFamily="Cascadia Mono, Consolas" />
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </ListBox.ItemTemplate>
+                                    </ListBox>
+                                    <TextBlock x:Name="MoreText" FontSize="12" TextWrapping="Wrap" Margin="2,12,0,4" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                </StackPanel>
+                            </ScrollViewer>
+                        </TabItem>
+
+                        <TabItem Header="Template">
+                            <DockPanel Margin="4,8,4,4">
+                                <Grid DockPanel.Dock="Top" Margin="0,0,0,6">
+                                    <TextBox x:Name="TemplateSearch" Padding="30,5,8,5" TextChanged="TemplateSearch_TextChanged"
+                                             ToolTip="Show only the properties whose name or value has this" />
+                                    <TextBlock Style="{StaticResource IconText}" Text="&#xE721;" FontSize="12" Margin="10,0,0,0" Opacity="0.6" HorizontalAlignment="Left" IsHitTestVisible="False" />
+                                    <TextBlock x:Name="TemplateSearchPlaceholder" Text="Search properties" Margin="31,0,0,0" Opacity="0.55" VerticalAlignment="Center" IsHitTestVisible="False" />
+                                </Grid>
+                                <local:SourceNote x:Name="SourceNoteBar" DockPanel.Dock="Top" Margin="0,0,0,6" />
+                                <local:PropertyListView x:Name="TemplateProperties" NameColumnWidth="190" TypeColumnWidth="0" LinkClicked="Properties_LinkClicked" />
+                            </DockPanel>
+                        </TabItem>
+
+                        <TabItem Header="Effects">
+                            <Grid Margin="4,8,4,4">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" MaxHeight="220" />
+                                    <RowDefinition Height="*" />
+                                </Grid.RowDefinitions>
+                                <TextBlock x:Name="NoEffectsText" Style="{StaticResource Small}" Text="This cutscene defines no effects." Visibility="Collapsed" />
+                                <ListBox x:Name="EffectList" ItemContainerStyle="{StaticResource CompactItem}" BorderThickness="0" Background="Transparent"
+                                         SelectionChanged="EffectList_SelectionChanged" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                    <ListBox.ItemTemplate>
                                         <DataTemplate DataType="{x:Type vm:CutsceneEffectItem}">
-                                            <StackPanel Margin="0,0,0,8">
+                                            <StackPanel>
                                                 <TextBlock TextTrimming="CharacterEllipsis">
                                                     <Run Text="{Binding Name, Mode=OneWay}" FontWeight="SemiBold" />
                                                     <Run Text="{Binding Detail, Mode=OneWay}" Foreground="{DynamicResource TextFillColorSecondaryBrush}" FontSize="11" />
@@ -206,80 +394,170 @@
                                                 <TextBlock Text="{Binding Parts}" FontSize="11" TextWrapping="Wrap" Foreground="{DynamicResource TextFillColorTertiaryBrush}" />
                                             </StackPanel>
                                         </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                            </StackPanel>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                                <local:PropertyListView x:Name="EffectProperties" Grid.Row="1" Margin="0,8,0,0" NameColumnWidth="180" TypeColumnWidth="0" LinkClicked="Properties_LinkClicked" />
+                            </Grid>
+                        </TabItem>
 
-                            <TextBlock Style="{StaticResource Heading}" Text="Files it uses" Margin="2,16,0,8" />
-                            <ItemsControl x:Name="LinkList">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate DataType="{x:Type vm:CutsceneLinkItem}">
-                                        <StackPanel Margin="0,0,0,6">
-                                            <Button Style="{StaticResource LinkButton}" Click="Link_Click" Tag="{Binding GamePath}" HorizontalAlignment="Left" ToolTip="{Binding GamePath}">
-                                                <Button.ContextMenu>
-                                                    <ContextMenu>
-                                                        <MenuItem Header="Copy path" Click="CopyLink_Click" Tag="{Binding GamePath}" />
-                                                    </ContextMenu>
-                                                </Button.ContextMenu>
-                                                <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}" />
-                                            </Button>
-                                            <TextBlock Text="{Binding Role}" FontSize="11" Foreground="{DynamicResource TextFillColorTertiaryBrush}" />
-                                        </StackPanel>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
+                        <TabItem Header="Animation">
+                            <Grid Margin="4,8,4,4">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="2*" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="*" />
+                                </Grid.RowDefinitions>
+                                <DockPanel>
+                                    <TextBlock Text="Animation" VerticalAlignment="Center" Margin="0,0,10,0" Opacity="0.75" />
+                                    <ComboBox x:Name="AnimationBox" SelectionChanged="AnimationBox_SelectionChanged" DisplayMemberPath="FullName"
+                                              ToolTip="Each actor's body and face animation, as actor:part:animation" />
+                                </DockPanel>
+                                <local:PropertyListView x:Name="AnimationProperties" Grid.Row="1" Margin="0,8,0,0" NameColumnWidth="190" TypeColumnWidth="0" />
+                                <TextBlock Grid.Row="2" Style="{StaticResource Heading}" Text="Event track" Margin="2,10,0,6" />
+                                <DataGrid x:Name="AnimationEvents" Grid.Row="3" Style="{StaticResource Grid}" SelectionChanged="AnimationEvents_SelectionChanged">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="Time" Binding="{Binding Time}" Width="70" ElementStyle="{StaticResource CodeCellText}" />
+                                        <DataGridTextColumn Header="Kind" Binding="{Binding Kind}" Width="90" ElementStyle="{StaticResource CellText}" />
+                                        <DataGridTextColumn Header="What" Binding="{Binding Title}" Width="*" ElementStyle="{StaticResource CellText}" />
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                            </Grid>
+                        </TabItem>
 
-                            <TextBlock x:Name="MoreText" FontSize="12" TextWrapping="Wrap" Margin="2,10,0,4" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
-                        </StackPanel>
-                    </ScrollViewer>
-                </Border>
+                        <TabItem Header="Dialogs">
+                            <DockPanel Margin="4,8,4,4">
+                                <DockPanel DockPanel.Dock="Top" Margin="2,0,0,8">
+                                    <Button x:Name="SaveSoundButton" DockPanel.Dock="Right" Padding="10,4" Margin="8,0,0,0" IsEnabled="False" Click="SaveSound_Click"
+                                            Content="Save sound…" ToolTip="Save its music and effects, each voiced line and the two mixed, as WAV files in a folder" />
+                                    <TextBlock x:Name="DialogNote" Style="{StaticResource Small}" TextWrapping="Wrap" VerticalAlignment="Center" />
+                                </DockPanel>
+                                <DataGrid x:Name="DialogGrid" Style="{StaticResource Grid}" SelectionChanged="DialogGrid_SelectionChanged">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="Time" Binding="{Binding Time}" Width="64" ElementStyle="{StaticResource CodeCellText}" />
+                                        <DataGridTextColumn Header="Actor" Binding="{Binding Actor}" Width="90" ElementStyle="{StaticResource CellText}" />
+                                        <DataGridTextColumn Header="Text" Binding="{Binding Text}" Width="2*" ElementStyle="{StaticResource CellText}" />
+                                        <DataGridTextColumn Header="Sound" Binding="{Binding Sound}" Width="*" ElementStyle="{StaticResource CodeCellText}" />
+                                        <DataGridTextColumn Header="Line" Binding="{Binding Line}" Width="44" ElementStyle="{StaticResource CodeCellText}" />
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                            </DockPanel>
+                        </TabItem>
 
-                <GridSplitter Grid.Column="1" Width="8" HorizontalAlignment="Stretch" Background="Transparent" />
+                        <TabItem Header="Scenes">
+                            <DockPanel Margin="4,8,4,4">
+                                <TextBlock DockPanel.Dock="Top" Style="{StaticResource Small}" TextWrapping="Wrap" Margin="2,0,0,8"
+                                           Text="The scenes that play this cutscene. Click one to open it in the scene viewer." />
+                                <DataGrid x:Name="SceneGrid" Style="{StaticResource Grid}" MouseLeftButtonUp="SceneGrid_MouseLeftButtonUp" Cursor="Hand">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="*" ElementStyle="{StaticResource CellText}" />
+                                        <DataGridTextColumn Header="File" Binding="{Binding GamePath}" Width="2*" ElementStyle="{StaticResource CellText}" />
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                            </DockPanel>
+                        </TabItem>
 
-                <Grid Grid.Column="2">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="*" />
-                    </Grid.RowDefinitions>
-                    <Grid Margin="0,0,0,8">
-                        <TextBox x:Name="SearchBox" Padding="32,6,8,6" VerticalContentAlignment="Center" TextChanged="SearchBox_TextChanged" />
-                        <TextBlock Style="{StaticResource IconText}" Text="&#xE721;" FontSize="13" Margin="11,0,0,0" Opacity="0.6"
-                                   HorizontalAlignment="Left" IsHitTestVisible="False" />
-                        <TextBlock x:Name="SearchPlaceholder" Margin="33,0,0,0" Opacity="0.55" VerticalAlignment="Center" IsHitTestVisible="False"
-                                   Text="Search events, e.g. sword or mus_  (Ctrl+F)" />
-                    </Grid>
-                    <Border Grid.Row="1" Style="{StaticResource Card}">
-                        <DataGrid x:Name="EventGrid" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False"
-                                  HeadersVisibility="Column" GridLinesVisibility="None" BorderThickness="0" Background="Transparent"
-                                  SelectionMode="Single" SelectionUnit="FullRow" CanUserResizeRows="False"
-                                  EnableRowVirtualization="True" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling"
-                                  CellStyle="{StaticResource ResultCell}" SelectionChanged="EventGrid_SelectionChanged">
-                            <DataGrid.ContextMenu>
-                                <ContextMenu>
-                                    <MenuItem Header="Copy" Click="CopyEvent_Click" />
-                                    <MenuItem Header="Copy what" Click="CopyEventTitle_Click" />
-                                </ContextMenu>
-                            </DataGrid.ContextMenu>
-                            <DataGrid.Columns>
-                                <DataGridTextColumn Header="Time" Binding="{Binding Time}" SortMemberPath="Start" Width="76" ElementStyle="{StaticResource CodeCellText}" />
-                                <DataGridTextColumn Header="Lasts" Binding="{Binding Length}" Width="70" ElementStyle="{StaticResource CodeCellText}" />
-                                <DataGridTextColumn Header="Actor" Binding="{Binding Actor}" Width="120" ElementStyle="{StaticResource CellText}" />
-                                <DataGridTemplateColumn Header="Kind" SortMemberPath="Kind" Width="110">
-                                    <DataGridTemplateColumn.CellTemplate>
-                                        <DataTemplate DataType="{x:Type vm:CutsceneEventItem}">
-                                            <StackPanel Orientation="Horizontal" Margin="6,0" VerticalAlignment="Center">
-                                                <Border Width="9" Height="9" CornerRadius="2" Background="{Binding Swatch}" VerticalAlignment="Center" Margin="0,1,7,0" />
-                                                <TextBlock Text="{Binding Kind}" />
+                        <TabItem Header="Camera">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="8,10,8,4">
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource Small}" TextWrapping="Wrap" Margin="0,0,0,10"
+                                               Text="What the cutscene's camera does at the time shown, as it plays or as you scrub." />
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
+                                        <TextBlock Grid.Row="0" Style="{StaticResource ReadoutName}" Text="Camera" />
+                                        <TextBlock Grid.Row="0" Grid.Column="1" x:Name="CameraName" Style="{StaticResource ReadoutValue}" />
+                                        <TextBlock Grid.Row="1" Style="{StaticResource ReadoutName}" Text="Field of view" />
+                                        <TextBlock Grid.Row="1" Grid.Column="1" x:Name="CameraFov" Style="{StaticResource ReadoutValue}" />
+                                        <TextBlock Grid.Row="2" Style="{StaticResource ReadoutName}" Text="Position" />
+                                        <TextBlock Grid.Row="2" Grid.Column="1" x:Name="CameraPosition" Style="{StaticResource ReadoutValue}" />
+                                        <TextBlock Grid.Row="3" Style="{StaticResource ReadoutName}" Text="Looking" />
+                                        <TextBlock Grid.Row="3" Grid.Column="1" x:Name="CameraLooking" Style="{StaticResource ReadoutValue}" />
+                                        <TextBlock Grid.Row="4" Style="{StaticResource ReadoutName}" Text="Depth of field" />
+                                        <TextBlock Grid.Row="4" Grid.Column="1" x:Name="CameraDof" Style="{StaticResource ReadoutValue}" />
+                                        <TextBlock Grid.Row="5" Style="{StaticResource ReadoutName}" Text="Clipping planes" />
+                                        <TextBlock Grid.Row="5" Grid.Column="1" x:Name="CameraPlanes" Style="{StaticResource ReadoutValue}" />
+                                        <TextBlock Grid.Row="6" Style="{StaticResource ReadoutName}" Text="Fade" />
+                                        <TextBlock Grid.Row="6" Grid.Column="1" x:Name="CameraFade" Style="{StaticResource ReadoutValue}" />
+                                    </Grid>
+                                </StackPanel>
+                            </ScrollViewer>
+                        </TabItem>
+
+                        <TabItem Header="Events">
+                            <Grid Margin="4,8,4,4">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="*" />
+                                </Grid.RowDefinitions>
+                                <Grid Margin="0,0,0,8">
+                                    <TextBox x:Name="SearchBox" Padding="32,6,8,6" VerticalContentAlignment="Center" TextChanged="SearchBox_TextChanged" />
+                                    <TextBlock Style="{StaticResource IconText}" Text="&#xE721;" FontSize="13" Margin="11,0,0,0" Opacity="0.6"
+                                               HorizontalAlignment="Left" IsHitTestVisible="False" />
+                                    <TextBlock x:Name="SearchPlaceholder" Margin="33,0,0,0" Opacity="0.55" VerticalAlignment="Center" IsHitTestVisible="False"
+                                               Text="Search events, e.g. sword or mus_  (Ctrl+F)" />
+                                </Grid>
+                                <DataGrid x:Name="EventGrid" Grid.Row="1" Style="{StaticResource Grid}" SelectionChanged="EventGrid_SelectionChanged">
+                                    <DataGrid.ContextMenu>
+                                        <ContextMenu>
+                                            <MenuItem Header="Copy" Click="CopyEvent_Click" />
+                                            <MenuItem Header="Copy what" Click="CopyEventTitle_Click" />
+                                        </ContextMenu>
+                                    </DataGrid.ContextMenu>
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="Time" Binding="{Binding Time}" SortMemberPath="Start" Width="66" ElementStyle="{StaticResource CodeCellText}" />
+                                        <DataGridTextColumn Header="Actor" Binding="{Binding Actor}" Width="80" ElementStyle="{StaticResource CellText}" />
+                                        <DataGridTemplateColumn Header="Kind" SortMemberPath="Kind" Width="92">
+                                            <DataGridTemplateColumn.CellTemplate>
+                                                <DataTemplate DataType="{x:Type vm:CutsceneEventItem}">
+                                                    <StackPanel Orientation="Horizontal" Margin="6,0" VerticalAlignment="Center">
+                                                        <Border Width="9" Height="9" CornerRadius="2" Background="{Binding Swatch}" VerticalAlignment="Center" Margin="0,1,7,0" />
+                                                        <TextBlock Text="{Binding Kind}" />
+                                                    </StackPanel>
+                                                </DataTemplate>
+                                            </DataGridTemplateColumn.CellTemplate>
+                                        </DataGridTemplateColumn>
+                                        <DataGridTextColumn Header="What" Binding="{Binding Title}" Width="2*" ElementStyle="{StaticResource CellText}" />
+                                        <DataGridTextColumn Header="Detail" Binding="{Binding Detail}" Width="*" ElementStyle="{StaticResource CellText}" />
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                            </Grid>
+                        </TabItem>
+
+                        <TabItem Header="Files">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="6,8,6,4">
+                                <ItemsControl x:Name="LinkList">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type vm:CutsceneLinkItem}">
+                                            <StackPanel Margin="0,0,0,6">
+                                                <Button Style="{StaticResource LinkButton}" Click="Link_Click" Tag="{Binding GamePath}" HorizontalAlignment="Left" ToolTip="{Binding GamePath}">
+                                                    <Button.ContextMenu>
+                                                        <ContextMenu>
+                                                            <MenuItem Header="Copy path" Click="CopyLink_Click" Tag="{Binding GamePath}" />
+                                                        </ContextMenu>
+                                                    </Button.ContextMenu>
+                                                    <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}" />
+                                                </Button>
+                                                <TextBlock Text="{Binding Role}" FontSize="11" Foreground="{DynamicResource TextFillColorTertiaryBrush}" />
                                             </StackPanel>
                                         </DataTemplate>
-                                    </DataGridTemplateColumn.CellTemplate>
-                                </DataGridTemplateColumn>
-                                <DataGridTextColumn Header="What" Binding="{Binding Title}" Width="2*" ElementStyle="{StaticResource CellText}" />
-                                <DataGridTextColumn Header="Detail" Binding="{Binding Detail}" Width="2*" ElementStyle="{StaticResource CellText}" />
-                            </DataGrid.Columns>
-                        </DataGrid>
-                    </Border>
-                </Grid>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+                        </TabItem>
+                    </TabControl>
+                </Border>
             </Grid>
         </Grid>
 

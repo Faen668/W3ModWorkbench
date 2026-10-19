@@ -269,7 +269,8 @@ public sealed class MeshMaterial
             if (parameter["parameterName"] is not string name || name.Length == 0 || result.Any(r => Same(r.Name, name))) continue;
             MaterialParameter? found = export.ClassName switch
             {
-                "CMaterialParameterScalar" => new(name, "Float", parameter.Float("scalar"), from),
+                // a scalar left at the class's default, 1, isn't saved (ColorShift_Enabled, Roughness_max)
+                "CMaterialParameterScalar" => new(name, "Float", parameter.Float("scalar", 1), from),
                 "CMaterialParameterColor" => new(name, "Color", parameter.Struct("color") is { } c
                     ? new ColorValue((byte)c.Integer("Red"), (byte)c.Integer("Green"), (byte)c.Integer("Blue"), (byte)c.Integer("Alpha", 255))
                     : new ColorValue(0, 0, 0, 255), from),

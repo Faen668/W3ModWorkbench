@@ -1,3 +1,4 @@
+using System.Numerics;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using W3ModWorkbench.Core.Cr2w;
@@ -32,9 +33,12 @@ public sealed record ColorShift(int Hue, int Saturation, int Luminance)
 /// character's hair colour is kept. The vertex colours of a material's chunks are averaged, as WPF can't blend them
 /// over a texture, and hair keeps nearly one colour.</item>
 /// <item>A component recoloured by its appearance (the <c>ShiftColorRB</c> block of the colour shift and tint mask
-/// shaders): the texture's red parts take the colour entry's first shift and its blue parts the second, as much as
-/// the tint mask's green says (or all of it, when the material's ColorShift_Enabled is off). The block itself is built into the engine, so how far each part is shifted is near
-/// the game's rather than exact.</item>
+/// shaders), as the engine does it: each colour shift becomes a colour matrix (the luminance scaled, the hue turned
+/// round the grey axis, the saturation scaled, as REDkit's <c>CColorShift</c> works it out), and the texture's colour,
+/// as it's stored, is put through the first where it's redder and the second where it's bluer (or a blend of both,
+/// with ColorShift_ BlendColors), as much as the tint mask's green says and, with ColorShift_ KeepGray, less where
+/// it's grey. Nothing is shifted when ColorShift_Enabled is off. Read from REDkit's material compiler while writing
+/// this.</item>
 /// <item>The soft shadow over the eyes, which the game blends over them, is left out.</item>
 /// </list>
 /// </summary>
@@ -87,12 +91,18 @@ public static class LookTextures
         // a colour entry recolours a material that can be: one with a tint mask. ColorShift_Enabled says whether the
         // mask is used; without it the whole texture is shifted (as Ciri's bath towel is, white in the game)
         var tintMask = resolved.Textures.FirstOrDefault(t => t.Parameter.Equals("TintMask", StringComparison.OrdinalIgnoreCase));
-        if (coloring is { } shifts && tintMask is not null)
+        if (coloring is { } shifts && tintMask is not null && Parameter(resolved, "ColorShift_Enabled") is float and > 0
+            && await texture(tintMask.Path) is { } mask)
         {
             paint.Shifting = true;
-            paint.Shifts = shifts;
+            paint.Mask = mask;
+            // the first shift goes on the red parts and the second on the blue, as the engine hands them to the shader.
+            // The matrices are made for a red colour, so the blue parts have their red and blue swapped on the way in:
+            // through the same shift, red and blue parts come out alike (dye_blue makes both blue)
+            paint.Red = ShiftMatrix(shifts.First);
+            paint.Blue = SwapRedBlue * ShiftMatrix(shifts.Second);
             paint.KeepGray = Parameter(resolved, "ColorShift_ KeepGray") is float and > 0;
-            if (Parameter(resolved, "ColorShift_Enabled") is float and > 0) paint.Mask = await texture(tintMask.Path);
+            paint.BlendColors = Parameter(resolved, "ColorShift_ BlendColors") is float and > 0;
         }
         return (paint.Does ? paint.Apply(picture) : picture, false);
     }
@@ -120,8 +130,8 @@ public static class LookTextures
         public (float R, float G, float B)? Vertex;
         public bool Shifting;
         public BitmapSource? Mask;
-        public (ColorShift? First, ColorShift? Second) Shifts;
-        public bool KeepGray;
+        public Matrix4x4 Red = Matrix4x4.Identity, Blue = Matrix4x4.Identity;
+        public bool KeepGray, BlendColors;
 
         public bool Does => Variance is not null || Vertex is not null || Shifting;
 
@@ -159,21 +169,35 @@ public static class LookTextures
         }
 
         /// <summary>
-        /// The <c>ShiftColorRB</c> block as near as it can be told from outside: the red of a colour takes the first
-        /// shift and its blue the second, a grey (with KeepGray) neither, as much as the mask says.
+        /// The <c>ShiftColorRB</c> block, as REDkit's material compiler writes it, on a colour as it's stored (the graphs
+        /// turn it from linear light first): how red and how blue it is picks the matrix, the matrix gives the shifted
+        /// colour, and the mask (less a grey, with KeepGray) says how far toward it to go. Thresholds are the block's own.
         /// </summary>
         private (float, float, float) ShiftColor(float r, float g, float b, float mask)
         {
-            if (mask <= 0) return (r, g, b);
-            float red = Math.Max(0, r - Math.Max(g, b)), blue = Math.Max(0, b - Math.Max(r, g)), colour = red + blue;
-            float amount = mask * (KeepGray ? Math.Clamp(colour * 4, 0, 1) : 1);
-            if (amount <= 0) return (r, g, b);
-            float first = colour > 0 ? red / colour : 1;
-            // shifted in linear light, as the shader has the colour when it shifts it
-            var one = LookTextures.Apply(r, g, b, Shifts.First);
-            var two = LookTextures.Apply(r, g, b, Shifts.Second);
-            float Mix(float original, float x, float y) => original + (x * first + y * (1 - first) - original) * amount;
-            return (Mix(r, one.R, two.R), Mix(g, one.G, two.G), Mix(b, one.B, two.B));
+            const float ColorLow = 0.3f, ColorHigh = 1, SaturationLow = 0.1f, SaturationHigh = 0.3f;
+            var c = new Vector3(ScreenF(r), ScreenF(g), ScreenF(b));
+            Matrix4x4 m;
+            if (BlendColors)
+            {
+                // the red and blue shares, each from the threshold up, as weights for the two matrices
+                float sum = c.X + c.Z;
+                float red = sum > 0 ? Math.Clamp((c.X / sum - ColorLow) / (ColorHigh - ColorLow), 0, 1) : 0;
+                float blue = sum > 0 ? Math.Clamp((c.Z / sum - ColorLow) / (ColorHigh - ColorLow), 0, 1) : 0;
+                float toBlue = red + blue > 0 ? blue / (red + blue) : 0;
+                m = Red * (1 - toBlue) + Blue * toBlue;
+            }
+            else m = c.X >= c.Z ? Red : Blue;
+            var shifted = Vector3.Transform(c, m);
+            float amount = mask;
+            if (KeepGray)
+            {
+                float most = Math.Max(c.X, Math.Max(c.Y, c.Z)), least = Math.Min(c.X, Math.Min(c.Y, c.Z));
+                float saturation = most > 0 ? (most - least) / most : 0;
+                amount *= Math.Clamp((saturation - SaturationLow) / (SaturationHigh - SaturationLow), 0, 1);
+            }
+            var result = Vector3.Lerp(c, shifted, amount);
+            return (LinearF(result.X), LinearF(result.Y), LinearF(result.Z));
         }
     }
 
@@ -191,6 +215,8 @@ public static class LookTextures
         return (Lerp(r, Math.Clamp(1.5f * r * br, 0, 1), t), Lerp(g, Math.Clamp(1.5f * g * bg, 0, 1), t), Lerp(b, Math.Clamp(1.5f * b * bb, 0, 1), t));
     }
 
+    private static (float R, float G, float B) Linear3((float R, float G, float B) c) => (LinearF(c.R), LinearF(c.G), LinearF(c.B));
+
     private static readonly float[] ToLinear = [.. Enumerable.Range(0, 256).Select(i => LinearF(i / 255f))];
 
     private static float Linear(byte value) => ToLinear[value];
@@ -201,23 +227,29 @@ public static class LookTextures
 
     private static byte Screen(float c) => (byte)Math.Clamp(ScreenF(c) * 255 + 0.5f, 0, 255);
 
-    /// <summary>One shift on a colour, in hue, saturation and lightness; a colour with no shift is left as it is.</summary>
-    internal static (float R, float G, float B) Apply(float r, float g, float b, ColorShift? shift)
+    /// <summary>Swaps a colour's red and blue, so a blue placeholder goes through a shift made for a red one.</summary>
+    private static readonly Matrix4x4 SwapRedBlue = new(0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1);
+
+    // the engine turns the hue round the grey axis in a space of its own: these take a colour there and back
+    private static readonly Matrix4x4 ToHueSpace = new(0.8165f, -0.4082f, 0.4082f, 0, 0, 0.7071f, 0.7071f, 0, -0.8539f, -0.7405f, 0.1377f, 0, 0, 0, 0, 1);
+    private static readonly Matrix4x4 FromHueSpace = new(0.621f, -0.2461f, -0.5774f, 0, -0.6038f, 0.461f, -0.5774f, 0, 0.6038f, 0.9532f, 0.5774f, 0, 0, 0, 0, 1);
+
+    /// <summary>
+    /// The colour matrix a shift makes, as REDkit's <c>CColorShift</c> works it out: the luminance scaled by
+    /// 1 + luminance/100, the hue turned by its degrees, and the saturation scaled by 1 + saturation/100 toward the
+    /// colour's grey, for a colour taken as a row (<see cref="Vector3.Transform(Vector3, Matrix4x4)"/>). Checked against
+    /// REDkit's own function, run on the same shifts. It's made for a red colour: a dye's shifts turn the red
+    /// placeholder into the colour the dye is named for. A shift that isn't there changes nothing.
+    /// </summary>
+    internal static Matrix4x4 ShiftMatrix(ColorShift? shift)
     {
-        if (shift is null) return (r, g, b);
-        float max = Math.Max(r, Math.Max(g, b)), min = Math.Min(r, Math.Min(g, b));
-        float l = (max + min) / 2, d = max - min;
-        float s = d == 0 ? 0 : d / (1 - Math.Abs(2 * l - 1));
-        float h = d == 0 ? 0 : max == r ? 60 * (((g - b) / d + 6) % 6) : max == g ? 60 * ((b - r) / d + 2) : 60 * ((r - g) / d + 4);
-        h = ((h + shift.Hue) % 360 + 360) % 360;
-        // saturation toward none or full by the share given, so -100 takes all the colour out and 100 makes it as strong
-        // as it goes; lightness scaled by it, which keeps the texture's own light and dark (a towel's dirt and weave)
-        // where drawing it toward white would wash them out
-        float By(float value, int percent) => percent < 0 ? value * (1 + percent / 100f) : value + (1 - value) * percent / 100f;
-        s = Math.Clamp(By(s, shift.Saturation), 0, 1);
-        l = Math.Clamp(l * (1 + shift.Luminance / 100f), 0, 1);
-        float c = (1 - Math.Abs(2 * l - 1)) * s, x = c * (1 - Math.Abs(h / 60 % 2 - 1)), m = l - c / 2;
-        var (r1, g1, b1) = h < 60 ? (c, x, 0f) : h < 120 ? (x, c, 0f) : h < 180 ? (0f, c, x) : h < 240 ? (0f, x, c) : h < 300 ? (x, 0f, c) : (c, 0f, x);
-        return (r1 + m, g1 + m, b1 + m);
+        if (shift is null) return Matrix4x4.Identity;
+        float saturation = 1 + shift.Saturation / 100f, luminance = 1 + shift.Luminance / 100f;
+        float other = (1 - saturation) / 3, same = other + saturation;
+        var saturate = new Matrix4x4(same, other, other, 0, other, same, other, 0, other, other, same, 0, 0, 0, 0, 1);
+        var lighten = Matrix4x4.CreateScale(luminance, luminance, luminance);
+        float angle = shift.Hue * MathF.PI / 180, cos = MathF.Cos(angle), sin = MathF.Sin(angle);
+        var turn = new Matrix4x4(cos, -sin, 0, 0, sin, cos, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1);
+        return lighten * ToHueSpace * turn * FromHueSpace * saturate;
     }
 }

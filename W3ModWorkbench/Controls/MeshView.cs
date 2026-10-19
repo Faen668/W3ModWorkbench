@@ -440,13 +440,38 @@ public sealed class MeshView : Border
     /// its feet), reaching out past them, its lines at a round spacing for their size and every fifth one brighter. Each
     /// line is a thin flat strip, as WPF has no lines in 3D.
     /// </summary>
+    // the ground to draw the grid over, in the game's space, when it's given rather than worked out from the meshes
+    private (System.Numerics.Vector3 Min, System.Numerics.Vector3 Max, float Ground)? _floorArea;
+
+    /// <summary>
+    /// The area the floor grid covers, in the game's Z-up space, and the height of the ground: for a scene whose meshes
+    /// move about (a cutscene's actors), so the grid is under everywhere they go. Null works it out from the meshes.
+    /// </summary>
+    public void SetFloorArea(System.Numerics.Vector3 min, System.Numerics.Vector3 max, float ground)
+    {
+        _floorArea = (min, max, ground);
+        RebuildFloor();
+    }
+
     private void RebuildFloor()
     {
         _floor.Children.Clear();
         if (!_showFloor || _parts.Count == 0) return;
-        var (min, max) = Bounds();
-        double size = Math.Max(2, Math.Max(max.X - min.X, max.Z - min.Z) * 2.5);
-        double step = new[] { 0.1, 0.25, 0.5, 1, 2, 5, 10, 25, 50, 100 }.FirstOrDefault(s => size / s <= 24, 250);
+        Point3D min, max;
+        double size;
+        if (_floorArea is { } area)
+        {
+            // the grid a little wider than the area, on the ground
+            (min, max) = (ToView(new System.Numerics.Vector3(area.Min.X, area.Min.Y, area.Ground)), ToView(new System.Numerics.Vector3(area.Max.X, area.Max.Y, area.Ground)));
+            (min, max) = (new Point3D(Math.Min(min.X, max.X), area.Ground, Math.Min(min.Z, max.Z)), new Point3D(Math.Max(min.X, max.X), area.Ground, Math.Max(min.Z, max.Z)));
+            size = Math.Max(4, Math.Max(max.X - min.X, max.Z - min.Z) + 6);
+        }
+        else
+        {
+            (min, max) = Bounds();
+            size = Math.Max(2, Math.Max(max.X - min.X, max.Z - min.Z) * 2.5);
+        }
+        double step = new[] { 0.1, 0.25, 0.5, 1, 2, 5, 10, 25, 50, 100 }.FirstOrDefault(s => size / s <= (_floorArea is null ? 24 : 60), 250);
         int lines = (int)Math.Ceiling(size / 2 / step);
         double half = lines * step, y = min.Y;
         double cx = Math.Round((min.X + max.X) / 2 / step) * step, cz = Math.Round((min.Z + max.Z) / 2 / step) * step;
@@ -700,13 +725,14 @@ public sealed class MeshView : Border
     private (Point3D Min, Point3D Max) Bounds()
     {
         if (_parts.Count == 0) return (new Point3D(-1, -1, -1), new Point3D(1, 1, 1));
-        var chunks = _parts.SelectMany((part, i) => DrawnAt(part.Mesh).Where(c => Shown(i, c) && c.Positions.Length > 0).Select(c => (Chunk: c, part.Place))).ToList();
-        if (chunks.Count == 0) chunks = _parts.SelectMany(part => part.Mesh.Chunks.Where(c => c.Positions.Length > 0).Select(c => (Chunk: c, part.Place))).ToList();
+        var chunks = _parts.SelectMany((part, i) => DrawnAt(part.Mesh).Where(c => Shown(i, c) && c.Positions.Length > 0).Select(c => (Part: i, Chunk: c, part.Place))).ToList();
+        if (chunks.Count == 0) chunks = _parts.SelectMany((part, i) => part.Mesh.Chunks.Where(c => c.Positions.Length > 0).Select(c => (Part: i, Chunk: c, part.Place))).ToList();
         if (chunks.Count == 0) return (new Point3D(-1, -1, -1), new Point3D(1, 1, 1));
         var min = new System.Numerics.Vector3(float.MaxValue);
         var max = new System.Numerics.Vector3(float.MinValue);
-        foreach (var (chunk, place) in chunks)
-            foreach (var p in chunk.Positions)
+        // where each chunk is in the pose shown, when it's posed, as a cutscene's actors stand away from where they were made
+        foreach (var (part, chunk, place) in chunks)
+            foreach (var p in _posedPositions.TryGetValue((part, chunk), out var posed) ? posed : chunk.Positions)
             {
                 var at = place.IsIdentity ? p : System.Numerics.Vector3.Transform(p, place);
                 min = System.Numerics.Vector3.Min(min, at);
@@ -729,9 +755,43 @@ public sealed class MeshView : Border
         var (min, max) = Bounds();
         _target = min + (max - min) / 2;
         double radius = Math.Max(0.01, (max - min).Length / 2);
-        _distance = radius / Math.Sin(_camera.FieldOfView * Math.PI / 360) * 1.1;
+        // far enough to fit it in the narrower of the view's two angles: across the width, or the height when it's wider than tall
+        double aspect = ActualWidth > 0 && ActualHeight > 0 ? ActualWidth / ActualHeight : 1;
+        double high = 2 * Math.Atan(Math.Tan(_camera.FieldOfView * Math.PI / 360) / aspect) * 180 / Math.PI;
+        _distance = radius / Math.Sin((_fieldOfView is null ? _camera.FieldOfView : Math.Min(_camera.FieldOfView, high)) * Math.PI / 360) * 1.1;
         _camera.NearPlaneDistance = radius * 0.01;
         _camera.FarPlaneDistance = radius * 200;
+        UpdateCamera();
+    }
+
+    /// <summary>Points the camera at the middle of a box in the game's Z-up space, from far enough to see all of it.</summary>
+    public void FitTo(System.Numerics.Vector3 min, System.Numerics.Vector3 max)
+    {
+        var (a, b) = (ToView(min), ToView(max));
+        var (low, high) = (new Point3D(Math.Min(a.X, b.X), Math.Min(a.Y, b.Y), Math.Min(a.Z, b.Z)), new Point3D(Math.Max(a.X, b.X), Math.Max(a.Y, b.Y), Math.Max(a.Z, b.Z)));
+        _target = low + (high - low) / 2;
+        double radius = Math.Max(0.5, (high - low).Length / 2);
+        double aspect = ActualWidth > 0 && ActualHeight > 0 ? ActualWidth / ActualHeight : 1;
+        // back far enough that every corner of the box is inside the picture as the camera looks now: a sphere round the
+        // box would sit much further back in a wide, short view
+        double across = Math.Tan(FieldOfView * Math.PI / 360), up = across / aspect;
+        double yaw = _yaw * Math.PI / 180, pitch = _pitch * Math.PI / 180;
+        var forward = new Vector3D(-Math.Sin(yaw) * Math.Cos(pitch), -Math.Sin(pitch), -Math.Cos(yaw) * Math.Cos(pitch));
+        var right = Vector3D.CrossProduct(forward, new Vector3D(0, 1, 0));
+        if (right.Length < 1e-6) right = new Vector3D(1, 0, 0);
+        right.Normalize();
+        var above = Vector3D.CrossProduct(right, forward);
+        double distance = 0;
+        for (int corner = 0; corner < 8; corner++)
+        {
+            var at = new Point3D((corner & 1) == 0 ? low.X : high.X, (corner & 2) == 0 ? low.Y : high.Y, (corner & 4) == 0 ? low.Z : high.Z) - _target;
+            double depth = Vector3D.DotProduct(at, forward);
+            distance = Math.Max(distance, depth + Math.Abs(Vector3D.DotProduct(at, right)) / across);
+            distance = Math.Max(distance, depth + Math.Abs(Vector3D.DotProduct(at, above)) / up);
+        }
+        _distance = Math.Max(distance * 1.1, radius * 0.5);
+        _camera.NearPlaneDistance = Math.Max(0.01, radius * 0.01);
+        _camera.FarPlaneDistance = Math.Max(2000, radius * 200);
         UpdateCamera();
     }
 
@@ -743,21 +803,102 @@ public sealed class MeshView : Border
         FitToView();
     }
 
+    // a camera of the game's to look through instead of the one the mouse moves, while it's set
+    private (Point3D Eye, Vector3D Forward, Vector3D Up, double FieldOfView)? _lookingThrough;
+
+    /// <summary>Whether the view is looking through a camera given to it rather than the one the mouse moves.</summary>
+    public bool IsLookingThrough => _lookingThrough is not null;
+
+    /// <summary>
+    /// Looks through a camera of the game's: from a point, along a direction with an up, in the game's Z-up space, with a
+    /// field of view across the width, in degrees, as the game's cameras have it. The mouse doesn't move it; <see cref="StopLookingThrough"/> gives
+    /// the view back to the mouse, where it was.
+    /// </summary>
+    public void LookThrough(System.Numerics.Vector3 eye, System.Numerics.Vector3 forward, System.Numerics.Vector3 up, double fieldOfView)
+    {
+        _lookingThrough = (ToView(eye), new Vector3D(forward.X, forward.Z, -forward.Y), new Vector3D(up.X, up.Z, -up.Y), fieldOfView);
+        _camera.NearPlaneDistance = 0.05;
+        _camera.FarPlaneDistance = 2000;
+        UpdateCamera();
+    }
+
+    /// <summary>Gives the view back to the mouse, looking from where it did before it looked through a camera.</summary>
+    public void StopLookingThrough()
+    {
+        if (_lookingThrough is null) return;
+        _lookingThrough = null;
+        double radius = Radius();
+        _camera.NearPlaneDistance = radius * 0.01;
+        _camera.FarPlaneDistance = radius * 200;
+        UpdateCamera();
+    }
+
+    private double? _fieldOfView;
+    private double _lightAngle;
+
+    /// <summary>The free camera's field of view across the width, in degrees, as the game and REDkit give one.</summary>
+    public double FieldOfView
+    {
+        get => _fieldOfView ?? 45;
+        set
+        {
+            _fieldOfView = Math.Clamp(value, 10, 120);
+            UpdateCamera();
+        }
+    }
+
+    /// <summary>Where the light comes from, in degrees round from where the camera looks (0 is from behind the camera).</summary>
+    public double LightAngle
+    {
+        get => _lightAngle;
+        set
+        {
+            _lightAngle = value;
+            UpdateCamera();
+        }
+    }
+
+    /// <summary>The light, from behind the camera and a little above and to the side, turned round by <see cref="LightAngle"/>.</summary>
+    private Vector3D LightFrom(Vector3D look)
+    {
+        var direction = look + new Vector3D(0.2, -0.3, 0);
+        double a = _lightAngle * Math.PI / 180;
+        return new Vector3D(direction.X * Math.Cos(a) - direction.Z * Math.Sin(a), direction.Y, direction.X * Math.Sin(a) + direction.Z * Math.Cos(a));
+    }
+
     private void UpdateCamera()
     {
+        if (_lookingThrough is { } through)
+        {
+            _camera.Position = through.Eye;
+            _camera.LookDirection = through.Forward;
+            _camera.UpDirection = through.Up;
+            // across the width, as WPF has it too
+            _camera.FieldOfView = through.FieldOfView;
+            _headlight.Direction = LightFrom(through.Forward);
+            return;
+        }
         double yaw = _yaw * Math.PI / 180, pitch = _pitch * Math.PI / 180;
         // the game's front is -Y, which is +Z here
         var direction = new Vector3D(-Math.Sin(yaw) * Math.Cos(pitch), -Math.Sin(pitch), -Math.Cos(yaw) * Math.Cos(pitch));
         _camera.Position = _target - direction * _distance;
         _camera.LookDirection = direction;
         _camera.UpDirection = new Vector3D(0, 1, 0);
-        _headlight.Direction = direction + new Vector3D(0.2, -0.3, 0);
+        _camera.FieldOfView = _fieldOfView ?? 45;
+        _headlight.Direction = LightFrom(direction);
+    }
+
+    protected override void OnRenderSizeChanged(SizeChangedInfo sizeInfo)
+    {
+        base.OnRenderSizeChanged(sizeInfo);
+        UpdateCamera();
     }
 
     protected override void OnMouseDown(MouseButtonEventArgs e)
     {
         base.OnMouseDown(e);
         Focus();
+        if (_lookingThrough is not null) return; // the camera looked through isn't moved by hand
         if (e.ChangedButton == MouseButton.Left && e.ClickCount == 2)
         {
             FitToView();
@@ -812,6 +953,7 @@ public sealed class MeshView : Border
     protected override void OnMouseWheel(MouseWheelEventArgs e)
     {
         base.OnMouseWheel(e);
+        if (_lookingThrough is not null) return;
         _distance = Math.Clamp(_distance * (e.Delta > 0 ? 0.85 : 1 / 0.85), Radius() * 0.02, Radius() * 100);
         UpdateCamera();
         e.Handled = true;

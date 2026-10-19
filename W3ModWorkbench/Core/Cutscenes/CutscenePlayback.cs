@@ -42,8 +42,11 @@ public sealed class CutscenePlayback
     public required float Duration { get; init; }
     public required List<PlayedActor> Actors { get; init; }
 
-    /// <summary>The camera's animation and rig, or null when the cutscene has no camera animation.</summary>
-    public PlayedActor? Camera { get; init; }
+    /// <summary>The camera looked through: the first of <see cref="Cameras"/>, or another picked. Null when the cutscene has no camera animation.</summary>
+    public PlayedActor? Camera { get; set; }
+
+    /// <summary>Every camera the cutscene animates, in the order it has them.</summary>
+    public List<PlayedActor> Cameras { get; init; } = [];
 
     /// <summary>Animations that couldn't be read, and why.</summary>
     public required List<string> Problems { get; init; }
@@ -57,7 +60,7 @@ public sealed class CutscenePlayback
         var file = cutscene.File;
         var actors = new List<PlayedActor>();
         var problems = new List<string>();
-        PlayedActor? camera = null;
+        var cameras = new List<PlayedActor>();
         var rigs = new Dictionary<string, Skeleton?>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var export in file.Exports.Where(e => e.ClassName == "CSkeletalAnimation"))
@@ -84,10 +87,10 @@ public sealed class CutscenePlayback
             var actor = cutscene.Actors.FirstOrDefault(a => a.Name == name);
             var (rig, note) = FindRig(actor?.Template, clip.BoneCount, locator, rigs);
             var played = new PlayedActor { Name = name, Clip = clip, Rig = rig, RigNote = note };
-            if (actor?.Type == "Camera" || name == "camera") camera ??= played;
+            if (actor?.Type == "Camera" || name.StartsWith("camera", StringComparison.OrdinalIgnoreCase)) cameras.Add(played);
             else actors.Add(played);
         }
-        return new CutscenePlayback { Duration = cutscene.Duration, Actors = actors, Camera = camera, Problems = problems };
+        return new CutscenePlayback { Duration = cutscene.Duration, Actors = actors, Camera = cameras.FirstOrDefault(c => c.Rig is not null) ?? cameras.FirstOrDefault(), Cameras = cameras, Problems = problems };
     }
 
     /// <summary>

@@ -388,7 +388,7 @@ public partial class SceneWindow : Window, IMessageHost
         if (EntityWindow.CanShow(path)) EntityWindow.Open(path, source, data, _locator, this, entry?.Archive);
         else if (BehTreeWindow.CanShow(path)) BehTreeWindow.Open(path, source, data, _locator, this, entry?.Archive);
         else if (MeshWindow.CanShow(path)) MeshWindow.Open(path, source, data, entry?.Archive, _locator, this);
-        else if (CutsceneWindow.CanShow(path)) CutsceneWindow.Open(path, source, data, _locator, this);
+        else if (CutsceneWindow.CanShow(path)) CutsceneWindow.Open(path, source, data, _locator, this, entry?.Archive);
         else if (CanShow(path)) Open(path, source, data, _locator, this);
         else if (XmlWindow.CanOpen(path)) XmlWindow.OpenData(name, $"{source}  ·  {path}", data, this, path);
         else if (!TextureWindow.Open(name, $"{source}  ·  {path}", data, this))

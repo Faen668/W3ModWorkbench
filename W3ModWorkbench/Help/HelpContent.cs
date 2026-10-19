@@ -347,34 +347,48 @@ The game's cooked meshes (CR2W versions 162 to 164: the original game, and the R
 """),
 
         new(Basics, "Cutscenes", "\uE714", """
-Double-click a `.w2cutscene`, or select it and press **Enter**, to open it in the cutscene viewer. The preview pane shows it too: how long it is, its actors and the entities they're made from, a timeline of its events and the scene that plays it. A cutscene file on disk opens from **Open files** or by dropping it on the window.
+Double-click a `.w2cutscene`, or select it and press **Enter**, to open it in the cutscene viewer, laid out as REDkit's cutscene editor is: the actors played back at the top, the timeline below, and beside it the tabs REDkit has. The preview pane shows a cutscene too: how long it is, its actors and the entities they're made from, a timeline of its events and the scene that plays it. A cutscene file on disk opens from **Open files** or by dropping it on the window.
 
 A cutscene is recorded: each actor (and the camera) has an animation for its body and one for its face, made for the whole length of it, and events are timed along them.
 
 ## Playing it
 
-Above the timeline the actors play as stick figures, a line from each bone to its parent, on a grid of metres. Their rigs are found through the entities they're made from. Press **Play** (**Space**) or drag the bar beside it; the line on the timeline shows where it is, and clicking or dragging on the timeline's ruler moves it. Drag the view to turn around, right-drag to move, use the wheel to come closer, and double-click to see everyone again. **Through the camera** (**C**) shows it as the cutscene's camera sees it, with its field of view. Faces, items, effects and the actors' meshes aren't drawn.
+The actors are drawn as they are in the game: each put together from the entity it's made from, in the appearance the cutscene gives it, with its textures and colours, and its body animation played on its rig, so it moves where the cutscene puts it. Press **Play** (**Space**), **Home** to go back to the start, the loop button (**L**) to play it round again, or drag the bar; the line on the timeline shows where it is, and clicking or dragging on the timeline's ruler moves it. Drag the view to turn around, right-drag to move, use the wheel to come closer, and double-click (or the fit button) to see everyone again. **Through the camera** (**C**) shows it as the cutscene's camera sees it, with its field of view, in a 16:9 picture. The buttons beside it turn textures, wireframe and the floor grid on and off. The floor is laid under everywhere the actors go in the whole cutscene, at their feet.
+
+It plays with its sound, as REDkit does: its recorded music and effects (the audio track it names, from the game's sound caches) and each dialog line's voice (from the speech files, in English, when the line was found in the scene that plays it), mixed as they play. The music button turns the music and effects on and off and the microphone button the voices (**V**); **M** turns them both on or off. **Save sound…** in **Dialogs** saves the music and effects, each voiced line and the two mixed as WAV files.
+
+Under the view, as in REDkit:
+
+- **FOV**: the free camera's field of view (60° to start, as REDkit's). Through the cutscene's camera, its own is used, and shown on the right with the depth of field in force.
+- **Aspect ratio**: the shape of the picture through the camera: 16:9, 21:9, 2.39:1 or 4:3.
+- **Light position**: where the light comes from, round the actors.
+- **Camera**: which of the cutscene's cameras to look through, when it has more than one.
+
+REDkit also has shadows and an environment picker; those need the game's own renderer, which this viewer doesn't have.
+
+When an actor is the player, the game dresses Geralt in whatever he has equipped, so the viewer shows him in the gear he starts the game in, as his default inventory gives it (the starting jacket, trousers, gloves and boots, his hairstyle, and the Long Steel Sword and Witcher Silver Sword on his back), and says so under the view. A piece made to be dyed is coloured as the game colours it: its texture's red and blue parts are placeholders that the appearance's colour shifts turn into its colours, worked out as the engine does it (the same shifts recolour people's clothes in the entity viewer, where a dyeable item opens undyed and each dye can be picked under **Appearance**). An actor that can't be drawn (no rig, entity or meshes found) is named there too, with why. Faces, items put in hands and effects aren't drawn yet.
 
 ## The timeline
 
-The top lane, **Scene**, has the events of the whole cutscene: dialog lines, music, effects placed in the world, fades, clipping planes, depth of field and lights. Under it each actor has a lane with its own: items put in or taken from a hand, effects on the actor, appearance changes, morphs and cloth. An event that lasts is a bar, and bars that overlap go one under another; one that doesn't last is a tick. Rest on an event to see what it is, and click it to find it in the list.
+The top lane, **Scene**, has the events of the whole cutscene: dialog lines, music, effects placed in the world, fades, clipping planes, depth of field and lights. Under it each actor has a lane with its own: items put in or taken from a hand, effects on the actor, appearance changes, morphs and cloth. An event that lasts is a bar, and bars that overlap go one under another; one that doesn't last is a tick. Click an event to see its properties.
 
 - **Fit** (**F**) fits the whole cutscene to the width. **Zoom**, or **Ctrl** and the wheel over the timeline, makes it wider to see events up close.
-- The buttons at the top show or hide each kind of event, with how many there are. **Cloth** starts hidden: it's mostly resets of cloth and dangles, often hundreds of them.
+- The buttons above it show or hide each kind of event, with how many there are. **Cloth** starts hidden: it's mostly resets of cloth and dangles, often hundreds of them.
 
-## Actors, effects and files
+## The tabs
 
-**Actors** lists who and what the cutscene spawns: actors, props and cameras, each with the entity (`.w2ent`) it's made from, its appearance, voice tag and tags. Rest on one to see its animations. Click one to list only its events, and **Show all** to list everyone's again.
+- **Properties**: everything the event picked keeps, as REDkit lists it.
+- **Cutscene**: who and what the cutscene spawns (actors, props and cameras), each with the entity it's made from (click it to open it), its appearance, voice tag and tags, and its animations as REDkit names them (`actor:Root:animation`). Click one to list only its events in **Events**.
+- **Template**: the cutscene's own properties, from REDkit's source file for one of the game's own when REDkit has it (see **Properties from REDkit**).
+- **Effects**: the effects the cutscene defines for its effect events, with the particle systems, materials and lights they're made of; click one for its properties.
+- **Animation**: each actor's body and face animation, its properties and its set entry's, and its event track.
+- **Dialogs**: each line with when it's said, who says it, its words and the sound event that plays it. Dialog lines are only marks in a cutscene: the words and speakers are in the scene that plays it, which the viewer reads (in English) when its cutscene section has as many lines as the cutscene has marks. Click a line to go to it.
+- **Scenes**: the scenes (`.w2scene`) that play it; click one to open it in the scene viewer.
+- **Camera**: what the cutscene's camera does at the time shown: its field of view, where it is and where it looks, and the depth of field, clipping planes and fade in force.
+- **Events**: every event with its time, whose it is, its kind, what it is and the rest of what it says. Search (**Ctrl+F**) finds part of any of those, or of the event's class. Right-click a row to copy it.
+- **Files**: the entities, particle systems and materials it refers to, the scenes that play it and the world it was made in. Click one to open it in its viewer, found the way the game would find it (any resource without one opens in a Properties window); right-click for **Copy path**.
 
-**Effects** lists the effects the cutscene defines for its effect events, with the particle systems, materials and lights they're made of.
-
-**Files it uses** lists the entities, particle systems and materials it refers to, the scene (`.w2scene`) that plays it and the world it was made in. Click one to open it where the tool has a viewer for it (meshes, cutscenes, XML and pictures), found the way the game would find it; for other kinds its path is copied. Right-click for **Copy path**.
-
-## The events
-
-Every event is listed with its time, how long it lasts, whose it is, its kind, what it is and the rest of what it says. Search (**Ctrl+F**) finds part of any of those, or of the event's class. Right-click a row to copy it.
-
-Dialog lines are only marks in a cutscene: the lines themselves, and who says them, are in the scene that plays it. The viewer finds them there and shows them in words, in English, when the scene's cutscene section has as many lines as the cutscene has marks. The voices are in the cutscene's recorded sound, the audio event the viewer names under the files it uses.
+The music and effects are the cutscene's recorded sound, the audio event named under **Cutscene**; the voices are the dialog lines', played where the cutscene marks them.
 """),
 
         new(Basics, "Entities", "", """

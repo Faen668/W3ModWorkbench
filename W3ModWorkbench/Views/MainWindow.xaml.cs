@@ -1205,7 +1205,7 @@ public partial class MainWindow : Window, IMessageHost
         {
             var entry = item.Entry;
             byte[] data = await ReadAsync(entry);
-            CutsceneWindow.Open(entry.Path, item.BundleName, data, LocatorFor(entry), this);
+            CutsceneWindow.Open(entry.Path, item.BundleName, data, LocatorFor(entry), this, entry.Archive);
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
         {
@@ -1897,7 +1897,7 @@ public partial class MainWindow : Window, IMessageHost
                 {
                     byte[] data = await ReadAsync(item.Entry);
                     entity = await Task.Run(() => Core.Entities.EntityFile.Read(data), token);
-                    var look = await Task.Run(() => entity.Look(entity.Appearances.FirstOrDefault(), locator.ReadFile), token);
+                    var look = await Task.Run(() => entity.Look(entity.DefaultAppearance, locator.ReadFile), token);
                     (parts, drawnBy, _, _) = await Task.Run(() => EntityWindow.ReadMeshes(look, locator, token), token);
                 }
                 catch (InvalidDataException ex)
@@ -1919,7 +1919,7 @@ public partial class MainWindow : Window, IMessageHost
                 var texture = PreviewTexture(locator);
                 for (int p = 0; p < parts.Count; p++)
                 {
-                    var coloring = LookTextures.Coloring(entity, entity.Appearances.FirstOrDefault()?.Name, drawnBy[p].Name);
+                    var coloring = LookTextures.Coloring(entity, entity.DefaultAppearance?.Name, drawnBy[p].Name);
                     for (int m = 0; m < parts[p].Mesh.Materials.Count; m++)
                     {
                         int part = p, material = m;

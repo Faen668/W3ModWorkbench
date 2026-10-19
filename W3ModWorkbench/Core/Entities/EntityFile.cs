@@ -85,6 +85,13 @@ public sealed class EntityFile
     public required List<EntityLink> Links { get; init; }
     public required List<string> Includes { get; init; }
     public required List<EntityAppearance> Appearances { get; init; }
+
+    /// <summary>
+    /// The appearance to show when none is asked for: a dyeable item's undyed one (dye_default), as the game gives it,
+    /// else the first. Null when it has none.
+    /// </summary>
+    public EntityAppearance? DefaultAppearance =>
+        Appearances.FirstOrDefault(a => a.Name.Equals("dye_default", StringComparison.OrdinalIgnoreCase)) ?? Appearances.FirstOrDefault();
     public required List<EntitySlot> Slots { get; init; }
     public required List<string> Effects { get; init; }
 

@@ -14,10 +14,21 @@ public enum CutsceneEventKind { Dialog, Sound, Effect, Item, Appearance, Camera,
 public sealed record CutsceneEvent(float Start, float Duration, CutsceneEventKind Kind, string Title, string Detail, string ClassName, string? Actor, string? Link)
 {
     public float End => Start + Duration;
+
+    /// <summary>The event as the file keeps it, for its properties.</summary>
+    public RedObject? Source { get; init; }
 }
 
 /// <summary>One of an actor's animations: its body ("Root") or face, which play for the whole cutscene or part of it.</summary>
-public sealed record CutsceneAnimation(string Actor, string Part, string Name, float Duration, float FramesPerSecond, IReadOnlyList<CutsceneEvent> Events);
+public sealed record CutsceneAnimation(string Actor, string Part, string Name, float Duration, float FramesPerSecond, IReadOnlyList<CutsceneEvent> Events)
+{
+    /// <summary>The animation (a CSkeletalAnimation) and its entry in the set (a CSkeletalAnimationSetEntry), for their properties.</summary>
+    public RedObject? Object { get; init; }
+    public RedObject? Entry { get; init; }
+
+    /// <summary>The animation's full name, as REDkit lists it: actor:part:animation.</summary>
+    public string FullName => $"{Actor}:{Part}:{Name}";
+}
 
 /// <summary>Someone or something in a cutscene: an actor, a prop or a camera, and the entity it's made from.</summary>
 public sealed class CutsceneActor
@@ -40,7 +51,11 @@ public sealed class CutsceneActor
 }
 
 /// <summary>An effect the cutscene defines for its effect events: how long it lasts and the particles and lights it's made of.</summary>
-public sealed record CutsceneEffect(string Name, float Length, bool Looped, IReadOnlyList<string> Parts);
+public sealed record CutsceneEffect(string Name, float Length, bool Looped, IReadOnlyList<string> Parts)
+{
+    /// <summary>The effect (a CFXDefinition) as the file keeps it, for its properties.</summary>
+    public RedObject? Source { get; init; }
+}
 
 /// <summary>A file the cutscene refers to, and what kind it is.</summary>
 public sealed record CutsceneLink(string Path, string Role);
@@ -54,6 +69,9 @@ public sealed record CutsceneLink(string Path, string Role);
 public sealed class CutsceneFile
 {
     public required Cr2wFile File { get; init; }
+
+    /// <summary>The cutscene itself, a CCutsceneTemplate, for its properties.</summary>
+    public required RedObject Template { get; init; }
     public required float Duration { get; init; }
     public required List<CutsceneActor> Actors { get; init; }
 
@@ -146,7 +164,11 @@ public sealed class CutsceneFile
                 actors.Add(actor);
             }
             var events = file.TailObjects(entry).Select(e => Describe(file, e, actor.Name)).OrderBy(e => e.Start).ToList();
-            actor.Animations.Add(new CutsceneAnimation(actor.Name, part, name, animation.Float("duration"), animation.Float("framesPerSecond", 30), events));
+            actor.Animations.Add(new CutsceneAnimation(actor.Name, part, name, animation.Float("duration"), animation.Float("framesPerSecond", 30), events)
+            {
+                Object = animation,
+                Entry = entry,
+            });
         }
 
         // the template keeps four bytes before its events
@@ -160,6 +182,7 @@ public sealed class CutsceneFile
         return new CutsceneFile
         {
             File = file,
+            Template = template,
             Duration = duration,
             Actors = actors,
             SceneEvents = sceneEvents,
@@ -192,7 +215,7 @@ public sealed class CutsceneFile
                     };
                     if (part is not null && !parts.Contains(part)) parts.Add(part);
                 }
-        return new CutsceneEffect(fx["name"] as string ?? "", fx.Float("length"), fx["isLooped"] is true, parts);
+        return new CutsceneEffect(fx["name"] as string ?? "", fx.Float("length"), fx["isLooped"] is true, parts) { Source = fx };
     }
 
     /// <summary>An event in words: what kind it is, a short title, and the rest of what it says.</summary>
@@ -281,7 +304,7 @@ public sealed class CutsceneFile
                 (kind, title, detail) = (CutsceneEventKind.Other, eventName.Length > 0 ? eventName : e.ClassName, Humanize(e.ClassName, "CExtAnim"));
                 break;
         }
-        return new CutsceneEvent(start, duration, kind, title, detail, e.ClassName, actor, link);
+        return new CutsceneEvent(start, duration, kind, title, detail, e.ClassName, actor, link) { Source = e };
     }
 
     private static string? Bone(RedObject e) => NameOrNull(e["bone"]) is { } bone && !bone.StartsWith('(') ? "at " + bone : null;
