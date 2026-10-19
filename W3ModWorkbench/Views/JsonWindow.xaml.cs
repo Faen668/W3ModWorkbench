@@ -565,15 +565,18 @@ public partial class JsonWindow : Window, IMessageHost
             return;
         }
         var doc = Editor.Document;
+        // the anchors stay around the embedded text as the rest of the document is edited
+        var start = doc.CreateAnchor(at.Start);
+        var end = doc.CreateAnchor(at.End);
+        start.MovementType = ICSharpCode.AvalonEdit.Document.AnchorMovementType.BeforeInsertion;
+        end.MovementType = ICSharpCode.AvalonEdit.Document.AnchorMovementType.AfterInsertion;
         var child = new JsonWindow(label, $"Embedded in {ShownName}")
         {
             _parent = this,
             _cr2wName = label,
-            _embedStart = doc.CreateAnchor(at.Start),
-            _embedEnd = doc.CreateAnchor(at.End),
+            _embedStart = start,
+            _embedEnd = end,
         }.Standalone(this);
-        child._embedStart.MovementType = ICSharpCode.AvalonEdit.Document.AnchorMovementType.BeforeInsertion;
-        child._embedEnd.MovementType = ICSharpCode.AvalonEdit.Document.AnchorMovementType.AfterInsertion;
         child.Load(Encoding.UTF8.GetBytes(json));
         _children.Add(child);
         child.Show();

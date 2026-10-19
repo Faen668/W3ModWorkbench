@@ -90,7 +90,7 @@ public partial class GameStringsWindow : Window, IMessageHost
         window.Show();
     }
 
-    private W3Language Language => LanguageBox.SelectedItem as W3Language ?? W3Strings.Languages[0];
+    private W3Language PickedLanguage => LanguageBox.SelectedItem as W3Language ?? W3Strings.Languages[0];
 
     private string SourceTag => (SourceBox.SelectedItem as ComboBoxItem)?.Tag as string ?? "Game";
 
@@ -129,17 +129,17 @@ public partial class GameStringsWindow : Window, IMessageHost
         _index = null;
         Grid.ItemsSource = null;
         string? database = Database;
-        StatusText.Text = database is null ? $"Reading the {Language.Handle} strings…" : $"Reading the {Language.Handle} strings from {Path.GetFileName(database)}…";
+        StatusText.Text = database is null ? $"Reading the {PickedLanguage.Handle} strings…" : $"Reading the {PickedLanguage.Handle} strings from {Path.GetFileName(database)}…";
         try
         {
-            var index = await GameStringIndex.GetAsync(_gameFolder, Language, ModsCheck.IsChecked == true && _gameFolder is not null, database);
+            var index = await GameStringIndex.GetAsync(_gameFolder, PickedLanguage, ModsCheck.IsChecked == true && _gameFolder is not null, database);
             if (id != _loadId) return;
             _index = index;
             int files = index.Sources.Count - (database is null ? 0 : 1);
             string sources = database is not null
                 ? $"{Format.Count(index.All.Count, "string")} from {Path.GetFileName(database)}" + (files > 0 ? $" and {Format.Count(files, "mod file")}" : "")
                 : index.Sources.Count == 0
-                ? $"No {Language.Handle}.w3strings files found under the game folder"
+                ? $"No {PickedLanguage.Handle}.w3strings files found under the game folder"
                 : $"{Format.Count(index.All.Count, "string")} from {Format.Count(index.Sources.Count, "file")}";
             DetailText.Text = sources + (index.Problems.Count > 0 ? $"  ·  {Format.Count(index.Problems.Count, "file")} couldn't be read" : "");
             RunSearch();
