@@ -871,6 +871,10 @@ Inside a script preview, Ctrl+Shift+F still searches from there, through the scr
 
 **Asset Browser** (the button beside Open folder, **Tools > Asset Browser**, or **Ctrl+Shift+A**) lists every file the game has in one tree at the top of the main window: content0, the DLC and the installed mods, each game path once, from where the game loads it (mods first, then DLC, then content0). The **Source** column says which bundle each comes from, and textures only in a texture cache are listed too. Search it, preview it, double-click to open, and right-click **Copy to project** to copy a file (with a mesh's buffers) into the project at its game path, as with any open bundle. It's read in a second or two and stays open; asking again goes back to it.
 
+**Class**, beside the search box, shows only the files that hold one class of resource, the way REDkit's asset browser filters: `CMesh` for meshes, `CBitmapTexture` for textures, `CEntityTemplate` for entities, `CMaterialInstance`, `CStoryScene`, `C2dArray` for `.csv` tables, and the rest, each with how many of them the folder picked has. It works with the search, in the asset browser and in any open bundle.
+
+**Bookmarks**: pick a folder in the asset browser and press the star beside Class to bookmark it (press it again to take it off), or right-click files and choose **Bookmark**. The bookmarks button beside the star lists them; pick one to go straight there, with the asset browser read first if it isn't open and a bookmarked file highlighted in its folder. **Remove a bookmark** at the bottom of the list takes one off. Bookmarks are kept between sessions.
+
 **Tools > Browse game scripts** lists the game's own scripts in the main window, to read, and **Browse installed mods** opens everything in the `mods` folder the way Open folder does. Both need the game folder, which is found for you or set in Settings.
 """),
 

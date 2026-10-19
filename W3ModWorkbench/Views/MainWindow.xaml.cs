@@ -942,7 +942,11 @@ public partial class MainWindow : Window, IMessageHost
 
     // ---------------------------------------------------------------- view
 
-    private void FolderTree_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e) => RefreshView();
+    private void FolderTree_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
+    {
+        RefreshView();
+        UpdateBookmarkButton();
+    }
 
     private void SearchBox_TextChanged(object sender, TextChangedEventArgs e)
     {
@@ -961,10 +965,14 @@ public partial class MainWindow : Window, IMessageHost
 
     private void RefreshView()
     {
-        IEnumerable<EntryItem> items = FolderTree.SelectedItem is FolderNode node
-            ? node.AllFiles()
-            : _roots.SelectMany(r => r.AllFiles());
+        List<EntryItem> scope = FolderTree.SelectedItem is FolderNode node
+            ? [.. node.AllFiles()]
+            : [.. _roots.SelectMany(r => r.AllFiles())];
+        FillClassChoices(scope);
 
+        IEnumerable<EntryItem> items = scope;
+        if (_classFilter is { } resourceClass)
+            items = items.Where(i => i.ResourceClass == resourceClass);
         var match = BuildMatcher(SearchBox.Text);
         if (match is not null)
             items = items.Where(match);
@@ -1324,6 +1332,9 @@ public partial class MainWindow : Window, IMessageHost
         // the game's files and installed mods' are copied into a project, not added to it: added, they'd still be read-only
         GridAddToProjectItem.Visibility = project is not null && loose.Any(l => !project.Contains(l.FullPath) && FileSafety.CanEdit(l.FullPath)) ? Visibility.Visible : Visibility.Collapsed;
         GridCopyToProjectItem.Visibility = Highlighted().Any(i => CopySource(i) is not null) ? Visibility.Visible : Visibility.Collapsed;
+        var game = InAssetBrowser ? Highlighted() : [];
+        GridBookmarkItem.Visibility = game.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        GridBookmarkItem.Header = game.Count > 0 && game.All(i => IsBookmarked(i.Path)) ? "Remove bookmark" : "Bookmark";
         GridRemoveFromProjectItem.Visibility = project is not null && loose.Any(l => project.Include.Any(s => project.Resolve(s).Equals(l.FullPath, StringComparison.OrdinalIgnoreCase)))
             ? Visibility.Visible : Visibility.Collapsed;
     }

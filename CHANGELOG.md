@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Class filter**, as REDkit's asset browser has: **Class** beside the search box shows only the files that hold one class of resource (`CMesh`, `CBitmapTexture`, `CEntityTemplate`, `CStoryScene`, `C2dArray`…), each with how many there are in the folder picked. It works with the search, in the asset browser and any open bundle. Each class was read from the game's own files.
+- **Bookmarks in the asset browser**: the star beside Class bookmarks the folder you're in, and right-click **Bookmark** bookmarks files. The bookmarks button lists them and goes straight to one, opening the asset browser if it isn't open and highlighting a bookmarked file. They're kept between sessions.
 - **Cube maps and texture arrays in the texture viewer**: a `.w2cube` shows any of its six faces and a `.texarray` any of its textures (**Face** or **Slice** beside Mip), double-clicked in a texture cache or in a bundle, like an `.xbm`. **Save DDS** writes every face or slice, as a cube map or an array that texture tools open. Before this only the first slice showed, its smaller mip levels came out scrambled, and Save DDS wrote a broken file. The environment probes in layers' texture caches (`.w2l`) show as the half-float cube maps they are, instead of as one scrambled RGB32F picture.
 - **Open as JSON for every CR2W file in the game**: foliage (`.flyr`), occlusion, SpeedTree (`.srt`), fur, spawn trees, cell maps, destruction, texture arrays, APEX and cloth, character templates (`.w2cent`), appearances (`.w3app`), menus, popups, the HUD, DLC descriptions and the rest now show **Open as JSON** too. Before, about 30 kinds didn't.
 - **Subtitles and lists preview as text**: cutscene subtitles (`.subs`) and `.list` files open in the preview like other text files.

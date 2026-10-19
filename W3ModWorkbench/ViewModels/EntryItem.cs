@@ -35,6 +35,19 @@ public sealed class EntryItem : INotifyPropertyChanged
     public string PackedText => Format.Bytes(Entry.PackedSize);
     public string CompressionText => Entry.FormatText;
 
+    private string? _resourceClass;
+    private bool _classKnown;
+
+    /// <summary>The engine class of the resource the file holds (CMesh, CBitmapTexture…), or null when it holds none.</summary>
+    public string? ResourceClass
+    {
+        get
+        {
+            if (!_classKnown) (_resourceClass, _classKnown) = (ResourceClasses.Of(Entry), true);
+            return _resourceClass;
+        }
+    }
+
     /// <summary>What kind of file it is, in a few words, when that's known.</summary>
     public FileKind? Kind => FileKinds.Of(Name);
 

@@ -230,9 +230,35 @@
             <Grid Margin="12,0,0,0">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" MinWidth="150" MaxWidth="340" />
                 </Grid.ColumnDefinitions>
-              <Grid Grid.Column="1">
+              <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="0,0,8,0">
+                <Button x:Name="BookmarkButton" Padding="8,6" Click="Bookmark_Click" IsEnabled="False"
+                        ToolTip="Bookmark the asset browser folder you're in, to come back to it from the bookmarks list">
+                    <TextBlock x:Name="BookmarkGlyph" Style="{StaticResource IconText}" Text="&#xE734;" />
+                </Button>
+                <Button x:Name="BookmarksButton" Margin="4,0,0,0" Padding="8,6" Click="Bookmarks_Click" ToolTip="Go to a bookmarked folder or file in the asset browser">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Style="{StaticResource IconText}" Text="&#xE8A4;" Margin="0,1,0,0" />
+                        <TextBlock Style="{StaticResource IconText}" Text="&#xE70D;" FontSize="9" Margin="6,2,0,0" />
+                    </StackPanel>
+                </Button>
+                <TextBlock Text="Class" VerticalAlignment="Center" Margin="12,0,8,0" Opacity="0.7" />
+                <ComboBox x:Name="ClassBox" Width="230" IsTextSearchEnabled="True" TextSearch.TextPath="Name"
+                          SelectionChanged="ClassBox_SelectionChanged"
+                          ToolTip="Show only files that hold one class of resource, as REDkit's asset browser does (CMesh, CBitmapTexture, CEntityTemplate…)">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="{Binding Name}" />
+                                <TextBlock Text="{Binding CountText}" Opacity="0.5" Margin="8,0,0,0" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
+              </StackPanel>
+              <Grid Grid.Column="2">
                 <TextBox x:Name="SearchBox" VerticalContentAlignment="Center" Padding="34,6,30,6"
                          TextChanged="SearchBox_TextChanged" ToolTip="Words must all appear in the path. Use * and ? to match file names, e.g. *.redswf" />
                 <TextBlock Style="{StaticResource IconText}" Text="&#xE721;" Margin="12,0,0,0" Opacity="0.6"
@@ -364,6 +390,10 @@
                                 <MenuItem x:Name="GridJsonItem" Header="Open as JSON" Click="GridJson_Click" Visibility="Collapsed"
                                           ToolTip="A CR2W file (.env, .w2ent, .w2mi…) as JSON to read and edit, saved back as CR2W; a .json file in the JSON editor">
                                     <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE943;" /></MenuItem.Icon>
+                                </MenuItem>
+                                <MenuItem x:Name="GridBookmarkItem" Header="Bookmark" Click="GridBookmark_Click" Visibility="Collapsed"
+                                          ToolTip="Add the file to the asset browser's bookmarks, or take it off">
+                                    <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE734;" /></MenuItem.Icon>
                                 </MenuItem>
                                 <MenuItem x:Name="GridCopyToProjectItem" Header="Copy to project" Click="GridCopyToProject_Click" Visibility="Collapsed"
                                           ToolTip="Copy into the open project at the same game path (scripts into its scripts folder, the rest into its workspace), to change the copy">

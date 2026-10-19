@@ -36,6 +36,9 @@ public sealed class Settings
     public string Cr2wJsonOutput { get; set; } = "";
     public bool Cr2wJsonRecursive { get; set; } = true;
 
+    /// <summary>Folders (ending in a backslash) and files bookmarked in the asset browser, by game path.</summary>
+    public List<string> AssetBookmarks { get; set; } = [];
+
     /// <summary>Bundles, files and folders opened most recently, newest first.</summary>
     public List<string> RecentPaths { get; set; } = [];
 
