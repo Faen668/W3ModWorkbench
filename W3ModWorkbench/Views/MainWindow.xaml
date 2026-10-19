@@ -167,10 +167,16 @@
                         <TextBlock Margin="8,0,0,0" Text="Open folder" />
                     </StackPanel>
                 </Button>
-                <Button x:Name="RecentButton" Margin="2,0,0,0" Padding="8,6" Click="Recent_Click" ToolTip="Open a folder or file you opened before">
+                <Button x:Name="RecentButton" Margin="6,0,0,0" Padding="8,6" Click="Recent_Click" ToolTip="Open a folder or file you opened before">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Style="{StaticResource IconText}" Text="&#xE81C;" Margin="0,1,0,0" />
                         <TextBlock Style="{StaticResource IconText}" Text="&#xE70D;" FontSize="9" Margin="6,2,0,0" />
+                    </StackPanel>
+                </Button>
+                <Button Margin="6,0,0,0" Click="AssetBrowser_Click" ToolTip="Browse every file the game has, from its content, DLC and installed mods, in one tree (Ctrl+Shift+A)">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Style="{StaticResource IconText}" Text="&#xE8F1;" Margin="0,1,0,0" />
+                        <TextBlock Margin="8,0,0,0" Text="Asset Browser" />
                     </StackPanel>
                 </Button>
                 <Button x:Name="ProjectButton" Margin="6,0,0,0" Click="Project_Click"
@@ -355,6 +361,10 @@
                                 <MenuItem x:Name="GridXmlItem" Header="Open in XML editor" Click="GridXmlEditor_Click" Visibility="Collapsed">
                                     <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE70F;" /></MenuItem.Icon>
                                 </MenuItem>
+                                <MenuItem x:Name="GridJsonItem" Header="Open as JSON" Click="GridJson_Click" Visibility="Collapsed"
+                                          ToolTip="A CR2W file (.env, .w2ent, .w2mi…) as JSON to read and edit, saved back as CR2W; a .json file in the JSON editor">
+                                    <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE943;" /></MenuItem.Icon>
+                                </MenuItem>
                                 <MenuItem x:Name="GridCopyToProjectItem" Header="Copy to project" Click="GridCopyToProject_Click" Visibility="Collapsed"
                                           ToolTip="Copy into the open project at the same game path (scripts into its scripts folder, the rest into its workspace), to change the copy">
                                     <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE8C8;" /></MenuItem.Icon>
@@ -443,6 +453,8 @@
                                                    FontFamily="Cascadia Mono, Consolas" FontSize="12" ShowLineNumbers="True" Padding="4,6,14,6"
                                                    Foreground="{DynamicResource TextFillColorPrimaryBrush}" LineNumbersForeground="{DynamicResource TextFillColorTertiaryBrush}"
                                                    HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" WordWrap="False" />
+                            <local:CutsceneSummary x:Name="PreviewCutscene" Visibility="Collapsed" />
+                            <local:SceneSummary x:Name="PreviewScene" Visibility="Collapsed" />
                             <StackPanel x:Name="PreviewEmpty" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="24" MaxWidth="320">
                                 <TextBlock x:Name="PreviewEmptyGlyph" Style="{StaticResource IconText}" Text="&#xE8A5;" FontSize="44" Opacity="0.4" HorizontalAlignment="Center" />
                                 <TextBlock x:Name="PreviewEmptyText" Margin="0,12,0,0" Opacity="0.7" TextWrapping="Wrap" TextAlignment="Center" />
@@ -527,6 +539,7 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
@@ -539,6 +552,8 @@
                               ToolTip="A mesh or other resource keeps its data in .buffer files beside it, and neither works without the other. Extract them together." />
                     <CheckBox x:Name="PngCheck" Grid.Row="1" Grid.Column="1" Content="Textures as PNG" MinHeight="0" Padding="6,0,0,0" Margin="16,4,0,0"
                               ToolTip="Write textures from a texture cache, and .dds files, as PNG pictures (the full size) instead of .dds" />
+                    <CheckBox x:Name="JsonCheck" Grid.Column="2" Content="CR2W files as JSON" MinHeight="0" Padding="6,0,0,0" Margin="16,0,0,0"
+                              ToolTip="Write resource files (.env, .w2mi, .w2ent…) as JSON to edit, as name.env.json. Tools › CR2W and JSON turns them back." />
                 </Grid>
                 <Button x:Name="ExtractShownButton" Grid.Column="3" Margin="8,0,0,0" Padding="14,7" Click="ExtractShown_Click"
                         IsEnabled="False" ToolTip="Extract every file in the list">

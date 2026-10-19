@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace W3ModWorkbench.Core.Meshes;
+namespace W3ModWorkbench.Core.Cr2w;
 
 /// <summary>The checksums a CR2W file carries: CRC-32 over its tables and objects, and FNV-1a over each name.</summary>
 public static class Checksums

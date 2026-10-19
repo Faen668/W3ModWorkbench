@@ -25,6 +25,7 @@
 | | Tool | What it does |
 |---|---|---|
 | 📦 | **Bundle explorer** | Opens the whole game or any mod, browse, search and extract. |
+| 🔁 | **CR2W and JSON** | Any resource file (`.env`, `.w2mi`, `.w2ent`…) as JSON and back, byte for byte, with bulk edits across hundreds of files and a command line for scripts. |
 | 🧩 | **Script decompiler** | `precompiled.rsblob` back into tidy, readable WitcherScript. |
 | ✏️ | **Script editor** | Edit a mod as a project (a `.w3bench` file) with go to definition, an outline and highlighting (XML gets an outline and folding too), and compile with REDkit's compiler, or the built-in one when you don't have REDkit. |
 | 🔤 | **Strings** | Read and edit `.w3strings`, update translations in minutes, search every string the game has. |
@@ -50,6 +51,11 @@
 - **Compare and track down copies**: compare two files side by side, or list every open copy of a file in load order, with the one the game uses marked and whether the others really differ.
 - **Know what you're looking at**: every file says what kind it is (mesh, buffer, entity, quest phase…); copy its path or name, show it in Explorer, or export the list as CSV. Recent folders and files are a click away.
 - **Handles every compression the game uses**: stored, zlib and LZ4 HC, plus LZ4 and Snappy.
+
+### CR2W and JSON
+- **Any resource file as JSON and back**: `.env`, `.w2mi`, `.w2ent`, quests, scenes, meshes and the rest turn into readable JSON to edit by hand or with a script, and back into the game's format byte for byte. Every file is checked to come back exactly as it was before it's written.
+- **Bulk edits**: the same tone mapping in all 500 of your `.env` files, a value set or removed everywhere, fog curves scaled by 0.8, with a dry run first and the property picked from a file.
+- **Scriptable**: `W3ModWorkbench.exe --to-json`, `--from-json` and `--edit` run with no window, for batch files and Python scripts. Extract can write CR2W files as JSON straight from the bundles.
 
 ### Compiled scripts
 - **Decompiles `precompiled.rsblob`** back into WitcherScript, split into tidy `.ws` files:

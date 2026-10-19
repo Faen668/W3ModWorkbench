@@ -1,0 +1,1124 @@
+using System.Buffers.Binary;
+using System.Globalization;
+using System.IO;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using W3ModWorkbench.Core.Scripts.Standalone;
+
+namespace W3ModWorkbench.Core.Cr2w;
+
+/// <summary>What converting a file to JSON found: how many values had to be kept as their bytes, and where.</summary>
+public sealed record Cr2wJsonReport(int RawValues, int RawObjects, IReadOnlyList<string> RawPaths)
+{
+    public bool FullyReadable => RawValues == 0 && RawObjects == 0;
+}
+
+/// <summary>
+/// Turns any CR2W file (<c>.env</c>, <c>.w2mi</c>, <c>.w2ent</c>…) into JSON that can be edited by hand or by a script,
+/// and back. Nothing is lost: a file turned into JSON and back comes out byte for byte the same, and every value is
+/// checked for that as it's written out. One that wouldn't come back the same is kept as its bytes instead
+/// (<c>{"$raw": "base64"}</c>), so it can't be edited but still survives.
+/// <para>
+/// The JSON is the file's objects, in order, each one its class (<c>$class</c>) and its properties by name. Structs are
+/// objects, arrays are arrays, enums are their names (a flags enum is a list of them), handles are <c>null</c>,
+/// <c>"export:N"</c> or <c>"import:path"</c>. A property's engine type isn't repeated on every value: the file block
+/// at the end lists the type of each class's properties (<c>"SSimpleCurve.dataCurveValues": "array:2,0,SCurveDataEntry"</c>),
+/// an object lists its own in <c>$types</c> only when they differ, and a property the file never had is looked up in
+/// the engine's own type list. The file block also keeps the header, names and imports, so indices stay right.
+/// </para>
+/// </summary>
+public static class Cr2wJson
+{
+    public const string FormatName = "w3mw-cr2w-json";
+    public const int FormatVersion = 1;
+
+    private static readonly Lazy<Rtti> EngineTypes = new(Rtti.LoadBuiltIn);
+
+    private static readonly Lazy<Dictionary<string, RttiClass>> RttiClasses = new(() =>
+    {
+        var classes = new Dictionary<string, RttiClass>(StringComparer.Ordinal);
+        foreach (var c in EngineTypes.Value.Classes) classes.TryAdd(c.Name, c);
+        return classes;
+    });
+
+    private static readonly Lazy<HashSet<string>> RttiEnums = new(() => EngineTypes.Value.Enums.Select(e => e.Name).ToHashSet(StringComparer.Ordinal));
+
+    /// <summary>A property's type as the engine declares it, looking through the class's bases; null when unknown.</summary>
+    public static string? EngineType(string className, string property)
+    {
+        var classes = RttiClasses.Value;
+        for (int depth = 0; depth < 64 && classes.TryGetValue(className, out var c); depth++)
+        {
+            foreach (var (name, type) in c.Properties)
+                if (name == property) return type;
+            if (c.Base is null) break;
+            className = c.Base;
+        }
+        return null;
+    }
+
+    // ---------------------------------------------------------------- to JSON
+
+    public static string ToJsonText(Cr2wFile file, out Cr2wJsonReport report, string? source = null) =>
+        Format(ToJson(file, out report, source));
+
+    public static JsonObject ToJson(Cr2wFile file, out Cr2wJsonReport report, string? source = null)
+    {
+        var d = file.Data;
+        (int Offset, int Count) Table(int i) => (I32(d, 40 + i * 12), I32(d, 44 + i * 12));
+        for (int i = 6; i < 10; i++)
+            if (Table(i).Count > 0) throw new NotSupportedException("This file has embedded files of its own, which can't be converted yet.");
+
+        var (fileNames, latin1) = Strings(d);
+        var context = new FileContext(fileNames, fileNames.Count == file.Names.Count
+            ? file.Imports.Select((i, n) => (Text(d, I32(d, Table(2).Offset + n * 8), latin1), i.ClassName, i.Flags)).ToList()
+            : throw new InvalidDataException("The names table can't be read."), adding: false);
+        var decoder = new Decoder(file, context);
+        var objects = new JsonArray();
+        var (exportsAt, _) = Table(4);
+        foreach (var export in file.Exports)
+        {
+            int at = exportsAt + export.Index * 24;
+            int flags = U16(d, at + 2), parent = I32(d, at + 4), template = I32(d, at + 16);
+            uint crc = (uint)I32(d, at + 20);
+            var data = d.AsSpan(export.Offset, export.Size);
+            var node = decoder.Export(export, $"objects[{export.Index}]");
+            if (node["$data"] is null)
+            {
+                // the whole object must come back the same, its tail included; when it wouldn't, keep its bytes
+                byte[]? again = null;
+                try { again = new Encoder(context).Export(node); }
+                catch (Exception ex) when (ex is InvalidDataException or FormatException or InvalidOperationException) { }
+                if (again is null || !data.SequenceEqual(again))
+                {
+                    node = new JsonObject { ["$class"] = export.ClassName, ["$data"] = Convert.ToBase64String(data) };
+                    decoder.RawObjects++;
+                    decoder.RawPaths.Add($"objects[{export.Index}] ({export.ClassName})");
+                }
+            }
+            // the export entry's fields that aren't the usual ones, after $class and before the properties
+            var head = new JsonObject { ["$class"] = node["$class"]!.DeepClone() };
+            if (parent != 0) head["$parent"] = parent - 1;
+            if (flags != 0) head["$flags"] = flags;
+            if (template != 0) head["$template"] = template;
+            uint actual = Checksums.Crc32(data);
+            if (crc != actual) head["$crc"] = new JsonArray(crc, actual);
+            foreach (var (key, value) in node.ToList())
+            {
+                if (key == "$class") continue;
+                node.Remove(key);
+                head[key] = value;
+            }
+            objects.Add(head);
+        }
+
+        var names = new JsonArray();
+        foreach (string name in fileNames) names.Add(name);
+        var imports = new JsonArray();
+        foreach (var import in context.Imports)
+        {
+            var entry = new JsonObject { ["path"] = import.Path, ["class"] = import.ClassName };
+            if (import.Flags != 0) entry["flags"] = import.Flags;
+            imports.Add(entry);
+        }
+        var (buffersAt, bufferCount) = Table(5);
+        var buffers = new JsonArray();
+        for (int i = 0; i < bufferCount; i++)
+        {
+            int at = buffersAt + i * 24;
+            int offset = I32(d, at + 8), disk = I32(d, at + 12);
+            var entry = new JsonObject
+            {
+                ["index"] = I32(d, at + 4),
+                ["flags"] = I32(d, at),
+                ["diskSize"] = disk,
+                ["memorySize"] = I32(d, at + 16),
+                ["crc"] = (uint)I32(d, at + 20),
+            };
+            if (offset > 0) entry["data"] = Convert.ToBase64String(d, offset, disk);
+            buffers.Add(entry);
+        }
+        var types = new JsonObject();
+        foreach (var (key, type) in context.Types) types[key] = type;
+
+        var (propertiesAt, propertyCount) = Table(3);
+        int bufferSize = I32(d, 28);
+        var fileBlock = new JsonObject
+        {
+            ["version"] = file.Version,
+            ["flags"] = I32(d, 8),
+            ["timestamp"] = BinaryPrimitives.ReadInt64LittleEndian(d.AsSpan(12)),
+            ["build"] = I32(d, 20),
+            ["chunks"] = I32(d, 36),
+            ["names"] = names,
+            ["imports"] = imports,
+        };
+        // a name's hash when it isn't the one that would be worked out
+        var hashes = new JsonObject();
+        for (int i = 0; i < fileNames.Count; i++)
+        {
+            uint hash = (uint)I32(d, I32(d, 52) + i * 8 + 4);
+            if (hash != (fileNames[i].Length == 0 ? 0 : Checksums.Fnv1a32(fileNames[i]))) hashes[i.ToString(CultureInfo.InvariantCulture)] = hash;
+        }
+        if (hashes.Count > 0) fileBlock["nameHashes"] = hashes;
+        if (StringOrder(d, fileNames, context.Imports) is { } order) fileBlock["stringOrder"] = order;
+        if (latin1.Count > 0) fileBlock["latin1"] = new JsonArray([.. latin1.Order().Select(s => (JsonNode)s)]);
+        if (buffers.Count > 0) fileBlock["buffers"] = buffers;
+        if (bufferSize > 0 && bufferSize < d.Length) fileBlock["trailer"] = Convert.ToBase64String(d, bufferSize, d.Length - bufferSize);
+        var properties = d.AsSpan(propertiesAt, propertyCount * 16);
+        if (propertyCount != 1 || properties.ContainsAnyExcept((byte)0))
+        {
+            fileBlock["propertyCount"] = propertyCount;
+            fileBlock["properties"] = Convert.ToBase64String(properties);
+        }
+        fileBlock["types"] = types;
+
+        var root = new JsonObject { ["$format"] = FormatName, ["$formatVersion"] = FormatVersion };
+        if (source is not null) root["$source"] = source;
+        root["objects"] = objects;
+        root["file"] = fileBlock;
+        report = new Cr2wJsonReport(decoder.RawValues, decoder.RawObjects, decoder.RawPaths);
+        return root;
+    }
+
+    // ---------------------------------------------------------------- from JSON
+
+    public static byte[] FromJsonText(string json)
+    {
+        JsonNode? node;
+        try { node = JsonNode.Parse(json, documentOptions: new JsonDocumentOptions { AllowTrailingCommas = true, CommentHandling = JsonCommentHandling.Skip }); }
+        catch (JsonException ex) { throw new InvalidDataException($"The JSON can't be read: {ex.Message}"); }
+        return FromJson(node as JsonObject ?? throw new InvalidDataException("The JSON isn't an object."));
+    }
+
+    public static byte[] FromJson(JsonObject root)
+    {
+        if ((string?)root["$format"] != FormatName)
+            throw new InvalidDataException($"This JSON wasn't made by W3 Mod Workbench's CR2W converter (\"$format\" isn't \"{FormatName}\").");
+        if ((int?)root["$formatVersion"] is not int formatVersion || formatVersion > FormatVersion)
+            throw new InvalidDataException("This JSON is from a newer version of W3 Mod Workbench; update to convert it.");
+        var fileBlock = root["file"] as JsonObject ?? throw new InvalidDataException("The JSON has no \"file\" block.");
+        var objects = root["objects"] as JsonArray ?? throw new InvalidDataException("The JSON has no \"objects\" list.");
+
+        var names = (fileBlock["names"] as JsonArray ?? []).Select(n => (string?)n ?? "").ToList();
+        if (names.Count == 0) names.Add("");
+        var imports = new List<(string, string, int)>();
+        foreach (var entry in fileBlock["imports"] as JsonArray ?? [])
+            imports.Add(((string?)entry?["path"] ?? "", (string?)entry?["class"] ?? "", (int?)entry?["flags"] ?? 0));
+        byte[] properties = fileBlock["properties"] is { } p ? Convert.FromBase64String((string)p!) : new byte[16];
+        int propertyCount = (int?)fileBlock["propertyCount"] ?? properties.Length / 16;
+        byte[] trailer = fileBlock["trailer"] is { } t ? Convert.FromBase64String((string)t!) : [];
+
+        var builder = Cr2wBuilder.Create((int?)fileBlock["version"] ?? 164, (int?)fileBlock["flags"] ?? 0, (long?)fileBlock["timestamp"] ?? 0,
+            (int?)fileBlock["build"] ?? 0, (int?)fileBlock["chunks"] ?? 6, names, imports, properties, propertyCount, trailer,
+            (fileBlock["latin1"] as JsonArray ?? []).Select(n => (string?)n ?? ""),
+            (fileBlock["nameHashes"] as JsonObject ?? []).Where(h => int.TryParse(h.Key, out _) && h.Value is not null)
+                .ToDictionary(h => int.Parse(h.Key, CultureInfo.InvariantCulture), h => (uint)h.Value!),
+            (fileBlock["stringOrder"] as JsonArray)?.Select(n => (int?)n ?? -1).ToList());
+
+        var context = new FileContext(names, imports, adding: true) { Builder = builder };
+        foreach (var (key, type) in fileBlock["types"] as JsonObject ?? [])
+            if ((string?)type is { } text) context.Types[key] = text;
+
+        for (int i = 0; i < objects.Count; i++)
+        {
+            var node = objects[i] as JsonObject ?? throw new InvalidDataException($"objects[{i}] isn't an object.");
+            string className = (string?)node["$class"] ?? throw new InvalidDataException($"objects[{i}] has no \"$class\".");
+            byte[] data;
+            try { data = new Encoder(context).Export(node); }
+            catch (InvalidDataException ex) { throw new InvalidDataException($"objects[{i}] ({className}): {ex.Message}"); }
+            uint? crc = null;
+            if (node["$crc"] is JsonArray { Count: 2 } kept && (uint?)kept[1] == Checksums.Crc32(data)) crc = (uint?)kept[0];
+            int parent = node["$parent"] is { } at ? (int)at! + 1 : 0;
+            builder.AddExport(className, (int?)node["$flags"] ?? 0, parent, (int?)node["$template"] ?? 0, data, crc);
+        }
+        foreach (var entry in fileBlock["buffers"] as JsonArray ?? [])
+        {
+            if (entry is null) continue;
+            byte[]? data = entry["data"] is { } b ? Convert.FromBase64String((string)b!) : null;
+            builder.AddBuffer((int?)entry["flags"] ?? 0, (int?)entry["index"] ?? 0, data, (int?)entry["diskSize"] ?? data?.Length ?? 0,
+                (int?)entry["memorySize"] ?? data?.Length ?? 0, (uint?)entry["crc"] ?? 0);
+        }
+        return builder.Build();
+    }
+
+    // ---------------------------------------------------------------- shared
+
+    /// <summary>The names, imports and property types both directions work with.</summary>
+    private sealed class FileContext
+    {
+        public readonly List<string> Names;
+        public readonly List<(string Path, string ClassName, int Flags)> Imports;
+        public readonly Dictionary<string, string> Types = new(StringComparer.Ordinal);
+        public Cr2wBuilder? Builder;
+        private readonly Dictionary<string, int> _nameIndex = new(StringComparer.Ordinal);
+        private readonly bool _adding;
+
+        public FileContext(IReadOnlyList<string> names, List<(string, string, int)> imports, bool adding)
+        {
+            Names = [.. names];
+            Imports = imports;
+            _adding = adding;
+            for (int i = 0; i < Names.Count; i++) _nameIndex.TryAdd(Names[i], i);
+        }
+
+        public string NameAt(int index) => index >= 0 && index < Names.Count ? Names[index] : throw new InvalidDataException($"Name {index} isn't in the file.");
+
+        public int Name(string text)
+        {
+            if (_nameIndex.TryGetValue(text, out int index)) return index;
+            if (!_adding) throw new InvalidDataException($"The name \"{text}\" isn't in the file.");
+            index = Builder!.Name(text);
+            Names.Add(text);
+            _nameIndex[text] = index;
+            return index;
+        }
+
+        /// <summary>An import's 0-based index by its path, adding it (of the class the reference is to) when the file doesn't have it.</summary>
+        public int Import(string path, string className)
+        {
+            int index = Imports.FindIndex(i => i.Path.Equals(path, StringComparison.OrdinalIgnoreCase));
+            if (index >= 0) return index;
+            if (!_adding) throw new InvalidDataException($"\"{path}\" isn't one of the file's imports.");
+            index = Builder!.Import(path, className);
+            Imports.Add((path, className, 0));
+            return index;
+        }
+    }
+
+    /// <summary>
+    /// Properties shown by another name than the file has them. The engine saves a curve point's under names that lost
+    /// their first letters (<c>me</c> for time, <c>ntrolPoint</c> for controlPoint); the JSON has the whole names.
+    /// </summary>
+    private static readonly Dictionary<string, (string Stored, string Shown)[]> Aliases = new(StringComparer.Ordinal)
+    {
+        ["SCurveDataEntry"] = [("me", "time"), ("ntrolPoint", "controlPoint"), ("lue", "value"), ("rveTypeL", "curveTypeL"), ("rveTypeR", "curveTypeR")],
+    };
+
+    private static string Shown(string className, string stored) =>
+        Aliases.TryGetValue(className, out var names) && names.FirstOrDefault(n => n.Stored == stored).Shown is { } shown ? shown : stored;
+
+    private static string Stored(string className, string shown) =>
+        Aliases.TryGetValue(className, out var names) && names.FirstOrDefault(n => n.Shown == shown).Stored is { } stored ? stored : shown;
+
+    /// <summary>The type a property of a class has: the object's own $types, then the file's list, then the engine's.</summary>
+    private static string TypeOf(FileContext context, string className, string property, JsonObject? local)
+    {
+        if (local?["$types"]?[Shown(className, property)] is JsonValue own && (string?)own is { } ownType) return ownType;
+        if (context.Types.TryGetValue(className + "." + property, out var type)) return type;
+        return EngineType(className, property)
+            ?? throw new InvalidDataException($"The type of {className}.{property} isn't known: add it to \"file\".\"types\" (for example \"{className}.{property}\": \"Float\").");
+    }
+
+    private static string ElementType(string type)
+    {
+        // "array:2,0,handle:IMaterial" → "handle:IMaterial"; "static:4,Float" → "Float"
+        int colon = type.IndexOf(':');
+        string rest = type[(colon + 1)..];
+        for (int i = 0, commas = type.StartsWith("static:", StringComparison.Ordinal) ? 1 : 2; i < rest.Length; i++)
+            if (rest[i] == ',' && --commas == 0) return rest[(i + 1)..];
+        return rest;
+    }
+
+    /// <summary>A fixed-size array, <c>[7]Float</c>: that many values, with no count in front.</summary>
+    private static bool IsFixed(string type, out string element, out int count)
+    {
+        element = "";
+        count = 0;
+        int close = type.IndexOf(']');
+        if (type.Length < 3 || type[0] != '[' || close < 2 || !int.TryParse(type.AsSpan(1, close - 1), NumberStyles.None, CultureInfo.InvariantCulture, out count)) return false;
+        element = type[(close + 1)..];
+        return element.Length > 0;
+    }
+
+    private static bool IsArray(string type) => type.StartsWith("array:", StringComparison.Ordinal) || type.StartsWith("static:", StringComparison.Ordinal);
+    private static bool IsHandle(string type) => type.StartsWith("handle:", StringComparison.Ordinal) || type.StartsWith("ptr:", StringComparison.Ordinal);
+    private static bool IsSoft(string type) => type.StartsWith("soft:", StringComparison.Ordinal);
+    /// <summary>The engine's enums, and by the usual naming (E and a capital) those it doesn't list.</summary>
+    private static bool IsEnum(string type) =>
+        !type.Contains(':') && (RttiEnums.Value.Contains(type) || type.Length > 1 && type[0] == 'E' && char.IsUpper(type[1]) && !RttiClasses.Value.ContainsKey(type));
+    private static string Target(string type) => type[(type.IndexOf(':') + 1)..];
+
+    // ---------------------------------------------------------------- reading
+
+    private sealed class Decoder(Cr2wFile file, FileContext context)
+    {
+        private readonly byte[] _d = file.Data;
+        public int RawValues, RawObjects;
+        public readonly List<string> RawPaths = [];
+
+        public JsonObject Export(Cr2wExport export, string path)
+        {
+            int pos = export.Offset, end = export.Offset + export.Size;
+            var node = new JsonObject { ["$class"] = export.ClassName };
+            try
+            {
+                if (export.Size > 0) Struct(node, export.ClassName, ref pos, end, path, allowShort: true);
+                if (pos < end) node["$tail"] = Convert.ToBase64String(_d, pos, end - pos);
+                return node;
+            }
+            catch (Exception ex) when (ex is InvalidDataException or ArgumentOutOfRangeException or IndexOutOfRangeException or FormatException)
+            {
+                return new JsonObject { ["$class"] = export.ClassName, ["$data"] = Convert.ToBase64String(_d, export.Offset, export.Size) };
+            }
+        }
+
+        /// <summary>A zero byte, then (name, type, size, value) until a name of 0.</summary>
+        private void Struct(JsonObject node, string className, ref int pos, int end, string path, bool allowShort = false)
+        {
+            if (pos >= end || _d[pos] != 0) throw new InvalidDataException();
+            pos++;
+            while (true)
+            {
+                if (pos + 2 > end)
+                {
+                    if (allowShort) return; // an object can end without the closing name; its check then keeps its bytes
+                    throw new InvalidDataException();
+                }
+                int name = U16(_d, pos);
+                pos += 2;
+                if (name == 0) return;
+                Need(pos, 6, end);
+                string stored = context.NameAt(name), property = Shown(className, stored);
+                string type = context.NameAt(U16(_d, pos));
+                int size = I32(_d, pos + 2);
+                pos += 6;
+                int valueEnd = pos - 4 + size;
+                if (size < 4 || valueEnd > end) throw new InvalidDataException();
+                if (node.ContainsKey(property)) throw new InvalidDataException(); // can't be keyed by name
+
+                // its type, said once for the file, or on the object when it isn't the file's usual one
+                string key = className + "." + stored;
+                if (!context.Types.TryGetValue(key, out var usual)) context.Types[key] = type;
+                else if (usual != type) ((node["$types"] ??= new JsonObject()) as JsonObject)![property] = type;
+
+                string here = path + "." + property;
+                JsonNode? value;
+                int start = pos;
+                try
+                {
+                    value = Value(type, ref pos, valueEnd, tagged: true, here);
+                    if (pos != valueEnd) throw new InvalidDataException();
+                    var again = new Encoder(context).Value(type, value, tagged: true);
+                    if (!_d.AsSpan(start, valueEnd - start).SequenceEqual(again)) throw new InvalidDataException();
+                }
+                catch (Exception ex) when (ex is InvalidDataException or ArgumentOutOfRangeException or IndexOutOfRangeException or FormatException or InvalidOperationException)
+                {
+                    value = new JsonObject { ["$raw"] = Convert.ToBase64String(_d, start, valueEnd - start) };
+                    RawValues++;
+                    RawPaths.Add($"{here} ({type})");
+                }
+                pos = valueEnd;
+                node[property] = value;
+            }
+        }
+
+        private JsonNode? Value(string type, ref int pos, int end, bool tagged, string path)
+        {
+            switch (type)
+            {
+                // a bool is 0 or 1; the odd one saved as something else is kept as that number
+                case "Bool": Need(pos, 1, end); return _d[pos++] switch { 0 => false, 1 => true, var other => (long)other };
+                case "Int8": Need(pos, 1, end); return (long)(sbyte)_d[pos++];
+                case "Uint8": Need(pos, 1, end); return (long)_d[pos++];
+                case "Int16": Need(pos, 2, end); pos += 2; return (long)(short)U16(_d, pos - 2);
+                case "Uint16": Need(pos, 2, end); pos += 2; return (long)U16(_d, pos - 2);
+                case "Int32": Need(pos, 4, end); pos += 4; return (long)I32(_d, pos - 4);
+                case "Uint32" or "LocalizedString": Need(pos, 4, end); pos += 4; return (long)(uint)I32(_d, pos - 4);
+                case "Int64": Need(pos, 8, end); pos += 8; return BinaryPrimitives.ReadInt64LittleEndian(_d.AsSpan(pos - 8));
+                case "Uint64" or "CDateTime": Need(pos, 8, end); pos += 8; return BinaryPrimitives.ReadUInt64LittleEndian(_d.AsSpan(pos - 8));
+                case "Float": Need(pos, 4, end); pos += 4; return Number(BinaryPrimitives.ReadSingleLittleEndian(_d.AsSpan(pos - 4)));
+                case "Double": Need(pos, 8, end); pos += 8; return Number(BinaryPrimitives.ReadDoubleLittleEndian(_d.AsSpan(pos - 8)));
+                case "CName": Need(pos, 2, end); pos += 2; return context.NameAt(U16(_d, pos - 2));
+                case "String": return Text(ref pos, end);
+                case "StringAnsi":
+                {
+                    // a byte of its length, then that many 8-bit characters
+                    Need(pos, 1, end);
+                    int length = _d[pos++];
+                    Need(pos, length, end);
+                    pos += length;
+                    return Encoding.Latin1.GetString(_d, pos - length, length);
+                }
+                case "DeferredDataBuffer": Need(pos, 2, end); pos += 2; return (long)U16(_d, pos - 2);
+                case "CGUID": Need(pos, 16, end); pos += 16; return new Guid(_d.AsSpan(pos - 16, 16)).ToString();
+                case "TagList":
+                {
+                    Need(pos, 1, end);
+                    int count = _d[pos++];
+                    var tags = new JsonArray();
+                    for (int i = 0; i < count; i++) { Need(pos, 2, end); tags.Add(context.NameAt(U16(_d, pos))); pos += 2; }
+                    return tags;
+                }
+                case "EngineTransform":
+                {
+                    // a byte of which parts there are, then each as three floats
+                    Need(pos, 1, end);
+                    int parts = _d[pos++];
+                    if ((parts & ~7) != 0) throw new InvalidDataException();
+                    var transform = new JsonObject();
+                    if ((parts & 1) != 0) transform["position"] = Floats(ref pos, end, "X", "Y", "Z");
+                    if ((parts & 2) != 0) transform["rotation"] = Floats(ref pos, end, "Pitch", "Yaw", "Roll");
+                    if ((parts & 4) != 0) transform["scale"] = Floats(ref pos, end, "X", "Y", "Z");
+                    return transform;
+                }
+                case "IdTag":
+                    Need(pos, 17, end);
+                    pos += 17;
+                    return new JsonObject { ["type"] = (long)_d[pos - 17], ["guid"] = new Guid(_d.AsSpan(pos - 16, 16)).ToString() };
+                case "EntityHandle":
+                {
+                    // a byte of what kind it is, then GUIDs to the end
+                    if (!tagged || (end - pos - 1) % 16 != 0) throw new InvalidDataException();
+                    var handle = new JsonObject { ["type"] = (long)_d[pos++] };
+                    var guids = new JsonArray();
+                    while (pos < end) { guids.Add(new Guid(_d.AsSpan(pos, 16)).ToString()); pos += 16; }
+                    handle["guids"] = guids;
+                    return handle;
+                }
+                case "SharedDataBuffer" or "DataBuffer":
+                {
+                    Need(pos, 4, end);
+                    int length = I32(_d, pos);
+                    pos += 4;
+                    Need(pos, length, end);
+                    pos += length;
+                    return Convert.ToBase64String(_d, pos - length, length);
+                }
+                case "CVariant":
+                {
+                    // a value of any type: the type's name, a size that counts itself, the value
+                    Need(pos, 6, end);
+                    string inner = context.NameAt(U16(_d, pos));
+                    int size = I32(_d, pos + 2);
+                    pos += 6;
+                    int valueEnd = pos - 4 + size;
+                    if (size < 4 || valueEnd > end) throw new InvalidDataException();
+                    var variant = new JsonObject { ["type"] = inner, ["value"] = Value(inner, ref pos, valueEnd, tagged: true, path) };
+                    if (pos != valueEnd) throw new InvalidDataException();
+                    return variant;
+                }
+            }
+            if (IsHandle(type))
+            {
+                Need(pos, 4, end);
+                int raw = I32(_d, pos);
+                pos += 4;
+                if (raw == 0) return null;
+                if (raw > 0) return $"export:{raw - 1}";
+                return ImportText(-raw - 1);
+            }
+            if (IsSoft(type))
+            {
+                Need(pos, 2, end);
+                int raw = U16(_d, pos);
+                pos += 2;
+                return raw == 0 ? null : ImportText(raw - 1);
+            }
+            if (IsFixed(type, out string fixedElement, out int fixedCount))
+            {
+                var items = new JsonArray();
+                for (int i = 0; i < fixedCount; i++) items.Add(Value(fixedElement, ref pos, end, tagged: false, $"{path}[{i}]"));
+                return items;
+            }
+            if (IsArray(type))
+            {
+                string element = ElementType(type);
+                Need(pos, 4, end);
+                int count = I32(_d, pos);
+                pos += 4;
+                if (count < 0 || count > 50_000_000) throw new InvalidDataException();
+                if (element is "Uint8" or "Int8")
+                {
+                    Need(pos, count, end);
+                    pos += count;
+                    return Convert.ToBase64String(_d, pos - count, count);
+                }
+                var list = new JsonArray();
+                for (int i = 0; i < count; i++) list.Add(Value(element, ref pos, end, tagged: false, $"{path}[{i}]"));
+                return list;
+            }
+            if (IsEnum(type))
+            {
+                // a plain enum is one name; a flags enum, which only a tagged value can be, is names until a 0
+                if (!tagged || end - pos == 2) { Need(pos, 2, end); pos += 2; return context.NameAt(U16(_d, pos - 2)); }
+                var values = new JsonArray();
+                while (true)
+                {
+                    Need(pos, 2, end);
+                    int v = U16(_d, pos);
+                    pos += 2;
+                    if (v == 0) break;
+                    values.Add(context.NameAt(v));
+                }
+                return values;
+            }
+            var node = new JsonObject();
+            Struct(node, type, ref pos, end, path);
+            if (type == "SAppearanceAttachment") node["$attachment"] = Attachment(ref pos, end, path + ".$attachment");
+            return node;
+        }
+
+        /// <summary>
+        /// The attachment an entity appearance's SAppearanceAttachment keeps after its properties: a size that counts
+        /// itself, a 1, the attachment's class and its properties (a CAnimatedAttachment and the slot it goes on).
+        /// </summary>
+        private JsonObject Attachment(ref int pos, int end, string path)
+        {
+            Need(pos, 7, end);
+            int size = I32(_d, pos), objectEnd = pos + size;
+            if (size < 7 || objectEnd > end || _d[pos + 4] != 1) throw new InvalidDataException();
+            string className = context.NameAt(U16(_d, pos + 5));
+            pos += 7;
+            var attachment = new JsonObject { ["$class"] = className };
+            Struct(attachment, className, ref pos, objectEnd, path);
+            if (pos != objectEnd) throw new InvalidDataException();
+            return attachment;
+        }
+
+        private JsonObject Floats(ref int pos, int end, params string[] names)
+        {
+            var result = new JsonObject();
+            foreach (string name in names)
+            {
+                Need(pos, 4, end);
+                result[name] = Number(BinaryPrimitives.ReadSingleLittleEndian(_d.AsSpan(pos)));
+                pos += 4;
+            }
+            return result;
+        }
+
+        private string ImportText(int index)
+        {
+            if (index < 0 || index >= context.Imports.Count) throw new InvalidDataException();
+            string importPath = context.Imports[index].Path;
+            // by path when that finds this import, else by number
+            int first = context.Imports.FindIndex(i => i.Path.Equals(importPath, StringComparison.OrdinalIgnoreCase));
+            return first == index ? "import:" + importPath : $"import#{index}";
+        }
+
+        private string Text(ref int pos, int end)
+        {
+            Need(pos, 1, end);
+            int first = _d[pos++];
+            bool narrow = (first & 0x80) != 0;
+            int length = first & 0x3F;
+            if ((first & 0x40) != 0)
+            {
+                int shift = 6, b;
+                do
+                {
+                    Need(pos, 1, end);
+                    b = _d[pos++];
+                    length |= (b & 0x7F) << shift;
+                    shift += 7;
+                } while ((b & 0x80) != 0 && shift < 32);
+            }
+            int bytes = narrow ? length : length * 2;
+            Need(pos, bytes, end);
+            pos += bytes;
+            return narrow ? Encoding.Latin1.GetString(_d, pos - bytes, bytes) : Encoding.Unicode.GetString(_d, pos - bytes, bytes);
+        }
+
+        private void Need(int pos, int count, int end)
+        {
+            if (count < 0 || pos + count > end || pos + count > _d.Length) throw new InvalidDataException();
+        }
+    }
+
+    /// <summary>A float as a JSON number, or as a string for the values JSON has no number for.</summary>
+    private static JsonNode Number(double value)
+    {
+        if (double.IsNaN(value)) return "NaN";
+        if (double.IsPositiveInfinity(value)) return "Infinity";
+        if (double.IsNegativeInfinity(value)) return "-Infinity";
+        return JsonValue.Create(value)!;
+    }
+
+    private static JsonNode Number(float value)
+    {
+        if (float.IsNaN(value) || float.IsInfinity(value)) return Number((double)value);
+        return JsonValue.Create(value)!;
+    }
+
+    // ---------------------------------------------------------------- writing
+
+    private sealed class Encoder(FileContext context)
+    {
+        private readonly MemoryStream _out = new();
+
+        public byte[] Export(JsonObject node)
+        {
+            if (node["$data"] is { } data) return Convert.FromBase64String((string)data!);
+            string className = (string?)node["$class"] ?? throw new InvalidDataException("An object has no \"$class\".");
+            Struct(className, node);
+            if (node["$tail"] is { } tail) _out.Write(Convert.FromBase64String((string)tail!));
+            return _out.ToArray();
+        }
+
+        public byte[] Value(string type, JsonNode? value, bool tagged)
+        {
+            Write(type, value, tagged, type);
+            return _out.ToArray();
+        }
+
+        private void Struct(string className, JsonObject node)
+        {
+            _out.WriteByte(0);
+            foreach (var (property, value) in node)
+            {
+                if (property.StartsWith('$')) continue;
+                string stored = Stored(className, property);
+                string type = TypeOf(context, className, stored, node);
+                U16(context.Name(stored));
+                U16(context.Name(type));
+                long sizeAt = _out.Position;
+                I32(0);
+                Write(type, value, tagged: true, $"{className}.{property}");
+                long after = _out.Position;
+                _out.Position = sizeAt;
+                I32((int)(after - sizeAt));
+                _out.Position = after;
+            }
+            U16(0);
+        }
+
+        private void Write(string type, JsonNode? value, bool tagged, string where)
+        {
+            if (value is JsonObject raw && raw["$raw"] is { } bytes)
+            {
+                _out.Write(Convert.FromBase64String((string)bytes!));
+                return;
+            }
+            try { WriteValue(type, value, tagged, where); }
+            catch (Exception ex) when (ex is FormatException or InvalidOperationException or OverflowException or ArgumentException)
+            {
+                throw new InvalidDataException($"{where} should be a {Describe(type)}, not {Show(value)}.");
+            }
+        }
+
+        private void WriteValue(string type, JsonNode? value, bool tagged, string where)
+        {
+            switch (type)
+            {
+                case "Bool": _out.WriteByte(Held(value) is bool or JsonElement { ValueKind: JsonValueKind.True or JsonValueKind.False } ? (Truth(value) ? (byte)1 : (byte)0) : checked((byte)Integer(value))); return;
+                case "Int8": _out.WriteByte((byte)checked((sbyte)Integer(value))); return;
+                case "Uint8": _out.WriteByte(checked((byte)Integer(value))); return;
+                case "Int16": U16((ushort)checked((short)Integer(value))); return;
+                case "Uint16": U16(checked((ushort)Integer(value))); return;
+                case "Int32": I32(checked((int)Integer(value))); return;
+                case "Uint32" or "LocalizedString": I32((int)checked((uint)Integer(value))); return;
+                case "Int64": Span8(s => BinaryPrimitives.WriteInt64LittleEndian(s, checked((long)Integer(value)))); return;
+                case "Uint64" or "CDateTime": Span8(s => BinaryPrimitives.WriteUInt64LittleEndian(s, checked((ulong)Integer(value)))); return;
+                case "Float":
+                {
+                    Span<byte> s = stackalloc byte[4];
+                    BinaryPrimitives.WriteSingleLittleEndian(s, Single(value));
+                    _out.Write(s);
+                    return;
+                }
+                case "Double": Span8(s => BinaryPrimitives.WriteDoubleLittleEndian(s, Real(value))); return;
+                case "CName": U16(context.Name(Str(value))); return;
+                case "String": Text(Str(value)); return;
+                case "StringAnsi":
+                {
+                    byte[] text = Encoding.Latin1.GetBytes(Str(value));
+                    _out.WriteByte(checked((byte)text.Length));
+                    _out.Write(text);
+                    return;
+                }
+                case "DeferredDataBuffer": U16(checked((ushort)Integer(value))); return;
+                case "CGUID": _out.Write(Guid.Parse(Str(value)).ToByteArray()); return;
+                case "TagList":
+                {
+                    var tags = value as JsonArray ?? throw new FormatException();
+                    _out.WriteByte(checked((byte)tags.Count));
+                    foreach (var tag in tags) U16(context.Name(Str(tag)));
+                    return;
+                }
+                case "EngineTransform":
+                {
+                    var transform = value as JsonObject ?? throw new FormatException();
+                    var position = transform["position"] as JsonObject;
+                    var rotation = transform["rotation"] as JsonObject;
+                    var scale = transform["scale"] as JsonObject;
+                    _out.WriteByte((byte)((position is null ? 0 : 1) | (rotation is null ? 0 : 2) | (scale is null ? 0 : 4)));
+                    if (position is not null) Floats(position, "X", "Y", "Z");
+                    if (rotation is not null) Floats(rotation, "Pitch", "Yaw", "Roll");
+                    if (scale is not null) Floats(scale, "X", "Y", "Z");
+                    return;
+                }
+                case "IdTag":
+                    _out.WriteByte(checked((byte)Integer(value?["type"])));
+                    _out.Write(Guid.Parse(Str(value?["guid"])).ToByteArray());
+                    return;
+                case "EntityHandle":
+                    _out.WriteByte(checked((byte)Integer(value?["type"])));
+                    foreach (var guid in value?["guids"] as JsonArray ?? []) _out.Write(Guid.Parse(Str(guid)).ToByteArray());
+                    return;
+                case "SharedDataBuffer" or "DataBuffer":
+                {
+                    byte[] bytes = Convert.FromBase64String(Str(value));
+                    I32(bytes.Length);
+                    _out.Write(bytes);
+                    return;
+                }
+                case "CVariant":
+                {
+                    string inner = Str(value?["type"]);
+                    U16(context.Name(inner));
+                    long sizeAt = _out.Position;
+                    I32(0);
+                    Write(inner, value?["value"], tagged: true, where + ".value");
+                    long after = _out.Position;
+                    _out.Position = sizeAt;
+                    I32((int)(after - sizeAt));
+                    _out.Position = after;
+                    return;
+                }
+            }
+            if (IsHandle(type)) { I32(Reference(Target(type), value, soft: false)); return; }
+            if (IsSoft(type)) { U16(checked((ushort)Reference(Target(type), value, soft: true))); return; }
+            if (IsFixed(type, out string fixedElement, out int fixedCount))
+            {
+                var items = value as JsonArray ?? throw new FormatException();
+                if (items.Count != fixedCount) throw new FormatException();
+                for (int i = 0; i < items.Count; i++) Write(fixedElement, items[i], tagged: false, $"{where}[{i}]");
+                return;
+            }
+            if (IsArray(type))
+            {
+                string element = ElementType(type);
+                if (element is "Uint8" or "Int8")
+                {
+                    byte[] bytes = Convert.FromBase64String(Str(value));
+                    I32(bytes.Length);
+                    _out.Write(bytes);
+                    return;
+                }
+                var list = value as JsonArray ?? throw new FormatException();
+                I32(list.Count);
+                for (int i = 0; i < list.Count; i++) Write(element, list[i], tagged: false, $"{where}[{i}]");
+                return;
+            }
+            if (IsEnum(type))
+            {
+                if (value is JsonArray flags && tagged)
+                {
+                    foreach (var flag in flags) U16(context.Name(Str(flag)));
+                    U16(0);
+                    return;
+                }
+                U16(context.Name(Str(value)));
+                return;
+            }
+            var fields = value as JsonObject ?? throw new FormatException();
+            Struct(type, fields);
+            if (type == "SAppearanceAttachment") Attachment(fields["$attachment"] as JsonObject ?? throw new FormatException(), where + ".$attachment");
+        }
+
+        private void Attachment(JsonObject attachment, string where)
+        {
+            string className = Str(attachment["$class"]);
+            long sizeAt = _out.Position;
+            I32(0);
+            _out.WriteByte(1);
+            U16(context.Name(className));
+            Struct(className, attachment);
+            long after = _out.Position;
+            _out.Position = sizeAt;
+            I32((int)(after - sizeAt));
+            _out.Position = after;
+        }
+
+        private void Floats(JsonObject node, params string[] names)
+        {
+            Span<byte> s = stackalloc byte[4];
+            foreach (string name in names)
+            {
+                BinaryPrimitives.WriteSingleLittleEndian(s, node[name] is null ? 0 : Single(node[name]));
+                _out.Write(s);
+            }
+        }
+
+        /// <summary>null, "export:N" (0-based), "import:path" or "import#N" as a handle's value.</summary>
+        private int Reference(string targetClass, JsonNode? value, bool soft)
+        {
+            if (value is null) return 0;
+            string text = Str(value);
+            if (text.StartsWith("export:", StringComparison.Ordinal) && !soft)
+                return int.Parse(text.AsSpan(7), CultureInfo.InvariantCulture) + 1;
+            int import;
+            if (text.StartsWith("import#", StringComparison.Ordinal)) import = int.Parse(text.AsSpan(7), CultureInfo.InvariantCulture);
+            else if (text.StartsWith("import:", StringComparison.Ordinal)) import = context.Import(text[7..], targetClass);
+            else throw new FormatException();
+            return soft ? import + 1 : -(import + 1);
+        }
+
+        private void Text(string text)
+        {
+            // 8-bit when every character fits, else UTF-16; the length's low six bits go in the first byte
+            bool narrow = text.All(c => c <= 0xFF);
+            int length = text.Length;
+            int first = (narrow ? 0x80 : 0) | (length & 0x3F);
+            if (length > 0x3F) first |= 0x40;
+            _out.WriteByte((byte)first);
+            for (int rest = length >> 6; rest > 0; rest >>= 7)
+                _out.WriteByte((byte)((rest & 0x7F) | (rest > 0x7F ? 0x80 : 0)));
+            _out.Write(narrow ? Encoding.Latin1.GetBytes(text) : Encoding.Unicode.GetBytes(text));
+        }
+
+        /// <summary>What a JSON value holds: a JsonElement when it was parsed from text, else the value it was made from.</summary>
+        private static object Held(JsonNode? value) =>
+            value is not JsonValue v ? throw new FormatException() : v.TryGetValue(out JsonElement e) ? e : v.GetValue<object>();
+
+        private static string Str(JsonNode? value) => Held(value) switch
+        {
+            string s => s,
+            JsonElement { ValueKind: JsonValueKind.String } e => e.GetString()!,
+            _ => throw new FormatException(),
+        };
+
+        private static decimal Integer(JsonNode? value)
+        {
+            decimal result = Held(value) switch
+            {
+                JsonElement { ValueKind: JsonValueKind.Number } e => e.TryGetInt64(out long l) ? l : e.TryGetUInt64(out ulong u) ? u : e.GetDecimal(),
+                string or bool or JsonElement => throw new FormatException(),
+                IConvertible c => Convert.ToDecimal(c, CultureInfo.InvariantCulture),
+                _ => throw new FormatException(),
+            };
+            return result == decimal.Truncate(result) ? result : throw new FormatException();
+        }
+
+        private static float Single(JsonNode? value) => Held(value) switch
+        {
+            JsonElement { ValueKind: JsonValueKind.Number } e => e.GetSingle(),
+            float f => f,
+            _ => (float)Real(value),
+        };
+
+        private static double Real(JsonNode? value) => Held(value) switch
+        {
+            JsonElement { ValueKind: JsonValueKind.Number } e => e.GetDouble(),
+            JsonElement { ValueKind: JsonValueKind.String } e => Special(e.GetString()!),
+            string s => Special(s),
+            bool or JsonElement => throw new FormatException(),
+            IConvertible c => Convert.ToDouble(c, CultureInfo.InvariantCulture),
+            _ => throw new FormatException(),
+        };
+
+        private static double Special(string s) => s switch
+        {
+            "NaN" => double.NaN,
+            "Infinity" => double.PositiveInfinity,
+            "-Infinity" => double.NegativeInfinity,
+            _ => throw new FormatException(),
+        };
+
+        private static bool Truth(JsonNode? value) => Held(value) switch
+        {
+            bool b => b,
+            JsonElement { ValueKind: JsonValueKind.True } => true,
+            JsonElement { ValueKind: JsonValueKind.False } => false,
+            _ => throw new FormatException(),
+        };
+
+        private void U16(int value) { Span<byte> s = stackalloc byte[2]; BinaryPrimitives.WriteUInt16LittleEndian(s, (ushort)value); _out.Write(s); }
+        private void I32(int value) { Span<byte> s = stackalloc byte[4]; BinaryPrimitives.WriteInt32LittleEndian(s, value); _out.Write(s); }
+
+        private void Span8(SpanAction write)
+        {
+            Span<byte> s = stackalloc byte[8];
+            write(s);
+            _out.Write(s);
+        }
+
+        private delegate void SpanAction(Span<byte> span);
+    }
+
+    private static string Describe(string type) => type switch
+    {
+        "Bool" => "true or false",
+        "Float" or "Double" => "number",
+        "Int8" or "Uint8" or "Int16" or "Uint16" or "Int32" or "Uint32" or "Int64" or "Uint64" => $"whole number ({type})",
+        "CName" or "String" => "string",
+        _ when IsHandle(type) || IsSoft(type) => "reference (null, \"export:N\" or \"import:path\")",
+        _ when IsArray(type) || IsFixed(type, out _, out _) => $"list ({type})",
+        "EngineTransform" => "transform ({ \"position\": {X, Y, Z}, \"rotation\": {Pitch, Yaw, Roll}, \"scale\": {X, Y, Z} }, each optional)",
+        "CVariant" => "variant ({ \"type\": \"Float\", \"value\": 1 })",
+        "SharedDataBuffer" or "DataBuffer" => "base64 string",
+        _ when IsEnum(type) => $"{type} value name",
+        _ => $"{type} object",
+    };
+
+    private static string Show(JsonNode? value)
+    {
+        string text = value?.ToJsonString() ?? "null";
+        return text.Length > 60 ? text[..57] + "..." : text;
+    }
+
+    // ---------------------------------------------------------------- layout
+
+    /// <summary>
+    /// Indented JSON, with small objects and lists of plain values on one line (a vector, a curve point), so a file
+    /// full of curves stays readable and diffs line by line.
+    /// </summary>
+    public static string Format(JsonNode node)
+    {
+        var text = new StringBuilder();
+        Write(text, node, 0);
+        text.Append('\n');
+        return text.ToString();
+    }
+
+    private static readonly JsonSerializerOptions Compact = new()
+    {
+        Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+    };
+
+    private const int LineLimit = 110;
+
+    private static void Write(StringBuilder text, JsonNode? node, int depth)
+    {
+        switch (node)
+        {
+            case JsonObject o when o.Count == 0: text.Append("{}"); return;
+            case JsonArray a when a.Count == 0: text.Append("[]"); return;
+            case JsonObject o:
+            {
+                if (OneLine(o) is { } line) { text.Append(line); return; }
+                text.Append("{\n");
+                int i = 0;
+                foreach (var (key, value) in o)
+                {
+                    Indent(text, depth + 1);
+                    text.Append(JsonSerializer.Serialize(key, Compact)).Append(": ");
+                    Write(text, value, depth + 1);
+                    text.Append(++i < o.Count ? ",\n" : "\n");
+                }
+                Indent(text, depth);
+                text.Append('}');
+                return;
+            }
+            case JsonArray a:
+            {
+                if (OneLine(a) is { } line) { text.Append(line); return; }
+                text.Append("[\n");
+                for (int i = 0; i < a.Count; i++)
+                {
+                    Indent(text, depth + 1);
+                    Write(text, a[i], depth + 1);
+                    text.Append(i + 1 < a.Count ? ",\n" : "\n");
+                }
+                Indent(text, depth);
+                text.Append(']');
+                return;
+            }
+            default:
+                text.Append(node?.ToJsonString(Compact) ?? "null");
+                return;
+        }
+    }
+
+    /// <summary>The node on one line, when it's only plain values or objects of them and short enough.</summary>
+    private static string? OneLine(JsonNode node)
+    {
+        bool Flat(JsonNode? n, int level) => n switch
+        {
+            JsonObject o => level < 2 && o.All(p => Flat(p.Value, level + 1)),
+            JsonArray a => level < 1 && a.All(v => v is not (JsonObject or JsonArray)),
+            _ => true,
+        };
+        if (!Flat(node, 0)) return null;
+        var text = new StringBuilder();
+        void Put(JsonNode? n)
+        {
+            switch (n)
+            {
+                case JsonObject o when o.Count == 0: text.Append("{}"); break;
+                case JsonObject o:
+                    text.Append("{ ");
+                    int i = 0;
+                    foreach (var (key, value) in o)
+                    {
+                        if (i++ > 0) text.Append(", ");
+                        text.Append(JsonSerializer.Serialize(key, Compact)).Append(": ");
+                        Put(value);
+                    }
+                    text.Append(" }");
+                    break;
+                case JsonArray a:
+                    text.Append('[');
+                    for (int k = 0; k < a.Count; k++)
+                    {
+                        if (k > 0) text.Append(", ");
+                        Put(a[k]);
+                    }
+                    text.Append(']');
+                    break;
+                default: text.Append(n?.ToJsonString(Compact) ?? "null"); break;
+            }
+            if (text.Length > LineLimit) throw new OperationCanceledException();
+        }
+        try { Put(node); }
+        catch (OperationCanceledException) { return null; }
+        return text.ToString();
+    }
+
+    private static void Indent(StringBuilder text, int depth) => text.Append(' ', depth * 2);
+
+    /// <summary>
+    /// The order the strings table has its names and import paths in, as numbers into the names and then on into the
+    /// imports; null when it's names first, then imports, which is what's written without one.
+    /// </summary>
+    private static JsonArray? StringOrder(byte[] d, List<string> names, List<(string Path, string ClassName, int Flags)> imports)
+    {
+        int namesAt = I32(d, 52), importsAt = I32(d, 64);
+        var byOffset = new SortedDictionary<int, int>();
+        for (int i = 0; i < names.Count; i++) byOffset.TryAdd(I32(d, namesAt + i * 8), i);
+        for (int i = 0; i < imports.Count; i++) byOffset.TryAdd(I32(d, importsAt + i * 8), names.Count + i);
+        var actual = byOffset.Values.ToList();
+
+        var usual = new List<int>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        for (int i = 0; i < names.Count; i++) if (seen.Add(names[i])) usual.Add(i);
+        for (int i = 0; i < imports.Count; i++) if (seen.Add(imports[i].Path)) usual.Add(names.Count + i);
+        return actual.SequenceEqual(usual) ? null : new JsonArray([.. actual.Select(i => (JsonNode)i)]);
+    }
+
+    private static readonly Encoding StrictUtf8 = new UTF8Encoding(false, throwOnInvalidBytes: true);
+
+    /// <summary>
+    /// The names, read from the strings table the way they'll be written back: as UTF-8, or as 8-bit text for the few
+    /// that aren't valid UTF-8 (those are listed, so they're written back as they were).
+    /// </summary>
+    private static (List<string> Names, HashSet<string> Latin1) Strings(byte[] d)
+    {
+        var latin1 = new HashSet<string>(StringComparer.Ordinal);
+        int namesAt = I32(d, 52), count = I32(d, 56);
+        var names = new List<string>(count);
+        for (int i = 0; i < count; i++) names.Add(Text(d, I32(d, namesAt + i * 8), latin1));
+        return (names, latin1);
+    }
+
+    private static string Text(byte[] d, int offset, HashSet<string> latin1)
+    {
+        int stringsAt = I32(d, 40), size = I32(d, 44);
+        if (offset < 0 || offset >= size) return "";
+        var from = d.AsSpan(stringsAt + offset, size - offset);
+        int end = from.IndexOf((byte)0);
+        var bytes = end < 0 ? from : from[..end];
+        try { return StrictUtf8.GetString(bytes); }
+        catch (DecoderFallbackException)
+        {
+            string text = Encoding.Latin1.GetString(bytes);
+            latin1.Add(text);
+            return text;
+        }
+    }
+
+    private static int I32(byte[] d, int at) => BinaryPrimitives.ReadInt32LittleEndian(d.AsSpan(at));
+    private static int U16(byte[] d, int at) => BinaryPrimitives.ReadUInt16LittleEndian(d.AsSpan(at));
+}

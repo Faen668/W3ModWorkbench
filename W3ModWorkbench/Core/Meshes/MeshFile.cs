@@ -1,6 +1,7 @@
 using System.Buffers.Binary;
 using System.IO;
 using System.Numerics;
+using W3ModWorkbench.Core.Cr2w;
 
 namespace W3ModWorkbench.Core.Meshes;
 
@@ -23,6 +24,21 @@ public sealed class MeshChunk
 
     /// <summary>Three per triangle, into this chunk's own vertices.</summary>
     public required int[] Indices { get; init; }
+
+    /// <summary>For a skinned chunk, how many bones move each vertex (4, or 8 for some), else 0.</summary>
+    public int BonesPerVertex { get; init; }
+
+    /// <summary>Each vertex's bones, <see cref="BonesPerVertex"/> of them, as numbers into the mesh's <see cref="MeshFile.BoneNames"/>.</summary>
+    public byte[] BoneIndices { get; init; } = [];
+
+    /// <summary>How much each of a vertex's bones moves it, from 0 to 1, in the same order.</summary>
+    public float[] BoneWeights { get; init; } = [];
+
+    /// <summary>
+    /// Each vertex's colour as red, green and blue bytes (three a vertex), or empty when the chunk has none. Hair
+    /// shaders multiply their texture by it, which is where a character's hair colour is kept.
+    /// </summary>
+    public byte[] Colors { get; init; } = [];
 
     public int Triangles => Indices.Length / 3;
 
@@ -58,6 +74,12 @@ public sealed class MeshFile
     public Vector3 BoundsMin { get; init; }
     public Vector3 BoundsMax { get; init; }
 
+    /// <summary>The bones a skinned mesh is bound to, by name, so they can be found in a rig.</summary>
+    public string[] BoneNames { get; init; } = [];
+
+    /// <summary>For each of <see cref="BoneNames"/>, the matrix that takes the mesh into the bone's space as it was bound.</summary>
+    public Matrix4x4[] BoneInverseBinds { get; init; } = [];
+
     /// <summary>
     /// Reads a mesh. <paramref name="buffer"/> reads one of its numbered <c>.buffer</c> files (1 for <c>.1.buffer</c>),
     /// or gives null when it isn't to be found.
@@ -91,9 +113,12 @@ public sealed class MeshFile
             chunks = ReadUncooked(mesh, vertices, indices, lods);
         }
         if (lods.Count == 0) lods.Add(0);
+        var (boneNames, inverseBinds) = Bones(file, mesh);
 
         return new MeshFile
         {
+            BoneNames = boneNames,
+            BoneInverseBinds = inverseBinds,
             File = file,
             Mesh = mesh,
             Chunks = chunks,
@@ -102,6 +127,56 @@ public sealed class MeshFile
             BoundsMin = box?.Vector("Min") ?? default,
             BoundsMax = box?.Vector("Max") ?? default,
         };
+    }
+
+    /// <summary>
+    /// A skinned mesh's bones, which it keeps after its properties: after a few LOD details, a count (packed as the
+    /// engine packs lengths), that many names, the count again and that many 4×4 matrices, each taking the mesh into a
+    /// bone's space. They're found by that pattern, a count of names that are all names followed by as many matrices.
+    /// </summary>
+    private static (string[] Names, Matrix4x4[] InverseBinds) Bones(Cr2wFile file, RedObject mesh)
+    {
+        var tail = mesh.Tail;
+        for (int at = 0; at < Math.Min(tail.Length, 128); at++)
+        {
+            var (count, next) = PackedCount(tail, at);
+            if (count <= 0 || count > 1024 || next + count * 2L > tail.Length) continue;
+            var names = new string[count];
+            bool good = true;
+            for (int i = 0; i < count && good; i++)
+            {
+                int name = BinaryPrimitives.ReadUInt16LittleEndian(tail.AsSpan(next + i * 2));
+                good = name > 0 && name < file.Names.Count;
+                if (good) names[i] = file.Names[name];
+            }
+            if (!good) continue;
+            var (again, matricesAt) = PackedCount(tail, next + count * 2);
+            if (again != count || matricesAt + count * 64L > tail.Length) continue;
+            var binds = new Matrix4x4[count];
+            for (int i = 0; i < count; i++)
+            {
+                int m = matricesAt + i * 64;
+                float F(int k) => BinaryPrimitives.ReadSingleLittleEndian(tail.AsSpan(m + k * 4));
+                binds[i] = new Matrix4x4(F(0), F(1), F(2), F(3), F(4), F(5), F(6), F(7), F(8), F(9), F(10), F(11), F(12), F(13), F(14), F(15));
+            }
+            return (names, binds);
+        }
+        return ([], []);
+    }
+
+    /// <summary>A length as the engine packs it: six bits, and more in the next bytes while a bit says so. (-1, at) when it runs out.</summary>
+    private static (int Count, int Next) PackedCount(byte[] data, int at)
+    {
+        if (at >= data.Length) return (-1, at);
+        int count = data[at] & 0x3F;
+        bool more = (data[at++] & 0x40) != 0;
+        for (int shift = 6; more; shift += 7)
+        {
+            if (at >= data.Length || shift > 27) return (-1, at);
+            count |= (data[at] & 0x7F) << shift;
+            more = (data[at++] & 0x80) != 0;
+        }
+        return (count, at);
     }
 
     private const int ChunkSize = 37;
@@ -128,7 +203,7 @@ public sealed class MeshFile
             var s = info.AsSpan(start + c * ChunkSize, ChunkSize);
             int vertexType = s[0];
             uint positionsAt = U32(s, 1), uvsAt = U32(s, 5), normalsAt = U32(s, 9);
-            uint indicesAt = U32(s, 22);
+            uint indicesAt = U32(s, 22), colorsAt = U32(s, 13);
             int vertices = BinaryPrimitives.ReadUInt16LittleEndian(s[27..]);
             int indices = (int)U32(s, 29);
             int material = s[33], renderMask = s[34], lodMask = s[36];
@@ -140,6 +215,10 @@ public sealed class MeshFile
             var positions = new Vector3[vertices];
             var uvs = new Vector2[vertices];
             var normals = new Vector3[vertices];
+            // a skinned vertex has its bones' numbers, then their weights as bytes, after its 8 bytes of position
+            int bones = vertexType == 3 ? (stride - 8) / 2 : 0;
+            var boneIndices = new byte[vertices * bones];
+            var boneWeights = new float[vertices * bones];
             Need(buffer, positionsAt, (long)vertices * stride);
             for (int v = 0; v < vertices; v++)
             {
@@ -148,6 +227,11 @@ public sealed class MeshFile
                     BinaryPrimitives.ReadUInt16LittleEndian(p) / 65535f,
                     BinaryPrimitives.ReadUInt16LittleEndian(p[2..]) / 65535f,
                     BinaryPrimitives.ReadUInt16LittleEndian(p[4..]) / 65535f) * scale + offset;
+                for (int b = 0; b < bones; b++)
+                {
+                    boneIndices[v * bones + b] = p[8 + b];
+                    boneWeights[v * bones + b] = p[8 + bones + b] / 255f;
+                }
             }
             if (uvsAt != positionsAt)
             {
@@ -166,6 +250,11 @@ public sealed class MeshFile
                     normals[v] = Vector3.Normalize(new Vector3(Ten(n), Ten(n >> 10), Ten(n >> 20)));
                 }
             }
+
+            // after the normals, a vertex's colour (red, green, blue and a byte the engine uses otherwise) and 4 more bytes
+            var colors = colorsAt > 0 && colorsAt + vertices * 8L <= buffer.Length ? new byte[vertices * 3] : [];
+            for (int v = 0; v < colors.Length / 3; v++)
+                buffer.AsSpan((int)(colorsAt + v * 8), 3).CopyTo(colors.AsSpan(v * 3));
 
             long trianglesAt = indexBase + indicesAt;
             Need(buffer, trianglesAt, indices * 2L);
@@ -189,6 +278,10 @@ public sealed class MeshFile
                 Normals = normals,
                 Uvs = uvs,
                 Indices = triangles,
+                BonesPerVertex = bones,
+                BoneIndices = boneIndices,
+                BoneWeights = boneWeights,
+                Colors = colors,
             });
         }
         return chunks;
@@ -229,10 +322,20 @@ public sealed class MeshFile
             var positions = new Vector3[vertices];
             var normals = new Vector3[vertices];
             var uvs = new Vector2[vertices];
+            bool skinned = info["vertexType"] is RedEnum t && t.Values.Contains("MVT_SkinnedMesh");
+            // the bones' numbers as four bytes after the position, their weights as four floats after those
+            var boneIndices = new byte[skinned ? vertices * 4 : 0];
+            var boneWeights = new float[skinned ? vertices * 4 : 0];
             for (int v = 0; v < vertices; v++)
             {
                 var s = vertexData.AsSpan((first + v) * stride, stride);
                 positions[v] = new Vector3(F(s, 0), F(s, 4), F(s, 8));
+                if (skinned)
+                    for (int b = 0; b < 4; b++)
+                    {
+                        boneIndices[v * 4 + b] = s[12 + b];
+                        boneWeights[v * 4 + b] = F(s, 16 + b * 4);
+                    }
                 var normal = new Vector3(F(s, 32), F(s, 36), F(s, 40));
                 normals[v] = normal.LengthSquared() > 1e-8f ? Vector3.Normalize(normal) : Vector3.UnitZ;
                 uvs[v] = new Vector2(F(s, 48), F(s, 52));
@@ -249,11 +352,14 @@ public sealed class MeshFile
                 Material = (int)info.Integer("materialID"),
                 LodMask = levels.Count > 0 && lodMasks[c] != 0 ? lodMasks[c] : 1,
                 RenderMask = 1,
-                Skinned = info["vertexType"] is RedEnum e && e.Values.Contains("MVT_SkinnedMesh"),
+                Skinned = skinned,
                 Positions = positions,
                 Normals = normals,
                 Uvs = uvs,
                 Indices = triangles,
+                BonesPerVertex = skinned ? 4 : 0,
+                BoneIndices = boneIndices,
+                BoneWeights = boneWeights,
             });
         }
         return chunks;

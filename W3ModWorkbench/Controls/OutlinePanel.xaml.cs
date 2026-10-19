@@ -191,7 +191,56 @@ public partial class OutlinePanel : UserControl
         }
         foreach (var open in stack) open.End = text.Length;
         if (all.Count == 0 && _all.Count > 0) return;
+        Show(all, roots);
+    }
 
+    /// <summary>
+    /// Shows a JSON file's objects and lists as a tree, each by its key (or [n] in a list) with its "$class" or size
+    /// beside it. Small ones that fit on a line (a vector, a curve point) are left out, so the tree stays readable.
+    /// </summary>
+    public void UpdateJson(string text, ScriptFile file)
+    {
+        var starts = ScriptSearch.LineStarts(text);
+        int LineOf(int offset)
+        {
+            int lo = 0, hi = starts.Count - 1;
+            while (lo < hi)
+            {
+                int mid = (lo + hi + 1) / 2;
+                if (starts[mid] <= offset) lo = mid; else hi = mid - 1;
+            }
+            return lo + 1;
+        }
+        var roots = new List<OutlineNode>();
+        var all = new List<OutlineNode>();
+        void Add(Highlighting.JsonBlock block, OutlineNode? parent, int depth)
+        {
+            if (all.Count >= MaxXmlNodes) return;
+            // one that opens and closes on one line isn't worth a row
+            if (parent is not null && LineOf(block.Open) == LineOf(Math.Max(block.Open, block.End - 1))) return;
+            bool keyed = block.Start < text.Length && text[block.Start] == '"';
+            var symbol = new ScriptSymbol(keyed ? block.Name : text[block.Open].ToString(), SymbolKind.Field, null, null, file,
+                keyed ? block.Start + 1 : block.Open, LineOf(block.Start));
+            var node = new OutlineNode(symbol, block.End)
+            {
+                CustomLabel = block.Name,
+                CustomDetail = block.Label ?? (block.IsList ? $"{block.Count} item{(block.Count == 1 ? "" : "s")}" : $"{block.Count} propert{(block.Count == 1 ? "y" : "ies")}"),
+                Parent = parent,
+                IsExpanded = depth < 3,
+            };
+            if (parent is null) roots.Add(node);
+            else parent.Children.Add(node);
+            all.Add(node);
+            foreach (var child in block.Children) Add(child, node, depth + 1);
+        }
+        foreach (var block in Highlighting.JsonScanner.Structure(text, MaxXmlNodes * 4)) Add(block, null, 0);
+        if (all.Count == 0 && _all.Count > 0) return;
+        Show(all, roots);
+    }
+
+    /// <summary>Puts a tree in the panel, or keeps the one there when only the places moved, so it stays as it was.</summary>
+    private void Show(List<OutlineNode> all, List<OutlineNode> roots)
+    {
         string signature = string.Join("\n", all.Select(n => $"{n.Identity}|{n.Children.Count}"));
         if (signature == _signature && _all.Count == all.Count)
         {

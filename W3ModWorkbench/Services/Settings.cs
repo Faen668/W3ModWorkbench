@@ -29,6 +29,13 @@ public sealed class Settings
     /// <summary>Write textures (from a texture cache, and .dds files) as PNG pictures instead of .dds.</summary>
     public bool ExtractTexturesAsPng { get; set; }
 
+    /// <summary>Write CR2W resources (.env, .w2mi, .w2ent…) as JSON to edit, instead of as they are.</summary>
+    public bool ExtractCr2wAsJson { get; set; }
+
+    /// <summary>The CR2W and JSON window's output folder (empty for beside each file), and whether it looks in subfolders.</summary>
+    public string Cr2wJsonOutput { get; set; } = "";
+    public bool Cr2wJsonRecursive { get; set; } = true;
+
     /// <summary>Bundles, files and folders opened most recently, newest first.</summary>
     public List<string> RecentPaths { get; set; } = [];
 
@@ -96,6 +103,9 @@ public sealed class Settings
     /// <summary>Show the preview pane beside the file list, and how wide it is.</summary>
     public bool ShowFilePreview { get; set; } = true;
     public double FilePreviewWidth { get; set; } = 380;
+
+    /// <summary>How many times a second the entity viewer poses an animation as it plays; 0 for as often as the screen draws.</summary>
+    public int AnimationFps { get; set; } = 30;
 
     /// <summary>The project files opened most recently, newest first.</summary>
     public List<string> RecentProjects { get; set; } = [];

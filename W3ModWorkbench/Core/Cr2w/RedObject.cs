@@ -2,7 +2,7 @@ using System.Buffers.Binary;
 using System.IO;
 using System.Text;
 
-namespace W3ModWorkbench.Core.Meshes;
+namespace W3ModWorkbench.Core.Cr2w;
 
 /// <summary>
 /// An object or struct read from a CR2W file: its class and its properties by name. A property's value is a bool, a
@@ -166,6 +166,29 @@ internal sealed class RedReader
         return result;
     }
 
+    /// <summary>
+    /// A counted list of (size, class, properties). The size counts its own four bytes and the class's two. An object
+    /// that can't be read is skipped by its size.
+    /// </summary>
+    public List<RedObject> ReadSizedObjects()
+    {
+        var result = new List<RedObject>();
+        int count = I32();
+        if (count < 0 || count > 100_000) throw new InvalidDataException("A list's length makes no sense.");
+        for (int i = 0; i < count && Position + 6 <= _end; i++)
+        {
+            int start = Position;
+            int size = I32();
+            int objectEnd = start + size;
+            if (size < 6 || objectEnd > _end) throw new InvalidDataException("An object is longer than the list it's in.");
+            string className = Name(U16());
+            try { result.Add(ReadObject(className, objectEnd)); }
+            catch (InvalidDataException) { result.Add(new RedObject(className)); }
+            Position = objectEnd;
+        }
+        return result;
+    }
+
     /// <summary>One value of a type. <paramref name="end"/> is where a tagged value ends, or -1 inside an array.</summary>
     private object? ReadValue(string type, int end)
     {
@@ -198,7 +221,8 @@ internal sealed class RedReader
             string element = ElementType(type);
             int count = I32();
             if (count < 0 || count > 50_000_000) throw new InvalidDataException("An array's length makes no sense.");
-            if (element == "Uint8")
+            // bytes, signed or not, are kept as they are: an animation's data is half a megabyte of Int8
+            if (element is "Uint8" or "Int8")
             {
                 Need(count);
                 Position += count;

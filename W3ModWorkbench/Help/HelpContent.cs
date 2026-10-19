@@ -104,7 +104,7 @@ Rest the mouse on a file's name to see its path and what kind of file it is: a m
 
 ## The preview pane
 
-**View > Preview pane** (Alt+P) shows the highlighted file beside the list, without opening it: textures and pictures as images (an `.xbm` finds its texture in a cache), meshes in 3D with their textures, scripts with WitcherScript colouring, XML with XML colouring, and other text as it is. With several files highlighted it says how many and their size. Drag the bar between the list and the pane to resize it.
+**View > Preview pane** (Alt+P) shows the highlighted file beside the list, without opening it: textures and pictures as images (an `.xbm` finds its texture in a cache), meshes in 3D with their textures, cutscenes as a summary with a timeline of their events, scenes as how they start with their lines in words, scripts with WitcherScript colouring, XML with XML colouring, and other text as it is. With several files highlighted it says how many and their size. Drag the bar between the list and the pane to resize it.
 
 ## Searching
 
@@ -153,6 +153,10 @@ A mesh and some other files keep their bulk data in numbered `.buffer` files: `w
 ## Textures as PNG
 
 Textures are extracted as `.dds` files with every mip level, which texture tools and the game's cooker read. Turn on **Textures as PNG** to get a picture instead: the full-size image with its transparency, as `name.xbm.png`. It applies to textures from a texture cache and to `.dds` files in bundles.
+
+## CR2W files as JSON
+
+Turn on **CR2W files as JSON** to get resource files (`.env`, `.w2mi`, `.w2ent` and the rest) as JSON to edit, as `name.env.json`. **Tools › CR2W and JSON** turns them back (see **CR2W files as JSON**).
 
 ## While it runs
 
@@ -299,6 +303,81 @@ With no project open, saving asks you to make one or open one first. Once saved,
 The colour is the texture alone, lit from where you look. The game's shaders do more: tinting, colour shifts, detail maps, transparency and skin. So some armour shows in the raw colours of its tint mask, and hair and foliage cards show as solid sheets. Skinned meshes are shown in their bind pose, without a skeleton. Textures that are missing from every cache, or in texture arrays, show as plain grey, and the material says why.
 
 The game's cooked meshes (CR2W versions 162 to 164: the original game, and the Remastered with its DLC) and REDkit's uncooked ones are read.
+"""),
+
+        new(Basics, "Cutscenes", "\uE714", """
+Double-click a `.w2cutscene`, or select it and press **Enter**, to open it in the cutscene viewer. The preview pane shows it too: how long it is, its actors and the entities they're made from, a timeline of its events and the scene that plays it. A cutscene file on disk opens from **Open files** or by dropping it on the window.
+
+A cutscene is recorded: each actor (and the camera) has an animation for its body and one for its face, made for the whole length of it, and events are timed along them.
+
+## Playing it
+
+Above the timeline the actors play as stick figures, a line from each bone to its parent, on a grid of metres. Their rigs are found through the entities they're made from. Press **Play** (**Space**) or drag the bar beside it; the line on the timeline shows where it is, and clicking or dragging on the timeline's ruler moves it. Drag the view to turn around, right-drag to move, use the wheel to come closer, and double-click to see everyone again. **Through the camera** (**C**) shows it as the cutscene's camera sees it, with its field of view. Faces, items, effects and the actors' meshes aren't drawn.
+
+## The timeline
+
+The top lane, **Scene**, has the events of the whole cutscene: dialog lines, music, effects placed in the world, fades, clipping planes, depth of field and lights. Under it each actor has a lane with its own: items put in or taken from a hand, effects on the actor, appearance changes, morphs and cloth. An event that lasts is a bar, and bars that overlap go one under another; one that doesn't last is a tick. Rest on an event to see what it is, and click it to find it in the list.
+
+- **Fit** (**F**) fits the whole cutscene to the width. **Zoom**, or **Ctrl** and the wheel over the timeline, makes it wider to see events up close.
+- The buttons at the top show or hide each kind of event, with how many there are. **Cloth** starts hidden: it's mostly resets of cloth and dangles, often hundreds of them.
+
+## Actors, effects and files
+
+**Actors** lists who and what the cutscene spawns: actors, props and cameras, each with the entity (`.w2ent`) it's made from, its appearance, voice tag and tags. Rest on one to see its animations. Click one to list only its events, and **Show all** to list everyone's again.
+
+**Effects** lists the effects the cutscene defines for its effect events, with the particle systems, materials and lights they're made of.
+
+**Files it uses** lists the entities, particle systems and materials it refers to, the scene (`.w2scene`) that plays it and the world it was made in. Click one to open it where the tool has a viewer for it (meshes, cutscenes, XML and pictures), found the way the game would find it; for other kinds its path is copied. Right-click for **Copy path**.
+
+## The events
+
+Every event is listed with its time, how long it lasts, whose it is, its kind, what it is and the rest of what it says. Search (**Ctrl+F**) finds part of any of those, or of the event's class. Right-click a row to copy it.
+
+Dialog lines are only marks in a cutscene: the lines themselves, and who says them, are in the scene that plays it. The viewer finds them there and shows them in words, in English, when the scene's cutscene section has as many lines as the cutscene has marks. The voices are in the cutscene's recorded sound, the audio event the viewer names under the files it uses.
+"""),
+
+        new(Basics, "Entities", "", """
+Double-click a `.w2ent`, or select it and press **Enter**, to open it in the entity viewer. The preview pane shows its meshes put together, in its first appearance. An entity file on disk opens from **Open files** or by dropping it on the window.
+
+An entity template is what the game spawns: an NPC, a horse, a door, a prop. It's an object of a class (`CNewNPC`, `CGameplayEntity`…) with **components** (meshes, a skeleton, sound emitters, triggers, effects…) hung from one another, **appearances** (the looks an NPC can have, each a list of templates for its head, body and armour), templates it **includes** and builds on, **slots** to put things in, and **effects**.
+
+## The view
+
+On the left are the entity's meshes put together where its components place them, with their colour textures, in the **Appearance** picked: its own meshes and those of every template the appearance includes. Drag to turn, right-drag to move, use the wheel to zoom and double-click to fit. **Textures** (**T**) and **Wireframe** (**W**) as in the mesh viewer; **Fit** (**F**). **LOD** picks the level of detail, and the line under the view says how many triangles and vertices it draws. Click a part to pick its component. Colours are worked out as the game's shaders work them out: hair takes its colour from the colours kept on its mesh's vertices, and a component the appearance recolours (its **Colors** entry) has the red and blue parts of its texture shifted as the entry says, where its tint mask allows. Lighting and shine are the viewer's own, so it looks flatter than the game. Cloth (a long coat, a skirt, a cape) is drawn in the shape it has before the game moves it, and follows the bones it's bound to in an animation, without swaying. Characters stand in the pose their meshes were made in; shadow-only meshes aren't drawn.
+
+## Animation
+
+When the entity has a skeleton and skinned meshes, the bar under the view plays its animations on them: pick an **animation set** (those the entity's animation settings name) and an **animation** (type to find one by name), and it plays, looping, with the actor brought back to the middle of the view and turned the way the entity faces (many animations are made for a place in a scene, off to one side or turned). Play and pause with the button or **Space**, drag the bar to any moment, and the stop button stands it as bound again. The frame rate box beside the bar sets how many times a second it's drawn (15 to 60, or **Max** for as often as the screen draws); fewer is lighter on the computer, and the choice is remembered. The face's and dangling bones (hair, medallions) have rigs of their own and move with the head or the body, stiffly; the face's own sets aren't listed. Items held in slots don't move with it, and cloth keeps its shape rather than swaying.
+
+## Components
+
+On the right are the components as the entity editor lays them out, with a line from each to the ones attached to it (dashed for meshes skinned to a skeleton): the entity's own, those from the templates it includes, and those of the templates the appearance picked uses. Each says which template it comes from, and is marked as the editor marks them: **I** included, **A** from the appearance, **O** overridden by this template. Above them is how many are streamed, the streaming distance and how many resources they use. Click a mesh component and its mesh glows in the 3D view, with how many triangles it has. Drag to move around, use the wheel to zoom, and double-click to see them all. Click one to see every property it has under **Component**, with what it's attached to, as REDkit shows them: under the class that brings each one in (`CNode`, `CComponent`, `CDrawableComponent`…), with transforms, tags and enums in words. Properties the file leaves at their default are listed dimmed. A property that refers to a file opens it. **Components** lists them all, and picking one finds it in the graph.
+
+**Entity** has the properties of the object the game spawns. **Template** has the entity's class, the templates it includes, and every file it depends on, following its includes and appearances as far as they go (**Show only entity templates** narrows the list), then the template's own properties. Structs, arrays and the objects a property points to fold open and shut with the arrow beside them, and a bool shows a tick or a cross.
+
+The tabs after them are REDkit's, each a list with the properties of the one picked beside it, and "(included)" on what comes from a template the entity includes: **Appearances** (with the templates each uses), **Colors** (the colour shifts of a component in an appearance), **Slots**, **AI** (its profile, base tree, presets and attack ranges), **Inventory** (what it spawns with), **Voicetags**, **Animation** (animation sets, behaviour graphs, constraints, mimics), **Gameplay** (stats, abilities, vital spots and the rest of its params), **Animation Slots** and **Dismemberment** (its wounds). **Effects** lists the effects it can play, and **Files** everything it refers to. Click a file to open it where the tool has a viewer for it.
+"""),
+
+        new(Basics, "Scenes", "", """
+Double-click a `.w2scene`, or select it and press **Enter**, to open it in the scene viewer. The preview pane shows it too: how many parts, lines and choices it has, how it starts with its lines in words, who's in it, the cutscenes it plays, and the facts and scripts it uses. A scene file on disk opens from **Open files** or by dropping it on the window.
+
+A scene is the flow of a conversation, or of the cutscenes a quest plays: from a **Start**, through **sections** that play lines, choices, cutscenes and videos, and through branches (a **Condition** on facts, a **Switch**, a **Random** pick, a **Script** run), to an **End**. A quest starts a scene at one of its starts and goes on from the end it reaches.
+
+## The flow
+
+Every part is a card, numbered in the order the flow reaches it from the starts; parts nothing leads to come last. A section shows its lines with who says them and to whom, and its choice with each option, what it needs or does (pay, leave, only if a fact is set) and where it leads. A branch shows its condition and where each way goes. Click any **→** link to go to that part, and **Back** (**Alt+Left**, or the mouse's back button) to return. A cutscene section links to its cutscene, which opens in the cutscene viewer.
+
+## Hearing it
+
+The ▷ beside a line plays its voice, from the game's speech files (`enpc.w3speech` and the DLC's, in the language picked, and in English for any line it has no voice for: the game installs the voices of one language, set in Steam or GOG apart from the text). **Read through** (**R**) plays the lines from the part picked, or from the start, one after another, marking the one being spoken and following the flow from part to part. At a choice or a condition it waits for you to click the way you want, a random pick goes a random way, and it stops at an end. Click **Stop** to stop.
+
+## Finding your way
+
+**Flow** on the left lists every part to jump to. **Search** (**Ctrl+F**) keeps the cards whose lines, speakers or names match. **Pauses** shows the pauses between lines. **Language** picks the language the lines are shown in, read from the game's strings; without the game folder set they show as string IDs. The writers' comments are shown where the game's strings have them.
+
+**Actors** lists the voice tags and props the scene uses, with the entity each is made from and how many lines it has, and **Files it uses** its entities, cutscenes and dialog sets. Click one to open it where the tool has a viewer for it.
+
+The cameras, animations and other events each section times along its lines aren't read yet.
 """),
 
         new(Basics, "Projects", "\uE821", """
@@ -552,6 +631,71 @@ Gives a mod's action a key. Fill in the action's name, the key (every key the en
 - **String IDs for a mod**: the block of 1000 IDs a Nexus mod ID gives by the usual convention: 211, then the four-digit ID, then 000 to 999.
 """),
 
+        new(Basics, "CR2W files as JSON", "\uE943", """
+Most of the game's resources are CR2W files: environments (`.env`), material instances (`.w2mi`), entities (`.w2ent`), quests, scenes, meshes and the rest. **Tools › CR2W and JSON** turns them into JSON you can read, edit by hand or change with a script, and turns the JSON back into the same file, byte for byte. It also makes the same edit to hundreds of files at once, such as putting one set of tone mapping parameters into every `.env`.
+
+The game's own files are never changed. Extract the files you want to work on first (tick **CR2W files as JSON** beside **Extract to** to get them as JSON straight away), or work on your project's copies.
+
+## The JSON editor
+
+Right-click a CR2W file in the list (an `.env`, `.w2ent`, `.w2mi`…) and choose **Open as JSON** to read and edit it as JSON straight from the bundle. **Save** writes it back as CR2W: into your project at its game path for one of the game's files, or over the file for one of your own. `.json` files open in the same editor: drop them on the window, open them with **Open files**, double-click one in a project, or use **Tools › Open a JSON file…**.
+
+It's coloured and folded as you type, with an **Outline** of the objects and lists (each by its key, with its `$class` beside it; Ctrl+Shift+O), find (Ctrl+F, with F3 for the next match), and **Format** (Ctrl+Shift+F), which indents it the way the converter does, with small objects such as a curve point on one line. The bar at the bottom says whether the JSON is valid, and a click goes to a mistake. For a file the converter made, it also says whether it still converts back to CR2W, and if not, which value is wrong and what it should be. **Save as name.env** writes the game file from a converted `name.env.json`.
+
+Some values are whole CR2W files kept inside another, as base64 starting `"Q1IyV…"` (that's "CR2W"): an entity's cooked effects and streamed components, for example. Put the cursor on one and press **Open embedded file** (Ctrl+E) to open it in a window of its own, with the same outline and checks. **Save** there writes it back into the file it came from, which is then marked as changed; save that file to keep it. **Save as** keeps it as a file of its own instead.
+
+## Convert
+
+Add files or folders, or drop them on the window, and choose a direction:
+
+- **CR2W to JSON** writes `name.env.json` for each `name.env`. In a folder it takes every CR2W file, whatever its extension.
+- **JSON back to CR2W** writes `name.env` from each `name.env.json` it made. Other `.json` files are left alone.
+
+Save **beside each file**, or **into a folder**, where each file keeps the folders it was in below the folder you added. Turn on **Replace files that are there already** to write over earlier results. Double-click a result to show it in File Explorer.
+
+Every file is checked as it's converted: its JSON must turn back into exactly the same bytes, or it isn't written. A value the converter doesn't understand is kept as its bytes (`{"$raw": "…"}`) so it still survives, it just can't be edited; the result says which. Across the game's files that's rare.
+
+## Bulk edit
+
+Add the files to edit: CR2W files, JSON files this tool made, or folders of either. Then build a list of edits, made in order to every file:
+
+- **Copy the value from another file**: the value at the path in the file you choose, put in place of each file's (or added where a file doesn't have it). Copy `envParams.m_toneMapping` from the environment you've tuned to give every `.env` the same tone mapping.
+- **Set a value**: JSON, such as `1.5`, `true`, `"text"`, or a whole object or list.
+- **Remove**: drops the property, so the game uses its default.
+- **Multiply numbers** and **Add to numbers**: change every number below the path, or only those in the properties you list. A curve's values are in `value`; a colour curve's colours are in `controlPoint`'s `X`, `Y` and `Z`. Multiplying `envParams.m_globalFog` by 0.8 in `value` thins all the fog curves by a fifth.
+
+A path is property names from an object down, separated by dots, with `[n]` for an item of a list: `envParams.m_globalFog.fogDensity.dataCurveValues[0].value`. **Choose…** shows the properties of the source file (or of the first file to edit) to pick from, and fills in the class too. **Only objects of** limits the edit to one class, such as `CEnvironmentDefinition`; leave it empty for every object that has the path.
+
+**Check** tries the edits without saving anything: which files they'd change, and whether each could be saved. **Make the edits** saves each changed file, in the form it was in, into the folder you chose or over the files themselves. A file the edits don't reach isn't written.
+
+## From a script or the command line
+
+The same work runs with no window, so a batch file or a Python script can use it:
+
+```
+W3ModWorkbench.exe --to-json "D:\mymod\envs" -r --out "D:\mymod\envs json"
+W3ModWorkbench.exe --from-json "D:\mymod\envs json" -r --out "D:\mymod\envs"
+W3ModWorkbench.exe --edit "D:\mymod\envs" -r --copy "D:\my_look.env" envParams.m_toneMapping
+W3ModWorkbench.exe --edit "D:\mymod\envs" -r --scale envParams.m_globalFog 0.8 --fields value
+```
+
+`-r` looks in subfolders, `--out` saves under another folder, `--overwrite` replaces files that are there, and `--class` limits edits to one class. The edits are `--copy <file> <path>`, `--set <path> <json>`, `--remove <path>`, `--scale <path> <factor>` and `--offset <path> <amount>`. `--help-json` lists them all. Each file's result is printed, and the exit code is 0 when every file worked. It's a windowed program, so a Command Prompt doesn't wait for it to finish: in a batch file use `start /wait "" W3ModWorkbench.exe …`, or in PowerShell `Start-Process -Wait -NoNewWindow`. Python's `subprocess.run` waits by itself.
+
+In Python, convert to JSON, change the files with the `json` module, and convert back:
+
+```
+import json, pathlib
+look = json.loads(pathlib.Path("my_look.env.json").read_text("utf-8"))
+tone = look["objects"][0]["envParams"]["m_toneMapping"]
+for f in pathlib.Path("envs json").rglob("*.env.json"):
+    env = json.loads(f.read_text("utf-8"))
+    env["objects"][0]["envParams"]["m_toneMapping"] = tone
+    f.write_text(json.dumps(env, indent=2, ensure_ascii=False), "utf-8")
+```
+
+See **The CR2W JSON format** in the Advanced section for what's in the files.
+"""),
+
         new(Basics, "Settings", "", """
 Open **Settings** from the toolbar, or press Ctrl+, (comma).
 
@@ -692,6 +836,8 @@ Click a line, or press Enter, to open that file in a preview with the match sele
 Inside a script preview, Ctrl+Shift+F still searches from there, through the scripts that preview knows about.
 
 ## Browsing instead
+
+**Asset Browser** (the button beside Open folder, **Tools > Asset Browser**, or **Ctrl+Shift+A**) lists every file the game has in one tree at the top of the main window: content0, the DLC and the installed mods, each game path once, from where the game loads it (mods first, then DLC, then content0). The **Source** column says which bundle each comes from, and textures only in a texture cache are listed too. Search it, preview it, double-click to open, and right-click **Copy to project** to copy a file (with a mesh's buffers) into the project at its game path, as with any open bundle. It's read in a second or two and stays open; asking again goes back to it.
 
 **Tools > Browse game scripts** lists the game's own scripts in the main window, to read, and **Browse installed mods** opens everything in the `mods` folder the way Open folder does. Both need the game folder, which is found for you or set in Settings.
 """),
@@ -934,6 +1080,51 @@ None of these turned up across the mods used to build and test the decompiler, s
 ## Can I recompile it?
 
 Usually yes, after a quick look over the result. Bear in mind the mod author's licence still applies to their code. Decompiling is best used to understand how a mod works, check compatibility, or recover your own source after losing it.
+"""),
+
+        new(Advanced, "The CR2W JSON format", "", """
+A converted file is the CR2W file's objects in order, then a `file` block with what's needed to put it back together.
+
+```
+{
+  "$format": "w3mw-cr2w-json",
+  "$formatVersion": 1,
+  "objects": [
+    {
+      "$class": "CEnvironmentDefinition",
+      "envParams": {
+        "m_toneMapping": {
+          "activated": true,
+          "luminanceLimitMax": {
+            "dataCurveValues": [
+              { "time": 0.5, "controlPoint": { "X": -0.1, "Y": 0, "Z": 0.1, "W": 0 }, "value": 1.2 }
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "file": { "version": 164, "names": […], "imports": […], "types": {…} }
+}
+```
+
+## Values
+
+- Each object has its `$class`, then its properties by name, in the order the file has them. A property the file doesn't have isn't listed: the game uses its default. Add it to set it.
+- Structs are objects and arrays are lists. Numbers, `true`/`false` and strings are what they look like; a name (`CName`) is a string too.
+- An enum is its value's name (`"SCT_Color"`); a flags enum is a list of names.
+- A reference is `null`, `"export:N"` for another object in the file (counting from 0), or `"import:path"` for another file, such as a texture. Point it at a new path and the file gains the import.
+- A transform is `{ "position": {X, Y, Z}, "rotation": {Pitch, Yaw, Roll}, "scale": {X, Y, Z} }`, each part optional. A variant (`CVariant`) is `{ "type": "Float", "value": 1 }`. Byte arrays and data buffers are base64 strings.
+- A curve point's properties are saved by the engine under shortened names (`me`, `ntrolPoint`, `lue`, `rveTypeL`, `rveTypeR`). The JSON calls them `time`, `controlPoint`, `value`, `curveTypeL` and `curveTypeR`, and they're saved back under the engine's names.
+- `{"$raw": "base64"}` is a value kept as its bytes, and an object with `$data` is a whole object kept as its bytes. Leave them as they are.
+
+## Types
+
+A property's engine type isn't repeated on every value. `file.types` lists the type of each class's properties (`"SSimpleCurve.ScalarEditScale": "Float"`); an object lists in `$types` any of its own that differ. A property you add that the file never had is looked up in the engine's list of classes, which the tool carries. Add its type to `file.types` if that doesn't know it.
+
+## The file block
+
+`names` and `imports` are the file's tables, in order, so the numbers its objects use stay right; new names and imports go on the end. The rest (`version`, `flags`, `buffers`, `trailer`, `stringOrder`, `nameHashes`, `latin1`, and `$flags`, `$parent` and `$crc` on objects) keeps the header and layout the file had, so it comes back byte for byte. Leave them as they are.
 """),
 
         new(Advanced, "Enum names", "", """

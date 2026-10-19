@@ -1,6 +1,7 @@
 using System.Buffers.Binary;
 using System.IO;
 using System.Numerics;
+using W3ModWorkbench.Core.Cr2w;
 
 namespace W3ModWorkbench.Core.Meshes;
 

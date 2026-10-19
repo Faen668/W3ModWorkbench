@@ -54,7 +54,7 @@ public static class FileKinds
         [".w2quest"] = new("Quest", "The top of a quest: its phases and how they connect."),
         [".w2phase"] = new("Quest phase", "A step of a quest: the blocks that run its scenes, objectives and facts."),
         [".w2scene"] = new("Scene", "A conversation or cutscene: lines, cameras, animations and choices."),
-        [".w2cutscene"] = new("Cutscene", "A recorded cutscene, played as it is."),
+        [".w2cutscene"] = new("Cutscene", "A recorded cutscene, played as it is: its actors, their animations and the camera's, and events timed along them."),
         [".w2comm"] = new("Community", "NPCs who live somewhere: who they are, where they go and when."),
         [".w2job"] = new("Action job", "Something an NPC does in place, such as sweeping or sitting, as a run of animations."),
         [".w2beh"] = new("Behaviour graph", "How a character's animations blend and change from one to another."),

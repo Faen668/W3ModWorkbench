@@ -1,0 +1,91 @@
+<UserControl x:Class="W3ModWorkbench.CutsceneSummary"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:W3ModWorkbench"
+             xmlns:vm="clr-namespace:W3ModWorkbench.ViewModels">
+    <UserControl.Resources>
+        <Style x:Key="Heading" TargetType="TextBlock">
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Margin" Value="0,16,0,6" />
+        </Style>
+        <Style x:Key="StatValue" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="18" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+        <Style x:Key="StatLabel" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
+        </Style>
+    </UserControl.Resources>
+
+    <!-- a cutscene in the main window's preview: its size, a timeline of what happens, and who's in it -->
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="14,12,14,8">
+        <StackPanel>
+            <WrapPanel>
+                <StackPanel Margin="0,0,22,4">
+                    <TextBlock x:Name="LengthText" Style="{StaticResource StatValue}" />
+                    <TextBlock Style="{StaticResource StatLabel}" Text="Length" />
+                </StackPanel>
+                <StackPanel Margin="0,0,22,4">
+                    <TextBlock x:Name="ActorsText" Style="{StaticResource StatValue}" />
+                    <TextBlock Style="{StaticResource StatLabel}" Text="Actors" />
+                </StackPanel>
+                <StackPanel Margin="0,0,22,4">
+                    <TextBlock x:Name="EventsText" Style="{StaticResource StatValue}" />
+                    <TextBlock Style="{StaticResource StatLabel}" Text="Events" />
+                </StackPanel>
+                <StackPanel Margin="0,0,22,4">
+                    <TextBlock x:Name="EffectsText" Style="{StaticResource StatValue}" />
+                    <TextBlock Style="{StaticResource StatLabel}" Text="Effects" />
+                </StackPanel>
+            </WrapPanel>
+
+            <TextBlock Style="{StaticResource Heading}" Text="Timeline" />
+            <Border BorderThickness="1" CornerRadius="6" Padding="0,2" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}">
+                <Grid>
+                    <local:CutsceneTimeline x:Name="Timeline" OnlyBusyLanes="True" />
+                    <TextBlock x:Name="NoEventsText" Text="No events: the actors' animations play on their own." Margin="10,28,10,8"
+                               Opacity="0.6" TextWrapping="Wrap" FontSize="12" Visibility="Collapsed" />
+                </Grid>
+            </Border>
+            <ItemsControl x:Name="KindList" Margin="0,8,0,0">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <WrapPanel />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="{x:Type vm:CutsceneKindItem}">
+                        <StackPanel Orientation="Horizontal" Margin="0,0,12,4">
+                            <Border Width="9" Height="9" CornerRadius="2" Background="{Binding Swatch}" VerticalAlignment="Center" Margin="0,1,6,0" />
+                            <TextBlock Text="{Binding Label}" FontSize="11" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                        </StackPanel>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <TextBlock Style="{StaticResource Heading}" Text="Actors" />
+            <ItemsControl x:Name="ActorList">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="{x:Type vm:CutsceneActorItem}">
+                        <StackPanel Margin="0,0,0,8" ToolTip="{Binding Animations}">
+                            <TextBlock TextTrimming="CharacterEllipsis">
+                                <Run Text="{Binding Name, Mode=OneWay}" FontWeight="SemiBold" />
+                                <Run Text="{Binding Type, Mode=OneWay}" Foreground="{DynamicResource TextFillColorSecondaryBrush}" FontSize="11" />
+                            </TextBlock>
+                            <TextBlock Text="{Binding TemplateName}" ToolTip="{Binding Template}" FontSize="12" TextTrimming="CharacterEllipsis"
+                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                            <TextBlock Text="{Binding Detail}" Visibility="{Binding DetailVisibility}" FontSize="11" TextWrapping="Wrap"
+                                       Foreground="{DynamicResource TextFillColorTertiaryBrush}" />
+                        </StackPanel>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <StackPanel x:Name="PlayedPanel">
+                <TextBlock Style="{StaticResource Heading}" Text="Played by" Margin="0,8,0,6" />
+                <TextBlock x:Name="PlayedText" FontSize="12" TextWrapping="Wrap" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+            </StackPanel>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

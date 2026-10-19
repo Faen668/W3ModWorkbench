@@ -1,0 +1,143 @@
+<UserControl x:Class="W3ModWorkbench.SceneSummary"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:W3ModWorkbench.ViewModels">
+    <UserControl.Resources>
+        <Style x:Key="Heading" TargetType="TextBlock">
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Margin" Value="0,16,0,6" />
+        </Style>
+        <Style x:Key="StatValue" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="18" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+        <Style x:Key="StatLabel" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
+        </Style>
+        <Style x:Key="Small" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
+        </Style>
+
+        <!-- the script's rows, smaller than the viewer's: the speaker in front of the line -->
+        <DataTemplate DataType="{x:Type vm:SceneLineRow}">
+            <TextBlock TextWrapping="Wrap" Margin="0,2" FontSize="12.5" ToolTip="{Binding Tip}">
+                <Run Text="{Binding Speaker, Mode=OneWay}" FontWeight="SemiBold" Foreground="{Binding SpeakerBrush, Mode=OneWay}" />
+                <Run Text="{Binding Text, Mode=OneWay}" />
+            </TextBlock>
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:SceneNoteRow}">
+            <TextBlock Text="{Binding Text}" FontStyle="{Binding Style}" FontWeight="{Binding Weight}" Opacity="{Binding Opacity}"
+                       TextWrapping="Wrap" Margin="0,2" FontSize="12" />
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:SceneOptionRow}">
+            <TextBlock TextWrapping="Wrap" Margin="10,1,0,1" FontSize="12.5">
+                <Run Text="▸" Foreground="{DynamicResource TextFillColorTertiaryBrush}" />
+                <Run Text="{Binding Text, Mode=OneWay}" />
+                <Run Text="{Binding Link.Text, Mode=OneWay}" FontSize="11" Foreground="{DynamicResource TextFillColorTertiaryBrush}" />
+            </TextBlock>
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <!-- a scene in the main window's preview: its size, how it starts, who's in it and what it checks -->
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="14,12,14,8">
+        <StackPanel>
+            <WrapPanel>
+                <StackPanel Margin="0,0,22,4">
+                    <TextBlock x:Name="PartsText" Style="{StaticResource StatValue}" />
+                    <TextBlock Style="{StaticResource StatLabel}" Text="Parts" />
+                </StackPanel>
+                <StackPanel Margin="0,0,22,4">
+                    <TextBlock x:Name="LinesText" Style="{StaticResource StatValue}" />
+                    <TextBlock Style="{StaticResource StatLabel}" Text="Lines" />
+                </StackPanel>
+                <StackPanel Margin="0,0,22,4">
+                    <TextBlock x:Name="ChoicesText" Style="{StaticResource StatValue}" />
+                    <TextBlock Style="{StaticResource StatLabel}" Text="Choices" />
+                </StackPanel>
+                <StackPanel Margin="0,0,22,4">
+                    <TextBlock x:Name="LengthText" Style="{StaticResource StatValue}" />
+                    <TextBlock Style="{StaticResource StatLabel}" Text="Spoken" />
+                </StackPanel>
+            </WrapPanel>
+
+            <!-- how many of each kind of part, in their colours -->
+            <ItemsControl x:Name="KindList" Margin="0,6,0,0">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <WrapPanel />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,12,4">
+                            <Border Width="9" Height="9" CornerRadius="2" Background="{Binding Swatch}" VerticalAlignment="Center" Margin="0,1,6,0" />
+                            <TextBlock Text="{Binding Label}" FontSize="11" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                        </StackPanel>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <TextBlock Style="{StaticResource Heading}" Text="How it goes" />
+            <TextBlock x:Name="StringsText" Style="{StaticResource Small}" Margin="0,0,0,6" Visibility="Collapsed" />
+            <ItemsControl x:Name="Script">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="{x:Type vm:SceneNodeItem}">
+                        <Border CornerRadius="6" Padding="10,7" Margin="0,0,0,6" Background="{DynamicResource SubtleFillColorSecondaryBrush}">
+                            <StackPanel>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="{Binding Number}" FontFamily="Cascadia Mono, Consolas" FontSize="11.5" Opacity="0.6" VerticalAlignment="Center" Margin="0,0,7,0" />
+                                    <Border CornerRadius="4" Background="{Binding Swatch}" Padding="6,0" VerticalAlignment="Center" Margin="0,0,7,0">
+                                        <TextBlock Text="{Binding Kind}" FontSize="10.5" Foreground="Black" />
+                                    </Border>
+                                    <TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="12.5" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+                                <TextBlock Text="{Binding Detail}" Visibility="{Binding DetailVisibility}" Style="{StaticResource Small}" FontSize="11.5" Margin="0,2,0,0" />
+                                <ItemsControl ItemsSource="{Binding Rows}" Visibility="{Binding RowsVisibility}" Margin="0,4,0,0" />
+                                <ItemsControl ItemsSource="{Binding Next}" Visibility="{Binding NextVisibility}" Margin="0,2,0,0">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type vm:SceneLinkItem}">
+                                            <TextBlock Text="{Binding Text}" FontSize="11" TextTrimming="CharacterEllipsis" Foreground="{DynamicResource TextFillColorTertiaryBrush}" />
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <TextBlock x:Name="MoreText" Style="{StaticResource Small}" Margin="0,2,0,0" />
+
+            <TextBlock Style="{StaticResource Heading}" Text="Actors" />
+            <ItemsControl x:Name="ActorList">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="{x:Type vm:SceneActorItem}">
+                        <StackPanel Margin="0,0,0,8">
+                            <TextBlock TextTrimming="CharacterEllipsis">
+                                <Run Text="{Binding Name, Mode=OneWay}" FontWeight="SemiBold" />
+                                <Run Text="{Binding Detail, Mode=OneWay}" Foreground="{DynamicResource TextFillColorSecondaryBrush}" FontSize="11" />
+                            </TextBlock>
+                            <TextBlock Text="{Binding TemplateName}" ToolTip="{Binding Template}" FontSize="12" TextTrimming="CharacterEllipsis"
+                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                        </StackPanel>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <StackPanel x:Name="CutscenesPanel">
+                <TextBlock Style="{StaticResource Heading}" Text="Cutscenes it plays" Margin="0,8,0,6" />
+                <TextBlock x:Name="CutscenesText" Style="{StaticResource Small}" />
+            </StackPanel>
+            <StackPanel x:Name="FactsPanel">
+                <TextBlock Style="{StaticResource Heading}" Text="Facts it checks or sets" />
+                <TextBlock x:Name="FactsText" Style="{StaticResource Small}" FontFamily="Cascadia Mono, Consolas" />
+            </StackPanel>
+            <StackPanel x:Name="ScriptsPanel">
+                <TextBlock Style="{StaticResource Heading}" Text="Scripts it runs" />
+                <TextBlock x:Name="ScriptsText" Style="{StaticResource Small}" FontFamily="Cascadia Mono, Consolas" />
+            </StackPanel>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

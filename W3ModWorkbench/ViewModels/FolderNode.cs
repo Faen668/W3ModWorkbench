@@ -60,8 +60,9 @@ public sealed class FolderNode : INotifyPropertyChanged
     /// <summary>Loose scripts opened without a project: they can be read, and edited once they are added to one.</summary>
     public bool IsLooseScripts => IsBundle && Archive is ScriptFolder { Project: null } folder && !ScriptFolder.IsGameScripts(folder.FilePath);
     public string Detail => IsBundle && !InGroup && !IsGroup ? Archive.Name : "";
-    public string Glyph => !IsBundle ? "\uE8B7" : IsGroup ? "\uE838" : IsProject ? "\uE821" : IsLooseScripts ? "\uE8A5" : Archive is ScriptArchive ? "\uE943" : Archive is TextureCacheArchive ? "\uEB9F" : Archive is StringsFolder ? "\uE8D2" : "\uE7B8";
+    public string Glyph => !IsBundle ? "\uE8B7" : IsGroup ? "\uE838" : IsProject ? "\uE821" : IsLooseScripts ? "\uE8A5" : Archive is GameFilesArchive ? "\uE8F1" : Archive is ScriptArchive ? "\uE943" : Archive is TextureCacheArchive ? "\uEB9F" : Archive is StringsFolder ? "\uE8D2" : "\uE7B8";
     public string ToolTip => IsGroup ? $"{Name}: {Children.Count} archives"
+        : IsBundle && Archive is GameFilesArchive ? $"Every file the game has, from {Archive.Name}, each from where the game loads it (mods first, then DLC, then content0)\n{Archive.FilePath}"
         : IsBundle && Archive is ScriptFolder { Project: { } project } ? $"Project {project.Name}: its files can be edited, saved and compiled\n{project.FilePath}"
         : IsLooseScripts ? $"Loose scripts, not in a project: editing them offers to add them to one\n{Archive.FilePath}"
         : IsBundle ? Archive.FilePath : FullPath;

@@ -2,7 +2,7 @@ using System.Buffers.Binary;
 using System.IO;
 using System.Text;
 
-namespace W3ModWorkbench.Core.Meshes;
+namespace W3ModWorkbench.Core.Cr2w;
 
 /// <summary>
 /// Writes a CR2W file: a copy of one that was read, with some of its objects' data replaced, or a new one. Names,
@@ -29,6 +29,7 @@ public sealed class Cr2wBuilder
     private readonly long _timestamp;
     private readonly MemoryStream _strings = new();
     private readonly Dictionary<string, int> _stringOffsets = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _latin1 = new(StringComparer.Ordinal);
     private readonly List<(int Offset, uint Hash, string Text)> _names = [];
     private readonly List<(int Path, int ClassName, int Flags, string PathText, string ClassText)> _imports = [];
     private readonly byte[] _properties;
@@ -112,6 +113,58 @@ public sealed class Cr2wBuilder
         return builder;
     }
 
+    /// <summary>
+    /// A file put back together from its parts, as <see cref="Cr2wJson"/> keeps them: the header's fields, the names
+    /// and imports in their order (so the indices objects use stay right), the properties table and the trailer.
+    /// Strings are laid out names first, then import paths, each once, the way the engine writes them; those in
+    /// <paramref name="latin1"/> as 8-bit text rather than UTF-8 (a few of the game's own are in a Windows code page).
+    /// A name's hash is worked out, unless <paramref name="hashes"/> has the one the file was saved with.
+    /// <paramref name="order"/>, when given, is the order the strings go in instead: numbers into the names, then on
+    /// into the import paths (the engine often writes an import's path just before its class's name).
+    /// </summary>
+    public static Cr2wBuilder Create(int version, int flags, long timestamp, int build, int chunks, IEnumerable<string> names,
+        IEnumerable<(string Path, string ClassName, int Flags)> imports, byte[] properties, int propertyCount, byte[] trailer,
+        IEnumerable<string>? latin1 = null, IReadOnlyDictionary<int, uint>? hashes = null, IEnumerable<int>? order = null)
+    {
+        var builder = new Cr2wBuilder(version, flags, timestamp, build, chunks, properties, propertyCount, trailer);
+        if (latin1 is not null) builder._latin1.UnionWith(latin1);
+        names = names as IReadOnlyList<string> ?? names.ToList();
+        imports = imports as IReadOnlyList<(string, string, int)> ?? imports.ToList();
+        if (order is not null)
+        {
+            var nameList = (IReadOnlyList<string>)names;
+            var importList = (IReadOnlyList<(string Path, string ClassName, int Flags)>)imports;
+            foreach (int i in order)
+            {
+                if (i >= 0 && i < nameList.Count) builder.StringOffset(nameList[i]);
+                else if (i - nameList.Count is int import && import >= 0 && import < importList.Count) builder.StringOffset(importList[import].Path);
+            }
+        }
+        // the empty name every file starts with has a hash of 0, not its FNV-1a
+        foreach (string name in names)
+        {
+            uint hash = hashes is not null && hashes.TryGetValue(builder._names.Count, out uint kept) ? kept : name.Length == 0 ? 0 : Checksums.Fnv1a32(name);
+            builder._names.Add((builder.StringOffset(name), hash, name));
+        }
+        foreach (var (path, className, importFlags) in imports)
+            builder._imports.Add((builder.StringOffset(path), builder.Name(className), importFlags, path, className));
+        return builder;
+    }
+
+    /// <summary>
+    /// Adds an object with all of its export entry: <paramref name="parent"/> as the file has it (1-based, 0 for none),
+    /// and the checksum to keep when the data is still what it was saved with (null to work it out).
+    /// </summary>
+    public int AddExport(string className, int flags, int parent, int template, byte[] data, uint? crc)
+    {
+        _exports.Add(new ExportEntry(Name(className), flags, parent, template, data, crc));
+        return _exports.Count - 1;
+    }
+
+    /// <summary>Adds a buffer: its bytes when they're kept inside the file, else null and its sizes and checksum.</summary>
+    public void AddBuffer(int flags, int index, byte[]? data, int diskSize, int memorySize, uint crc) =>
+        _buffers.Add(new BufferEntry(flags, index, data, diskSize, memorySize, crc));
+
     public int Version => _version;
 
     /// <summary>A name's index, adding it when the file doesn't have it yet.</summary>
@@ -137,7 +190,7 @@ public sealed class Cr2wBuilder
     {
         if (_stringOffsets.TryGetValue(text, out int known)) return known;
         int offset = (int)_strings.Length;
-        _strings.Write(Encoding.UTF8.GetBytes(text));
+        _strings.Write(_latin1.Contains(text) ? Encoding.Latin1.GetBytes(text) : Encoding.UTF8.GetBytes(text));
         _strings.WriteByte(0);
         _stringOffsets[text] = offset;
         return offset;

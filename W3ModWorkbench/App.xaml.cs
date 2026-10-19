@@ -13,6 +13,13 @@ public partial class App : Application
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        // run from a script (--to-json, --from-json, --edit): do the work and exit, with no window
+        if (CommandLine.Handles(e.Args))
+        {
+            Core.Scripts.GameScripts.GameFolder = Settings.GameFolder;
+            Shutdown(CommandLine.Run(e.Args));
+            return;
+        }
         ApplyTheme(Settings.Theme, Settings.ThemePreset);
 
         // Text boxes give everything inside them the text cursor, their scroll bars included.

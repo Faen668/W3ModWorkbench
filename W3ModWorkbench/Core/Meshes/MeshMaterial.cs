@@ -1,4 +1,5 @@
 using System.IO;
+using W3ModWorkbench.Core.Cr2w;
 using System.Numerics;
 
 namespace W3ModWorkbench.Core.Meshes;

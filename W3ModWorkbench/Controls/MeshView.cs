@@ -12,7 +12,8 @@ namespace W3ModWorkbench;
 /// Shows a mesh in 3D, lit from where you look. Drag with the left button to turn around it, with the right or middle
 /// button (or Shift and the left) to move it, and use the wheel to come closer; double-click fits it to the view.
 /// Each chunk is drawn with its material's texture, or plain grey when there's none. The game is Z-up, so a mesh is
-/// turned to stand up the way it does in the game.
+/// turned to stand up the way it does in the game. It can also show several meshes, each placed where it goes, the
+/// way an entity puts its meshes together (<see cref="ShowParts"/>).
 /// </summary>
 public sealed class MeshView : Border
 {
@@ -24,7 +25,14 @@ public sealed class MeshView : Border
     private readonly Dictionary<int, GeometryModel3D> _chunks = [];
     private readonly Dictionary<int, Material> _materials = [];
     private readonly HashSet<int> _hidden = [];
-    private MeshFile? _mesh;
+    private List<(MeshFile Mesh, System.Numerics.Matrix4x4 Place)> _parts = [];
+    private HashSet<int> _highlighted = [];
+    private Func<int, MeshChunk, System.Numerics.Vector3[]?>? _posed;
+    // each chunk's vertices in the pose shown, kept for the wireframe
+    private readonly Dictionary<(int Part, MeshChunk Chunk), System.Numerics.Vector3[]> _posedPositions = [];
+    private readonly System.Windows.Threading.DispatcherTimer _wireTimer = new() { Interval = TimeSpan.FromMilliseconds(150) };
+    private DateTime _wiresBuilt;
+    private MeshFile? _mesh => _parts.Count > 0 ? _parts[0].Mesh : null;
     private int _lod;
     private bool _wireframe;
     private bool _textured = true;
@@ -33,12 +41,13 @@ public sealed class MeshView : Border
     // the camera turns around this point, at this distance, at these angles (degrees)
     private Point3D _target;
     private double _distance = 5, _yaw = 35, _pitch = 20;
-    private Point _lastMouse;
+    private Point _lastMouse, _downAt;
     private bool _orbiting, _panning;
 
     public MeshView()
     {
         Background = Brushes.Transparent; // takes the mouse everywhere, not just over the mesh
+        _wireTimer.Tick += (_, _) => RebuildWires();
         ClipToBounds = true;
         Focusable = true;
         _viewport.Camera = _camera;
@@ -84,11 +93,18 @@ public sealed class MeshView : Border
         return seen.Count > 0 ? seen : chunks.Where(c => c.RenderMask != 0);
     }
 
-    public void Show(MeshFile? mesh)
+    public void Show(MeshFile? mesh) => ShowParts(mesh is null ? [] : [(mesh, System.Numerics.Matrix4x4.Identity)]);
+
+    /// <summary>Shows meshes together, each moved, turned and scaled by its matrix (in the game's Z-up space).</summary>
+    public void ShowParts(IReadOnlyList<(MeshFile Mesh, System.Numerics.Matrix4x4 Place)> parts)
     {
-        _mesh = mesh;
+        _parts = [.. parts];
+        _highlighted = [];
+        _posed = null;
+        _posedPositions.Clear();
         _lod = 0;
         _hidden.Clear();
+        _leftOut.Clear();
         _textures.Clear();
         _materials.Clear();
         Rebuild();
@@ -109,12 +125,144 @@ public sealed class MeshView : Border
     }
 
     /// <summary>Puts a picture on every chunk drawn with a material, or plain grey for null.</summary>
-    public void SetTexture(int material, BitmapSource? texture)
+    public void SetTexture(int material, BitmapSource? texture) => SetTexture(0, material, texture);
+
+    /// <summary>Puts a picture on the chunks of one of the meshes shown together that are drawn with a material.</summary>
+    private readonly HashSet<int> _leftOut = [];
+
+    /// <summary>
+    /// Leaves out the chunks of one of a mesh's materials, such as the soft shadow drawn over the eyes, which can't be
+    /// drawn as the game blends it and would cover what's under it.
+    /// </summary>
+    public void LeaveOut(int part, int material)
     {
-        _textures[material] = texture;
-        _materials.Remove(material);
+        if (_leftOut.Add(Key(part, material))) Rebuild();
+    }
+
+    /// <summary>Whether a chunk is drawn: not hidden in the chunk list (the first mesh's), nor of a material left out.</summary>
+    private bool Shown(int part, MeshChunk chunk) => (part > 0 || !_hidden.Contains(chunk.Index)) && !_leftOut.Contains(Key(part, chunk.Material));
+
+    public void SetTexture(int part, int material, BitmapSource? texture)
+    {
+        int key = Key(part, material);
+        _textures[key] = texture;
+        _materials.Remove(key);
         foreach (var (index, model) in _chunks)
-            if (_mesh!.Chunks[index].Material == material) model.Material = model.BackMaterial = MaterialFor(material);
+            if (index >> 16 == part && part < _parts.Count && _parts[part].Mesh.Chunks[index & 0xFFFF].Material == material)
+                model.Material = model.BackMaterial = _highlighted.Contains(part) ? new MaterialGroup { Children = { MaterialFor(key), Glow } } : MaterialFor(key);
+    }
+
+    /// <summary>
+    /// Marks some of the meshes shown together with a glow, to show where a part of an entity is; how many triangles
+    /// they have at the LOD shown.
+    /// </summary>
+    public int Highlight(IEnumerable<int> parts)
+    {
+        _highlighted = [.. parts.Where(p => p >= 0 && p < _parts.Count)];
+        Rebuild();
+        return _highlighted.Sum(p => DrawnAt(_parts[p].Mesh).Sum(c => c.Triangles));
+    }
+
+    private static readonly Material Glow = Frozen(new EmissiveMaterial(new SolidColorBrush(Color.FromArgb(150, 0x4C, 0x9A, 0xFF))));
+
+    private static Material Frozen(Material material)
+    {
+        material.Freeze();
+        return material;
+    }
+
+    /// <summary>Raised when one of the meshes shown together is clicked (not dragged), with its number, or -1 for none.</summary>
+    public event EventHandler<int>? PartClicked;
+
+    /// <summary>
+    /// Shows the meshes in a pose: <paramref name="posed"/> gives a chunk's vertices where they are in it (by its mesh's
+    /// number), or null to leave it as it was made. Null shows them all as they were made again.
+    /// </summary>
+    public void Pose(Func<int, MeshChunk, System.Numerics.Vector3[]?>? posed)
+    {
+        _posed = posed;
+        _posedPositions.Clear();
+        foreach (var (key, model) in _chunks)
+            model.Geometry = PosedGeometry(key >> 16, _parts[key >> 16].Mesh.Chunks[key & 0xFFFF]);
+        if (!_wireframe) return;
+        // the wireframe is slow to make, so while it plays it follows a few times a second, and then where it stops
+        if (DateTime.UtcNow - _wiresBuilt > TimeSpan.FromMilliseconds(250)) RebuildWires();
+        else
+        {
+            _wireTimer.Stop();
+            _wireTimer.Start();
+        }
+    }
+
+    /// <summary>A chunk's geometry, in the pose shown. Its normals are left for WPF to work out from the bent triangles.</summary>
+    private MeshGeometry3D PosedGeometry(int part, MeshChunk chunk)
+    {
+        var made = Geometry(chunk);
+        if (_posed?.Invoke(part, chunk) is not { } positions) return made;
+        _posedPositions[(part, chunk)] = positions;
+        var points = new Point3DCollection(positions.Length);
+        foreach (var v in positions) points.Add(ToView(v));
+        var geometry = new MeshGeometry3D { Positions = points, TextureCoordinates = made.TextureCoordinates, TriangleIndices = made.TriangleIndices };
+        geometry.Freeze();
+        return geometry;
+    }
+
+    /// <summary>The most LODs any of the meshes shown has.</summary>
+    public int LodCount => _parts.Count == 0 ? 1 : _parts.Max(p => p.Mesh.LodCount);
+
+    /// <summary>How much is drawn at the LOD shown: triangles, vertices and chunks.</summary>
+    public (int Triangles, int Vertices, int Chunks) Stats()
+    {
+        var chunks = _parts.SelectMany((part, p) => DrawnAt(part.Mesh).Where(c => Shown(p, c))).ToList();
+        return (chunks.Sum(c => c.Triangles), chunks.Sum(c => c.Positions.Length), chunks.Count);
+    }
+
+    /// <summary>
+    /// The mesh under a point of the view, or -1: a ray from the camera through the point, into the scene, and the
+    /// nearest chunk it meets.
+    /// </summary>
+    private int PartAt(Point point)
+    {
+        var at = TranslatePoint(point, _viewport);
+        double width = Math.Max(1, _viewport.ActualWidth), height = Math.Max(1, _viewport.ActualHeight);
+        var look = _camera.LookDirection;
+        look.Normalize();
+        var right = Vector3D.CrossProduct(look, _camera.UpDirection);
+        right.Normalize();
+        var up = Vector3D.CrossProduct(right, look);
+        // the camera's field of view is across; up and down follow from the view's shape
+        double across = Math.Tan(_camera.FieldOfView * Math.PI / 360), down = across * height / width;
+        var ray = look + right * ((at.X / width * 2 - 1) * across) + up * ((1 - at.Y / height * 2) * down);
+        int found = -1;
+        double nearest = double.MaxValue;
+        VisualTreeHelper.HitTest(_viewport.Children[0], null, result =>
+        {
+            if (result is RayMeshGeometry3DHitTestResult { ModelHit: GeometryModel3D model } hit && hit.DistanceToRayOrigin < nearest
+                && _chunks.FirstOrDefault(c => ReferenceEquals(c.Value, model)) is { Value: not null } chunk)
+            {
+                nearest = hit.DistanceToRayOrigin;
+                found = chunk.Key >> 16;
+            }
+            return HitTestResultBehavior.Continue;
+        }, new RayHitTestParameters(_camera.Position, ray));
+        return found;
+    }
+
+    // chunks, materials and textures are kept by the mesh they're in and their number in it
+    private static int Key(int part, int index) => part << 16 | index;
+
+    /// <summary>The chunks of a mesh drawn at the LOD picked, or its least detailed when it has fewer.</summary>
+    private IEnumerable<MeshChunk> DrawnAt(MeshFile mesh) => Drawn(mesh, Math.Min(_lod, Math.Max(0, mesh.LodCount - 1)));
+
+    /// <summary>A placement in the game's Z-up space as one in the view's Y-up space.</summary>
+    private static Matrix3D ToView(System.Numerics.Matrix4x4 m)
+    {
+        // the view's axes are the game's X, Z and -Y: S^-1 · M · S, with S taking (x, y, z) to (x, z, -y)
+        var s = new Matrix3D(1, 0, 0, 0, 0, 0, -1, 0, 0, 1, 0, 0, 0, 0, 0, 1);
+        var inverse = s;
+        inverse.Invert();
+        var game = new Matrix3D(m.M11, m.M12, m.M13, m.M14, m.M21, m.M22, m.M23, m.M24, m.M31, m.M32, m.M33, m.M34, m.M41, m.M42, m.M43, m.M44);
+        return inverse * game * s;
     }
 
     // ---------------------------------------------------------------- building the scene
@@ -123,16 +271,22 @@ public sealed class MeshView : Border
     {
         _models.Children.Clear();
         _chunks.Clear();
-        if (_mesh is not null)
-            foreach (var chunk in Drawn(_mesh, _lod))
+        for (int p = 0; p < _parts.Count; p++)
+        {
+            var (mesh, place) = _parts[p];
+            var transform = place.IsIdentity ? null : new MatrixTransform3D(ToView(place));
+            foreach (var chunk in DrawnAt(mesh))
             {
-                if (_hidden.Contains(chunk.Index)) continue;
-                var material = MaterialFor(chunk.Material);
+                if (!Shown(p, chunk)) continue;
+                Material material = MaterialFor(Key(p, chunk.Material));
+                if (_highlighted.Contains(p)) material = new MaterialGroup { Children = { material, Glow } };
                 // both sides drawn, as many of the game's cloth and foliage chunks are single sheets
-                var model = new GeometryModel3D(Geometry(chunk), material) { BackMaterial = material };
-                _chunks[chunk.Index] = model;
+                var model = new GeometryModel3D(PosedGeometry(p, chunk), material) { BackMaterial = material };
+                if (transform is not null) model.Transform = transform;
+                _chunks[Key(p, chunk.Index)] = model;
                 _models.Children.Add(model);
             }
+        }
         RebuildWires();
     }
 
@@ -191,14 +345,17 @@ public sealed class MeshView : Border
     /// </summary>
     private void RebuildWires()
     {
+        _wireTimer.Stop();
+        _wiresBuilt = DateTime.UtcNow;
         _wires.Children.Clear();
-        if (!_wireframe || _mesh is null) return;
-        var drawn = Drawn(_mesh, _lod).Where(c => !_hidden.Contains(c.Index)).ToList();
+        if (!_wireframe || _parts.Count == 0) return;
+        var drawn = _parts.SelectMany((part, p) => DrawnAt(part.Mesh).Where(c => Shown(p, c))
+            .Select(c => (Chunk: c, part.Place, Positions: _posedPositions.GetValueOrDefault((p, c)) ?? c.Positions))).ToList();
         if (drawn.Count == 0) return;
         double width = Math.Max(1e-4, Radius() * 0.0012);
         var positions = new Point3DCollection();
         var indices = new Int32Collection();
-        foreach (var chunk in drawn)
+        foreach (var (chunk, place, at) in drawn)
         {
             var edges = new HashSet<long>();
             for (int i = 0; i + 2 < chunk.Indices.Length; i += 3)
@@ -206,7 +363,7 @@ public sealed class MeshView : Border
                 {
                     int a = chunk.Indices[i + k], b = chunk.Indices[i + (k + 1) % 3];
                     if (a == b || !edges.Add(a < b ? ((long)a << 32) | (uint)b : ((long)b << 32) | (uint)a)) continue;
-                    AddEdge(positions, indices, ToView(chunk.Positions[a]), ToView(chunk.Positions[b]), width);
+                    AddEdge(positions, indices, ToView(System.Numerics.Vector3.Transform(at[a], place)), ToView(System.Numerics.Vector3.Transform(at[b], place)), width);
                 }
         }
         var geometry = new MeshGeometry3D { Positions = positions, TriangleIndices = indices };
@@ -245,17 +402,18 @@ public sealed class MeshView : Border
 
     private (Point3D Min, Point3D Max) Bounds()
     {
-        if (_mesh is null) return (new Point3D(-1, -1, -1), new Point3D(1, 1, 1));
-        var chunks = Drawn(_mesh, _lod).Where(c => !_hidden.Contains(c.Index) && c.Positions.Length > 0).ToList();
-        if (chunks.Count == 0) chunks = _mesh.Chunks.Where(c => c.Positions.Length > 0).ToList();
+        if (_parts.Count == 0) return (new Point3D(-1, -1, -1), new Point3D(1, 1, 1));
+        var chunks = _parts.SelectMany((part, i) => DrawnAt(part.Mesh).Where(c => Shown(i, c) && c.Positions.Length > 0).Select(c => (Chunk: c, part.Place))).ToList();
+        if (chunks.Count == 0) chunks = _parts.SelectMany(part => part.Mesh.Chunks.Where(c => c.Positions.Length > 0).Select(c => (Chunk: c, part.Place))).ToList();
         if (chunks.Count == 0) return (new Point3D(-1, -1, -1), new Point3D(1, 1, 1));
         var min = new System.Numerics.Vector3(float.MaxValue);
         var max = new System.Numerics.Vector3(float.MinValue);
-        foreach (var chunk in chunks)
+        foreach (var (chunk, place) in chunks)
             foreach (var p in chunk.Positions)
             {
-                min = System.Numerics.Vector3.Min(min, p);
-                max = System.Numerics.Vector3.Max(max, p);
+                var at = place.IsIdentity ? p : System.Numerics.Vector3.Transform(p, place);
+                min = System.Numerics.Vector3.Min(min, at);
+                max = System.Numerics.Vector3.Max(max, at);
             }
         var a = ToView(min);
         var b = ToView(max);
@@ -308,7 +466,7 @@ public sealed class MeshView : Border
             FitToView();
             return;
         }
-        _lastMouse = e.GetPosition(this);
+        _lastMouse = _downAt = e.GetPosition(this);
         _panning = e.ChangedButton is MouseButton.Right or MouseButton.Middle || e.ChangedButton == MouseButton.Left && Keyboard.Modifiers.HasFlag(ModifierKeys.Shift);
         _orbiting = !_panning && e.ChangedButton == MouseButton.Left;
         if (_orbiting || _panning)
@@ -347,9 +505,11 @@ public sealed class MeshView : Border
     {
         base.OnMouseUp(e);
         if (!_orbiting && !_panning) return;
+        bool clicked = _orbiting && (e.GetPosition(this) - _downAt).Length < 4;
         _orbiting = _panning = false;
         ReleaseMouseCapture();
         e.Handled = true; // a right-drag isn't a right-click
+        if (clicked && PartClicked is not null) PartClicked(this, PartAt(e.GetPosition(this)));
     }
 
     protected override void OnMouseWheel(MouseWheelEventArgs e)

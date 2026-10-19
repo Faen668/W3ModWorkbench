@@ -2,7 +2,7 @@ using System.Buffers.Binary;
 using System.IO;
 using System.Text;
 
-namespace W3ModWorkbench.Core.Meshes;
+namespace W3ModWorkbench.Core.Cr2w;
 
 /// <summary>A file a CR2W file refers to: a material, a texture, a base mesh. Its path is relative to the game's depot.</summary>
 public sealed record Cr2wImport(string Path, string ClassName, int Flags);
@@ -126,6 +126,29 @@ public sealed class Cr2wFile
         var reader = new RedReader(this, Data, export.Offset + export.Size - instance.Tail.Length, export.Offset + export.Size);
         try { return reader.ReadParameters(); }
         catch (InvalidDataException) { return []; }
+    }
+
+    /// <summary>
+    /// The objects a class keeps after its properties as a counted list of (size, class, properties), the way an
+    /// animation set entry keeps its events. <paramref name="skip"/> is how many bytes come before the list (a cutscene
+    /// keeps four). Empty when there are none or they can't be read.
+    /// </summary>
+    public List<RedObject> TailObjects(RedObject owner, int skip = 0)
+    {
+        if (owner.Export is not { } export || owner.Tail.Length < skip + 4) return [];
+        var reader = new RedReader(this, Data, export.Offset + export.Size - owner.Tail.Length + skip, export.Offset + export.Size);
+        try { return reader.ReadSizedObjects(); }
+        catch (Exception ex) when (ex is InvalidDataException or ArgumentOutOfRangeException or IndexOutOfRangeException) { return []; }
+    }
+
+    /// <summary>A TagList's tags. It's kept as its bytes: a count, then that many names.</summary>
+    public List<string> Tags(byte[] raw)
+    {
+        var tags = new List<string>();
+        if (raw.Length == 0) return tags;
+        for (int i = 0, at = 1; i < raw[0] && at + 2 <= raw.Length; i++, at += 2)
+            if (U16(raw, at) is var name && name < Names.Count) tags.Add(Names[name]);
+        return tags;
     }
 
     /// <summary>The import a handle or soft reference points at, when it points at one.</summary>

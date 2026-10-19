@@ -191,7 +191,7 @@ public static class ModBuilder
         {
             using var stream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
             var header = new byte[160];
-            if (stream.Read(header) < header.Length || !Meshes.Cr2wFile.IsCr2w(header)) return false;
+            if (stream.Read(header) < header.Length || !Cr2w.Cr2wFile.IsCr2w(header)) return false;
             int exportsAt = BitConverter.ToInt32(header, 40 + 4 * 12), count = BitConverter.ToInt32(header, 44 + 4 * 12);
             if (count <= 0 || exportsAt < 160 || exportsAt + (long)count * 24 > stream.Length) return false;
             var exports = new byte[count * 24];

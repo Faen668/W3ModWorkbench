@@ -13,6 +13,8 @@ using W3ModWorkbench.Core;
 using W3ModWorkbench.Core.Projects;
 using W3ModWorkbench.Core.Scripts;
 using W3ModWorkbench.Core.Strings;
+using W3ModWorkbench.Core.Cr2w;
+using W3ModWorkbench.Core.Cutscenes;
 using W3ModWorkbench.Core.Meshes;
 using W3ModWorkbench.Core.Textures;
 using W3ModWorkbench.Highlighting;
@@ -57,6 +59,7 @@ public partial class MainWindow : Window, IMessageHost
         OpenWhenDoneCheck.IsChecked = _settings.OpenWhenDone;
         CompanionsCheck.IsChecked = _settings.ExtractCompanions;
         PngCheck.IsChecked = _settings.ExtractTexturesAsPng;
+        JsonCheck.IsChecked = _settings.ExtractCr2wAsJson;
 
         UpdateProjectUi();
         FileThumbs.ContextMenu = FileGrid.ContextMenu;
@@ -78,9 +81,9 @@ public partial class MainWindow : Window, IMessageHost
         var dialog = new OpenFileDialog
         {
             Title = "Open projects, bundles, scripts or strings",
-            Filter = "Projects, bundles, scripts, strings, XML and meshes (*.w3bench;*.bundle;*.rsblob;*.cache;*.ws;*.w3strings;*.csv;*.xml;*.w2mesh)|*.w3bench;*.bundle;*.rsblob;*.cache;*.ws;*.w3strings;*.csv;*.xml;*.w2mesh|"
+            Filter = "Projects, bundles, scripts, strings, XML, meshes, entities, cutscenes and scenes (*.w3bench;*.bundle;*.rsblob;*.cache;*.ws;*.w3strings;*.csv;*.xml;*.json;*.w2mesh;*.w2ent;*.w2cutscene;*.w2scene)|*.w3bench;*.bundle;*.rsblob;*.cache;*.ws;*.w3strings;*.csv;*.xml;*.json;*.w2mesh;*.w2ent;*.w2cutscene;*.w2scene|"
                    + "Projects (*.w3bench)|*.w3bench|Bundles (*.bundle)|*.bundle|Compiled scripts (*.rsblob)|*.rsblob|Texture caches (*.cache)|*.cache|Loose scripts (*.ws)|*.ws|"
-                   + "Strings (*.w3strings;*.csv)|*.w3strings;*.csv|XML, opened in the XML editor (*.xml)|*.xml|Meshes, opened in the mesh viewer (*.w2mesh)|*.w2mesh|All files (*.*)|*.*",
+                   + "Strings (*.w3strings;*.csv)|*.w3strings;*.csv|XML, opened in the XML editor (*.xml)|*.xml|JSON, opened in the JSON editor (*.json)|*.json|Meshes, opened in the mesh viewer (*.w2mesh)|*.w2mesh|Entities, opened in the entity viewer (*.w2ent)|*.w2ent|Cutscenes, opened in the cutscene viewer (*.w2cutscene)|*.w2cutscene|Scenes, opened in the scene viewer (*.w2scene)|*.w2scene|All files (*.*)|*.*",
             Multiselect = true,
             InitialDirectory = Directory.Exists(_settings.LastOpenFolder) ? _settings.LastOpenFolder : "",
         };
@@ -203,11 +206,27 @@ public partial class MainWindow : Window, IMessageHost
         var xml = paths.Where(p => File.Exists(p) && XmlWindow.CanOpen(p)).ToList();
         foreach (string path in xml) XmlWindow.Open(path, this);
         paths = [.. paths.Except(xml)];
+        // and JSON, in the JSON editor (a converted CR2W file can be saved back as one from there)
+        var json = paths.Where(p => File.Exists(p) && JsonWindow.CanOpen(p)).ToList();
+        foreach (string path in json) JsonWindow.Open(path, this);
+        paths = [.. paths.Except(json)];
         // and meshes, which open in the mesh viewer
         var meshes = paths.Where(p => File.Exists(p) && MeshWindow.CanShow(p)).ToList();
         foreach (string path in meshes) MeshWindow.OpenFile(path, new ResourceLocator(OpenArchives(), null, GameLocator.Resolve(null), ProjectFiles), this);
         paths = [.. paths.Except(meshes)];
-        if ((strings.Count > 0 || xml.Count > 0 || meshes.Count > 0) && !paths.Any()) return;
+        // and cutscenes, which open in the cutscene viewer
+        var cutscenes = paths.Where(p => File.Exists(p) && CutsceneWindow.CanShow(p)).ToList();
+        foreach (string path in cutscenes) CutsceneWindow.OpenFile(path, new ResourceLocator(OpenArchives(), null, GameLocator.Resolve(null), ProjectFiles), this);
+        paths = [.. paths.Except(cutscenes)];
+        // and scenes, which open in the scene viewer
+        var scenes = paths.Where(p => File.Exists(p) && SceneWindow.CanShow(p)).ToList();
+        foreach (string path in scenes) SceneWindow.OpenFile(path, new ResourceLocator(OpenArchives(), null, GameLocator.Resolve(null), ProjectFiles), this);
+        paths = [.. paths.Except(scenes)];
+        // and entities, which open in the entity viewer
+        var entities = paths.Where(p => File.Exists(p) && EntityWindow.CanShow(p)).ToList();
+        foreach (string path in entities) EntityWindow.OpenFile(path, new ResourceLocator(OpenArchives(), null, GameLocator.Resolve(null), ProjectFiles), this);
+        paths = [.. paths.Except(entities)];
+        if ((strings.Count > 0 || xml.Count > 0 || meshes.Count > 0 || cutscenes.Count > 0 || scenes.Count > 0 || entities.Count > 0) && !paths.Any()) return;
 
         var files = new List<string>();
         foreach (var path in paths)
@@ -802,7 +821,11 @@ public partial class MainWindow : Window, IMessageHost
         var item = ProjectNode?.AllFiles().FirstOrDefault(i => i.Entry is LooseScriptEntry l && l.FullPath.Equals(path, StringComparison.OrdinalIgnoreCase));
         if (item is not null) OpenItem(item);
         else if (MeshWindow.CanShow(path)) MeshWindow.OpenFile(path, new ResourceLocator(OpenArchives(), null, GameLocator.Resolve(null), ProjectFiles), this);
+        else if (CutsceneWindow.CanShow(path)) CutsceneWindow.OpenFile(path, new ResourceLocator(OpenArchives(), null, GameLocator.Resolve(null), ProjectFiles), this);
+        else if (SceneWindow.CanShow(path)) SceneWindow.OpenFile(path, new ResourceLocator(OpenArchives(), null, GameLocator.Resolve(null), ProjectFiles), this);
+        else if (EntityWindow.CanShow(path)) EntityWindow.OpenFile(path, new ResourceLocator(OpenArchives(), null, GameLocator.Resolve(null), ProjectFiles), this);
         else if (XmlWindow.CanOpen(path)) XmlWindow.Open(path, this);
+        else if (JsonWindow.CanOpen(path)) JsonWindow.Open(path, this);
     }
 
     private void GridAddToProject_Click(object sender, RoutedEventArgs e)
@@ -1025,12 +1048,22 @@ public partial class MainWindow : Window, IMessageHost
             _ = OpenPictureAsync(item);
         else if (MeshWindow.CanShow(item.Name))
             _ = OpenMeshAsync(item);
+        else if (CutsceneWindow.CanShow(item.Name))
+            _ = OpenCutsceneAsync(item);
+        else if (SceneWindow.CanShow(item.Name))
+            _ = OpenSceneAsync(item);
+        else if (EntityWindow.CanShow(item.Name))
+            _ = OpenEntityAsync(item);
         else if (item.Entry is LooseScriptEntry { IsScript: false } && XmlWindow.CanOpen(item.Name))
             _ = OpenXmlAsync(item);
+        else if (item.Entry is LooseScriptEntry { IsScript: false } && JsonWindow.CanOpen(item.Name))
+            _ = OpenJsonAsync(item, asCr2w: false);
         else if (item.IsPreviewable)
             _ = PreviewAsync(item);
         else if (XmlWindow.CanOpen(item.Name))
             _ = OpenXmlAsync(item);
+        else if (JsonWindow.CanOpen(item.Name))
+            _ = OpenJsonAsync(item, asCr2w: false);
         else
             item.IsChecked = !item.IsChecked;
     }
@@ -1065,6 +1098,66 @@ public partial class MainWindow : Window, IMessageHost
                 return entry.Read(fs);
             });
             MeshWindow.Open(entry.Path, item.BundleName, data, entry.Archive, LocatorFor(entry), this);
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
+        {
+            ShowError($"{item.Name} could not be read.\n\n{ex.Message}");
+        }
+    }
+
+    /// <summary>Shows an entity in the entity viewer, with the files it uses found the way the game would.</summary>
+    private async Task OpenEntityAsync(EntryItem item)
+    {
+        if (item.Entry is LooseScriptEntry loose)
+        {
+            EntityWindow.OpenFile(loose.FullPath, LocatorFor(item.Entry), this);
+            return;
+        }
+        try
+        {
+            var entry = item.Entry;
+            byte[] data = await ReadAsync(entry);
+            EntityWindow.Open(entry.Path, item.BundleName, data, LocatorFor(entry), this);
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
+        {
+            ShowError($"{item.Name} could not be read.\n\n{ex.Message}");
+        }
+    }
+
+    /// <summary>Shows a scene in the scene viewer, with the files it uses found the way the game would.</summary>
+    private async Task OpenSceneAsync(EntryItem item)
+    {
+        if (item.Entry is LooseScriptEntry loose)
+        {
+            SceneWindow.OpenFile(loose.FullPath, LocatorFor(item.Entry), this);
+            return;
+        }
+        try
+        {
+            var entry = item.Entry;
+            byte[] data = await ReadAsync(entry);
+            SceneWindow.Open(entry.Path, item.BundleName, data, LocatorFor(entry), this);
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
+        {
+            ShowError($"{item.Name} could not be read.\n\n{ex.Message}");
+        }
+    }
+
+    /// <summary>Shows a cutscene in the cutscene viewer, with the files it uses found the way the game would.</summary>
+    private async Task OpenCutsceneAsync(EntryItem item)
+    {
+        if (item.Entry is LooseScriptEntry loose)
+        {
+            CutsceneWindow.OpenFile(loose.FullPath, LocatorFor(item.Entry), this);
+            return;
+        }
+        try
+        {
+            var entry = item.Entry;
+            byte[] data = await ReadAsync(entry);
+            CutsceneWindow.Open(entry.Path, item.BundleName, data, LocatorFor(entry), this);
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
         {
@@ -1139,9 +1232,12 @@ public partial class MainWindow : Window, IMessageHost
 
     private void GridPreview_Click(object sender, RoutedEventArgs e)
     {
-        if (Highlighted().FirstOrDefault(i => i.IsPreviewable || i.Entry is StringsEntry or TextureEntry || IsTextureHeader(i) || TextureWindow.CanShow(i.Name) || MeshWindow.CanShow(i.Name)) is not { } item) return;
+        if (Highlighted().FirstOrDefault(i => i.IsPreviewable || i.Entry is StringsEntry or TextureEntry || IsTextureHeader(i) || TextureWindow.CanShow(i.Name) || MeshWindow.CanShow(i.Name) || CutsceneWindow.CanShow(i.Name) || SceneWindow.CanShow(i.Name) || EntityWindow.CanShow(i.Name)) is not { } item) return;
         if (item.Entry is StringsEntry strings) StringsWindow.Open(strings.FullPath, this);
         else if (MeshWindow.CanShow(item.Name)) _ = OpenMeshAsync(item);
+        else if (CutsceneWindow.CanShow(item.Name)) _ = OpenCutsceneAsync(item);
+        else if (SceneWindow.CanShow(item.Name)) _ = OpenSceneAsync(item);
+        else if (EntityWindow.CanShow(item.Name)) _ = OpenEntityAsync(item);
         else if (item.Entry is TextureEntry texture) TextureWindow.Open(texture, this);
         else if (IsTextureHeader(item)) _ = OpenTextureHeaderAsync(item);
         else if (TextureWindow.CanShow(item.Name)) _ = OpenPictureAsync(item);
@@ -1154,11 +1250,49 @@ public partial class MainWindow : Window, IMessageHost
             _ = OpenXmlAsync(item);
     }
 
+    /// <summary>JSON files in the JSON editor, and CR2W files (an .env, a .w2ent…) as their JSON.</summary>
+    private void GridJson_Click(object sender, RoutedEventArgs e)
+    {
+        foreach (var item in Highlighted().Where(i => JsonWindow.CanOpen(i.Name) || Cr2wJsonBatch.LooksLikeCr2w(i.Name)).Take(10))
+            _ = OpenJsonAsync(item, asCr2w: !JsonWindow.CanOpen(item.Name));
+    }
+
+    /// <summary>Opens a JSON file, or a CR2W file as its JSON, from a bundle or the project.</summary>
+    private async Task OpenJsonAsync(EntryItem item, bool asCr2w)
+    {
+        try
+        {
+            var entry = item.Entry;
+            if (entry is LooseScriptEntry loose && !asCr2w)
+            {
+                JsonWindow.Open(loose.FullPath, this);
+                return;
+            }
+            byte[] data = await Task.Run(() =>
+            {
+                if (!entry.Archive.ReadsFromDisk) return entry.Read(null);
+                using var fs = new FileStream(entry.Archive.FilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                return entry.Read(fs);
+            });
+            string source = $"{item.BundleName}  ·  {entry.Path}";
+            string? disk = entry is LooseScriptEntry l ? l.FullPath : null;
+            if (asCr2w) JsonWindow.OpenCr2w(item.Name, source, data, this, disk is null ? entry.Path : null, disk);
+            else JsonWindow.OpenData(item.Name, source, data, this, entry.Path);
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
+        {
+            ShowError($"{item.Name} could not be opened.\n\n{ex.Message}");
+        }
+    }
+
     private void FileGrid_ContextMenuOpening(object sender, ContextMenuEventArgs e)
     {
         UpdateFileMenu();
         GridExternalItem.IsEnabled = Highlighted().Any(i => i.IsPreviewable);
         GridXmlItem.Visibility = Highlighted().Any(i => XmlWindow.CanOpen(i.Name)) ? Visibility.Visible : Visibility.Collapsed;
+        bool anyJson = Highlighted().Any(i => JsonWindow.CanOpen(i.Name)), anyCr2w = Highlighted().Any(i => Cr2wJsonBatch.LooksLikeCr2w(i.Name));
+        GridJsonItem.Visibility = anyJson || anyCr2w ? Visibility.Visible : Visibility.Collapsed;
+        GridJsonItem.Header = anyJson && !anyCr2w ? "Open in JSON editor" : "Open as JSON";
         var project = ProjectWorkspace.Current;
         var loose = Highlighted().Select(i => i.Entry).OfType<LooseScriptEntry>().ToList();
         // the game's files and installed mods' are copied into a project, not added to it: added, they'd still be read-only
@@ -1539,8 +1673,13 @@ public partial class MainWindow : Window, IMessageHost
         return document;
     }
 
-    private void ShowPreview(string glyph, string? message, EntryPicture? picture = null, string? text = null, string? name = null, MeshFile? mesh = null)
+    private void ShowPreview(string glyph, string? message, EntryPicture? picture = null, string? text = null, string? name = null, MeshFile? mesh = null,
+        CutsceneFile? cutscene = null, Core.Scenes.SceneFile? scene = null)
     {
+        PreviewScene.Visibility = scene is not null ? Visibility.Visible : Visibility.Collapsed;
+        if (!ReferenceEquals(PreviewScene.Scene, scene)) PreviewScene.Show(scene);
+        PreviewCutscene.Visibility = cutscene is not null ? Visibility.Visible : Visibility.Collapsed;
+        if (!ReferenceEquals(PreviewCutscene.Cutscene, cutscene)) PreviewCutscene.Show(cutscene);
         PreviewMeshHost.Visibility = mesh is not null ? Visibility.Visible : Visibility.Collapsed;
         if (!ReferenceEquals(PreviewMesh.Mesh, mesh)) PreviewMesh.Show(mesh);
         PreviewImageHost.Visibility = picture is not null ? Visibility.Visible : Visibility.Collapsed;
@@ -1548,9 +1687,23 @@ public partial class MainWindow : Window, IMessageHost
         PreviewText.Visibility = text is not null ? Visibility.Visible : Visibility.Collapsed;
         if (text is not null) SetPreviewText(text, name);
         else SetPreviewDocument(new TextDocument());
-        PreviewEmpty.Visibility = picture is null && text is null && mesh is null ? Visibility.Visible : Visibility.Collapsed;
+        PreviewEmpty.Visibility = picture is null && text is null && mesh is null && cutscene is null && scene is null ? Visibility.Visible : Visibility.Collapsed;
         PreviewEmptyGlyph.Text = glyph;
         PreviewEmptyText.Text = message ?? "";
+    }
+
+    /// <summary>The preview's textures, smaller than the viewers', each read once for the file shown.</summary>
+    private static Func<string, Task<System.Windows.Media.Imaging.BitmapSource?>> PreviewTexture(ResourceLocator locator)
+    {
+        var read = new Dictionary<string, Task<System.Windows.Media.Imaging.BitmapSource?>>(StringComparer.OrdinalIgnoreCase);
+        return path =>
+        {
+            lock (read)
+            {
+                if (!read.TryGetValue(path, out var task)) read[path] = task = Task.Run(() => MeshTextures.Load(locator, path, 512));
+                return task;
+            }
+        };
     }
 
     /// <summary>Shows the file highlighted in the list, when there's just one: a picture for textures and picture files, text for text files, and what it is for the rest.</summary>
@@ -1624,11 +1777,97 @@ public partial class MainWindow : Window, IMessageHost
                 for (int i = 0; i < mesh.Materials.Count; i++)
                 {
                     int material = i;
-                    var picture = await Task.Run(() => MeshMaterial.Resolve(mesh.File, mesh.Materials[material], locator.ReadFile).Diffuse is { } diffuse
-                        ? MeshTextures.Load(locator, diffuse.Path, 512) : null, token);
+                    var (picture, leaveOut) = await Task.Run(() => LookTextures.ForMaterial(mesh, material, locator, PreviewTexture(locator)), token);
                     if (token.IsCancellationRequested || !ReferenceEquals(PreviewMesh.Mesh, mesh)) return;
-                    PreviewMesh.SetTexture(material, picture);
+                    if (leaveOut) PreviewMesh.LeaveOut(0, material);
+                    else PreviewMesh.SetTexture(material, picture);
                 }
+            }
+            else if (CutsceneWindow.CanShow(item.Name))
+            {
+                ShowPreview(item.Glyph, "Reading the cutscene…");
+                var entry = item.Entry;
+                CutsceneFile cutscene;
+                try
+                {
+                    byte[] data = await ReadAsync(entry);
+                    cutscene = await Task.Run(() => CutsceneFile.Read(data), token);
+                }
+                catch (InvalidDataException ex)
+                {
+                    if (!token.IsCancellationRequested) ShowPreview(item.Glyph, $"This cutscene could not be read.\n\n{ex.Message}\n\nIt can still be checked and extracted.");
+                    return;
+                }
+                if (token.IsCancellationRequested) return;
+                ShowPreview(item.Glyph, null, cutscene: cutscene);
+                PreviewDetail.Text = detail + "  ·  double-click to open";
+            }
+            else if (EntityWindow.CanShow(item.Name))
+            {
+                // its meshes put together, in its first appearance
+                ShowPreview(item.Glyph, "Reading the entity…");
+                var locator = LocatorFor(item.Entry);
+                Core.Entities.EntityFile entity;
+                List<(MeshFile Mesh, System.Numerics.Matrix4x4 Place)> parts;
+                List<Core.Entities.EntityComponent> drawnBy;
+                try
+                {
+                    byte[] data = await ReadAsync(item.Entry);
+                    entity = await Task.Run(() => Core.Entities.EntityFile.Read(data), token);
+                    var look = await Task.Run(() => entity.Look(entity.Appearances.FirstOrDefault(), locator.ReadFile), token);
+                    (parts, drawnBy, _, _) = await Task.Run(() => EntityWindow.ReadMeshes(look, locator, token), token);
+                }
+                catch (InvalidDataException ex)
+                {
+                    if (!token.IsCancellationRequested) ShowPreview(item.Glyph, $"This entity could not be read.\n\n{ex.Message}\n\nIt can still be checked and extracted.");
+                    return;
+                }
+                if (token.IsCancellationRequested) return;
+                string what = $"{entity.EntityClass ?? "Entity"}  ·  {Format.Count(entity.Components.Count, "component")}"
+                            + (entity.Appearances.Count > 0 ? $", {Format.Count(entity.Appearances.Count, "appearance")}" : "");
+                if (parts.Count == 0)
+                {
+                    ShowPreview(item.Glyph, $"{what}\n\nIt has no meshes to show. Double-click to see its components.");
+                    return;
+                }
+                ShowPreview(item.Glyph, null, mesh: parts[0].Mesh);
+                PreviewMesh.ShowParts(parts);
+                PreviewDetail.Text = detail + $"  ·  {what}, {Format.Count(parts.Count, "mesh", "meshes")}  ·  double-click to open";
+                var texture = PreviewTexture(locator);
+                for (int p = 0; p < parts.Count; p++)
+                {
+                    var coloring = LookTextures.Coloring(entity, entity.Appearances.FirstOrDefault()?.Name, drawnBy[p].Name);
+                    for (int m = 0; m < parts[p].Mesh.Materials.Count; m++)
+                    {
+                        int part = p, material = m;
+                        var mesh = parts[p].Mesh;
+                        var (picture, leaveOut) = await Task.Run(() => LookTextures.ForMaterial(mesh, material, locator, texture, coloring), token);
+                        if (token.IsCancellationRequested || !ReferenceEquals(PreviewMesh.Mesh, parts[0].Mesh)) return;
+                        if (leaveOut) PreviewMesh.LeaveOut(part, material);
+                        else PreviewMesh.SetTexture(part, material, picture);
+                    }
+                }
+            }
+            else if (SceneWindow.CanShow(item.Name))
+            {
+                ShowPreview(item.Glyph, "Reading the scene…");
+                Core.Scenes.SceneFile scene;
+                try
+                {
+                    byte[] data = await ReadAsync(item.Entry);
+                    scene = await Task.Run(() => Core.Scenes.SceneFile.Read(data), token);
+                }
+                catch (InvalidDataException ex)
+                {
+                    if (!token.IsCancellationRequested) ShowPreview(item.Glyph, $"This scene could not be read.\n\n{ex.Message}\n\nIt can still be checked and extracted.");
+                    return;
+                }
+                if (token.IsCancellationRequested) return;
+                // shown at once, then again with its lines in words once the game's strings are read
+                ShowPreview(item.Glyph, null, scene: scene);
+                PreviewDetail.Text = detail + "  ·  double-click to open";
+                var (text, note) = await SceneWindow.LinesAsync();
+                if (!token.IsCancellationRequested && ReferenceEquals(PreviewScene.Scene, scene)) PreviewScene.Show(scene, text ?? (_ => null), note);
             }
             else if (item.Entry is StringsEntry)
                 ShowPreview(item.Glyph, "Double-click to open it in the strings editor.");
@@ -1682,6 +1921,7 @@ public partial class MainWindow : Window, IMessageHost
             return item;
         }
         Add("Find in files…", "Ctrl+Shift+F", () => FindInFilesWindow.Open(this));
+        Add("Asset Browser", "Ctrl+Shift+A", () => _ = BrowseGameFilesAsync());
         Add("Browse game scripts", "", () => _ = BrowseGameScriptsAsync());
         Add("Browse installed mods", "", () => _ = BrowseModsAsync());
         menu.Items.Add(new Separator());
@@ -1696,14 +1936,17 @@ public partial class MainWindow : Window, IMessageHost
         Add("Scripts log…", "", () => LogWindow.Open(this));
         Add("Key binding helper…", "", () => InputBindingsWindow.Open(this));
         Add("Hashes and IDs…", "", () => HashToolsWindow.Open(this));
+        Add("CR2W and JSON…", "", () => Cr2wJsonWindow.Open(this));
         menu.Items.Add(new Separator());
         Add("New mod menu…", "", () => XmlWindow.OpenNewMenu(this));
         Add("Open an XML file…", "", OpenXmlFile);
+        Add("Open a JSON file…", "", OpenJsonFile);
         menu.IsOpen = true;
     }
 
     /// <summary>The archives open in the main window, for script lookups and for Find in files.</summary>
-    public IEnumerable<IArchive> OpenArchives() => _roots.Select(r => r.Archive);
+    /// <summary>The archives open in the tree; the asset browser's game files count as the bundles and caches they're from.</summary>
+    public IEnumerable<IArchive> OpenArchives() => _roots.SelectMany(r => r.Archive is GameFilesArchive game ? game.Parts : [r.Archive]);
 
     /// <summary>Opens the game's own scripts (content\content0\scripts) in the file list, to read, with no project needed.</summary>
     private async Task BrowseGameScriptsAsync()
@@ -1716,6 +1959,58 @@ public partial class MainWindow : Window, IMessageHost
             return;
         }
         await BrowseAsync([scripts], scripts);
+    }
+
+    private void AssetBrowser_Click(object sender, RoutedEventArgs e) => _ = BrowseGameFilesAsync();
+
+    /// <summary>
+    /// The asset browser: every file the game has (content0, DLC and installed mods) as one tree, each path from where
+    /// the game loads it, to search, preview, open and copy into the project like any open archive's. It's read once and
+    /// kept at the top of the tree; asking again goes back to it.
+    /// </summary>
+    private async Task BrowseGameFilesAsync()
+    {
+        if (_roots.FirstOrDefault(r => r.Archive is GameFilesArchive) is { } open)
+        {
+            open.IsExpanded = true;
+            open.IsSelected = true;
+            SearchBox.Focus();
+            return;
+        }
+        string? game = GameLocator.Resolve(null);
+        if (game is null || !Directory.Exists(Path.Combine(game, "content")))
+        {
+            ShowError("The game folder isn't set.\n\nThe asset browser lists the files of The Witcher 3's content, DLC and mods. Set the game's folder in Settings.");
+            return;
+        }
+        LoadingOverlay.Visibility = Visibility.Visible;
+        EmptyState.Visibility = Visibility.Collapsed;
+        BrowserPanel.Visibility = Visibility.Collapsed;
+        LoadingProgress.IsIndeterminate = true;
+        LoadingText.Text = "Reading the game's bundles…";
+        FolderNode node;
+        try
+        {
+            node = await Task.Run(() => FolderNode.Build(GameFilesArchive.Open(game,
+                name => Dispatcher.BeginInvoke(() => LoadingText.Text = $"Reading {name}…")), OnEntryChecked));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            ShowError($"The game's files could not be read.\n\n{ex.Message}");
+            return;
+        }
+        finally
+        {
+            LoadingProgress.IsIndeterminate = false;
+            LoadingOverlay.Visibility = Visibility.Collapsed;
+            UpdateEmptyState();
+        }
+        // below the project, which stays at the top
+        _roots.Insert(ProjectNode is null ? 0 : 1, node);
+        UpdateEmptyState();
+        node.IsSelected = true;
+        SearchBox.Focus();
+        SetStatus($"Asset browser: {Format.Count(node.TotalFiles, "file")} from {node.Archive.Name}");
     }
 
     /// <summary>Opens everything in the game's mods folder, as Open folder does: loose scripts, compiled scripts, bundles and strings.</summary>
@@ -1772,6 +2067,20 @@ public partial class MainWindow : Window, IMessageHost
         if (dialog.ShowDialog(this) != true) return;
         _settings.LastOpenFolder = Path.GetDirectoryName(dialog.FileNames[0]) ?? "";
         foreach (string path in dialog.FileNames) XmlWindow.Open(path, this);
+    }
+
+    private void OpenJsonFile()
+    {
+        var dialog = new OpenFileDialog
+        {
+            Title = "Open a JSON file",
+            Filter = "JSON (*.json)|*.json|All files (*.*)|*.*",
+            Multiselect = true,
+            InitialDirectory = Directory.Exists(_settings.LastOpenFolder) ? _settings.LastOpenFolder : "",
+        };
+        if (dialog.ShowDialog(this) != true) return;
+        _settings.LastOpenFolder = Path.GetDirectoryName(dialog.FileNames[0]) ?? "";
+        foreach (string path in dialog.FileNames) JsonWindow.Open(path, this);
     }
 
     private async Task PreviewAsync(EntryItem item)
@@ -1873,6 +2182,10 @@ public partial class MainWindow : Window, IMessageHost
         bool keepStructure = KeepStructureCheck.IsChecked == true;
         bool openWhenDone = OpenWhenDoneCheck.IsChecked == true;
         bool asPng = PngCheck.IsChecked == true;
+        bool asJson = JsonCheck.IsChecked == true;
+        ExtractConverter? convert = asPng || asJson
+            ? (entry, data) => (asPng ? EntryImages.ToPng(entry, data) : null) ?? (asJson ? Cr2wJsonBatch.ExtractAsJson(entry, data) : null)
+            : null;
         try
         {
             output = Path.GetFullPath(output);
@@ -1888,7 +2201,7 @@ public partial class MainWindow : Window, IMessageHost
 
         var entries = items.Select(i => i.Entry).ToList();
         int companions = 0;
-        var open = _roots.Select(r => r.Archive).ToList();
+        var open = OpenArchives().ToList();
         if (CompanionsCheck.IsChecked == true) entries = await Task.Run(() => Companions.With(entries, open, out companions));
 
         _extractCts = new CancellationTokenSource();
@@ -1905,7 +2218,7 @@ public partial class MainWindow : Window, IMessageHost
         ExtractResult result;
         try
         {
-            result = await Task.Run(() => Extractor.Extract(entries, output, keepStructure, progress, token, asPng ? EntryImages.ToPng : null));
+            result = await Task.Run(() => Extractor.Extract(entries, output, keepStructure, progress, token, convert));
         }
         finally
         {
@@ -1982,6 +2295,11 @@ public partial class MainWindow : Window, IMessageHost
         else if (Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && e.Key == Key.G)
         {
             OpenGameStrings();
+            e.Handled = true;
+        }
+        else if (Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && e.Key == Key.A)
+        {
+            _ = BrowseGameFilesAsync();
             e.Handled = true;
         }
         else if (Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && e.Key == Key.I)
@@ -2157,6 +2475,7 @@ public partial class MainWindow : Window, IMessageHost
         _settings.OpenWhenDone = OpenWhenDoneCheck.IsChecked == true;
         _settings.ExtractCompanions = CompanionsCheck.IsChecked == true;
         _settings.ExtractTexturesAsPng = PngCheck.IsChecked == true;
+        _settings.ExtractCr2wAsJson = JsonCheck.IsChecked == true;
     }
 
     private bool _closeConfirmed;

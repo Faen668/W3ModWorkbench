@@ -1,6 +1,7 @@
 using System.IO;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using W3ModWorkbench.Core.Cr2w;
 using W3ModWorkbench.Core.Meshes;
 using W3ModWorkbench.Core.Textures;
 

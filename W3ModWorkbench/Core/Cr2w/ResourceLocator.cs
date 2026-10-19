@@ -1,7 +1,7 @@
 using System.IO;
 using W3ModWorkbench.Core.Textures;
 
-namespace W3ModWorkbench.Core.Meshes;
+namespace W3ModWorkbench.Core.Cr2w;
 
 /// <summary>
 /// Finds the files a resource refers to by their game path: a mesh's buffers, its materials (.w2mi, .w2mg) and its
@@ -99,6 +99,49 @@ public sealed class ResourceLocator
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
         return [.. paths.Order(StringComparer.OrdinalIgnoreCase)];
+    }
+
+    // ---------------------------------------------------------------- collision caches
+
+    /// <summary>
+    /// A cooked resource's entry in the game's collision caches (a cloth's APEX asset), from the nearest that has it:
+    /// beside the file being looked at, then the installed mods', the DLC's and content0's. Null when none has.
+    /// </summary>
+    public byte[]? ReadCollision(string path)
+    {
+        var places = new List<string>();
+        if (_near is not null) places.Add(Path.Combine(_near, "collision.cache"));
+        if (_game is not null)
+        {
+            foreach (string folder in new[] { "mods", "dlc" })
+            {
+                string root = Path.Combine(_game, folder);
+                if (!Directory.Exists(root)) continue;
+                try { places.AddRange(Directory.GetDirectories(root).Order(StringComparer.OrdinalIgnoreCase).Select(m => Path.Combine(m, "content", "collision.cache"))); }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+            }
+            places.Add(Path.Combine(_game, "content", "content0", "collision.cache"));
+        }
+        foreach (string place in places)
+            if (CollisionCacheAt(place) is { } cache && cache.Has(path))
+                try { return cache.Read(path); }
+                catch (Exception ex) when (ex is IOException or InvalidDataException) { }
+        return null;
+    }
+
+    private static readonly Dictionary<string, Meshes.CollisionCache?> OpenedCollisionCaches = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>A collision cache on disk, its index read once. Null when there's none there or it can't be read.</summary>
+    private static Meshes.CollisionCache? CollisionCacheAt(string path)
+    {
+        lock (OpenedCollisionCaches)
+        {
+            if (OpenedCollisionCaches.TryGetValue(path, out var known)) return known;
+            Meshes.CollisionCache? cache = null;
+            try { if (File.Exists(path)) cache = Meshes.CollisionCache.Open(path); }
+            catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException) { }
+            return OpenedCollisionCaches[path] = cache;
+        }
     }
 
     // ---------------------------------------------------------------- textures

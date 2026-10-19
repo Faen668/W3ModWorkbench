@@ -5,6 +5,7 @@ using System.Windows.Input;
 using System.Windows.Media.Imaging;
 using Microsoft.Win32;
 using W3ModWorkbench.Core;
+using W3ModWorkbench.Core.Cr2w;
 using W3ModWorkbench.Core.Meshes;
 using W3ModWorkbench.Core.Projects;
 using W3ModWorkbench.ViewModels;

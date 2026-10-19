@@ -8,7 +8,8 @@ namespace W3ModWorkbench;
 /// The Fluent theme greys a disabled button's text only when its content is plain text. Content of our own (an icon
 /// and a label in a StackPanel) takes its colour from the button instead, so it stayed as bright as an enabled button,
 /// or black on an accent button in dark mode. This puts a style over each of the theme's button styles that gives the
-/// button itself the theme's disabled colour while it is disabled.
+/// button itself the theme's disabled colour while it is disabled. A checked toggle button had the same trouble the
+/// other way round: its content stayed white on the light accent fill, so it's given the theme's checked colour too.
 /// </summary>
 /// <remarks>
 /// The styles are built here, on the theme's own styles as the app finds them once the theme is applied. Written in
@@ -29,6 +30,9 @@ public static class DisabledLook
         if (app.TryFindResource(typeof(ToggleButton)) is Style toggle)
         {
             var style = new Style(typeof(ToggleButton), toggle);
+            style.Triggers.Add(Checked(false, "ToggleButtonForegroundChecked"));
+            style.Triggers.Add(Checked(true, "ToggleButtonForegroundCheckedPressed"));
+            // after the checked ones, so a disabled toggle is grey whether it's checked or not
             style.Triggers.Add(Disabled(ToggleButton.IsCheckedProperty, true, "ToggleButtonForegroundCheckedDisabled"));
             style.Triggers.Add(Disabled(ToggleButton.IsCheckedProperty, false, "ToggleButtonForegroundDisabled"));
             set(typeof(ToggleButton), style);
@@ -47,6 +51,16 @@ public static class DisabledLook
         });
         set(key, style);
     }
+
+    private static MultiTrigger Checked(bool pressed, string brush) => new()
+    {
+        Conditions =
+        {
+            new Condition(ToggleButton.IsCheckedProperty, true),
+            new Condition(ButtonBase.IsPressedProperty, pressed),
+        },
+        Setters = { new Setter(Control.ForegroundProperty, new DynamicResourceExtension(brush)) },
+    };
 
     private static MultiTrigger Disabled(DependencyProperty property, object value, string brush) => new()
     {
