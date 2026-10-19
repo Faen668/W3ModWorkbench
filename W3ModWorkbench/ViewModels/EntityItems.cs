@@ -251,6 +251,9 @@ public sealed class PropertyRow(string name, string type, string value, int dept
     {
         "Vector" or "Vector2" or "Vector3" or "EulerAngles" or "Color" => string.Join(", ", s.Properties.Select(p => $"{p.Name} {Text(p.Value)}")),
         "Box" => $"min {Summary(s.Struct("Min") ?? new RedObject("Vector"))}  ·  max {Summary(s.Struct("Max") ?? new RedObject("Vector"))}",
+        // a behaviour tree's value: what it is, and the behaviour variable it can be set from
+        _ when s.ClassName.StartsWith("CBehTreeVal", StringComparison.Ordinal) && s.Properties.Count > 0 =>
+            Text(s["value"]) + (s["varName"] is string v && v.Length > 0 && v != "None" ? $"  (from {v})" : ""),
         _ => "",
     };
 

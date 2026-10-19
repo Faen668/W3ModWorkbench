@@ -360,7 +360,7 @@ public partial class SceneWindow : Window, IMessageHost
     /// </summary>
     private async Task OpenLinkAsync(string path)
     {
-        bool viewable = EntityWindow.CanShow(path) || MeshWindow.CanShow(path) || CutsceneWindow.CanShow(path) || CanShow(path) || XmlWindow.CanOpen(path) || TextureWindow.CanShow(path);
+        bool viewable = EntityWindow.CanShow(path) || BehTreeWindow.CanShow(path) || MeshWindow.CanShow(path) || CutsceneWindow.CanShow(path) || CanShow(path) || XmlWindow.CanOpen(path) || TextureWindow.CanShow(path);
         if (!viewable)
         {
             string kind = FileKinds.Of(path)?.Name.ToLowerInvariant() ?? "this kind of";
@@ -386,6 +386,7 @@ public partial class SceneWindow : Window, IMessageHost
         string source = entry is null ? "project" : entry.Archive.Name;
         string name = Path.GetFileName(path);
         if (EntityWindow.CanShow(path)) EntityWindow.Open(path, source, data, _locator, this);
+        else if (BehTreeWindow.CanShow(path)) BehTreeWindow.Open(path, source, data, _locator, this);
         else if (MeshWindow.CanShow(path)) MeshWindow.Open(path, source, data, entry?.Archive, _locator, this);
         else if (CutsceneWindow.CanShow(path)) CutsceneWindow.Open(path, source, data, _locator, this);
         else if (CanShow(path)) Open(path, source, data, _locator, this);

@@ -268,6 +268,18 @@ A mesh keeps its shape in its `.buffer` files and its look in its materials and 
 - **Front**, **Side** and **Top** (or **1**, **2**, **3**) look at it from those sides.
 - **LOD** picks the level of detail: 0 is the one used up close, and each one after it says how many triangles it has and from how far away the game uses it.
 - **Textures** (**T**) turns the textures off, to see the shape in plain grey. **Wireframe** (**W**) draws the triangles' edges over it.
+- **Floor** (**G**) draws a grid on the ground under it.
+- **Show** draws how it's made: its **bounding box** (**B**), its **vertex colours** (**V**, each triangle in its corners' average, which is how hair keeps its colour), its **normals** (**N**), a skinned mesh's **bones** where they were bound (**K**), and its **collision** (**C**).
+- The panel at the top left (**I** hides or shows it) says how many triangles, vertices and chunks the LOD shown draws, the mesh's size, the memory its data and its textures take, its bones and its collision shapes.
+
+## Properties, LODs, Report and Collision
+
+Beside the **Materials** tab, as REDkit's mesh editor has them:
+
+- **Properties**: every property of the mesh, under the class that brings each in, with a search.
+- **LODs**: each level of detail, the distance it's drawn from, and its chunks with their material, vertices, indices and vertices a triangle.
+- **Report**: the memory the mesh's data and textures take, how far away it's drawn, each LOD's share of triangles for each material, and every texture the materials use with a picture of it, its format and size, and the materials that use it.
+- **Collision**: the shapes the game collides with, read from its collision.cache (where a cooked mesh's collision is kept): each one's kind (convex or a triangle mesh), vertices, triangles and physical material. Boxes, spheres and capsules are counted but not drawn.
 
 ## Chunks and materials
 
@@ -343,11 +355,11 @@ An entity template is what the game spawns: an NPC, a horse, a door, a prop. It'
 
 ## The view
 
-On the left are the entity's meshes put together where its components place them, with their colour textures, in the **Appearance** picked: its own meshes and those of every template the appearance includes. Drag to turn, right-drag to move, use the wheel to zoom and double-click to fit. **Textures** (**T**) and **Wireframe** (**W**) as in the mesh viewer; **Fit** (**F**). **LOD** picks the level of detail, and the line under the view says how many triangles and vertices it draws. Click a part to pick its component. Colours are worked out as the game's shaders work them out: hair takes its colour from the colours kept on its mesh's vertices, and a component the appearance recolours (its **Colors** entry) has the red and blue parts of its texture shifted as the entry says, where its tint mask allows. Lighting and shine are the viewer's own, so it looks flatter than the game. Cloth (a long coat, a skirt, a cape) is drawn in the shape it has before the game moves it, and follows the bones it's bound to in an animation, without swaying. Characters stand in the pose their meshes were made in; shadow-only meshes aren't drawn.
+On the left are the entity's meshes put together where its components place them, with their colour textures, in the **Appearance** picked: its own meshes and those of every template the appearance includes. Drag to turn, right-drag to move, use the wheel to zoom and double-click to fit. **Textures** (**T**) and **Wireframe** (**W**) as in the mesh viewer; **Floor** (**G**) draws a grid on the ground under the entity; the panel at the top left of the view (**I** hides or shows it) says how many triangles, vertices, meshes and chunks are drawn, the LOD, the size, the skeleton, and while an animation plays how many frames a second are drawn and how long each pose takes; **Fit** (**F**). **LOD** picks the level of detail, and the line under the view says how many triangles and vertices it draws. Click a part to pick its component. Colours are worked out as the game's shaders work them out: hair takes its colour from the colours kept on its mesh's vertices, and a component the appearance recolours (its **Colors** entry) has the red and blue parts of its texture shifted as the entry says, where its tint mask allows. Lighting and shine are the viewer's own, so it looks flatter than the game. Cloth (a long coat, a skirt, a cape) is drawn in the shape it has before the game moves it, and follows the bones it's bound to in an animation, without swaying. Characters stand in the pose their meshes were made in; shadow-only meshes aren't drawn.
 
 ## Animation
 
-When the entity has a skeleton and skinned meshes, the bar under the view plays its animations on them: pick an **animation set** (those the entity's animation settings name) and an **animation** (type to find one by name), and it plays, looping, with the actor brought back to the middle of the view and turned the way the entity faces (many animations are made for a place in a scene, off to one side or turned). Play and pause with the button or **Space**, drag the bar to any moment, and the stop button stands it as bound again. The frame rate box beside the bar sets how many times a second it's drawn (15 to 60, or **Max** for as often as the screen draws); fewer is lighter on the computer, and the choice is remembered. The face's and dangling bones (hair, medallions) have rigs of their own and move with the head or the body, stiffly; the face's own sets aren't listed. Items held in slots don't move with it, and cloth keeps its shape rather than swaying.
+When the entity has a skeleton and skinned meshes, the bar under the view plays its animations on them: pick an **animation set** (those the entity's animation settings name) and an **animation** (with its list open, type the start of a name to jump to it), and it plays, looping (an entity opens in a standing idle from its own sets when it has one, and the animation picked carries on when the appearance changes), with the actor brought back to the middle of the view and turned the way the entity faces (many animations are made for a place in a scene, off to one side or turned). Play and pause with the button or **Space**, drag the bar to any moment, and the stop button stands it as bound again. The frame rate box beside the bar sets how many times a second it's drawn (15 to 60, or **Max** for as often as the screen draws); fewer is lighter on the computer, and the choice is remembered. The speed box beside it plays it slower or faster, from 10% to 200% of the game's speed. The face's and dangling bones (hair, medallions) have rigs of their own and move with the head or the body, stiffly; the face's own sets aren't listed. Items held in slots don't move with it, and cloth keeps its shape rather than swaying.
 
 ## Components
 
@@ -356,6 +368,25 @@ On the right are the components as the entity editor lays them out, with a line 
 **Entity** has the properties of the object the game spawns. **Template** has the entity's class, the templates it includes, and every file it depends on, following its includes and appearances as far as they go (**Show only entity templates** narrows the list), then the template's own properties. Structs, arrays and the objects a property points to fold open and shut with the arrow beside them, and a bool shows a tick or a cross.
 
 The tabs after them are REDkit's, each a list with the properties of the one picked beside it, and "(included)" on what comes from a template the entity includes: **Appearances** (with the templates each uses), **Colors** (the colour shifts of a component in an appearance), **Slots**, **AI** (its profile, base tree, presets and attack ranges), **Inventory** (what it spawns with), **Voicetags**, **Animation** (animation sets, behaviour graphs, constraints, mimics), **Gameplay** (stats, abilities, vital spots and the rest of its params), **Animation Slots** and **Dismemberment** (its wounds). **Effects** lists the effects it can play, and **Files** everything it refers to. Click a file to open it where the tool has a viewer for it.
+"""),
+
+        new(Basics, "Behaviour trees", "\uE8F9", """
+Double-click a `.w2behtree`, or select it and press **Enter**, to open it in the behaviour tree viewer. A tree an entity or another tree uses opens from it too, and a file on disk opens from **Open files** or by dropping it on the window.
+
+A behaviour tree is the AI an NPC runs: from its root, nodes that pick among their children by priority or run them in order (**composites**), nodes that wrap one child with a delay, a loop, a priority or a variable (**decorators**), nodes that let their child run only when a test passes (**conditions**), tasks written in WitcherScript (**script tasks**), and nodes that do something themselves, such as idle, play an animation or move (**actions**). **Subtrees** run another tree, and **comments** are notes in the tree.
+
+## The tree
+
+The tree is drawn from its root down, each node's children in a row under it in the order they're tried, each node coloured by what it is (the colours are listed under the tree). A node says what it is or the task it runs, its main settings (the variable it tests or sets, the animation event, the distance) and, at its top right, its priority. Drag to move around, use the wheel to zoom, and double-click the background (or press **F**) to see it all.
+
+- **Double-click a node** to fold its branch away; it says how many nodes are folded under it. Double-click it again to open it. The box at the top folds every branch below a level, to see the tree's shape.
+- **Find** (**Ctrl+F**) marks the nodes whose name, class, task, settings or comment has the words, opens the branches they're in and goes to the first. **Enter** goes to the next, **Shift+Enter** to the one before.
+
+## The node picked
+
+Click a node to see every property it has on the right, under the class that brings each one in, as the entity viewer shows them, and then those of the script task it runs. A value a behaviour variable can set says which. The search above the list narrows it, and right-click a property to copy it.
+
+Every behaviour tree in the game reads (390, base game and DLC).
 """),
 
         new(Basics, "Scenes", "", """
@@ -1082,7 +1113,7 @@ None of these turned up across the mods used to build and test the decompiler, s
 Usually yes, after a quick look over the result. Bear in mind the mod author's licence still applies to their code. Decompiling is best used to understand how a mod works, check compatibility, or recover your own source after losing it.
 """),
 
-        new(Advanced, "The CR2W JSON format", "", """
+        new(Advanced, "The CR2W JSON format", "", """
 A converted file is the CR2W file's objects in order, then a `file` block with what's needed to put it back together.
 
 ```

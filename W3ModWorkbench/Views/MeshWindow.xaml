@@ -4,7 +4,7 @@
         xmlns:local="clr-namespace:W3ModWorkbench"
         xmlns:vm="clr-namespace:W3ModWorkbench.ViewModels"
         Title="Mesh" Icon="pack://application:,,,/W3ModWorkbench;component/Assets/app.ico"
-        Width="1280" Height="820" MinWidth="720" MinHeight="460"
+        Width="1380" Height="860" MinWidth="820" MinHeight="460"
         WindowStartupLocation="CenterOwner" PreviewKeyDown="Window_PreviewKeyDown">
 
     <Window.Resources>
@@ -18,6 +18,33 @@
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}" />
             <Setter Property="Background" Value="{DynamicResource CardBackgroundFillColorDefaultBrush}" />
+        </Style>
+        <Style x:Key="Small" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="11.5" />
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorTertiaryBrush}" />
+        </Style>
+        <!-- the tabs as small segments in a row, as the entity viewer has them; the label's colour is set on the label alone -->
+        <Style TargetType="TabItem">
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TabItem">
+                        <Border x:Name="Back" CornerRadius="6" Padding="10,4" Margin="2,0,2,4" Background="Transparent" Cursor="Hand">
+                            <ContentPresenter x:Name="Label" ContentSource="Header" VerticalAlignment="Center"
+                                              TextElement.Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Back" Property="Background" Value="{DynamicResource SubtleFillColorTertiaryBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Back" Property="Background" Value="{DynamicResource AccentFillColorDefaultBrush}" />
+                                <Setter TargetName="Label" Property="TextElement.Foreground" Value="{DynamicResource TextOnAccentFillColorPrimaryBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
         <Style x:Key="Heading" TargetType="TextBlock">
             <Setter Property="FontWeight" Value="SemiBold" />
@@ -38,6 +65,24 @@
                 <ComboBox x:Name="LodBox" Width="190" SelectionChanged="Lod_SelectionChanged" ToolTip="The level of detail shown: 0 is the most detailed, used up close" />
                 <ToggleButton x:Name="TexturedToggle" Margin="14,0,0,0" Padding="12,5" Content="Textures" IsChecked="True" Click="Textured_Click" ToolTip="Show the materials' colour textures, or the shape alone in grey (T)" />
                 <ToggleButton x:Name="WireToggle" Margin="6,0,0,0" Padding="12,5" Content="Wireframe" Click="Wire_Click" ToolTip="Draw the triangles' edges over the mesh (W)" />
+                <ToggleButton x:Name="FloorToggle" Margin="6,0,0,0" Padding="12,5" Content="Floor" Click="Floor_Click" ToolTip="A grid on the ground under the mesh (G)" />
+                <Button x:Name="ShowButton" Margin="6,0,0,0" Padding="12,5" Click="Show_Click" ToolTip="Draw how the mesh is made: its box, vertex colours, normals, bones and collision">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="Show" />
+                        <TextBlock Style="{StaticResource IconText}" Text="&#xE70D;" FontSize="9" Margin="8,2,0,0" />
+                    </StackPanel>
+                    <Button.ContextMenu>
+                        <ContextMenu x:Name="ShowMenu">
+                            <MenuItem x:Name="BoundsItem" Header="Bounding box" InputGestureText="B" IsCheckable="True" />
+                            <MenuItem x:Name="ColorsItem" Header="Vertex colours" InputGestureText="V" IsCheckable="True" />
+                            <MenuItem x:Name="NormalsItem" Header="Normals" InputGestureText="N" IsCheckable="True" />
+                            <MenuItem x:Name="BonesItem" Header="Bones" InputGestureText="K" IsCheckable="True" />
+                            <MenuItem x:Name="CollisionItem" Header="Collision" InputGestureText="C" IsCheckable="True" />
+                            <Separator />
+                            <MenuItem x:Name="InfoItem" Header="Info panel" InputGestureText="I" IsCheckable="True" />
+                        </ContextMenu>
+                    </Button.ContextMenu>
+                </Button>
                 <Button Margin="14,0,0,0" Padding="12,5" Click="Fit_Click" ToolTip="Fit the mesh to the view (F, or double-click it)">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Style="{StaticResource IconText}" Text="&#xE9A6;" />
@@ -69,7 +114,7 @@
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="8" />
-                <ColumnDefinition Width="360" MinWidth="240" />
+                <ColumnDefinition Width="460" MinWidth="300" />
             </Grid.ColumnDefinitions>
 
             <Border Grid.Column="0" Style="{StaticResource Card}" ClipToBounds="True">
@@ -81,6 +126,11 @@
                         </LinearGradientBrush>
                     </Grid.Background>
                     <local:MeshView x:Name="View" />
+                    <!-- what's being drawn, as a 3D view's overlay has it -->
+                    <Border x:Name="InfoPanel" Margin="10,8" Padding="8,5" CornerRadius="4" HorizontalAlignment="Left" VerticalAlignment="Top"
+                            Background="#88000000" IsHitTestVisible="False" Visibility="Collapsed">
+                        <TextBlock x:Name="InfoOverlay" FontFamily="Cascadia Mono, Consolas" FontSize="11.5" Foreground="#E6E6EC" LineHeight="17" />
+                    </Border>
                     <TextBlock x:Name="BusyText" Text="Reading the mesh…" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="White" Opacity="0.8"
                                TextWrapping="Wrap" TextAlignment="Center" MaxWidth="460" IsHitTestVisible="False" />
                     <TextBlock Text="Drag to turn  ·  right-drag or Shift+drag to move  ·  wheel to zoom  ·  double-click to fit" Foreground="White" Opacity="0.55"
@@ -91,74 +141,112 @@
             <GridSplitter Grid.Column="1" Width="8" HorizontalAlignment="Stretch" Background="Transparent" />
 
             <Border Grid.Column="2" Style="{StaticResource Card}">
-                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="12,10">
-                    <StackPanel>
-                        <TextBlock Style="{StaticResource Heading}" Text="Chunks" />
-                        <ItemsControl x:Name="ChunkList">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate DataType="{x:Type vm:MeshChunkItem}">
-                                    <CheckBox IsChecked="{Binding IsVisible}" Margin="0,0,0,2" ToolTip="{Binding Detail}">
-                                        <TextBlock TextTrimming="CharacterEllipsis">
-                                            <Run Text="{Binding Title, Mode=OneWay}" />
-                                            <Run Text="{Binding Detail, Mode=OneWay}" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
-                                        </TextBlock>
-                                    </CheckBox>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
+                <TabControl x:Name="Tabs" Margin="6,8,6,6" Background="Transparent" BorderThickness="0">
+                    <TabControl.Template>
+                        <ControlTemplate TargetType="TabControl">
+                            <DockPanel>
+                                <WrapPanel DockPanel.Dock="Top" IsItemsHost="True" HorizontalAlignment="Center" />
+                                <ContentPresenter ContentSource="SelectedContent" Margin="0,4,0,0" />
+                            </DockPanel>
+                        </ControlTemplate>
+                    </TabControl.Template>
+                    <TabItem Header="Materials">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="12,10">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource Heading}" Text="Chunks" />
+                                <ItemsControl x:Name="ChunkList">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type vm:MeshChunkItem}">
+                                            <CheckBox IsChecked="{Binding IsVisible}" Margin="0,0,0,2" ToolTip="{Binding Detail}">
+                                                <TextBlock TextTrimming="CharacterEllipsis">
+                                                    <Run Text="{Binding Title, Mode=OneWay}" />
+                                                    <Run Text="{Binding Detail, Mode=OneWay}" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                                </TextBlock>
+                                            </CheckBox>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
 
-                        <TextBlock Style="{StaticResource Heading}" Text="Materials" Margin="2,16,0,8" />
-                        <ItemsControl x:Name="MaterialList">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate DataType="{x:Type vm:MeshMaterialItem}">
-                                    <Border BorderThickness="1" CornerRadius="6" Padding="10,8" Margin="0,0,0,8" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}">
-                                        <StackPanel>
-                                            <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
-                                            <TextBlock Text="{Binding Source}" Opacity="0.75" FontSize="11" TextTrimming="CharacterEllipsis" ToolTip="{Binding SourceTip}" Margin="0,2,0,6" />
-                                            <TextBlock Text="Colour texture" Opacity="0.7" FontSize="11" Margin="0,0,0,3" />
-                                            <ComboBox ItemsSource="{Binding Options}" SelectedItem="{Binding Selected}" DisplayMemberPath="Label" ToolTip="{Binding Selected.Path}" />
-                                            <TextBlock Text="{Binding Status}" Opacity="0.7" FontSize="11" Margin="0,4,0,0" TextWrapping="Wrap" />
-                                            <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
-                                                <Button Padding="10,3" Content="Other texture…" Click="OtherTexture_Click" Tag="{Binding}" ToolTip="Put any texture from the game or an open mod on this material's chunks" />
-                                                <Button Margin="6,0,0,0" Padding="10,3" Content="Other material…" Click="OtherMaterial_Click" Tag="{Binding}" ToolTip="Use another material instance (.w2mi) for these chunks" />
-                                            </StackPanel>
-                                            <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
-                                                <Button Padding="10,3" Content="Save as new material…" Click="SaveNewMaterial_Click" Tag="{Binding}"
-                                                        ToolTip="Save this material, with its changes, as a new .w2mi in the project, and use it for these chunks" />
-                                                <Button Margin="6,0,0,0" Padding="10,3" Content="Back to its own" Click="ResetMaterial_Click" Tag="{Binding}"
-                                                        Visibility="{Binding ResetVisibility}" ToolTip="Undo the changes and use the mesh's own material again" />
-                                            </StackPanel>
-                                            <Expander Header="{Binding ParametersHeader}" Margin="0,6,0,0" FontSize="11">
-                                                <ItemsControl ItemsSource="{Binding Parameters}" Margin="0,4,0,0">
-                                                    <ItemsControl.ItemTemplate>
-                                                        <DataTemplate DataType="{x:Type vm:MaterialParameterItem}">
-                                                            <StackPanel Margin="0,0,0,6">
-                                                                <DockPanel>
-                                                                    <Border DockPanel.Dock="Left" Width="10" Height="10" Margin="0,0,5,0" CornerRadius="2" Background="{Binding Swatch}"
-                                                                            BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="1" Visibility="{Binding SwatchVisibility}" />
-                                                                    <TextBlock Text="{Binding Name}" FontWeight="{Binding Weight}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Detail}" />
-                                                                </DockPanel>
-                                                                <DockPanel Margin="0,2,0,0">
-                                                                    <Button DockPanel.Dock="Right" Padding="6,1" Margin="4,0,0,0" Content="&#xE7A7;" FontFamily="{StaticResource IconFont}"
-                                                                            Click="ResetParameter_Click" Tag="{Binding}" Visibility="{Binding ResetVisibility}" ToolTip="Take its own value away, so it takes its base's again" />
-                                                                    <Button DockPanel.Dock="Right" Padding="6,1" Margin="4,0,0,0" Content="…" Click="PickParameterTexture_Click" Tag="{Binding}"
-                                                                            Visibility="{Binding PickVisibility}" ToolTip="Pick a texture" />
-                                                                    <TextBox Text="{Binding Text, UpdateSourceTrigger=LostFocus}" IsReadOnly="{Binding IsReadOnly, Mode=OneWay}"
-                                                                             FontSize="11" Padding="4,2" MinHeight="0" KeyDown="ParameterBox_KeyDown" ToolTip="{Binding Detail}" />
-                                                                </DockPanel>
-                                                                <TextBlock Text="{Binding Error}" Foreground="#FFE0564B" FontSize="11" TextWrapping="Wrap" Visibility="{Binding ErrorVisibility}" />
-                                                            </StackPanel>
-                                                        </DataTemplate>
-                                                    </ItemsControl.ItemTemplate>
-                                                </ItemsControl>
-                                            </Expander>
-                                        </StackPanel>
-                                    </Border>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </StackPanel>
-                </ScrollViewer>
+                                <TextBlock Style="{StaticResource Heading}" Text="Materials" Margin="2,16,0,8" />
+                                <ItemsControl x:Name="MaterialList">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type vm:MeshMaterialItem}">
+                                            <Border BorderThickness="1" CornerRadius="6" Padding="10,8" Margin="0,0,0,8" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}">
+                                                <StackPanel>
+                                                    <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                                                    <TextBlock Text="{Binding Source}" Opacity="0.75" FontSize="11" TextTrimming="CharacterEllipsis" ToolTip="{Binding SourceTip}" Margin="0,2,0,6" />
+                                                    <TextBlock Text="Colour texture" Opacity="0.7" FontSize="11" Margin="0,0,0,3" />
+                                                    <ComboBox ItemsSource="{Binding Options}" SelectedItem="{Binding Selected}" DisplayMemberPath="Label" ToolTip="{Binding Selected.Path}" />
+                                                    <TextBlock Text="{Binding Status}" Opacity="0.7" FontSize="11" Margin="0,4,0,0" TextWrapping="Wrap" />
+                                                    <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                                                        <Button Padding="10,3" Content="Other texture…" Click="OtherTexture_Click" Tag="{Binding}" ToolTip="Put any texture from the game or an open mod on this material's chunks" />
+                                                        <Button Margin="6,0,0,0" Padding="10,3" Content="Other material…" Click="OtherMaterial_Click" Tag="{Binding}" ToolTip="Use another material instance (.w2mi) for these chunks" />
+                                                    </StackPanel>
+                                                    <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                                        <Button Padding="10,3" Content="Save as new material…" Click="SaveNewMaterial_Click" Tag="{Binding}"
+                                                                ToolTip="Save this material, with its changes, as a new .w2mi in the project, and use it for these chunks" />
+                                                        <Button Margin="6,0,0,0" Padding="10,3" Content="Back to its own" Click="ResetMaterial_Click" Tag="{Binding}"
+                                                                Visibility="{Binding ResetVisibility}" ToolTip="Undo the changes and use the mesh's own material again" />
+                                                    </StackPanel>
+                                                    <Expander Header="{Binding ParametersHeader}" Margin="0,6,0,0" FontSize="11">
+                                                        <ItemsControl ItemsSource="{Binding Parameters}" Margin="0,4,0,0">
+                                                            <ItemsControl.ItemTemplate>
+                                                                <DataTemplate DataType="{x:Type vm:MaterialParameterItem}">
+                                                                    <StackPanel Margin="0,0,0,6">
+                                                                        <DockPanel>
+                                                                            <Border DockPanel.Dock="Left" Width="10" Height="10" Margin="0,0,5,0" CornerRadius="2" Background="{Binding Swatch}"
+                                                                                    BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="1" Visibility="{Binding SwatchVisibility}" />
+                                                                            <TextBlock Text="{Binding Name}" FontWeight="{Binding Weight}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Detail}" />
+                                                                        </DockPanel>
+                                                                        <DockPanel Margin="0,2,0,0">
+                                                                            <Button DockPanel.Dock="Right" Padding="6,1" Margin="4,0,0,0" Content="&#xE7A7;" FontFamily="{StaticResource IconFont}"
+                                                                                    Click="ResetParameter_Click" Tag="{Binding}" Visibility="{Binding ResetVisibility}" ToolTip="Take its own value away, so it takes its base's again" />
+                                                                            <Button DockPanel.Dock="Right" Padding="6,1" Margin="4,0,0,0" Content="…" Click="PickParameterTexture_Click" Tag="{Binding}"
+                                                                                    Visibility="{Binding PickVisibility}" ToolTip="Pick a texture" />
+                                                                            <TextBox Text="{Binding Text, UpdateSourceTrigger=LostFocus}" IsReadOnly="{Binding IsReadOnly, Mode=OneWay}"
+                                                                                     FontSize="11" Padding="4,2" MinHeight="0" KeyDown="ParameterBox_KeyDown" ToolTip="{Binding Detail}" />
+                                                                        </DockPanel>
+                                                                        <TextBlock Text="{Binding Error}" Foreground="#FFE0564B" FontSize="11" TextWrapping="Wrap" Visibility="{Binding ErrorVisibility}" />
+                                                                    </StackPanel>
+                                                                </DataTemplate>
+                                                            </ItemsControl.ItemTemplate>
+                                                        </ItemsControl>
+                                                    </Expander>
+                                                </StackPanel>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </TabItem>
+                    <TabItem Header="Properties">
+                        <DockPanel Margin="6,4,2,2">
+                            <Grid DockPanel.Dock="Top" Margin="0,0,0,6">
+                                <TextBox x:Name="PropertySearch" Padding="30,5,8,5" VerticalContentAlignment="Center" TextChanged="PropertySearch_TextChanged" />
+                                <TextBlock Style="{StaticResource IconText}" Text="&#xE721;" FontSize="12" Margin="10,0,0,0" Opacity="0.6" HorizontalAlignment="Left" IsHitTestVisible="False" />
+                                <TextBlock x:Name="PropertySearchPlaceholder" Margin="31,0,0,0" Opacity="0.55" VerticalAlignment="Center" IsHitTestVisible="False"
+                                           Text="Find properties by name or value" />
+                            </Grid>
+                            <local:PropertyListView x:Name="Properties" />
+                        </DockPanel>
+                    </TabItem>
+                    <TabItem Header="LODs">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="8,4">
+                            <StackPanel x:Name="LodPanel" />
+                        </ScrollViewer>
+                    </TabItem>
+                    <TabItem Header="Report">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="8,4">
+                            <StackPanel x:Name="ReportPanel" />
+                        </ScrollViewer>
+                    </TabItem>
+                    <TabItem Header="Collision">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="8,4">
+                            <StackPanel x:Name="CollisionPanel" />
+                        </ScrollViewer>
+                    </TabItem>
+                </TabControl>
             </Border>
         </Grid>
 

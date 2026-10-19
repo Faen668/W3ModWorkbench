@@ -261,6 +261,14 @@ public sealed class JsonColorizer : DocumentColorizingTransformer
         }
     }
 
+    /// <summary>The colour a kind of JSON is shown in, in a dark theme or a light one, as the JSON editor shows it.</summary>
+    public static Brush BrushFor(JsonSpanKind kind, bool dark)
+    {
+        var brush = new SolidColorBrush((Color)ColorConverter.ConvertFromString((dark ? Dark : Light)[kind]));
+        brush.Freeze();
+        return brush;
+    }
+
     private static readonly Dictionary<JsonSpanKind, string> Dark = new()
     {
         [JsonSpanKind.Key] = "#9CDCFE",

@@ -2,6 +2,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Microsoft.Win32;
 using W3ModWorkbench.Core;
@@ -46,6 +47,14 @@ public partial class MeshWindow : Window, IMessageHost
         _locator = locator;
         Title = $"{Path.GetFileName(path)} - Mesh";
         InfoText.Text = $"{path}   ·   {source}";
+        FloorToggle.IsChecked = View.ShowFloor = App.Settings.ShowMeshFloor;
+        InfoItem.IsChecked = App.Settings.ShowMeshInfo;
+        BoundsItem.Click += (_, _) => View.ShowBounds = BoundsItem.IsChecked;
+        ColorsItem.Click += (_, _) => View.VertexColors = ColorsItem.IsChecked;
+        NormalsItem.Click += (_, _) => View.ShowNormals = NormalsItem.IsChecked;
+        BonesItem.Click += (_, _) => View.ShowBones = BonesItem.IsChecked;
+        CollisionItem.Click += (_, _) => _ = ShowCollisionAsync(CollisionItem.IsChecked);
+        InfoItem.Click += (_, _) => SetInfo(InfoItem.IsChecked);
         Loaded += async (_, _) => await LoadAsync();
     }
 
@@ -130,6 +139,11 @@ public partial class MeshWindow : Window, IMessageHost
         ShowChunks();
         InfoText.Text = $"{_path}   ·   {_source}   ·   CR2W {_mesh.File.Version}, {_mesh.Chunks.Count} chunks, {_mesh.LodCount} LOD{(_mesh.LodCount == 1 ? "" : "s")}, {materials.Count} material{(materials.Count == 1 ? "" : "s")}";
         ExportButton.IsEnabled = true;
+        Properties.Show(PropertyRow.Of(_mesh.Mesh, _mesh.File, leaveOut: ["cookedData"]));
+        ShowLods();
+        ShowInfo();
+        _ = ReadReportAsync(materials);
+        _ = ReadCollisionAsync();
         foreach (var item in _materials) await ApplyAsync(item);
     }
 
@@ -172,6 +186,258 @@ public partial class MeshWindow : Window, IMessageHost
         if (_mesh is null || LodBox.SelectedIndex < 0 || LodBox.SelectedIndex == View.Lod) return;
         View.Lod = LodBox.SelectedIndex;
         ShowChunks();
+        ShowInfo();
+    }
+
+    private void Floor_Click(object sender, RoutedEventArgs e) => SetFloor(FloorToggle.IsChecked == true);
+
+    private void SetFloor(bool on)
+    {
+        FloorToggle.IsChecked = View.ShowFloor = on;
+        App.Settings.ShowMeshFloor = on;
+        App.Settings.Save();
+    }
+
+    private void Show_Click(object sender, RoutedEventArgs e)
+    {
+        ShowMenu.PlacementTarget = ShowButton;
+        ShowMenu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
+        ShowMenu.IsOpen = true;
+    }
+
+    /// <summary>Ticks one of the Show menu's items and does what it says, as a key does.</summary>
+    private void Toggle(MenuItem item)
+    {
+        item.IsChecked = !item.IsChecked;
+        item.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+    }
+
+    // ---------------------------------------------------------------- what's drawn, and the tabs
+
+    private (List<CollisionShape> Shapes, int Count)? _collision;
+    private long _textureBytes;
+    private int _textureCount;
+
+    /// <summary>Shows or hides the overlay, and remembers which.</summary>
+    private void SetInfo(bool on)
+    {
+        InfoItem.IsChecked = on;
+        App.Settings.ShowMeshInfo = on;
+        App.Settings.Save();
+        ShowInfo();
+    }
+
+    /// <summary>The overlay at the top left of the view: what the LOD shown draws, how big the mesh is and the memory its data and textures take.</summary>
+    private void ShowInfo()
+    {
+        InfoPanel.Visibility = App.Settings.ShowMeshInfo && _mesh is not null ? Visibility.Visible : Visibility.Collapsed;
+        if (_mesh is null || !App.Settings.ShowMeshInfo) return;
+        var (triangles, vertices, chunks) = View.Stats();
+        var size = View.Size();
+        var lines = new List<string>
+        {
+            $"Triangles  {triangles,10:N0}",
+            $"Vertices   {vertices,10:N0}",
+            $"Chunks     {chunks,10:N0}",
+            $"LOD        {View.Lod,10}" + (_mesh.LodCount > 1 ? $" of {_mesh.LodCount}" : ""),
+            $"Size  {size.X:0.00} x {size.Y:0.00} x {size.Z:0.00} m",
+            $"Mesh data  {Megabytes(MeshBytes(_mesh)),7} MB",
+        };
+        if (_textureCount > 0) lines.Add($"Textures   {Megabytes(_textureBytes),7} MB in {_textureCount}");
+        if (_mesh.BoneNames.Length > 0) lines.Add($"Bones      {_mesh.BoneNames.Length,10}");
+        if (_collision is { } c) lines.Add($"Collision  {c.Count,10} shape{(c.Count == 1 ? "" : "s")}");
+        InfoOverlay.Text = string.Join("\n", lines);
+    }
+
+    private static string Megabytes(long bytes) => (bytes / 1048576.0).ToString("0.000");
+
+    /// <summary>How much the mesh's own data takes: its cooked vertex and index buffers, or else all the buffers it has.</summary>
+    private static long MeshBytes(MeshFile mesh) =>
+        mesh.Mesh["cookedData"] is RedObject cooked && cooked.Integer("vertexBufferSize") > 0
+            ? cooked.Integer("vertexBufferSize") + cooked.Integer("indexBufferSize")
+            : mesh.File.Buffers.Sum(b => (long)b.MemorySize);
+
+    private void PropertySearch_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        PropertySearchPlaceholder.Visibility = PropertySearch.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
+        Properties.Search = PropertySearch.Text;
+    }
+
+    /// <summary>The LODs tab: each LOD, the distance it's drawn from, and its chunks with their material, kind of vertex and counts.</summary>
+    private void ShowLods()
+    {
+        if (_mesh is null) return;
+        LodPanel.Children.Clear();
+        for (int lod = 0; lod < _mesh.LodCount; lod++)
+        {
+            var chunks = MeshView.Drawn(_mesh, lod).ToList();
+            string from = lod < _mesh.LodDistances.Count ? $"drawn from {_mesh.LodDistances[lod]:0.##} m" : "";
+            LodPanel.Children.Add(Heading($"LOD {lod}", $"{from}  ·  {Format.Count(chunks.Count, "chunk")}, {chunks.Sum(c => c.Positions.Length):N0} vertices, {chunks.Sum(c => c.Triangles):N0} triangles"));
+            LodPanel.Children.Add(Table(["Chunk", "Material", "Vertices", "Indices", "Vertices a triangle"],
+                [.. chunks.Select(c => new[]
+                {
+                    $"{c.Index}" + (c.Skinned ? "  skinned" : ""),
+                    MaterialName(c.Material),
+                    $"{c.Positions.Length:N0}",
+                    $"{c.Indices.Length:N0}",
+                    c.Triangles > 0 ? $"{(double)c.Positions.Length / c.Triangles:0.00}" : "",
+                })]));
+        }
+    }
+
+    private string MaterialName(int index) =>
+        index < _materials.Count ? $"{index}  {_materials[index].Current.Shader}" : $"{index}";
+
+    /// <summary>
+    /// The Report tab, as REDkit's mesh editor has it: what the mesh takes in memory, each LOD's chunks and the share of its
+    /// triangles each material draws, and every texture the materials use with its size and the memory it takes.
+    /// </summary>
+    private async Task ReadReportAsync(List<MeshMaterial> materials)
+    {
+        if (_mesh is null) return;
+        var mesh = _mesh;
+        // every texture the materials use, each once, with which materials use it
+        var used = new Dictionary<string, List<int>>(StringComparer.OrdinalIgnoreCase);
+        for (int i = 0; i < materials.Count; i++)
+            foreach (var t in materials[i].Textures.Where(t => t.Path.EndsWith(".xbm", StringComparison.OrdinalIgnoreCase)))
+            {
+                if (!used.TryGetValue(t.Path, out var list)) used[t.Path] = list = [];
+                if (!list.Contains(i)) list.Add(i);
+            }
+        var textures = await Task.Run(() => used.Select(u => (Path: u.Key, Users: u.Value, Entry: _locator.FindTexture(u.Key))).ToList());
+        _textureCount = textures.Count(t => t.Entry is not null);
+        _textureBytes = textures.Sum(t => (long)(t.Entry?.Size ?? 0));
+        ShowInfo();
+
+        ReportPanel.Children.Clear();
+        ReportPanel.Children.Add(Heading("Totals", ""));
+        ReportPanel.Children.Add(Lines(
+            $"Mesh data: {Megabytes(MeshBytes(mesh))} MB",
+            $"Texture data: {Megabytes(_textureBytes)} MB in {Format.Count(_textureCount, "texture")}" + (textures.Count > _textureCount ? $" ({textures.Count - _textureCount} not found)" : ""),
+            $"Drawn up to: {(mesh.Mesh["autoHideDistance"] is float hide ? $"{hide:0.##} m" : "the default distance")}",
+            $"Bounding box: {View.Size().X:0.00} x {View.Size().Y:0.00} x {View.Size().Z:0.00} m"));
+        for (int lod = 0; lod < mesh.LodCount; lod++)
+        {
+            var chunks = MeshView.Drawn(mesh, lod).ToList();
+            int triangles = chunks.Sum(c => c.Triangles);
+            ReportPanel.Children.Add(Heading($"LOD {lod}", $"{Format.Count(chunks.Count, "chunk")}, {chunks.Sum(c => c.Positions.Length):N0} vertices, {triangles:N0} triangles"));
+            ReportPanel.Children.Add(Table(["Material", "Triangles", "Share"],
+                [.. chunks.GroupBy(c => c.Material).Select(g => new[]
+                {
+                    MaterialName(g.Key),
+                    $"{g.Sum(c => c.Triangles):N0}",
+                    triangles > 0 ? $"{100.0 * g.Sum(c => c.Triangles) / triangles:0.0}%" : "",
+                })]));
+        }
+        ReportPanel.Children.Add(Heading("Textures", Format.Count(textures.Count, "texture")));
+        foreach (var t in textures.OrderByDescending(t => t.Entry?.Size ?? 0))
+        {
+            var row = new DockPanel { Margin = new Thickness(0, 0, 0, 10) };
+            var picture = new Image { Width = 72, Height = 72, Margin = new Thickness(0, 0, 10, 0), Stretch = Stretch.Uniform, VerticalAlignment = VerticalAlignment.Top };
+            DockPanel.SetDock(picture, Dock.Left);
+            row.Children.Add(picture);
+            var text = (StackPanel)Lines(
+                t.Entry is { } entry ? $"{entry.FormatText}  ·  {Megabytes(entry.Size)} MB" : "Not found in any texture cache",
+                "Used by material " + string.Join(", ", t.Users));
+            // the path, and the picture, open the texture in its viewer
+            var name = new TextBlock { Text = t.Path, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 3) };
+            if (t.Entry is { } found)
+            {
+                name.SetResourceReference(TextBlock.ForegroundProperty, "AccentTextFillColorPrimaryBrush");
+                name.Cursor = picture.Cursor = Cursors.Hand;
+                name.ToolTip = picture.ToolTip = "Open it in the texture viewer";
+                name.MouseLeftButtonUp += (_, _) => TextureWindow.Open(found, this);
+                picture.MouseLeftButtonUp += (_, _) => TextureWindow.Open(found, this);
+            }
+            text.Children.Insert(0, name);
+            row.Children.Add(text);
+            ReportPanel.Children.Add(row);
+            if (t.Entry is not null) _ = Thumbnail(t.Path, picture);
+        }
+    }
+
+    private async Task Thumbnail(string path, Image into)
+    {
+        if (!_textures.TryGetValue(path, out var task))
+            _textures[path] = task = Task.Run(() => MeshTextures.Load(_locator, path, TextureSize));
+        into.Source = await task;
+    }
+
+    /// <summary>Reads the mesh's collision from the game's collision caches, for the Collision tab and the overlay.</summary>
+    private async Task ReadCollisionAsync()
+    {
+        var data = await Task.Run(() => _locator.ReadCollision(_path));
+        _collision = data is null ? null : await Task.Run(() => MeshCollision.Read(data));
+        CollisionPanel.Children.Clear();
+        if (_collision is not { } found)
+        {
+            CollisionPanel.Children.Add(Lines("This mesh has no collision in the game's collision caches.",
+                "A mesh only collides when it's cooked with collision; REDkit's own (uncooked) meshes keep theirs in the file and aren't read here."));
+            CollisionItem.IsEnabled = false;
+            ShowInfo();
+            return;
+        }
+        CollisionPanel.Children.Add(Heading("Shapes", Format.Count(found.Count, "shape")));
+        CollisionPanel.Children.Add(Table(["Shape", "Kind", "Vertices", "Triangles", "Material"],
+            [.. found.Shapes.Select((s, i) => new[] { $"{i}", s.Kind, $"{s.Vertices.Length:N0}", $"{s.Triangles.Length / 3:N0}", s.Material })]));
+        if (found.Count > found.Shapes.Count)
+            CollisionPanel.Children.Add(Lines($"{found.Count - found.Shapes.Count} more shape(s) are boxes, spheres or capsules, which aren't drawn."));
+        CollisionPanel.Children.Add(Lines("Show › Collision (C) draws the shapes over the mesh, in orange."));
+        ShowInfo();
+    }
+
+    private async Task ShowCollisionAsync(bool on)
+    {
+        if (on && _collision is null) await ReadCollisionAsync();
+        View.ShowCollision(on && _collision is { } c ? [.. c.Shapes.Select(s => (s.Vertices, s.Triangles))] : []);
+    }
+
+    // ---------------------------------------------------------------- building the tabs' contents
+
+    private static FrameworkElement Heading(string title, string detail)
+    {
+        var panel = new StackPanel { Margin = new Thickness(0, 10, 0, 6) };
+        panel.Children.Add(new TextBlock { Text = title, FontWeight = FontWeights.SemiBold, FontSize = 14 });
+        if (detail.Length > 0)
+        {
+            var small = new TextBlock { Text = detail, FontSize = 11.5, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 2, 0, 0) };
+            small.SetResourceReference(TextBlock.ForegroundProperty, "TextFillColorSecondaryBrush");
+            panel.Children.Add(small);
+        }
+        return panel;
+    }
+
+    private static FrameworkElement Lines(params string[] lines)
+    {
+        var panel = new StackPanel();
+        foreach (string line in lines)
+            panel.Children.Add(new TextBlock { Text = line, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 3) });
+        return panel;
+    }
+
+    /// <summary>A small table: a header row, then a row for each, the columns as wide as they need.</summary>
+    private static FrameworkElement Table(string[] headers, List<string[]> rows)
+    {
+        var grid = new Grid { Margin = new Thickness(0, 0, 0, 6) };
+        for (int c = 0; c < headers.Length; c++) grid.ColumnDefinitions.Add(new ColumnDefinition { Width = c == 1 ? new GridLength(1, GridUnitType.Star) : GridLength.Auto });
+        for (int r = 0; r <= rows.Count; r++)
+        {
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            var cells = r == 0 ? headers : rows[r - 1];
+            for (int c = 0; c < headers.Length && c < cells.Length; c++)
+            {
+                var cell = new TextBlock { Text = cells[c], Margin = new Thickness(0, 1, 14, 1), TextTrimming = TextTrimming.CharacterEllipsis };
+                if (r == 0)
+                {
+                    cell.FontSize = 11.5;
+                    cell.SetResourceReference(TextBlock.ForegroundProperty, "TextFillColorTertiaryBrush");
+                }
+                Grid.SetRow(cell, r);
+                Grid.SetColumn(cell, c);
+                grid.Children.Add(cell);
+            }
+        }
+        return grid;
     }
 
     private void Textured_Click(object sender, RoutedEventArgs e) => View.Textured = TexturedToggle.IsChecked == true;
@@ -204,6 +470,13 @@ public partial class MeshWindow : Window, IMessageHost
             case Key.F: View.FitToView(); break;
             case Key.W: WireToggle.IsChecked = WireToggle.IsChecked != true; View.Wireframe = WireToggle.IsChecked == true; break;
             case Key.T: TexturedToggle.IsChecked = TexturedToggle.IsChecked != true; View.Textured = TexturedToggle.IsChecked == true; break;
+            case Key.G: SetFloor(!View.ShowFloor); break;
+            case Key.B: Toggle(BoundsItem); break;
+            case Key.V: Toggle(ColorsItem); break;
+            case Key.N: Toggle(NormalsItem); break;
+            case Key.K: Toggle(BonesItem); break;
+            case Key.C when CollisionItem.IsEnabled: Toggle(CollisionItem); break;
+            case Key.I: SetInfo(!App.Settings.ShowMeshInfo); break;
             case Key.D1 or Key.NumPad1: View.LookFrom(0); break;
             case Key.D2 or Key.NumPad2: View.LookFrom(90); break;
             case Key.D3 or Key.NumPad3: View.LookFrom(0, top: true); break;

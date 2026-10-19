@@ -104,6 +104,16 @@ public sealed class Settings
     public bool ShowFilePreview { get; set; } = true;
     public double FilePreviewWidth { get; set; } = 380;
 
+    /// <summary>Whether the mesh viewer draws a floor grid under the mesh, and shows what it's drawing over the view.</summary>
+    public bool ShowMeshFloor { get; set; } = true;
+    public bool ShowMeshInfo { get; set; } = true;
+
+    /// <summary>Whether the entity viewer shows what it's drawing (triangles, frame rate…) over the view.</summary>
+    public bool ShowEntityInfo { get; set; } = true;
+
+    /// <summary>Whether the entity viewer draws a floor grid under the entity.</summary>
+    public bool ShowEntityFloor { get; set; } = true;
+
     /// <summary>How many times a second the entity viewer poses an animation as it plays; 0 for as often as the screen draws.</summary>
     public int AnimationFps { get; set; } = 30;
 

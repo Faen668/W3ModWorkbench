@@ -1,0 +1,91 @@
+<UserControl x:Class="W3ModWorkbench.PropertyListView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:W3ModWorkbench.ViewModels">
+    <UserControl.Resources>
+        <Style x:Key="Small" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="11.5" />
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorTertiaryBrush}" />
+        </Style>
+        <Style x:Key="LinkButton" TargetType="Button">
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Foreground" Value="{DynamicResource AccentTextFillColorPrimaryBrush}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <ContentPresenter />
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <!-- a property: its name indented under what it's in, its type, and its value or the file it refers to -->
+        <DataTemplate x:Key="PropertyTemplate" DataType="{x:Type vm:PropertyRow}">
+            <Border x:Name="Row" CornerRadius="4" Padding="4,1" Background="Transparent">
+                <Grid Opacity="{Binding Opacity}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="220" />
+                        <ColumnDefinition Width="150" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Orientation="Horizontal" Margin="{Binding Indent}">
+                        <!-- the fold arrow, for a row with rows under it -->
+                        <Button Style="{StaticResource LinkButton}" Click="Fold_Click" Width="16" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Focusable="False">
+                            <TextBlock Text="{Binding Glyph}" FontFamily="{StaticResource IconFont}" FontSize="9" VerticalAlignment="Center" />
+                        </Button>
+                        <TextBlock Text="{Binding Name}" FontWeight="{Binding Weight}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Name}" />
+                    </StackPanel>
+                    <TextBlock Grid.Column="1" Text="{Binding Type}" Style="{StaticResource Small}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Type}"
+                               VerticalAlignment="Center" Margin="8,0" />
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" Visibility="{Binding ValueVisibility}">
+                        <TextBlock Text="{Binding BoolGlyph}" Visibility="{Binding BoolVisibility}" Foreground="{Binding BoolBrush}" FontFamily="{StaticResource IconFont}"
+                                   FontSize="11" VerticalAlignment="Center" Margin="0,0,6,0" />
+                        <TextBlock Text="{Binding Value}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Value}" FontFamily="Cascadia Mono, Consolas" FontSize="12"
+                                   VerticalAlignment="Center" />
+                    </StackPanel>
+                    <Button Grid.Column="2" Style="{StaticResource LinkButton}" HorizontalAlignment="Left" Visibility="{Binding LinkVisibility}"
+                            Click="Link_Click" Tag="{Binding Link}" ToolTip="{Binding Link}">
+                        <TextBlock Text="{Binding Value}" TextTrimming="CharacterEllipsis" FontSize="12" />
+                    </Button>
+                </Grid>
+            </Border>
+            <DataTemplate.Triggers>
+                <!-- a class's heading is shaded, as REDkit has them -->
+                <DataTrigger Binding="{Binding Heading}" Value="True">
+                    <Setter TargetName="Row" Property="Background" Value="{DynamicResource SubtleFillColorSecondaryBrush}" />
+                    <Setter TargetName="Row" Property="Margin" Value="0,6,0,2" />
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+        <!-- list rows as tight as REDkit's, rather than the theme's tall ones -->
+        <Style x:Key="CompactItem" TargetType="ListBoxItem">
+            <!-- the theme's own template gave rows its text colour; without it they'd be black -->
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+            <Setter Property="Padding" Value="2,1" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="Back" Background="Transparent" CornerRadius="3" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Back" Property="Background" Value="{DynamicResource SubtleFillColorTertiaryBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Back" Property="Background" Value="{DynamicResource AccentFillColorDefaultBrush}" />
+                                <Setter Property="Foreground" Value="{DynamicResource TextOnAccentFillColorPrimaryBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
+
+    <!-- the right-click menu is made in code: a Click on a menu item in XAML here is wired to the wrong element -->
+    <ListBox x:Name="List" IsSynchronizedWithCurrentItem="False" ItemContainerStyle="{StaticResource CompactItem}" ItemTemplate="{StaticResource PropertyTemplate}"
+             BorderThickness="0" Background="Transparent" HorizontalContentAlignment="Stretch" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+             VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling" />
+</UserControl>

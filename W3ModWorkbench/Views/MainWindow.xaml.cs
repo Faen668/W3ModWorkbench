@@ -81,9 +81,9 @@ public partial class MainWindow : Window, IMessageHost
         var dialog = new OpenFileDialog
         {
             Title = "Open projects, bundles, scripts or strings",
-            Filter = "Projects, bundles, scripts, strings, XML, meshes, entities, cutscenes and scenes (*.w3bench;*.bundle;*.rsblob;*.cache;*.ws;*.w3strings;*.csv;*.xml;*.json;*.w2mesh;*.w2ent;*.w2cutscene;*.w2scene)|*.w3bench;*.bundle;*.rsblob;*.cache;*.ws;*.w3strings;*.csv;*.xml;*.json;*.w2mesh;*.w2ent;*.w2cutscene;*.w2scene|"
+            Filter = "Projects, bundles, scripts, strings, XML, meshes, entities, cutscenes, scenes and behaviour trees (*.w3bench;*.bundle;*.rsblob;*.cache;*.ws;*.w3strings;*.csv;*.xml;*.json;*.w2mesh;*.w2ent;*.w2cutscene;*.w2scene;*.w2behtree)|*.w3bench;*.bundle;*.rsblob;*.cache;*.ws;*.w3strings;*.csv;*.xml;*.json;*.w2mesh;*.w2ent;*.w2cutscene;*.w2scene;*.w2behtree|"
                    + "Projects (*.w3bench)|*.w3bench|Bundles (*.bundle)|*.bundle|Compiled scripts (*.rsblob)|*.rsblob|Texture caches (*.cache)|*.cache|Loose scripts (*.ws)|*.ws|"
-                   + "Strings (*.w3strings;*.csv)|*.w3strings;*.csv|XML, opened in the XML editor (*.xml)|*.xml|JSON, opened in the JSON editor (*.json)|*.json|Meshes, opened in the mesh viewer (*.w2mesh)|*.w2mesh|Entities, opened in the entity viewer (*.w2ent)|*.w2ent|Cutscenes, opened in the cutscene viewer (*.w2cutscene)|*.w2cutscene|Scenes, opened in the scene viewer (*.w2scene)|*.w2scene|All files (*.*)|*.*",
+                   + "Strings (*.w3strings;*.csv)|*.w3strings;*.csv|XML, opened in the XML editor (*.xml)|*.xml|JSON, opened in the JSON editor (*.json)|*.json|Meshes, opened in the mesh viewer (*.w2mesh)|*.w2mesh|Entities, opened in the entity viewer (*.w2ent)|*.w2ent|Cutscenes, opened in the cutscene viewer (*.w2cutscene)|*.w2cutscene|Scenes, opened in the scene viewer (*.w2scene)|*.w2scene|Behaviour trees, opened in the behaviour tree viewer (*.w2behtree)|*.w2behtree|All files (*.*)|*.*",
             Multiselect = true,
             InitialDirectory = Directory.Exists(_settings.LastOpenFolder) ? _settings.LastOpenFolder : "",
         };
@@ -225,6 +225,8 @@ public partial class MainWindow : Window, IMessageHost
         // and entities, which open in the entity viewer
         var entities = paths.Where(p => File.Exists(p) && EntityWindow.CanShow(p)).ToList();
         foreach (string path in entities) EntityWindow.OpenFile(path, new ResourceLocator(OpenArchives(), null, GameLocator.Resolve(null), ProjectFiles), this);
+        foreach (string path in paths.Where(p => File.Exists(p) && BehTreeWindow.CanShow(p)))
+            BehTreeWindow.OpenFile(path, new ResourceLocator(OpenArchives(), null, GameLocator.Resolve(null), ProjectFiles), this);
         paths = [.. paths.Except(entities)];
         if ((strings.Count > 0 || xml.Count > 0 || meshes.Count > 0 || cutscenes.Count > 0 || scenes.Count > 0 || entities.Count > 0) && !paths.Any()) return;
 
@@ -824,6 +826,7 @@ public partial class MainWindow : Window, IMessageHost
         else if (CutsceneWindow.CanShow(path)) CutsceneWindow.OpenFile(path, new ResourceLocator(OpenArchives(), null, GameLocator.Resolve(null), ProjectFiles), this);
         else if (SceneWindow.CanShow(path)) SceneWindow.OpenFile(path, new ResourceLocator(OpenArchives(), null, GameLocator.Resolve(null), ProjectFiles), this);
         else if (EntityWindow.CanShow(path)) EntityWindow.OpenFile(path, new ResourceLocator(OpenArchives(), null, GameLocator.Resolve(null), ProjectFiles), this);
+        else if (BehTreeWindow.CanShow(path)) BehTreeWindow.OpenFile(path, new ResourceLocator(OpenArchives(), null, GameLocator.Resolve(null), ProjectFiles), this);
         else if (XmlWindow.CanOpen(path)) XmlWindow.Open(path, this);
         else if (JsonWindow.CanOpen(path)) JsonWindow.Open(path, this);
     }
@@ -1054,6 +1057,8 @@ public partial class MainWindow : Window, IMessageHost
             _ = OpenSceneAsync(item);
         else if (EntityWindow.CanShow(item.Name))
             _ = OpenEntityAsync(item);
+        else if (BehTreeWindow.CanShow(item.Name))
+            _ = OpenBehTreeAsync(item);
         else if (item.Entry is LooseScriptEntry { IsScript: false } && XmlWindow.CanOpen(item.Name))
             _ = OpenXmlAsync(item);
         else if (item.Entry is LooseScriptEntry { IsScript: false } && JsonWindow.CanOpen(item.Name))
@@ -1118,6 +1123,26 @@ public partial class MainWindow : Window, IMessageHost
             var entry = item.Entry;
             byte[] data = await ReadAsync(entry);
             EntityWindow.Open(entry.Path, item.BundleName, data, LocatorFor(entry), this);
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
+        {
+            ShowError($"{item.Name} could not be read.\n\n{ex.Message}");
+        }
+    }
+
+    /// <summary>Shows a behaviour tree in its viewer.</summary>
+    private async Task OpenBehTreeAsync(EntryItem item)
+    {
+        if (item.Entry is LooseScriptEntry loose)
+        {
+            BehTreeWindow.OpenFile(loose.FullPath, LocatorFor(item.Entry), this);
+            return;
+        }
+        try
+        {
+            var entry = item.Entry;
+            byte[] data = await ReadAsync(entry);
+            BehTreeWindow.Open(entry.Path, item.BundleName, data, LocatorFor(entry), this);
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
         {
@@ -1232,12 +1257,13 @@ public partial class MainWindow : Window, IMessageHost
 
     private void GridPreview_Click(object sender, RoutedEventArgs e)
     {
-        if (Highlighted().FirstOrDefault(i => i.IsPreviewable || i.Entry is StringsEntry or TextureEntry || IsTextureHeader(i) || TextureWindow.CanShow(i.Name) || MeshWindow.CanShow(i.Name) || CutsceneWindow.CanShow(i.Name) || SceneWindow.CanShow(i.Name) || EntityWindow.CanShow(i.Name)) is not { } item) return;
+        if (Highlighted().FirstOrDefault(i => i.IsPreviewable || i.Entry is StringsEntry or TextureEntry || IsTextureHeader(i) || TextureWindow.CanShow(i.Name) || MeshWindow.CanShow(i.Name) || CutsceneWindow.CanShow(i.Name) || SceneWindow.CanShow(i.Name) || EntityWindow.CanShow(i.Name) || BehTreeWindow.CanShow(i.Name)) is not { } item) return;
         if (item.Entry is StringsEntry strings) StringsWindow.Open(strings.FullPath, this);
         else if (MeshWindow.CanShow(item.Name)) _ = OpenMeshAsync(item);
         else if (CutsceneWindow.CanShow(item.Name)) _ = OpenCutsceneAsync(item);
         else if (SceneWindow.CanShow(item.Name)) _ = OpenSceneAsync(item);
         else if (EntityWindow.CanShow(item.Name)) _ = OpenEntityAsync(item);
+        else if (BehTreeWindow.CanShow(item.Name)) _ = OpenBehTreeAsync(item);
         else if (item.Entry is TextureEntry texture) TextureWindow.Open(texture, this);
         else if (IsTextureHeader(item)) _ = OpenTextureHeaderAsync(item);
         else if (TextureWindow.CanShow(item.Name)) _ = OpenPictureAsync(item);

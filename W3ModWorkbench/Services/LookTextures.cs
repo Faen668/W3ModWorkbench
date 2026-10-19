@@ -33,7 +33,7 @@ public sealed record ColorShift(int Hue, int Saturation, int Luminance)
 /// over a texture, and hair keeps nearly one colour.</item>
 /// <item>A component recoloured by its appearance (the <c>ShiftColorRB</c> block of the colour shift and tint mask
 /// shaders): the texture's red parts take the colour entry's first shift and its blue parts the second, as much as
-/// the tint mask's green says. The block itself is built into the engine, so how far each part is shifted is near
+/// the tint mask's green says (or all of it, when the material's ColorShift_Enabled is off). The block itself is built into the engine, so how far each part is shifted is near
 /// the game's rather than exact.</item>
 /// <item>The soft shadow over the eyes, which the game blends over them, is left out.</item>
 /// </list>
@@ -84,13 +84,15 @@ public static class LookTextures
             if (Parameter(resolved, "VarianceColor") is ColorValue variance)
                 paint.Variance = (variance.R / 255f, variance.G / 255f, variance.B / 255f, Parameter(resolved, "VarianceOffset") as float? ?? 0);
         }
-        if (coloring is { } shifts && Parameter(resolved, "ColorShift_Enabled") is float and > 0
-            && resolved.Textures.FirstOrDefault(t => t.Parameter.Equals("TintMask", StringComparison.OrdinalIgnoreCase)) is { } mask
-            && await texture(mask.Path) is { } maskPicture)
+        // a colour entry recolours a material that can be: one with a tint mask. ColorShift_Enabled says whether the
+        // mask is used; without it the whole texture is shifted (as Ciri's bath towel is, white in the game)
+        var tintMask = resolved.Textures.FirstOrDefault(t => t.Parameter.Equals("TintMask", StringComparison.OrdinalIgnoreCase));
+        if (coloring is { } shifts && tintMask is not null)
         {
-            paint.Mask = maskPicture;
+            paint.Shifting = true;
             paint.Shifts = shifts;
             paint.KeepGray = Parameter(resolved, "ColorShift_ KeepGray") is float and > 0;
+            if (Parameter(resolved, "ColorShift_Enabled") is float and > 0) paint.Mask = await texture(tintMask.Path);
         }
         return (paint.Does ? paint.Apply(picture) : picture, false);
     }
@@ -116,11 +118,12 @@ public static class LookTextures
     {
         public (float R, float G, float B, float Offset)? Variance;
         public (float R, float G, float B)? Vertex;
+        public bool Shifting;
         public BitmapSource? Mask;
         public (ColorShift? First, ColorShift? Second) Shifts;
         public bool KeepGray;
 
-        public bool Does => Variance is not null || Vertex is not null || Mask is not null;
+        public bool Does => Variance is not null || Vertex is not null || Shifting;
 
         public BitmapSource Apply(BitmapSource picture)
         {
@@ -145,7 +148,7 @@ public static class LookTextures
                 float r = Linear(pixels[i + 2]), g = Linear(pixels[i + 1]), b = Linear(pixels[i]);
                 if (Variance is { } v) (r, g, b) = CustomColoring(v.Offset, r, g, b, v.R, v.G, v.B);
                 if (Vertex is { } c) (r, g, b) = (r * c.R, g * c.G, b * c.B);
-                if (mask is not null) (r, g, b) = ShiftColor(r, g, b, mask[i + 1] / 255f);
+                if (Shifting) (r, g, b) = ShiftColor(r, g, b, mask is null ? 1 : mask[i + 1] / 255f);
                 pixels[i + 2] = Screen(r);
                 pixels[i + 1] = Screen(g);
                 pixels[i] = Screen(b);
@@ -166,11 +169,10 @@ public static class LookTextures
             float amount = mask * (KeepGray ? Math.Clamp(colour * 4, 0, 1) : 1);
             if (amount <= 0) return (r, g, b);
             float first = colour > 0 ? red / colour : 1;
-            // a shift is in hue, saturation and lightness, which are the screen's, so it's done there
-            var (sr, sg, sb) = (ScreenF(r), ScreenF(g), ScreenF(b));
-            var one = LookTextures.Apply(sr, sg, sb, Shifts.First);
-            var two = LookTextures.Apply(sr, sg, sb, Shifts.Second);
-            float Mix(float original, float x, float y) => original + (LinearF(x * first + y * (1 - first)) - original) * amount;
+            // shifted in linear light, as the shader has the colour when it shifts it
+            var one = LookTextures.Apply(r, g, b, Shifts.First);
+            var two = LookTextures.Apply(r, g, b, Shifts.Second);
+            float Mix(float original, float x, float y) => original + (x * first + y * (1 - first) - original) * amount;
             return (Mix(r, one.R, two.R), Mix(g, one.G, two.G), Mix(b, one.B, two.B));
         }
     }
@@ -208,10 +210,12 @@ public static class LookTextures
         float s = d == 0 ? 0 : d / (1 - Math.Abs(2 * l - 1));
         float h = d == 0 ? 0 : max == r ? 60 * (((g - b) / d + 6) % 6) : max == g ? 60 * ((b - r) / d + 2) : 60 * ((r - g) / d + 4);
         h = ((h + shift.Hue) % 360 + 360) % 360;
-        // toward none or full by the share given, so -100 takes all the colour out and 100 makes it as strong as it goes
+        // saturation toward none or full by the share given, so -100 takes all the colour out and 100 makes it as strong
+        // as it goes; lightness scaled by it, which keeps the texture's own light and dark (a towel's dirt and weave)
+        // where drawing it toward white would wash them out
         float By(float value, int percent) => percent < 0 ? value * (1 + percent / 100f) : value + (1 - value) * percent / 100f;
         s = Math.Clamp(By(s, shift.Saturation), 0, 1);
-        l = Math.Clamp(By(l, shift.Luminance), 0, 1);
+        l = Math.Clamp(l * (1 + shift.Luminance / 100f), 0, 1);
         float c = (1 - Math.Abs(2 * l - 1)) * s, x = c * (1 - Math.Abs(h / 60 % 2 - 1)), m = l - c / 2;
         var (r1, g1, b1) = h < 60 ? (c, x, 0f) : h < 120 ? (x, c, 0f) : h < 180 ? (0f, c, x) : h < 240 ? (0f, x, c) : h < 300 ? (x, 0f, c) : (c, 0f, x);
         return (r1 + m, g1 + m, b1 + m);

@@ -22,6 +22,12 @@ public sealed class MeshView : Border
     private readonly DirectionalLight _headlight = new(Color.FromRgb(200, 200, 200), new Vector3D(0, 0, -1));
     private readonly Model3DGroup _models = new();
     private readonly Model3DGroup _wires = new();
+    private readonly Model3DGroup _floor = new();
+    private bool _showFloor;
+    // what's drawn over the meshes to see how they're made: their box, normals, bones and collision
+    private readonly Model3DGroup _debug = new();
+    private bool _showBounds, _showNormals, _showBones, _vertexColors;
+    private IReadOnlyList<(System.Numerics.Vector3[] Vertices, int[] Triangles)> _collision = [];
     private readonly Dictionary<int, GeometryModel3D> _chunks = [];
     private readonly Dictionary<int, Material> _materials = [];
     private readonly HashSet<int> _hidden = [];
@@ -30,8 +36,6 @@ public sealed class MeshView : Border
     private Func<int, MeshChunk, System.Numerics.Vector3[]?>? _posed;
     // each chunk's vertices in the pose shown, kept for the wireframe
     private readonly Dictionary<(int Part, MeshChunk Chunk), System.Numerics.Vector3[]> _posedPositions = [];
-    private readonly System.Windows.Threading.DispatcherTimer _wireTimer = new() { Interval = TimeSpan.FromMilliseconds(150) };
-    private DateTime _wiresBuilt;
     private MeshFile? _mesh => _parts.Count > 0 ? _parts[0].Mesh : null;
     private int _lod;
     private bool _wireframe;
@@ -47,15 +51,16 @@ public sealed class MeshView : Border
     public MeshView()
     {
         Background = Brushes.Transparent; // takes the mouse everywhere, not just over the mesh
-        _wireTimer.Tick += (_, _) => RebuildWires();
         ClipToBounds = true;
         Focusable = true;
         _viewport.Camera = _camera;
         var scene = new Model3DGroup();
         scene.Children.Add(new AmbientLight(Color.FromRgb(90, 90, 90)));
         scene.Children.Add(_headlight);
+        scene.Children.Add(_floor);
         scene.Children.Add(_models);
         scene.Children.Add(_wires);
+        scene.Children.Add(_debug);
         _viewport.Children.Add(new ModelVisual3D { Content = scene });
         Child = _viewport;
         RenderOptions.SetEdgeMode(_viewport, EdgeMode.Unspecified);
@@ -69,6 +74,32 @@ public sealed class MeshView : Border
     {
         get => _lod;
         set { _lod = value; Rebuild(); }
+    }
+
+    /// <summary>Whether a grid is drawn on the ground under the meshes, so what's shown stands on something.</summary>
+    public bool ShowFloor
+    {
+        get => _showFloor;
+        set { _showFloor = value; RebuildFloor(); }
+    }
+
+    /// <summary>Whether the box the meshes fit in is drawn.</summary>
+    public bool ShowBounds { get => _showBounds; set { _showBounds = value; RebuildDebug(); } }
+
+    /// <summary>Whether each vertex's normal is drawn, as a short line out of the surface.</summary>
+    public bool ShowNormals { get => _showNormals; set { _showNormals = value; RebuildDebug(); } }
+
+    /// <summary>Whether a skinned mesh's bones are drawn where they were bound, as small crosses.</summary>
+    public bool ShowBones { get => _showBones; set { _showBones = value; RebuildDebug(); } }
+
+    /// <summary>Whether the meshes are shown in their vertex colours (each triangle in its corners' average) instead of their textures.</summary>
+    public bool VertexColors { get => _vertexColors; set { _vertexColors = value; Rebuild(); } }
+
+    /// <summary>Collision shapes to draw over the meshes, each its vertices and triangles in the mesh's space; none to draw none.</summary>
+    public void ShowCollision(IReadOnlyList<(System.Numerics.Vector3[] Vertices, int[] Triangles)> shapes)
+    {
+        _collision = shapes;
+        RebuildDebug();
     }
 
     /// <summary>Whether the triangles' edges are drawn over the mesh.</summary>
@@ -99,6 +130,7 @@ public sealed class MeshView : Border
     public void ShowParts(IReadOnlyList<(MeshFile Mesh, System.Numerics.Matrix4x4 Place)> parts)
     {
         _parts = [.. parts];
+        _wireWidth = 0;
         _highlighted = [];
         _posed = null;
         _posedPositions.Clear();
@@ -184,14 +216,7 @@ public sealed class MeshView : Border
         _posedPositions.Clear();
         foreach (var (key, model) in _chunks)
             model.Geometry = PosedGeometry(key >> 16, _parts[key >> 16].Mesh.Chunks[key & 0xFFFF]);
-        if (!_wireframe) return;
-        // the wireframe is slow to make, so while it plays it follows a few times a second, and then where it stops
-        if (DateTime.UtcNow - _wiresBuilt > TimeSpan.FromMilliseconds(250)) RebuildWires();
-        else
-        {
-            _wireTimer.Stop();
-            _wireTimer.Start();
-        }
+        if (_wireframe) RebuildWires();
     }
 
     /// <summary>A chunk's geometry, in the pose shown. Its normals are left for WPF to work out from the bent triangles.</summary>
@@ -211,6 +236,13 @@ public sealed class MeshView : Border
     public int LodCount => _parts.Count == 0 ? 1 : _parts.Max(p => p.Mesh.LodCount);
 
     /// <summary>How much is drawn at the LOD shown: triangles, vertices and chunks.</summary>
+    /// <summary>How big the meshes shown are, in metres: across, deep and high, as they were made.</summary>
+    public System.Numerics.Vector3 Size()
+    {
+        var (min, max) = Bounds();
+        return new System.Numerics.Vector3((float)(max.X - min.X), (float)(max.Z - min.Z), (float)(max.Y - min.Y));
+    }
+
     public (int Triangles, int Vertices, int Chunks) Stats()
     {
         var chunks = _parts.SelectMany((part, p) => DrawnAt(part.Mesh).Where(c => Shown(p, c))).ToList();
@@ -280,14 +312,235 @@ public sealed class MeshView : Border
                 if (!Shown(p, chunk)) continue;
                 Material material = MaterialFor(Key(p, chunk.Material));
                 if (_highlighted.Contains(p)) material = new MaterialGroup { Children = { material, Glow } };
+                var geometry = PosedGeometry(p, chunk);
+                if (_vertexColors) (geometry, material) = ColoredGeometry(chunk);
                 // both sides drawn, as many of the game's cloth and foliage chunks are single sheets
-                var model = new GeometryModel3D(PosedGeometry(p, chunk), material) { BackMaterial = material };
+                var model = new GeometryModel3D(geometry, material) { BackMaterial = material };
                 if (transform is not null) model.Transform = transform;
                 _chunks[Key(p, chunk.Index)] = model;
                 _models.Children.Add(model);
             }
         }
         RebuildWires();
+        RebuildFloor();
+        RebuildDebug();
+    }
+
+    /// <summary>
+    /// The debug drawing over the meshes: the box they fit in (blue), each vertex's normal (green), the bones of a
+    /// skinned mesh where they were bound (yellow crosses), and the collision shapes' edges (orange).
+    /// </summary>
+    private void RebuildDebug()
+    {
+        _debug.Children.Clear();
+        if (_parts.Count == 0) return;
+        double radius = Radius();
+        double width = Math.Max(1e-4, radius * 0.0015);
+        if (_showBounds)
+        {
+            var (a, b) = Bounds();
+            var c = new Point3D[8];
+            for (int i = 0; i < 8; i++) c[i] = new Point3D((i & 1) == 0 ? a.X : b.X, (i & 2) == 0 ? a.Y : b.Y, (i & 4) == 0 ? a.Z : b.Z);
+            var edges = new List<(Point3D, Point3D)>();
+            for (int i = 0; i < 8; i++)
+                for (int bit = 1; bit < 8; bit <<= 1)
+                    if ((i & bit) == 0) edges.Add((c[i], c[i | bit]));
+            AddLines(edges, Color.FromRgb(0x4C, 0x9A, 0xFF), width);
+        }
+        var drawn = _parts.SelectMany((part, p) => DrawnAt(part.Mesh).Where(c => Shown(p, c)).Select(c => (Part: p, Chunk: c, part.Place))).ToList();
+        if (_showNormals)
+        {
+            int total = drawn.Sum(d => d.Chunk.Positions.Length);
+            int every = Math.Max(1, total / 30000); // a big mesh has some of them drawn, so the view stays quick
+            double length = radius * 0.04;
+            var lines = new List<(Point3D, Point3D)>();
+            foreach (var (part, chunk, place) in drawn)
+            {
+                var at = _posedPositions.GetValueOrDefault((part, chunk)) ?? chunk.Positions;
+                for (int v = 0; v < at.Length && v < chunk.Normals.Length; v += every)
+                {
+                    var from = place.IsIdentity ? at[v] : System.Numerics.Vector3.Transform(at[v], place);
+                    var normal = place.IsIdentity ? chunk.Normals[v] : System.Numerics.Vector3.TransformNormal(chunk.Normals[v], place);
+                    lines.Add((ToView(from), ToView(from + normal * (float)length)));
+                }
+            }
+            AddLines(lines, Color.FromRgb(0x2E, 0xB6, 0x7D), width * 0.7);
+        }
+        if (_showBones)
+        {
+            double size = radius * 0.02;
+            var lines = new List<(Point3D, Point3D)>();
+            foreach (var (mesh, place) in _parts)
+                foreach (var inverse in mesh.BoneInverseBinds)
+                    if (System.Numerics.Matrix4x4.Invert(inverse, out var bound))
+                    {
+                        var joint = ToView(System.Numerics.Vector3.Transform(bound.Translation, place));
+                        lines.Add((joint + new Vector3D(-size, 0, 0), joint + new Vector3D(size, 0, 0)));
+                        lines.Add((joint + new Vector3D(0, -size, 0), joint + new Vector3D(0, size, 0)));
+                        lines.Add((joint + new Vector3D(0, 0, -size), joint + new Vector3D(0, 0, size)));
+                    }
+            AddLines(lines, Color.FromRgb(0xF2, 0xC9, 0x4C), width * 1.4);
+        }
+        if (_collision.Count > 0)
+        {
+            var lines = new List<(Point3D, Point3D)>();
+            var place = _parts[0].Place;
+            foreach (var (vertices, triangles) in _collision)
+            {
+                var seen = new HashSet<long>();
+                for (int i = 0; i + 2 < triangles.Length; i += 3)
+                    for (int k = 0; k < 3; k++)
+                    {
+                        int a = triangles[i + k], b = triangles[i + (k + 1) % 3];
+                        if (a >= vertices.Length || b >= vertices.Length || !seen.Add(a < b ? ((long)a << 32) | (uint)b : ((long)b << 32) | (uint)a)) continue;
+                        lines.Add((ToView(System.Numerics.Vector3.Transform(vertices[a], place)), ToView(System.Numerics.Vector3.Transform(vertices[b], place))));
+                    }
+            }
+            AddLines(lines, Color.FromRgb(0xF2, 0x7A, 0x4A), width * 1.2);
+        }
+    }
+
+    /// <summary>Lines in 3D, each as two narrow strips at right angles (WPF has no lines in 3D), in one colour that shows whatever the light.</summary>
+    private void AddLines(List<(Point3D A, Point3D B)> lines, Color color, double width)
+    {
+        if (lines.Count == 0) return;
+        var points = new Point3D[lines.Count * 8];
+        var indices = new int[lines.Count * 12];
+        for (int i = 0; i < lines.Count; i++)
+        {
+            var (a, b) = lines[i];
+            var along = b - a;
+            var side = along.LengthSquared < 1e-12 ? new Vector3D(1, 0, 0)
+                : Vector3D.CrossProduct(along, Math.Abs(along.Y) < 0.9 * along.Length ? new Vector3D(0, 1, 0) : new Vector3D(1, 0, 0));
+            side.Normalize();
+            var up = along.LengthSquared < 1e-12 ? new Vector3D(0, 1, 0) : Vector3D.CrossProduct(along, side);
+            up.Normalize();
+            side *= width;
+            up *= width;
+            int at = i * 8;
+            (points[at], points[at + 1], points[at + 2], points[at + 3]) = (a - side, a + side, b + side, b - side);
+            (points[at + 4], points[at + 5], points[at + 6], points[at + 7]) = (a - up, a + up, b + up, b - up);
+            for (int strip = 0; strip < 2; strip++)
+            {
+                int s0 = at + strip * 4, t = i * 12 + strip * 6;
+                (indices[t], indices[t + 1], indices[t + 2], indices[t + 3], indices[t + 4], indices[t + 5]) = (s0, s0 + 1, s0 + 2, s0, s0 + 2, s0 + 3);
+            }
+        }
+        var geometry = new MeshGeometry3D { Positions = new Point3DCollection(points), TriangleIndices = new Int32Collection(indices) };
+        geometry.Freeze();
+        var brush = new SolidColorBrush(color);
+        brush.Freeze();
+        var material = new MaterialGroup { Children = { new DiffuseMaterial(Brushes.Black), new EmissiveMaterial(brush) } };
+        material.Freeze();
+        _debug.Children.Add(new GeometryModel3D(geometry, material) { BackMaterial = material });
+    }
+
+    /// <summary>
+    /// A grid on the ground the meshes stand on (the lowest point of them as they were made, which for a character is
+    /// its feet), reaching out past them, its lines at a round spacing for their size and every fifth one brighter. Each
+    /// line is a thin flat strip, as WPF has no lines in 3D.
+    /// </summary>
+    private void RebuildFloor()
+    {
+        _floor.Children.Clear();
+        if (!_showFloor || _parts.Count == 0) return;
+        var (min, max) = Bounds();
+        double size = Math.Max(2, Math.Max(max.X - min.X, max.Z - min.Z) * 2.5);
+        double step = new[] { 0.1, 0.25, 0.5, 1, 2, 5, 10, 25, 50, 100 }.FirstOrDefault(s => size / s <= 24, 250);
+        int lines = (int)Math.Ceiling(size / 2 / step);
+        double half = lines * step, y = min.Y;
+        double cx = Math.Round((min.X + max.X) / 2 / step) * step, cz = Math.Round((min.Z + max.Z) / 2 / step) * step;
+        double width = Math.Max(0.002, step * 0.012);
+        var minor = (Positions: new Point3DCollection(), Indices: new Int32Collection());
+        var major = (Positions: new Point3DCollection(), Indices: new Int32Collection());
+        static void Strip((Point3DCollection Positions, Int32Collection Indices) to, Point3D a, Point3D b, Point3D c, Point3D d)
+        {
+            int start = to.Positions.Count;
+            to.Positions.Add(a); to.Positions.Add(b); to.Positions.Add(c); to.Positions.Add(d);
+            to.Indices.Add(start); to.Indices.Add(start + 1); to.Indices.Add(start + 2);
+            to.Indices.Add(start); to.Indices.Add(start + 2); to.Indices.Add(start + 3);
+        }
+        for (int k = -lines; k <= lines; k++)
+        {
+            var into = k % 5 == 0 ? major : minor;
+            double w = k % 5 == 0 ? width * 1.6 : width, x = cx + k * step, z = cz + k * step;
+            Strip(into, new Point3D(cx - half, y, z - w), new Point3D(cx - half, y, z + w), new Point3D(cx + half, y, z + w), new Point3D(cx + half, y, z - w));
+            Strip(into, new Point3D(x - w, y, cz - half), new Point3D(x + w, y, cz - half), new Point3D(x + w, y, cz + half), new Point3D(x - w, y, cz + half));
+        }
+        foreach (var (lines3d, colour) in new[] { (minor, Color.FromRgb(72, 72, 82)), (major, Color.FromRgb(112, 112, 126)) })
+        {
+            var geometry = new MeshGeometry3D { Positions = lines3d.Positions, TriangleIndices = lines3d.Indices };
+            geometry.Freeze();
+            var material = new MaterialGroup { Children = { new DiffuseMaterial(Brushes.Black), new EmissiveMaterial(new SolidColorBrush(colour)) } };
+            material.Freeze();
+            _floor.Children.Add(new GeometryModel3D(geometry, material) { BackMaterial = material });
+        }
+    }
+
+    /// <summary>
+    /// A chunk in its vertex colours. WPF can't blend colours across a triangle from its corners, so each triangle gets
+    /// its own corners and the average of their colours, looked up in a small palette texture; a chunk without vertex
+    /// colours is white.
+    /// </summary>
+    private static (MeshGeometry3D, Material) ColoredGeometry(MeshChunk chunk)
+    {
+        int triangles = chunk.Indices.Length / 3;
+        var palette = new Dictionary<int, int>();
+        var colorOf = new int[triangles];
+        for (int t = 0; t < triangles; t++)
+        {
+            int r = 255, g = 255, b = 255;
+            if (chunk.Colors.Length > 0)
+            {
+                (r, g, b) = (0, 0, 0);
+                for (int k = 0; k < 3; k++)
+                {
+                    int v = chunk.Indices[t * 3 + k] * 3;
+                    if (v + 2 >= chunk.Colors.Length) continue;
+                    (r, g, b) = (r + chunk.Colors[v], g + chunk.Colors[v + 1], b + chunk.Colors[v + 2]);
+                }
+                (r, g, b) = (r / 3, g / 3, b / 3);
+            }
+            // five bits a channel keeps the palette small without bands showing
+            int key = (r >> 3) << 10 | (g >> 3) << 5 | b >> 3;
+            if (!palette.TryGetValue(key, out int index)) palette[key] = index = palette.Count;
+            colorOf[t] = index;
+        }
+        int side = Math.Max(1, (int)Math.Ceiling(Math.Sqrt(palette.Count)));
+        var pixels = new byte[side * side * 4];
+        foreach (var (key, index) in palette)
+        {
+            int at = index * 4;
+            pixels[at] = (byte)((key & 31) << 3 | 4);
+            pixels[at + 1] = (byte)((key >> 5 & 31) << 3 | 4);
+            pixels[at + 2] = (byte)((key >> 10 & 31) << 3 | 4);
+            pixels[at + 3] = 255;
+        }
+        var bitmap = BitmapSource.Create(side, side, 96, 96, PixelFormats.Bgra32, null, pixels, side * 4);
+        bitmap.Freeze();
+        var positions = new Point3DCollection(triangles * 3);
+        var uvs = new PointCollection(triangles * 3);
+        var indices = new Int32Collection(triangles * 3);
+        for (int t = 0; t < triangles; t++)
+        {
+            var uv = new Point((colorOf[t] % side + 0.5) / side, (colorOf[t] / side + 0.5) / side);
+            // wound the other way round for WPF, as the textured geometry is
+            foreach (int k in new[] { 0, 2, 1 })
+            {
+                int v = chunk.Indices[t * 3 + k];
+                indices.Add(positions.Count);
+                positions.Add(v < chunk.Positions.Length ? ToView(chunk.Positions[v]) : default);
+                uvs.Add(uv);
+            }
+        }
+        var geometry = new MeshGeometry3D { Positions = positions, TextureCoordinates = uvs, TriangleIndices = indices };
+        geometry.Freeze();
+        var brush = new ImageBrush(bitmap) { ViewportUnits = BrushMappingMode.Absolute, Viewport = new Rect(0, 0, 1, 1) };
+        RenderOptions.SetBitmapScalingMode(brush, BitmapScalingMode.NearestNeighbor);
+        brush.Freeze();
+        var material = new DiffuseMaterial(brush);
+        material.Freeze();
+        return (geometry, material);
     }
 
     private readonly System.Runtime.CompilerServices.ConditionalWeakTable<MeshChunk, MeshGeometry3D> _geometries = [];
@@ -345,57 +598,101 @@ public sealed class MeshView : Border
     /// </summary>
     private void RebuildWires()
     {
-        _wireTimer.Stop();
-        _wiresBuilt = DateTime.UtcNow;
         _wires.Children.Clear();
         if (!_wireframe || _parts.Count == 0) return;
         var drawn = _parts.SelectMany((part, p) => DrawnAt(part.Mesh).Where(c => Shown(p, c))
-            .Select(c => (Chunk: c, part.Place, Positions: _posedPositions.GetValueOrDefault((p, c)) ?? c.Positions))).ToList();
+            .Select(c => (Chunk: c, part.Place, Positions: _posedPositions.GetValueOrDefault((p, c)) ?? c.Positions, Edges: Edges(c)))).ToList();
         if (drawn.Count == 0) return;
-        double width = Math.Max(1e-4, Radius() * 0.0012);
-        var positions = new Point3DCollection();
-        var indices = new Int32Collection();
-        foreach (var (chunk, place, at) in drawn)
+        if (_wireWidth <= 0) _wireWidth = Math.Max(1e-4, Radius() * 0.0012);
+        double width = _wireWidth;
+
+        // each edge is 4 points, so every chunk's share of the points is known before any is made
+        var firstPoint = new int[drawn.Count];
+        int total = 0;
+        for (int i = 0; i < drawn.Count; i++) (firstPoint[i], total) = (total, total + drawn[i].Edges.Length / 3 * 4);
+        var points = new Point3D[total];
+        Parallel.For(0, drawn.Count, i =>
         {
-            var edges = new HashSet<long>();
-            for (int i = 0; i + 2 < chunk.Indices.Length; i += 3)
-                for (int k = 0; k < 3; k++)
-                {
-                    int a = chunk.Indices[i + k], b = chunk.Indices[i + (k + 1) % 3];
-                    if (a == b || !edges.Add(a < b ? ((long)a << 32) | (uint)b : ((long)b << 32) | (uint)a)) continue;
-                    AddEdge(positions, indices, ToView(System.Numerics.Vector3.Transform(at[a], place)), ToView(System.Numerics.Vector3.Transform(at[b], place)), width);
-                }
+            var (_, place, at, edges) = drawn[i];
+            var view = new Point3D[at.Length];
+            for (int v = 0; v < at.Length; v++) view[v] = ToView(place.IsIdentity ? at[v] : System.Numerics.Vector3.Transform(at[v], place));
+            int to = firstPoint[i];
+            for (int e = 0; e + 2 < edges.Length; e += 3, to += 4) Edge(points, to, view[edges[e]], view[edges[e + 1]], view[edges[e + 2]], width);
+        });
+
+        // the triangles are the same for every pose of the same edges, so they're made once
+        if (_wireIndices is null || _wireIndices.Count != total / 4 * 6)
+        {
+            var indices = new int[total / 4 * 6];
+            for (int at = 0, point = 0; point < total; at += 6, point += 4)
+                (indices[at], indices[at + 1], indices[at + 2], indices[at + 3], indices[at + 4], indices[at + 5]) = (point, point + 1, point + 2, point, point + 2, point + 3);
+            _wireIndices = new Int32Collection(indices);
+            _wireIndices.Freeze();
         }
-        var geometry = new MeshGeometry3D { Positions = positions, TriangleIndices = indices };
+        var geometry = new MeshGeometry3D { Positions = new Point3DCollection(points), TriangleIndices = _wireIndices };
         geometry.Freeze();
-        var brush = new SolidColorBrush(Color.FromRgb(225, 230, 235));
-        brush.Freeze();
-        var material = new EmissiveMaterial(brush);
-        var group = new MaterialGroup();
-        group.Children.Add(new DiffuseMaterial(Brushes.Black));
-        group.Children.Add(material);
-        group.Freeze();
-        _wires.Children.Add(new GeometryModel3D(geometry, group) { BackMaterial = group });
+        _wires.Children.Add(new GeometryModel3D(geometry, WireMaterial) { BackMaterial = WireMaterial });
     }
 
-    private static void AddEdge(Point3DCollection positions, Int32Collection indices, Point3D a, Point3D b, double width)
+    private double _wireWidth;
+    private Int32Collection? _wireIndices;
+
+    private static readonly Material WireMaterial = MakeWireMaterial();
+
+    private static Material MakeWireMaterial()
+    {
+        var brush = new SolidColorBrush(Color.FromRgb(225, 230, 235));
+        brush.Freeze();
+        var group = new MaterialGroup();
+        group.Children.Add(new DiffuseMaterial(Brushes.Black));
+        group.Children.Add(new EmissiveMaterial(brush));
+        group.Freeze();
+        return group;
+    }
+
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<MeshChunk, int[]> EdgeCache = [];
+
+    /// <summary>
+    /// A chunk's edges, each once, as its two vertices' numbers and the third vertex of a triangle it's an edge of (which
+    /// gives the surface the line is laid on); found the first time they're wanted.
+    /// </summary>
+    private static int[] Edges(MeshChunk chunk) => EdgeCache.GetValue(chunk, c =>
+    {
+        var seen = new HashSet<long>();
+        var edges = new List<int>();
+        for (int i = 0; i + 2 < c.Indices.Length; i += 3)
+            for (int k = 0; k < 3; k++)
+            {
+                int a = c.Indices[i + k], b = c.Indices[i + (k + 1) % 3];
+                if (a == b || !seen.Add(a < b ? ((long)a << 32) | (uint)b : ((long)b << 32) | (uint)a)) continue;
+                edges.Add(a);
+                edges.Add(b);
+                edges.Add(c.Indices[i + (k + 2) % 3]);
+            }
+        return [.. edges];
+    });
+
+    /// <summary>
+    /// An edge as a narrow strip, 4 points from <paramref name="at"/>, laid flat on the surface of the triangle with
+    /// <paramref name="third"/> as its other corner, so it's seen wherever the surface is; a point-like one is folded to a point.
+    /// </summary>
+    private static void Edge(Point3D[] points, int at, Point3D a, Point3D b, Point3D third, double width)
     {
         var along = b - a;
-        if (along.LengthSquared < 1e-12) return;
-        var side = Vector3D.CrossProduct(along, Math.Abs(along.Y) < 0.9 * along.Length ? new Vector3D(0, 1, 0) : new Vector3D(1, 0, 0));
-        side.Normalize();
-        var up = Vector3D.CrossProduct(along, side);
-        up.Normalize();
-        foreach (var offset in new[] { side * width, up * width })
+        // the game's triangles are wound the other way round from WPF's, so this points out of the surface
+        var normal = Vector3D.CrossProduct(third - a, along);
+        var side = Vector3D.CrossProduct(normal, along);
+        if (along.LengthSquared < 1e-12 || side.LengthSquared < 1e-24)
         {
-            int start = positions.Count;
-            positions.Add(a - offset);
-            positions.Add(a + offset);
-            positions.Add(b + offset);
-            positions.Add(b - offset);
-            indices.Add(start); indices.Add(start + 1); indices.Add(start + 2);
-            indices.Add(start); indices.Add(start + 2); indices.Add(start + 3);
+            for (int i = 0; i < 4; i++) points[at + i] = a;
+            return;
         }
+        side.Normalize();
+        side *= width;
+        // lifted a little off the surface, or it flickers in and out of it
+        normal.Normalize();
+        var lift = normal * (width * 2);
+        (points[at], points[at + 1], points[at + 2], points[at + 3]) = (a - side + lift, a + side + lift, b + side + lift, b - side + lift);
     }
 
     // ---------------------------------------------------------------- camera

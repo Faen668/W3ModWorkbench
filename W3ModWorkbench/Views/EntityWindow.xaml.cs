@@ -40,6 +40,10 @@ public partial class EntityWindow : Window, IMessageHost
         InitializeComponent();
         Resources["PropertyMenu"] = Menu(("Copy value", CopyValue_Click), ("Copy name", CopyName_Click), ("Copy name and value", CopyBoth_Click));
         Resources["FileMenu"] = Menu(("Copy path", CopyPath_Click));
+        FloorToggle.IsChecked = View.ShowFloor = App.Settings.ShowEntityFloor;
+        InfoPanel.Visibility = App.Settings.ShowEntityInfo ? Visibility.Visible : Visibility.Collapsed;
+        SpeedBox.ItemsSource = Speeds.Select(s => $"{s * 100:0}%").ToList();
+        SpeedBox.SelectedIndex = Array.IndexOf(Speeds, 1f);
         FpsBox.ItemsSource = FrameRates.Select(f => f == 0 ? "Max" : $"{f} fps").ToList();
         int remembered = Array.IndexOf(FrameRates, App.Settings.AnimationFps);
         FpsBox.SelectedIndex = remembered >= 0 ? remembered : Array.IndexOf(FrameRates, 30);
@@ -354,6 +358,8 @@ public partial class EntityWindow : Window, IMessageHost
         }
         if (token.IsCancellationRequested) return;
         _partComponents = drawnBy;
+        // the animation playing carries on in the new look, from where it was
+        (_resumeAt, _resumePlaying) = _clip is null ? (0f, true) : (_time, _playing);
         StopAnimation();
         View.ShowParts(parts);
         _meshesNote = $"{Format.Count(parts.Count, "mesh", "meshes")} shown" + (missing > 0 ? $", {missing:N0} not found or not read" : "")
@@ -474,6 +480,47 @@ public partial class EntityWindow : Window, IMessageHost
     {
         var (triangles, vertices, chunks) = View.Stats();
         MeshesText.Text = $"{_meshesNote}  ·  {triangles:N0} triangles, {vertices:N0} vertices, {Format.Count(chunks, "chunk")}";
+        ShowInfo();
+    }
+
+    private readonly System.Diagnostics.Stopwatch _infoClock = System.Diagnostics.Stopwatch.StartNew();
+    private int _framesDrawn;
+    private double _framesSince, _framesPerSecond, _poseMilliseconds;
+
+    /// <summary>
+    /// The overlay at the top left of the view: how much is drawn, at which LOD and how big it is, the skeleton, and while
+    /// an animation plays how often it's drawn and how long a pose takes to work out.
+    /// </summary>
+    private void ShowInfo()
+    {
+        InfoPanel.Visibility = App.Settings.ShowEntityInfo ? Visibility.Visible : Visibility.Collapsed;
+        if (!App.Settings.ShowEntityInfo) return;
+        var (triangles, vertices, chunks) = View.Stats();
+        var size = View.Size();
+        var lines = new List<string>
+        {
+            $"Triangles  {triangles,10:N0}",
+            $"Vertices   {vertices,10:N0}",
+            $"Meshes     {_partComponents.Count,10:N0}",
+            $"Chunks     {chunks,10:N0}",
+            $"LOD        {View.Lod,10}",
+            $"Size  {size.X:0.00} x {size.Y:0.00} x {size.Z:0.00} m",
+        };
+        if (_posing is { } posing) lines.Add($"Skeleton  {Path.GetFileNameWithoutExtension(posing.RigPath)}, {posing.Rig.Count} bones");
+        if (_playing) lines.Add($"Drawing  {_framesPerSecond,5:0} fps, pose {_poseMilliseconds:0.0} ms");
+        InfoOverlay.Text = string.Join("\n", lines);
+    }
+
+    /// <summary>Counts a frame drawn, and every half second works out the frame rate and puts it in the overlay.</summary>
+    private void CountFrame(double poseMilliseconds)
+    {
+        _framesDrawn++;
+        _poseMilliseconds = _poseMilliseconds == 0 ? poseMilliseconds : _poseMilliseconds * 0.8 + poseMilliseconds * 0.2;
+        double now = _infoClock.Elapsed.TotalSeconds;
+        if (now - _framesSince < 0.5) return;
+        _framesPerSecond = _framesDrawn / (now - _framesSince);
+        (_framesDrawn, _framesSince) = (0, now);
+        ShowInfo();
     }
 
     private void LodBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -499,9 +546,18 @@ public partial class EntityWindow : Window, IMessageHost
 
     private void Fit_Click(object sender, RoutedEventArgs e) => View.FitToView();
 
+    private void Floor_Click(object sender, RoutedEventArgs e) => SetFloor(FloorToggle.IsChecked == true);
+
+    private void SetFloor(bool on)
+    {
+        FloorToggle.IsChecked = View.ShowFloor = on;
+        App.Settings.ShowEntityFloor = on;
+        App.Settings.Save();
+    }
+
     // ---------------------------------------------------------------- animation
 
-    private sealed record Posing(Skeleton Rig, Matrix4x4[] Rest, List<MeshFile> Meshes, List<(int Bone, bool ByName)[]> Maps);
+    private sealed record Posing(string RigPath, Skeleton Rig, Matrix4x4[] Rest, List<MeshFile> Meshes, List<(int Bone, bool ByName)[]> Maps);
 
     private sealed record AnimationEntry(string Name, int Export)
     {
@@ -529,8 +585,12 @@ public partial class EntityWindow : Window, IMessageHost
         _posing = null;
         var meshes = parts.Select(p => p.Mesh).ToList();
         if (!meshes.Any(m => m.BoneNames.Length > 0)) return;
-        var rigs = look.Components.SelectMany(c => c.Resources)
-            .Where(r => r.EndsWith(".w2rig", StringComparison.OrdinalIgnoreCase)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        // the body's skeleton, which animations play on, is the moving or animated component's; a dangle component's
+        // (a hood's or hair's) also names most of the body's bones, so it's only tried when there's no other
+        static bool IsRig(string r) => r.EndsWith(".w2rig", StringComparison.OrdinalIgnoreCase);
+        var main = look.Components.Where(c => !c.ClassName.Contains("Dangle", StringComparison.Ordinal)).SelectMany(c => c.Resources).Where(IsRig);
+        var rigs = main.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        if (rigs.Count == 0) rigs = look.Components.SelectMany(c => c.Resources).Where(IsRig).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         var sets = _entity!.File.Imports.Select(i => i.Path).Concat(look.Components.SelectMany(c => c.Resources))
             .Where(r => r.EndsWith(".w2anims", StringComparison.OrdinalIgnoreCase))
             // a face's sets move the face's own rig, not the body's
@@ -552,7 +612,7 @@ public partial class EntityWindow : Window, IMessageHost
                     if (named <= bestNamed) continue;
                     var rest = new Matrix4x4[rig.Count];
                     rig.ToModel(rig.Pose, rest);
-                    (best, bestNamed) = (new Posing(rig, rest, meshes, meshes.Select(m => Skinning.MapBones(m, rig, rest)).ToList()), named);
+                    (best, bestNamed) = (new Posing(path, rig, rest, meshes, meshes.Select(m => Skinning.MapBones(m, rig, rest)).ToList()), named);
                 }
                 catch (InvalidDataException)
                 {
@@ -566,7 +626,72 @@ public partial class EntityWindow : Window, IMessageHost
         AnimsetBox.ItemsSource = sets.Select(s => new CutsceneLinkItem(new CutsceneLink(s, "Animation set"))).ToList();
         AnimsetBox.DisplayMemberPath = nameof(CutsceneLinkItem.Name);
         AnimationBar.Visibility = PlayBar.Visibility = Visibility.Visible;
-        AnimsetBox.SelectedIndex = 0;
+        ShowInfo();
+        if (_wanted is null && !_stopped) _wanted = await Task.Run(() => StandingIdle(sets), token).ContinueWith(t => t.IsCompletedSuccessfully ? t.Result : null, TaskScheduler.Default);
+        if (token.IsCancellationRequested) return;
+        int index = _wanted is { } wanted ? sets.FindIndex(s => s.Equals(wanted.Set, StringComparison.OrdinalIgnoreCase)) : -1;
+        AnimsetBox.SelectedIndex = Math.Max(0, index);
+    }
+
+    /// <summary>The animation to show, by its set and name: the one picked last, kept when the look changes.</summary>
+    private (string Set, string Name)? _wanted;
+
+    /// <summary>Whether the stop button was pressed, so nothing plays until an animation is picked again.</summary>
+    private bool _stopped;
+
+    private float _resumeAt;
+    private bool _resumePlaying = true;
+
+    /// <summary>The animation sets read so far, by path, as reading one again is slow.</summary>
+    private readonly Dictionary<string, (Cr2wFile File, List<AnimationEntry> List)?> _sets = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// A standing idle to show the entity in when nothing has been picked: from its dialog sets (the standing ones
+    /// first), the neutral standing idle when there's one, else another standing idle, or else "idle" alone, but not one that sits, lies,
+    /// kneels or leans, nor a look-at or an additive layer. Null when there's none.
+    /// </summary>
+    private (string Set, string Name)? StandingIdle(List<string> sets)
+    {
+        static bool Has(string text, params string[] words) => words.Any(w => text.Contains(w, StringComparison.OrdinalIgnoreCase));
+        string[] notStanding = ["sit", "lying", "lie_", "kneel", "lean", "lookat", "additive", "mimic", "ground", "table", "horse", "boat"];
+        var candidates = sets.Select(path => (Path: path, Name: Path.GetFileNameWithoutExtension(path)))
+            .Where(s => !Has(s.Name, notStanding))
+            .Select(s => (s.Path, Rank: Has(s.Name, "dialog_standing") ? 0 : Has(s.Name, "dialog") ? 1 : Has(s.Name, "exploration", "movement", "community") ? 2 : 3))
+            .Where(s => s.Rank < 3).OrderBy(s => s.Rank).Take(4);
+        foreach (var (path, _) in candidates)
+        {
+            if (ReadSet(path) is not { } set) continue;
+            var names = set.List.Select(a => a.Name).Where(n => Has(n, "idle") && !Has(n, notStanding)).ToList();
+            // "determined" is the dialogs' neutral stance, so a plain standing one is the likeliest to look at rest
+            var name = names.FirstOrDefault(n => n.Equals("high_standing_determined_idle", StringComparison.OrdinalIgnoreCase))
+                ?? names.FirstOrDefault(n => Has(n, "standing_determined_idle"))
+                ?? names.FirstOrDefault(n => Has(n, "standing")) ?? names.FirstOrDefault();
+            if (name is not null) return (path, name);
+        }
+        return null;
+    }
+
+    /// <summary>An animation set and its animations by name, read once. Null when it can't be read.</summary>
+    private (Cr2wFile File, List<AnimationEntry> List)? ReadSet(string path)
+    {
+        lock (_sets)
+            if (_sets.TryGetValue(path, out var known)) return known;
+        (Cr2wFile File, List<AnimationEntry> List)? read = null;
+        try
+        {
+            if (_locator.ReadFile(path) is { } data)
+            {
+                var file = Cr2wFile.Read(data);
+                read = (file, file.Exports.Where(x => x.ClassName == "CSkeletalAnimation")
+                    .Select(x => new AnimationEntry(file.Object(x.Index)["name"] as string ?? $"#{x.Index}", x.Index))
+                    .OrderBy(a => a.Name, StringComparer.OrdinalIgnoreCase).ToList());
+            }
+        }
+        catch (InvalidDataException)
+        {
+        }
+        lock (_sets) _sets[path] = read;
+        return read;
     }
 
     /// <summary>Reads the animation set picked and lists its animations by name.</summary>
@@ -577,22 +702,7 @@ public partial class EntityWindow : Window, IMessageHost
         _animationLoad?.Cancel();
         var token = (_animationLoad = new CancellationTokenSource()).Token;
         AnimationBox.ItemsSource = null;
-        var read = await Task.Run(() =>
-        {
-            try
-            {
-                if (_locator.ReadFile(path) is not { } data) return null;
-                var file = Cr2wFile.Read(data);
-                var list = file.Exports.Where(x => x.ClassName == "CSkeletalAnimation")
-                    .Select(x => new AnimationEntry(file.Object(x.Index)["name"] as string ?? $"#{x.Index}", x.Index))
-                    .OrderBy(a => a.Name, StringComparer.OrdinalIgnoreCase).ToList();
-                return (File: file, List: list);
-            }
-            catch (InvalidDataException)
-            {
-                return ((Cr2wFile File, List<AnimationEntry> List)?)null;
-            }
-        });
+        var read = await Task.Run(() => ReadSet(path));
         if (token.IsCancellationRequested) return;
         if (read is not { } r || r.List.Count == 0)
         {
@@ -601,12 +711,20 @@ public partial class EntityWindow : Window, IMessageHost
         }
         (_animset, _animsetPath) = (r.File, path);
         AnimationBox.ItemsSource = r.List;
+        // the animation wanted, when it's in this set, plays again
+        if (_wanted is { } wanted && wanted.Set.Equals(path, StringComparison.OrdinalIgnoreCase))
+            AnimationBox.SelectedItem = r.List.FirstOrDefault(a => a.Name == wanted.Name);
     }
 
     /// <summary>Reads the animation picked and plays it from the start.</summary>
     private async void AnimationBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (AnimationBox.SelectedItem is not AnimationEntry entry || _animset is not { } set || _animsetPath is not { } path) return;
+        bool again = _wanted is { } before && before.Set.Equals(path, StringComparison.OrdinalIgnoreCase) && before.Name == entry.Name;
+        var (from, playing) = again ? (_resumeAt, _resumePlaying) : (0f, true);
+        (_resumeAt, _resumePlaying) = (0f, true);
+        _wanted = (path, entry.Name);
+        _stopped = false;
         _animationLoad?.Cancel();
         var token = (_animationLoad = new CancellationTokenSource()).Token;
         Pause();
@@ -629,18 +747,32 @@ public partial class EntityWindow : Window, IMessageHost
         ScrubSlider.IsEnabled = PlayButton.IsEnabled = _clip is not null;
         if (_clip is null)
         {
-            TimeText.Text = otherRig ? "another rig's" : "not read";
+            TimeText.Text = otherRig ? "other skeleton" : "not read";
+            TimeText.ToolTip = otherRig ? "This animation is made for a skeleton with more bones than this entity's, such as another kind of creature's, so it can't be played on it" : "The animation could not be read";
+            _scrubbing = true;
+            ScrubSlider.Value = 0;
+            _scrubbing = false;
             return;
         }
         ScrubSlider.Maximum = Math.Max(0.01, _clip.Duration);
         ScrubSlider.SmallChange = 1 / 30.0;
         ScrubSlider.LargeChange = 1;
         _placing = Placing(_clip, _posing!);
-        SetTime(0);
-        Play();
+        SetTime(from);
+        if (playing) Play();
     }
 
     private Matrix4x4 _placing = Matrix4x4.Identity;
+
+    /// <summary>
+    /// Leaves the rig's root as it stands. The game places a character's root itself, where the entity is, and doesn't
+    /// take it from the animation; some animations have it turned (a dialog idle exported lying on its back), which
+    /// would lay the character down.
+    /// </summary>
+    private static void KeepRoot(Skeleton rig, BoneTransform[] pose)
+    {
+        if (rig.Count > 0 && rig.Parents[0] < 0) pose[0] = rig.Pose[0];
+    }
 
     /// <summary>
     /// What brings an animation's actor back to where the entity stands, facing the way it faces: many are made for a
@@ -655,6 +787,7 @@ public partial class EntityWindow : Window, IMessageHost
         if (pelvis < 0) pelvis = rig.Count > 1 ? 1 : 0;
         var pose = rig.Pose.ToArray();
         clip.Sample(0, pose);
+        KeepRoot(posing.Rig, pose);
         var model = new Matrix4x4[rig.Count];
         rig.ToModel(pose, model);
         var rest = posing.Rest[pelvis];
@@ -672,16 +805,20 @@ public partial class EntityWindow : Window, IMessageHost
     private void SetTime(float time)
     {
         if (_clip is not { } clip || _posing is not { } posing) return;
+        long started = System.Diagnostics.Stopwatch.GetTimestamp();
         _time = time = Math.Clamp(time, 0, clip.Duration);
         if (_pose.Length != posing.Rig.Count) _pose = new BoneTransform[posing.Rig.Count];
         posing.Rig.Pose.CopyTo(_pose, 0);
         clip.Sample(time, _pose);
+        KeepRoot(posing.Rig, _pose);
         var model = new Matrix4x4[posing.Rig.Count];
         posing.Rig.ToModel(_pose, model);
         for (int i = 0; i < model.Length; i++) model[i] *= _placing;
         var bones = posing.Meshes.Select((m, i) => Skinning.BoneMatrices(m, posing.Maps[i], posing.Rest, model)).ToList();
         View.Pose((part, chunk) => part < bones.Count ? Skinning.Pose(chunk, bones[part]) : null);
+        if (_playing) CountFrame(System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds);
         TimeText.Text = $"{time,5:0.00} / {clip.Duration:0.00} s";
+        TimeText.ToolTip = null;
         _scrubbing = true;
         ScrubSlider.Value = time;
         _scrubbing = false;
@@ -698,7 +835,7 @@ public partial class EntityWindow : Window, IMessageHost
         if (_clip is null || _playing) return;
         _playedFrom = _time >= _clip.Duration - 0.01f ? 0 : _time;
         _clock.Restart();
-        _drawnAt = -1;
+        _nextDraw = 0;
         _playing = true;
         PlayIcon.Text = ""; // pause
         System.Windows.Media.CompositionTarget.Rendering += Tick;
@@ -711,9 +848,30 @@ public partial class EntityWindow : Window, IMessageHost
         _clock.Stop();
         PlayIcon.Text = ""; // play
         System.Windows.Media.CompositionTarget.Rendering -= Tick;
+        ShowInfo();
     }
 
-    private double _drawnAt;
+    /// <summary>When the next frame is due, on the clock, for the frame rate picked.</summary>
+    private double _nextDraw;
+
+    /// <summary>How fast it plays: 1 is the game's speed.</summary>
+    private float _speed = 1;
+
+    /// <summary>The speeds offered.</summary>
+    private static readonly float[] Speeds = [0.1f, 0.25f, 0.5f, 0.75f, 1f, 1.5f, 2f];
+
+    private void SpeedBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (SpeedBox.SelectedIndex < 0) return;
+        // carries on from where it is, at the new speed
+        if (_playing)
+        {
+            _playedFrom = _time;
+            _clock.Restart();
+            _nextDraw = 0;
+        }
+        _speed = Speeds[SpeedBox.SelectedIndex];
+    }
 
     /// <summary>The frame rates offered; 0 is as often as the screen draws.</summary>
     private static readonly int[] FrameRates = [15, 24, 30, 60, 0];
@@ -732,9 +890,15 @@ public partial class EntityWindow : Window, IMessageHost
         if (_clip is not { } clip) return;
         double now = _clock.Elapsed.TotalSeconds;
         int fps = App.Settings.AnimationFps;
-        if (fps > 0 && now - _drawnAt < 1.0 / fps && now >= _drawnAt) return;
-        _drawnAt = now;
-        float time = _playedFrom + (float)now;
+        if (fps > 0)
+        {
+            // frames are due on a schedule, a little early allowed: the screen's frames come about every 16.6 ms, and
+            // waiting for a whole 1/60 s from the last one would skip every other and halve the rate
+            if (now < _nextDraw - 0.004) return;
+            _nextDraw += 1.0 / fps;
+            if (_nextDraw < now) _nextDraw = now + 1.0 / fps;
+        }
+        float time = _playedFrom + (float)now * _speed;
         SetTime(clip.Duration > 0 ? time % clip.Duration : 0);
     }
 
@@ -745,7 +909,12 @@ public partial class EntityWindow : Window, IMessageHost
         SetTime((float)e.NewValue);
     }
 
-    private void RestPose_Click(object sender, RoutedEventArgs e) => StopAnimation();
+    private void RestPose_Click(object sender, RoutedEventArgs e)
+    {
+        _wanted = null;
+        _stopped = true;
+        StopAnimation();
+    }
 
     /// <summary>Stops playing and stands the meshes as they were bound.</summary>
     private void StopAnimation()
@@ -830,7 +999,7 @@ public partial class EntityWindow : Window, IMessageHost
     /// </summary>
     private async Task OpenLinkAsync(string path)
     {
-        bool viewable = MeshWindow.CanShow(path) || CutsceneWindow.CanShow(path) || SceneWindow.CanShow(path) || CanShow(path) || XmlWindow.CanOpen(path) || TextureWindow.CanShow(path);
+        bool viewable = MeshWindow.CanShow(path) || CutsceneWindow.CanShow(path) || SceneWindow.CanShow(path) || CanShow(path) || BehTreeWindow.CanShow(path) || XmlWindow.CanOpen(path) || TextureWindow.CanShow(path);
         if (!viewable)
         {
             string kind = FileKinds.Of(path)?.Name.ToLowerInvariant() ?? "this kind of";
@@ -859,6 +1028,7 @@ public partial class EntityWindow : Window, IMessageHost
         else if (CutsceneWindow.CanShow(path)) CutsceneWindow.Open(path, source, data, _locator, this);
         else if (SceneWindow.CanShow(path)) SceneWindow.Open(path, source, data, _locator, this);
         else if (CanShow(path)) Open(path, source, data, _locator, this);
+        else if (BehTreeWindow.CanShow(path)) BehTreeWindow.Open(path, source, data, _locator, this);
         else if (XmlWindow.CanOpen(path)) XmlWindow.OpenData(name, $"{source}  ·  {path}", data, this, path);
         else if (!TextureWindow.Open(name, $"{source}  ·  {path}", data, this))
             await ShowMessage("It can't be shown", $"{path}\n\nIt isn't a picture the texture viewer understands.", MessageKind.Warning);
@@ -887,6 +1057,12 @@ public partial class EntityWindow : Window, IMessageHost
             case Key.F when Keyboard.Modifiers == ModifierKeys.Control: PropertySearch.Focus(); break;
             case Key.Escape: Close(); break;
             case Key.F when Keyboard.Modifiers == ModifierKeys.None: View.FitToView(); break;
+            case Key.G when Keyboard.Modifiers == ModifierKeys.None: SetFloor(!View.ShowFloor); break;
+            case Key.I when Keyboard.Modifiers == ModifierKeys.None:
+                App.Settings.ShowEntityInfo = !App.Settings.ShowEntityInfo;
+                App.Settings.Save();
+                ShowInfo();
+                break;
             case Key.Space when Keyboard.Modifiers == ModifierKeys.None && PlayButton.IsEnabled:
                 if (_playing) Pause();
                 else Play();

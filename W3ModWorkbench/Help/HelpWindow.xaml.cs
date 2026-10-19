@@ -65,9 +65,14 @@ public partial class HelpWindow : Window
             });
             foreach (var t in topics)
             {
-                var row = new StackPanel { Orientation = Orientation.Horizontal };
-                row.Children.Add(new TextBlock { Text = t.Glyph, FontFamily = (FontFamily)FindResource("IconFont"), Width = 26, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 2, 0, 0) });
-                row.Children.Add(new TextBlock { Text = t.Title, VerticalAlignment = VerticalAlignment.Center });
+                // a long title wraps under itself, beside the icon, rather than running out of the list
+                var row = new Grid();
+                row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(26) });
+                row.ColumnDefinitions.Add(new ColumnDefinition());
+                row.Children.Add(new TextBlock { Text = t.Glyph, FontFamily = (FontFamily)FindResource("IconFont"), VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(0, 3, 0, 0) });
+                var title = new TextBlock { Text = t.Title, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center };
+                Grid.SetColumn(title, 1);
+                row.Children.Add(title);
                 var item = new ListBoxItem { Content = row, Tag = t };
                 TopicList.Items.Add(item);
                 if (t == selected) TopicList.SelectedItem = item;
@@ -220,7 +225,7 @@ public partial class HelpWindow : Window
         }
     }
 
-    private static Border CodeBlock(string code)
+    private Border CodeBlock(string code)
     {
         var border = new Border
         {
@@ -228,11 +233,33 @@ public partial class HelpWindow : Window
             BorderThickness = new Thickness(1),
             Padding = new Thickness(14, 10, 14, 10),
             Margin = new Thickness(0, 2, 0, 14),
-            Child = new TextBlock { Text = code, FontFamily = Mono, FontSize = 13 },
+            Child = CodeText(code),
         };
         border.SetResourceReference(Border.BackgroundProperty, "SubtleFillColorSecondaryBrush");
         border.SetResourceReference(Border.BorderBrushProperty, "CardStrokeColorDefaultBrush");
         return border;
+    }
+
+    /// <summary>A code block's text, coloured as the JSON editor colours it when it's JSON.</summary>
+    private TextBlock CodeText(string code)
+    {
+        var text = new TextBlock { FontFamily = Mono, FontSize = 13 };
+        string trimmed = code.TrimStart();
+        if (!trimmed.StartsWith('{') && !trimmed.StartsWith('['))
+        {
+            text.Text = code;
+            return text;
+        }
+        bool dark = TryFindResource("TextFillColorPrimaryBrush") is SolidColorBrush b && 0.299 * b.Color.R + 0.587 * b.Color.G + 0.114 * b.Color.B > 128;
+        int at = 0;
+        foreach (var span in Highlighting.JsonScanner.Scan(code))
+        {
+            if (span.Start > at) text.Inlines.Add(new Run(code[at..span.Start]));
+            text.Inlines.Add(new Run(code.Substring(span.Start, span.Length)) { Foreground = Highlighting.JsonColorizer.BrushFor(span.Kind, dark) });
+            at = span.Start + span.Length;
+        }
+        if (at < code.Length) text.Inlines.Add(new Run(code[at..]));
+        return text;
     }
 
     private Border Note(string markup)
