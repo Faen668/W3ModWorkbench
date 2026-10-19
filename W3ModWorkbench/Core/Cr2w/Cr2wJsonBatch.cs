@@ -54,6 +54,10 @@ public static class Cr2wJsonBatch
         ".w2l", ".w2w", ".redswf", ".w2rig", ".w2beh", ".w2behtree", ".w2ter", ".w2cube", ".w2job", ".w2comm", ".w2p", ".w2mg",
         ".w2em", ".w2cutscene", ".w2ragdoll", ".w2animev", ".vbrush", ".w2sm", ".w2dyng", ".w2steer", ".w2je", ".w2cl", ".w2srt",
         ".w2fnt", ".w2lc", ".w2ow", ".w2spe", ".w3dyng", ".w2pe", ".w3ac", ".w3fac", ".w3hud", ".w3tutorial", ".w3gld", ".w3oprt",
+        // the rest of the CR2W kinds in the game's bundles
+        ".flyr", ".w3occlusion", ".w3occlusiondef", ".srt", ".redfur", ".spawntree", ".cellmap", ".reddest", ".texarray", ".redapex",
+        ".redcloth", ".w2sf", ".redgame", ".w2cent", ".w3app", ".menu", ".popup", ".hud", ".guiconfig", ".reddlc", ".formation",
+        ".grassmask", ".w3simplex", ".redexp", ".redwpset", ".w2qm", ".w2am", ".w2dset", ".redicsv",
     };
 
     /// <summary>Whether a file's name says it's a CR2W resource (its bytes say for sure).</summary>

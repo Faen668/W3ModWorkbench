@@ -1,3 +1,5 @@
+using System.IO;
+
 namespace W3ModWorkbench.Core.Textures;
 
 /// <summary>A decoded mip level: 32-bit pixels, blue first, as WPF wants them.</summary>
@@ -10,7 +12,7 @@ public static class TextureDecoder
     {
         TextureFormat.Rgba8 => 4,
         TextureFormat.R8 => 1,
-        TextureFormat.Rgb32F => 12,
+        TextureFormat.R16F => 2,
         _ => 0,
     };
 
@@ -40,12 +42,50 @@ public static class TextureDecoder
         return total;
     }
 
-    /// <summary>Decodes one mip level (0 is the largest) of the first slice. Null when the format isn't understood.</summary>
-    public static DecodedImage? Decode(TextureInfo info, byte[] pixels, int level = 0)
+    /// <summary>
+    /// Where a mip level of a slice starts. A texture with several slices keeps each level of every slice before the next
+    /// level, as the game's cache does: level 0 of slices 0, 1, 2…, then level 1 of each, and so on.
+    /// </summary>
+    public static int LevelOffset(TextureInfo info, int level, int slice = 0)
+    {
+        int offset = 0;
+        for (int i = 0; i < level; i++) offset += LevelSize(info.Format, LevelWidth(info, i), LevelHeight(info, i)) * info.Slices;
+        return offset + slice * LevelSize(info.Format, LevelWidth(info, level), LevelHeight(info, level));
+    }
+
+    /// <summary>The pixels with each slice's mip levels together, slice after slice, as a .dds lays them out.</summary>
+    public static byte[] SliceMajor(TextureInfo info, byte[] pixels) => Reorder(info, pixels, toSliceMajor: true);
+
+    /// <summary>A .dds's pixels (slice after slice) turned round to the cache's order (level after level).</summary>
+    public static byte[] LevelMajor(TextureInfo info, byte[] pixels) => Reorder(info, pixels, toSliceMajor: false);
+
+    private static byte[] Reorder(TextureInfo info, byte[] pixels, bool toSliceMajor)
+    {
+        if (info.Slices <= 1) return pixels;
+        int chain = ChainSize(info);
+        if (pixels.Length < chain * info.Slices) throw new InvalidDataException("The texture's data is shorter than its slices need.");
+        var result = new byte[chain * info.Slices];
+        for (int slice = 0; slice < info.Slices; slice++)
+        {
+            int sliceMajor = slice * chain;
+            for (int level = 0; level < info.Mips; level++)
+            {
+                int size = LevelSize(info.Format, LevelWidth(info, level), LevelHeight(info, level));
+                int levelMajor = LevelOffset(info, level, slice);
+                if (toSliceMajor) Buffer.BlockCopy(pixels, levelMajor, result, sliceMajor, size);
+                else Buffer.BlockCopy(pixels, sliceMajor, result, levelMajor, size);
+                sliceMajor += size;
+            }
+        }
+        return result;
+    }
+
+    /// <summary>Decodes one mip level (0 is the largest) of one slice (a cube map's face, an array's texture). Null when the format isn't understood.</summary>
+    public static DecodedImage? Decode(TextureInfo info, byte[] pixels, int level = 0, int slice = 0)
     {
         level = Math.Clamp(level, 0, info.Mips - 1);
-        int offset = 0;
-        for (int i = 0; i < level; i++) offset += LevelSize(info.Format, LevelWidth(info, i), LevelHeight(info, i));
+        slice = Math.Clamp(slice, 0, info.Slices - 1);
+        int offset = LevelOffset(info, level, slice);
         int w = LevelWidth(info, level), h = LevelHeight(info, level);
         int size = LevelSize(info.Format, w, h);
         if (info.Format == TextureFormat.Unknown || offset + size > pixels.Length) return null;
@@ -60,19 +100,16 @@ public static class TextureDecoder
             case TextureFormat.R8:
                 for (int i = 0; i < w * h; i++) { bgra[i * 4] = bgra[i * 4 + 1] = bgra[i * 4 + 2] = src[i]; bgra[i * 4 + 3] = 255; }
                 break;
-            case TextureFormat.Rgb32F:
+            case TextureFormat.R16F:
             {
-                // light and probe data is not limited to 0..1: scale it so the brightest value shows as white
+                // probe data is not limited to 0..1: scale it so the brightest value shows as white
                 float max = 0;
-                for (int i = 0; i + 4 <= src.Length; i += 4) max = Math.Max(max, BitConverter.ToSingle(src.Slice(i, 4)));
-                float scale = max > 0 && !float.IsInfinity(max) ? 255f / max : 255f;
+                for (int i = 0; i + 2 <= src.Length; i += 2) { float v = (float)BitConverter.ToHalf(src.Slice(i, 2)); if (float.IsFinite(v)) max = Math.Max(max, v); }
+                float scale = max > 0 ? 255f / max : 255f;
                 for (int i = 0; i < w * h; i++)
                 {
-                    for (int c = 0; c < 3; c++)
-                    {
-                        float v = BitConverter.ToSingle(src.Slice(i * 12 + c * 4, 4));
-                        bgra[i * 4 + 2 - c] = (byte)Math.Clamp((int)(float.IsNaN(v) ? 0 : v * scale + 0.5f), 0, 255);
-                    }
+                    float v = (float)BitConverter.ToHalf(src.Slice(i * 2, 2));
+                    bgra[i * 4] = bgra[i * 4 + 1] = bgra[i * 4 + 2] = (byte)Math.Clamp((int)(float.IsFinite(v) ? v * scale + 0.5f : 0), 0, 255);
                     bgra[i * 4 + 3] = 255;
                 }
                 break;

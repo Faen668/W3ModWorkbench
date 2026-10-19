@@ -1073,7 +1073,7 @@ public partial class MainWindow : Window, IMessageHost
             item.IsChecked = !item.IsChecked;
     }
 
-    /// <summary>An .xbm in a bundle: the texture's description, whose pixels are in a texture.cache under the same path.</summary>
+    /// <summary>An .xbm, .texarray or .w2cube in a bundle: the texture's description, whose pixels are in a texture.cache under the same path.</summary>
     private static bool IsTextureHeader(EntryItem item) => item.IsTextureHeader;
 
     private static TextureEntry? FindInCache(TextureCacheArchive cache, string path) => ResourceLocator.FindInCache(cache, path);

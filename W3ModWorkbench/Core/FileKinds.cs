@@ -69,6 +69,7 @@ public static class FileKinds
         [".bnk"] = new("Sound bank", "Wwise sounds and the events that play them."),
         [".wem"] = new("Sound", "A Wwise sound: speech, music or an effect."),
         [".usm"] = new("Video", "A video, such as an intro or an ending."),
+        [".subs"] = new("Subtitles", "A video's subtitles in one language: each line with when it shows and goes."),
         [".bundle"] = new("Bundle", "An archive of the game's or a mod's files."),
         [".cache"] = new("Cache", "An archive of textures, sounds, collision or shaders."),
     };

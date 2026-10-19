@@ -15,20 +15,24 @@ public enum TextureFormat
     Bc7,
     Rgba8,
     R8,
-    Rgb32F,
+    R16F,
 }
 
 /// <summary>What a texture.cache entry says about its texture.</summary>
 public sealed record TextureInfo(int Width, int Height, int Mips, int Slices, int RawFormat, TextureFormat Format, int Alignment, long DataOffset, int PackedSize, int UnpackedSize)
 {
+    /// <summary>A cube map's six faces (+X, −X, +Y, −Y, +Z, −Z) rather than an array's slices.</summary>
+    public bool IsCube { get; init; }
+
     /// <summary>The format, size and mip count in a few words: BC1 2048x1024 ×12.</summary>
-    public string Description => $"{FormatName} {Width}x{Height}" + (Mips > 1 ? $" ×{Mips}" : "");
+    public string Description => $"{FormatName} {Width}x{Height}" + (Mips > 1 ? $" ×{Mips}" : "")
+        + (IsCube ? "  cube" : Slices > 1 ? $"  [{Slices}]" : "");
 
     /// <summary>The format as the game writes it, for what's not understood yet.</summary>
     public string FormatName => Format == TextureFormat.Unknown ? $"format {RawFormat}" : Format switch
     {
         TextureFormat.Rgba8 => "RGBA8",
-        TextureFormat.Rgb32F => "RGB32F",
+        TextureFormat.R16F => "R16F",
         _ => Format.ToString().ToUpperInvariant(),
     };
 }
@@ -44,7 +48,7 @@ public sealed class TextureEntry : ArchiveEntry
 
     public override string FormatText => Info.Description;
 
-    /// <summary>The texture as a .dds file: all of its mip levels, of the first slice.</summary>
+    /// <summary>The texture as a .dds file: all of its mip levels, of every slice (a cube map's faces, an array's textures).</summary>
     public override byte[] Read(Stream? archiveStream)
     {
         if (archiveStream is null) throw new InvalidOperationException("A texture is read from its cache file.");
@@ -144,7 +148,11 @@ public sealed class TextureCacheArchive : IArchive
             if (nameOffset < 0 || nameOffset >= names.Length) continue;
             int end = Array.IndexOf(names, (byte)0, nameOffset);
             string name = System.Text.Encoding.Latin1.GetString(names, nameOffset, (end < 0 ? names.Length : end) - nameOffset);
-            var info = new TextureInfo(width, height, Math.Max(1, mips), Math.Max(1, slices), raw, FormatOf(raw), alignment, page * PageSize, packed, unpacked);
+            var info = new TextureInfo(width, height, Math.Max(1, mips), Math.Max(1, slices), raw, FormatOf(raw), alignment, page * PageSize, packed, unpacked)
+            {
+                // a cube map's own file, or a layer's environment probe
+                IsCube = slices == 6 && (name.EndsWith(".w2cube", StringComparison.OrdinalIgnoreCase) || name.EndsWith(".w2l", StringComparison.OrdinalIgnoreCase)),
+            };
             list.Add(new TextureEntry
             {
                 Archive = archive,
@@ -167,13 +175,14 @@ public sealed class TextureCacheArchive : IArchive
         10 => TextureFormat.Bc7,
         13 => TextureFormat.Bc3,
         253 => TextureFormat.Rgba8,
-        16 => TextureFormat.Rgb32F,
+        16 => TextureFormat.R16F, // the environment probes' cube maps
         _ => TextureFormat.Unknown,
     };
 
     /// <summary>
-    /// The texture's pixels as the cache holds them, every mip level one after another, largest first. A texture is a run of
-    /// blocks, each with a header (packed size, unpacked size, which mip it starts at) and a zlib stream.
+    /// The texture's pixels as the cache holds them, every mip level one after another, largest first; a texture with several
+    /// slices has each level of every slice before the next level. A texture is a run of blocks, each with a header (packed
+    /// size, unpacked size, which mip it starts at) and a zlib stream.
     /// </summary>
     public static byte[] ReadPixels(Stream cache, TextureInfo info)
     {

@@ -12,8 +12,8 @@ using W3ModWorkbench.Core.Projects;
 namespace W3ModWorkbench;
 
 /// <summary>
-/// Shows a texture from a texture.cache: its mip levels, one channel at a time, over a chequerboard for transparency.
-/// It can be saved as a PNG (the level shown) or as a .dds (every level).
+/// Shows a texture from a texture.cache: its mip levels, a cube map's faces or an array's slices, one channel at a time,
+/// over a chequerboard for transparency. It can be saved as a PNG (the level shown) or as a .dds (every level and slice).
 /// </summary>
 public partial class TextureWindow : Window, IMessageHost
 {
@@ -37,6 +37,14 @@ public partial class TextureWindow : Window, IMessageHost
         for (int level = 0; level < mips; level++)
             MipBox.Items.Add($"{Math.Max(1, width >> level)} x {Math.Max(1, height >> level)}" + (level == 0 ? "  (full)" : ""));
         MipBox.SelectedIndex = 0;
+        if (info is { Slices: > 1 })
+        {
+            string[] faces = ["+X", "−X", "+Y", "−Y", "+Z", "−Z"];
+            for (int slice = 0; slice < info.Slices; slice++) SliceBox.Items.Add(info.IsCube ? faces[slice] : $"{slice}");
+            SliceBox.SelectedIndex = 0;
+            SliceLabel.Text = info.IsCube ? "Face" : "Slice";
+            SliceLabel.Visibility = SliceBox.Visibility = Visibility.Visible;
+        }
         InfoText.Text = $"{path}   ·   {detail}";
         Loaded += async (_, _) => await LoadAsync();
     }
@@ -47,7 +55,7 @@ public partial class TextureWindow : Window, IMessageHost
         var info = entry.Info;
         var archive = entry.Archive;
         string detail = $"{entry.FormatText}   ·   {Format.Bytes(info.UnpackedSize)} unpacked, {Format.Bytes(info.PackedSize)} in the cache"
-            + (info.Slices > 1 ? $"   ·   {info.Slices} slices, the first is shown" : "");
+            + (info.IsCube ? "   ·   a cube map's six faces" : info.Slices > 1 ? $"   ·   an array of {info.Slices} textures" : "");
         new TextureWindow(entry.Path, detail, info, () =>
         {
             using var fs = new FileStream(archive.FilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
@@ -106,10 +114,12 @@ public partial class TextureWindow : Window, IMessageHost
 
     private int Level => Math.Max(0, MipBox.SelectedIndex);
 
+    private int Slice => Math.Max(0, SliceBox.SelectedIndex);
+
     private void Render()
     {
         if (_pixels is null) return;
-        _image = _picture ?? TextureDecoder.Decode(_info!, _pixels, Level);
+        _image = _picture ?? TextureDecoder.Decode(_info!, _pixels, Level, Slice);
         if (_image is null)
         {
             Picture.Source = null;
@@ -208,7 +218,7 @@ public partial class TextureWindow : Window, IMessageHost
     private void SavePng_Click(object sender, RoutedEventArgs e)
     {
         if (_image is null) return;
-        var dialog = new SaveFileDialog { Title = "Save the picture", FileName = BaseName + (Level > 0 ? $"_mip{Level}" : "") + ".png", Filter = "PNG image (*.png)|*.png" };
+        var dialog = new SaveFileDialog { Title = "Save the picture", FileName = BaseName + (_info is { Slices: > 1 } ? $"_{Slice}" : "") + (Level > 0 ? $"_mip{Level}" : "") + ".png", Filter = "PNG image (*.png)|*.png" };
         if (dialog.ShowDialog(this) != true) return;
         try
         {

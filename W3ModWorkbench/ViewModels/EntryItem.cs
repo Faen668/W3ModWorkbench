@@ -10,7 +10,7 @@ public sealed class EntryItem : INotifyPropertyChanged
 
     private static readonly HashSet<string> TextExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
-        ".ws", ".xml", ".csv", ".txt", ".json", ".ini", ".yml", ".yaml", ".log", ".lua",
+        ".ws", ".xml", ".csv", ".txt", ".json", ".ini", ".yml", ".yaml", ".log", ".lua", ".subs", ".list",
     };
 
     public EntryItem(ArchiveEntry entry, Action<EntryItem, bool> checkedChanged)
@@ -49,9 +49,9 @@ public sealed class EntryItem : INotifyPropertyChanged
     {
         ".ws" or ".rsblob" => "",
         ".xml" or ".json" or ".ini" or ".yml" or ".yaml" => "",
-        ".txt" or ".csv" or ".log" or ".lua" => "",
+        ".txt" or ".csv" or ".log" or ".lua" or ".subs" or ".list" => "",
         ".w3strings" => "",
-        ".xbm" or ".png" or ".jpg" or ".jpeg" or ".bmp" or ".gif" or ".tga" or ".dds" or ".tif" or ".tiff" => "",
+        ".xbm" or ".texarray" or ".w2cube" or ".png" or ".jpg" or ".jpeg" or ".bmp" or ".gif" or ".tga" or ".dds" or ".tif" or ".tiff" => "",
         ".w2mesh" or ".w2ent" or ".w2rig" or ".w2anims" => "",
         ".redswf" or ".swf" => "",
         ".bnk" or ".wem" or ".ogg" or ".wav" => "",
@@ -61,9 +61,12 @@ public sealed class EntryItem : INotifyPropertyChanged
     /// <summary>Whether a picture of the file's contents can be made: a texture, a picture file, or an .xbm whose texture is in a cache.</summary>
     public bool CanHaveThumbnail => EntryImages.IsPicture(Entry) || IsTextureHeader;
 
-    /// <summary>An .xbm in a bundle: the texture's description, whose pixels are in a texture.cache under the same path.</summary>
+    /// <summary>
+    /// An .xbm, .texarray or .w2cube in a bundle: the texture's description, whose pixels are in a texture.cache under the
+    /// same path.
+    /// </summary>
     public bool IsTextureHeader => Entry is not Core.Textures.TextureEntry and not Core.Scripts.LooseScriptEntry
-        && Name.EndsWith(".xbm", StringComparison.OrdinalIgnoreCase);
+        && System.IO.Path.GetExtension(Name).ToLowerInvariant() is ".xbm" or ".texarray" or ".w2cube";
 
     private System.Windows.Media.ImageSource? _thumbnail;
 

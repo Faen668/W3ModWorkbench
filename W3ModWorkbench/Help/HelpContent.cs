@@ -166,7 +166,7 @@ Right-click a file you've extracted and choose **Show extracted file** to find t
 """),
 
         new(Basics, "Previewing text files", "", """
-Text files can be read without extracting them first. That includes decompiled scripts, and the `.xml`, `.csv`, `.ws`, `.json` and `.txt` files found inside bundles.
+Text files can be read without extracting them first. That includes decompiled scripts, and the `.xml`, `.csv`, `.ws`, `.json` and `.txt` files found inside bundles, and the cutscene subtitles (`.subs`).
 
 - Double-click a text file, or highlight it and press **Enter**.
 - Or right-click it and choose **Preview**.
@@ -245,16 +245,17 @@ Double-click a texture, or select it and press **Enter**, to open the viewer:
 
 - **RGBA** shows the picture over a chequerboard where it's transparent; **RGB** drops the transparency; **R**, **G**, **B** and **A** show one channel as grey, which is how masks and normal maps are checked.
 - **Mip** picks a smaller level of the texture.
+- **Face** picks one of a cube map's six faces (`.w2cube`), and **Slice** one of the textures in a texture array (`.texarray`), such as a wall's blend layers.
 - **Fit** shows the whole picture in the window; turn it off to see it at its own size, and hold **Ctrl** and turn the wheel to zoom.
-- **Save PNG** writes the level and channel shown. **Save DDS** writes the whole texture with every mip level, for tools that read `.dds`.
+- **Save PNG** writes the level and channel shown. **Save DDS** writes the whole texture with every mip level, for tools that read `.dds`: a cube map as a cube map, an array as an array.
 
 The same viewer opens picture files from bundles and projects: PNG, JPEG, BMP, GIF, TIFF and DDS (BC1 to BC7). A DDS keeps its mip levels.
 
-An `.xbm` inside a bundle only describes its texture. Double-click one and the tool looks for the pixels in a texture cache under the same path: one that's open, the one beside the bundle, or the game's own, and says so if none has it.
+An `.xbm`, `.texarray` or `.w2cube` inside a bundle only describes its texture. Double-click one and the tool looks for the pixels in a texture cache under the same path: one that's open, the one beside the bundle, or the game's own, and says so if none has it.
 
 Extracting a texture from the file list writes it as `name.xbm.dds`.
 
-Formats it reads: BC1 and BC3 (colour, with and without alpha), BC4 (single-channel masks), BC5 and BC7 (normal maps and the Remastered's high quality textures), plain 32-bit colour and float data (light probes). A texture in another format is listed, but the viewer says it can't show it yet. Cube maps and texture arrays show their first slice. Normal maps are shown as stored, with the blue worked out for BC5.
+Formats it reads: BC1 and BC3 (colour, with and without alpha), BC4 (single-channel masks), BC5 and BC7 (normal maps and the Remastered's high quality textures), plain 32-bit colour and the environment probes' half-float cube maps. A texture in another format is listed, but the viewer says it can't show it yet. Normal maps are shown as stored, with the blue worked out for BC5.
 """),
 
         new(Basics, "Meshes", "", """

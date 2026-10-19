@@ -58,6 +58,8 @@
                 <RadioButton x:Name="ChannelA" Style="{StaticResource Segment}" Content="A" Checked="Channel_Checked" ToolTip="The alpha channel, as grey" />
                 <TextBlock Text="Mip" VerticalAlignment="Center" Margin="18,0,8,0" Opacity="0.7" />
                 <ComboBox x:Name="MipBox" Width="150" SelectionChanged="Mip_SelectionChanged" />
+                <TextBlock x:Name="SliceLabel" Text="Slice" VerticalAlignment="Center" Margin="14,0,8,0" Opacity="0.7" Visibility="Collapsed" />
+                <ComboBox x:Name="SliceBox" Width="110" SelectionChanged="Mip_SelectionChanged" Visibility="Collapsed" />
                 <ToggleButton x:Name="FitToggle" Margin="14,0,0,0" Padding="12,5" Content="Fit" IsChecked="True" Click="Fit_Click" ToolTip="Fit the window, or show at its size (Ctrl+wheel zooms)" />
             </StackPanel>
             <StackPanel Orientation="Horizontal" DockPanel.Dock="Right">
