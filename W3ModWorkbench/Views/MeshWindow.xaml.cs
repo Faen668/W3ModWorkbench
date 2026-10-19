@@ -28,6 +28,8 @@ public partial class MeshWindow : Window, IMessageHost
     private readonly Func<byte[]> _readData;
     private readonly Func<int, byte[]?> _readBuffer;
     private readonly ResourceLocator _locator;
+    // where the mesh was opened from (its archive, or the file on disk), which says whether it's one of the game's own
+    private readonly string? _origin;
     private MeshFile? _mesh;
 
     /// <summary>The mesh as it is saved now: as opened, until changes are saved into the project. Changes are made to it.</summary>
@@ -37,9 +39,10 @@ public partial class MeshWindow : Window, IMessageHost
     private readonly Dictionary<string, Task<BitmapSource?>> _textures = new(StringComparer.OrdinalIgnoreCase);
     private List<string>? _allTextures, _allMaterials;
 
-    private MeshWindow(string path, string source, Func<byte[]> readData, Func<int, byte[]?> readBuffer, ResourceLocator locator)
+    private MeshWindow(string path, string source, Func<byte[]> readData, Func<int, byte[]?> readBuffer, ResourceLocator locator, string? origin)
     {
         InitializeComponent();
+        _origin = origin;
         _path = path;
         _source = source;
         _readData = readData;
@@ -67,7 +70,7 @@ public partial class MeshWindow : Window, IMessageHost
     /// </summary>
     public static void Open(string path, string source, byte[] data, IArchive? archive, ResourceLocator locator, Window owner)
     {
-        new MeshWindow(path, source, () => data, n => locator.ReadBuffer(path, n, archive), locator).Standalone(owner).Show();
+        new MeshWindow(path, source, () => data, n => locator.ReadBuffer(path, n, archive), locator, archive?.FilePath).Standalone(owner).Show();
     }
 
     /// <summary>
@@ -79,7 +82,7 @@ public partial class MeshWindow : Window, IMessageHost
     {
         string depot = GamePathOf(file);
         new MeshWindow(depot, file, () => File.ReadAllBytes(file),
-            n => File.Exists($"{file}.{n}.buffer") ? File.ReadAllBytes($"{file}.{n}.buffer") : locator.ReadBuffer(depot, n, null), locator).Standalone(owner).Show();
+            n => File.Exists($"{file}.{n}.buffer") ? File.ReadAllBytes($"{file}.{n}.buffer") : locator.ReadBuffer(depot, n, null), locator, file).Standalone(owner).Show();
     }
 
     private static string GamePathOf(string file)
@@ -140,6 +143,7 @@ public partial class MeshWindow : Window, IMessageHost
         InfoText.Text = $"{_path}   ·   {_source}   ·   CR2W {_mesh.File.Version}, {_mesh.Chunks.Count} chunks, {_mesh.LodCount} LOD{(_mesh.LodCount == 1 ? "" : "s")}, {materials.Count} material{(materials.Count == 1 ? "" : "s")}";
         ExportButton.IsEnabled = true;
         Properties.Show(PropertyRow.Of(_mesh.Mesh, _mesh.File, leaveOut: ["cookedData"]));
+        _ = ShowRedkitPropertiesAsync();
         ShowLods();
         ShowInfo();
         _ = ReadReportAsync(materials);
@@ -257,6 +261,20 @@ public partial class MeshWindow : Window, IMessageHost
             ? cooked.Integer("vertexBufferSize") + cooked.Integer("indexBufferSize")
             : mesh.File.Buffers.Sum(b => (long)b.MemorySize);
 
+    /// <summary>
+    /// The mesh's properties from REDkit's source file, for one of the game's own meshes when REDkit has it, as it keeps
+    /// what cooking leaves out; said above them either way.
+    /// </summary>
+    private async Task ShowRedkitPropertiesAsync()
+    {
+        if (_mesh is null) return;
+        var (path, origin, mesh) = (_path, _origin, _mesh);
+        var from = await Task.Run(() => RedkitSource.For(path, origin));
+        if (from.Redkit is { } redkit && RedkitSource.Match(redkit, mesh.Mesh, mesh.File) is { } own)
+            Properties.Show(PropertyRow.Of(own, redkit, leaveOut: ["cookedData"]));
+        SourceNoteBar.Show(from.Source, from.RedkitPath ?? origin, "mesh");
+    }
+
     private void PropertySearch_TextChanged(object sender, TextChangedEventArgs e)
     {
         PropertySearchPlaceholder.Visibility = PropertySearch.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
@@ -346,8 +364,9 @@ public partial class MeshWindow : Window, IMessageHost
                 name.SetResourceReference(TextBlock.ForegroundProperty, "AccentTextFillColorPrimaryBrush");
                 name.Cursor = picture.Cursor = Cursors.Hand;
                 name.ToolTip = picture.ToolTip = "Open it in the texture viewer";
-                name.MouseLeftButtonUp += (_, _) => TextureWindow.Open(found, this);
-                picture.MouseLeftButtonUp += (_, _) => TextureWindow.Open(found, this);
+                string path = t.Path;
+                name.MouseLeftButtonUp += (_, _) => TextureWindow.Open(found, this, () => _locator.ReadFile(path), _locator);
+                picture.MouseLeftButtonUp += (_, _) => TextureWindow.Open(found, this, () => _locator.ReadFile(path), _locator);
             }
             text.Children.Insert(0, name);
             row.Children.Add(text);

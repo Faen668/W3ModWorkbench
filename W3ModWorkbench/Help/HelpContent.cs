@@ -247,15 +247,43 @@ Double-click a texture, or select it and press **Enter**, to open the viewer:
 - **Mip** picks a smaller level of the texture.
 - **Face** picks one of a cube map's six faces (`.w2cube`), and **Slice** one of the textures in a texture array (`.texarray`), such as a wall's blend layers.
 - **Fit** shows the whole picture in the window; turn it off to see it at its own size, and hold **Ctrl** and turn the wheel to zoom.
+- **3D** puts the texture on a lit shape, as REDkit's texture viewer does: pick **Sphere**, **Box**, **Cylinder** or **Plane**, and move **Light** to light it from another side. Drag to turn the shape, use the wheel to come closer, and double-click to put it back. A cube map goes round the shape whole, each part showing the face it looks at; on the plane it shows what's ahead, as through a window. **2D** goes back to the picture.
+- **Properties**, on the right, are listed as REDkit lists them. **Texture** at the top says what the cache holds: the format, size, mip levels, faces or slices, the memory it takes and its size in the cache. Below are the properties of the texture's resource file (its `.xbm`, `.w2cube` or `.texarray`) under each class from CResource down, such as the compression, texture group and resident mip, with those the file doesn't keep dimmed. For one of the game's own textures they're read from REDkit's source file when REDkit is installed and has one, as cooking leaves most of them out (see **Properties from REDkit**); a note above them says where they came from. The box above them narrows the list.
 - **Save PNG** writes the level and channel shown. **Save DDS** writes the whole texture with every mip level, for tools that read `.dds`: a cube map as a cube map, an array as an array.
 
 The same viewer opens picture files from bundles and projects: PNG, JPEG, BMP, GIF, TIFF and DDS (BC1 to BC7). A DDS keeps its mip levels.
+
+A **texture array** (`.texarray`) opens in a window of its own, as REDkit's texture array editor shows one: every texture in it in a row (`texture_0`, `texture_1`…, with **Slots used** above them), the one picked large, and the array's properties beside it. Double-click a texture, or press **Enter**, to open it in the texture viewer with its mip levels, channels and 3D view. **Save PNGs** writes every texture in the array to a folder, and **Save DDS** the whole array as one `.dds`.
 
 An `.xbm`, `.texarray` or `.w2cube` inside a bundle only describes its texture. Double-click one and the tool looks for the pixels in a texture cache under the same path: one that's open, the one beside the bundle, or the game's own, and says so if none has it.
 
 Extracting a texture from the file list writes it as `name.xbm.dds`.
 
 Formats it reads: BC1 and BC3 (colour, with and without alpha), BC4 (single-channel masks), BC5 and BC7 (normal maps and the Remastered's high quality textures), plain 32-bit colour and the environment probes' half-float cube maps. A texture in another format is listed, but the viewer says it can't show it yet. Normal maps are shown as stored, with the blue worked out for BC5.
+"""),
+
+        new(Basics, "Properties from REDkit", "\uE946", """
+The game's files are cooked: cooking leaves out most of the properties REDkit's editors show, so a cooked cube map keeps none at all, and a texture, an entity or a behaviour tree only some. REDkit keeps its own copies of the game's files from before they were cooked, as loose files in its `r4data` folder.
+
+So the dedicated viewers (textures, texture arrays, meshes, entities and behaviour trees) and the Properties window show the properties of one of **the game's own files** (from `content` or an official DLC) from **REDkit's copy** when REDkit is installed and has one. What they draw still comes from the file the game loads; only the property lists come from REDkit's copy. A note above the properties says where they came from:
+
+- **Properties from REDkit's source file**, with its path in `r4data`: everything REDkit shows.
+- **REDkit has no source file for this…**: REDkit hasn't got a copy of this one (it keeps only some meshes, for one), so only what the cooked file keeps is shown.
+- **REDkit has a source file… in an older format**: REDkit's copy is from early in the game's making (an old CR2W version, such as some fonts), which the tool can't read yet, so the cooked file's properties are shown.
+- **REDkit isn't installed**: install it (it's free on Steam and GOG for owners of the game) to see the properties cooking leaves out. It's found from the wcc_lite set in Settings, or in the usual Steam and GOG folders.
+- **Properties from this file itself**: the file is from a mod, a project or somewhere on disk, so its own properties are shown, as that's what you're looking at. REDkit's copy would show the game's version instead.
+
+A file opened from REDkit's own `r4data` is REDkit's copy already, and shows all of its properties.
+"""),
+
+        new(Basics, "Properties", "\uE946", """
+Any of the game's resource files can be opened in a **Properties** window, as REDkit opens every resource in a property window even when it has no editor for it: a layer (`.w2l`), a grass mask, a terrain tile, a font, a particle system, a quest, an environment, and the rest. Double-click one that has no viewer of its own (or select it and press **Enter**); for any of them, right-click and choose **Properties**.
+
+- **Objects**, on the left, lists every object in the file, each under the one it belongs to: a layer's entities with their components, a particle system's emitters with their drawers and curves, a font with its texture. The resource itself is at the top and picked first.
+- The object picked has its **properties** on the right, under each class from CResource down, as REDkit lists them, with those the file doesn't keep dimmed. Structs, arrays and the objects they point to fold open beneath them. The box above them narrows the list.
+- For one of the game's own files, the properties come from REDkit's source file when REDkit has one, and the note above them says so (see **Properties from REDkit**).
+- A file a property names is a link: click it to open the file in its viewer, or in another Properties window.
+- **Open as JSON** opens the whole file as JSON, to read or edit; **Copy path** copies its game path.
 """),
 
         new(Basics, "Meshes", "", """

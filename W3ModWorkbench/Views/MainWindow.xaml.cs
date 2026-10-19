@@ -829,6 +829,7 @@ public partial class MainWindow : Window, IMessageHost
         else if (BehTreeWindow.CanShow(path)) BehTreeWindow.OpenFile(path, new ResourceLocator(OpenArchives(), null, GameLocator.Resolve(null), ProjectFiles), this);
         else if (XmlWindow.CanOpen(path)) XmlWindow.Open(path, this);
         else if (JsonWindow.CanOpen(path)) JsonWindow.Open(path, this);
+        else if (PropertiesWindow.CanShow(path)) PropertiesWindow.OpenFile(path, new ResourceLocator(OpenArchives(), null, GameLocator.Resolve(null), ProjectFiles), this);
     }
 
     private void GridAddToProject_Click(object sender, RoutedEventArgs e)
@@ -1052,7 +1053,7 @@ public partial class MainWindow : Window, IMessageHost
         if (item.Entry is StringsEntry strings)
             StringsWindow.Open(strings.FullPath, this);
         else if (item.Entry is TextureEntry texture)
-            TextureWindow.Open(texture, this);
+            OpenTexture(texture);
         else if (IsTextureHeader(item))
             _ = OpenTextureHeaderAsync(item);
         else if (TextureWindow.CanShow(item.Name))
@@ -1077,6 +1078,8 @@ public partial class MainWindow : Window, IMessageHost
             _ = OpenXmlAsync(item);
         else if (JsonWindow.CanOpen(item.Name))
             _ = OpenJsonAsync(item, asCr2w: false);
+        else if (PropertiesWindow.CanShow(item.Name))
+            _ = OpenPropertiesAsync(item);
         else
             item.IsChecked = !item.IsChecked;
     }
@@ -1088,6 +1091,18 @@ public partial class MainWindow : Window, IMessageHost
 
     /// <summary>What finds a file's buffers, materials and textures: the archives open here, those beside it, and the game's.</summary>
     private ResourceLocator LocatorFor(ArchiveEntry entry) => new(OpenArchives(), entry.Archive, GameLocator.Resolve(null), ProjectFiles);
+
+    /// <summary>Reads a cached texture's resource (its .xbm, .w2cube or .texarray) from the bundles, for the texture viewer's properties.</summary>
+    private Func<byte[]?> ResourceReader(TextureEntry texture)
+    {
+        var locator = LocatorFor(texture);
+        string path = texture.Path;
+        return () => locator.ReadFile(path);
+    }
+
+    /// <summary>Opens a texture from a cache in its viewer, with its resource for the properties and the archives open to follow its links.</summary>
+    private void OpenTexture(TextureEntry texture, Func<byte[]?>? resource = null) =>
+        TextureWindow.Open(texture, this, resource ?? ResourceReader(texture), LocatorFor(texture));
 
     /// <summary>The open project's workspace, which is looked in before anything else; null with no project open.</summary>
     private static string? ProjectFiles() => ProjectWorkspace.Current?.WorkspacePath;
@@ -1130,7 +1145,7 @@ public partial class MainWindow : Window, IMessageHost
         {
             var entry = item.Entry;
             byte[] data = await ReadAsync(entry);
-            EntityWindow.Open(entry.Path, item.BundleName, data, LocatorFor(entry), this);
+            EntityWindow.Open(entry.Path, item.BundleName, data, LocatorFor(entry), this, entry.Archive);
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
         {
@@ -1150,7 +1165,7 @@ public partial class MainWindow : Window, IMessageHost
         {
             var entry = item.Entry;
             byte[] data = await ReadAsync(entry);
-            BehTreeWindow.Open(entry.Path, item.BundleName, data, LocatorFor(entry), this);
+            BehTreeWindow.Open(entry.Path, item.BundleName, data, LocatorFor(entry), this, entry.Archive);
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
         {
@@ -1229,7 +1244,9 @@ public partial class MainWindow : Window, IMessageHost
     private async Task OpenTextureHeaderAsync(EntryItem item)
     {
         var found = await FindTextureForHeaderAsync(item);
-        if (found is not null) TextureWindow.Open(found, this);
+        var header = item.Entry;
+        // the .xbm (or .w2cube, .texarray) double-clicked is the texture's resource, with its properties
+        if (found is not null) OpenTexture(found, () => ReadAsync(header).GetAwaiter().GetResult());
         else ShowError($"The texture's pixels weren't found.\n\n{item.Name} only describes the texture; its pixels are in a texture.cache under the same path. Open the mod's texture.cache (or the game's, in content\\content0), or put one beside this bundle.");
     }
 
@@ -1265,16 +1282,17 @@ public partial class MainWindow : Window, IMessageHost
 
     private void GridPreview_Click(object sender, RoutedEventArgs e)
     {
-        if (Highlighted().FirstOrDefault(i => i.IsPreviewable || i.Entry is StringsEntry or TextureEntry || IsTextureHeader(i) || TextureWindow.CanShow(i.Name) || MeshWindow.CanShow(i.Name) || CutsceneWindow.CanShow(i.Name) || SceneWindow.CanShow(i.Name) || EntityWindow.CanShow(i.Name) || BehTreeWindow.CanShow(i.Name)) is not { } item) return;
+        if (Highlighted().FirstOrDefault(i => i.IsPreviewable || i.Entry is StringsEntry or TextureEntry || IsTextureHeader(i) || TextureWindow.CanShow(i.Name) || MeshWindow.CanShow(i.Name) || CutsceneWindow.CanShow(i.Name) || SceneWindow.CanShow(i.Name) || EntityWindow.CanShow(i.Name) || BehTreeWindow.CanShow(i.Name) || PropertiesWindow.CanShow(i.Name)) is not { } item) return;
         if (item.Entry is StringsEntry strings) StringsWindow.Open(strings.FullPath, this);
         else if (MeshWindow.CanShow(item.Name)) _ = OpenMeshAsync(item);
         else if (CutsceneWindow.CanShow(item.Name)) _ = OpenCutsceneAsync(item);
         else if (SceneWindow.CanShow(item.Name)) _ = OpenSceneAsync(item);
         else if (EntityWindow.CanShow(item.Name)) _ = OpenEntityAsync(item);
         else if (BehTreeWindow.CanShow(item.Name)) _ = OpenBehTreeAsync(item);
-        else if (item.Entry is TextureEntry texture) TextureWindow.Open(texture, this);
+        else if (item.Entry is TextureEntry texture) OpenTexture(texture);
         else if (IsTextureHeader(item)) _ = OpenTextureHeaderAsync(item);
         else if (TextureWindow.CanShow(item.Name)) _ = OpenPictureAsync(item);
+        else if (!item.IsPreviewable && PropertiesWindow.CanShow(item.Name)) _ = OpenPropertiesAsync(item);
         else _ = PreviewAsync(item);
     }
 
@@ -1282,6 +1300,33 @@ public partial class MainWindow : Window, IMessageHost
     {
         foreach (var item in Highlighted().Where(i => XmlWindow.CanOpen(i.Name)).Take(10))
             _ = OpenXmlAsync(item);
+    }
+
+    /// <summary>Any CR2W file's properties, in a window of its own, as REDkit shows every resource.</summary>
+    private void GridProperties_Click(object sender, RoutedEventArgs e)
+    {
+        foreach (var item in Highlighted().Where(i => PropertiesWindow.CanShow(i.Name)).Take(10))
+            _ = OpenPropertiesAsync(item);
+    }
+
+    /// <summary>Shows a CR2W file's properties, with the files they name found the way the game would.</summary>
+    private async Task OpenPropertiesAsync(EntryItem item)
+    {
+        if (item.Entry is LooseScriptEntry loose)
+        {
+            PropertiesWindow.OpenFile(loose.FullPath, LocatorFor(item.Entry), this);
+            return;
+        }
+        try
+        {
+            var entry = item.Entry;
+            byte[] data = await ReadAsync(entry);
+            PropertiesWindow.Open(entry.Path, item.BundleName, data, LocatorFor(entry), this, entry.Archive);
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
+        {
+            ShowError($"{item.Name} could not be read.\n\n{ex.Message}");
+        }
     }
 
     /// <summary>JSON files in the JSON editor, and CR2W files (an .env, a .w2ent…) as their JSON.</summary>
@@ -1326,6 +1371,7 @@ public partial class MainWindow : Window, IMessageHost
         GridXmlItem.Visibility = Highlighted().Any(i => XmlWindow.CanOpen(i.Name)) ? Visibility.Visible : Visibility.Collapsed;
         bool anyJson = Highlighted().Any(i => JsonWindow.CanOpen(i.Name)), anyCr2w = Highlighted().Any(i => Cr2wJsonBatch.LooksLikeCr2w(i.Name));
         GridJsonItem.Visibility = anyJson || anyCr2w ? Visibility.Visible : Visibility.Collapsed;
+        GridPropertiesItem.Visibility = anyCr2w ? Visibility.Visible : Visibility.Collapsed;
         GridJsonItem.Header = anyJson && !anyCr2w ? "Open in JSON editor" : "Open as JSON";
         var project = ProjectWorkspace.Current;
         var loose = Highlighted().Select(i => i.Entry).OfType<LooseScriptEntry>().ToList();

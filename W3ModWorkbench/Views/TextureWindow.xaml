@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:W3ModWorkbench"
         Title="Texture" Icon="pack://application:,,,/W3ModWorkbench;component/Assets/app.ico"
-        Width="1000" Height="780" MinWidth="560" MinHeight="400"
+        Width="1280" Height="800" MinWidth="720" MinHeight="420"
         WindowStartupLocation="CenterOwner" PreviewKeyDown="Window_PreviewKeyDown">
 
     <Window.Resources>
@@ -50,17 +50,30 @@
 
         <DockPanel Grid.Row="0" Margin="14,12,14,10" LastChildFill="False">
             <StackPanel Orientation="Horizontal" DockPanel.Dock="Left">
-                <RadioButton x:Name="ChannelRgba" Style="{StaticResource Segment}" Content="RGBA" IsChecked="True" Checked="Channel_Checked" ToolTip="All channels, over a chequerboard" />
-                <RadioButton x:Name="ChannelRgb" Style="{StaticResource Segment}" Content="RGB" Checked="Channel_Checked" ToolTip="Colour without transparency" />
-                <RadioButton x:Name="ChannelR" Style="{StaticResource Segment}" Content="R" Checked="Channel_Checked" />
-                <RadioButton x:Name="ChannelG" Style="{StaticResource Segment}" Content="G" Checked="Channel_Checked" />
-                <RadioButton x:Name="ChannelB" Style="{StaticResource Segment}" Content="B" Checked="Channel_Checked" />
-                <RadioButton x:Name="ChannelA" Style="{StaticResource Segment}" Content="A" Checked="Channel_Checked" ToolTip="The alpha channel, as grey" />
+                <RadioButton x:Name="ChannelRgba" Style="{StaticResource Segment}" GroupName="Channel" Content="RGBA" IsChecked="True" Checked="Channel_Checked" ToolTip="All channels, over a chequerboard" />
+                <RadioButton x:Name="ChannelRgb" Style="{StaticResource Segment}" GroupName="Channel" Content="RGB" Checked="Channel_Checked" ToolTip="Colour without transparency" />
+                <RadioButton x:Name="ChannelR" Style="{StaticResource Segment}" GroupName="Channel" Content="R" Checked="Channel_Checked" />
+                <RadioButton x:Name="ChannelG" Style="{StaticResource Segment}" GroupName="Channel" Content="G" Checked="Channel_Checked" />
+                <RadioButton x:Name="ChannelB" Style="{StaticResource Segment}" GroupName="Channel" Content="B" Checked="Channel_Checked" />
+                <RadioButton x:Name="ChannelA" Style="{StaticResource Segment}" GroupName="Channel" Content="A" Checked="Channel_Checked" ToolTip="The alpha channel, as grey" />
                 <TextBlock Text="Mip" VerticalAlignment="Center" Margin="18,0,8,0" Opacity="0.7" />
                 <ComboBox x:Name="MipBox" Width="150" SelectionChanged="Mip_SelectionChanged" />
                 <TextBlock x:Name="SliceLabel" Text="Slice" VerticalAlignment="Center" Margin="14,0,8,0" Opacity="0.7" Visibility="Collapsed" />
                 <ComboBox x:Name="SliceBox" Width="110" SelectionChanged="Mip_SelectionChanged" Visibility="Collapsed" />
-                <ToggleButton x:Name="FitToggle" Margin="14,0,0,0" Padding="12,5" Content="Fit" IsChecked="True" Click="Fit_Click" ToolTip="Fit the window, or show at its size (Ctrl+wheel zooms)" />
+                <RadioButton x:Name="View2D" Style="{StaticResource Segment}" GroupName="View" Margin="18,0,2,0" Content="2D" IsChecked="True" Checked="View_Checked" ToolTip="The texture as a picture" />
+                <RadioButton x:Name="View3D" Style="{StaticResource Segment}" GroupName="View" Content="3D" Checked="View_Checked" ToolTip="The texture on a shape, lit, as REDkit's texture viewer shows it" />
+                <ToggleButton x:Name="FitToggle" Margin="12,0,0,0" Padding="12,5" Content="Fit" IsChecked="True" Click="Fit_Click" ToolTip="Fit the window, or show at its size (Ctrl+wheel zooms)" />
+                <StackPanel x:Name="ShapeBar" Orientation="Horizontal" Visibility="Collapsed">
+                    <ComboBox x:Name="ShapeBox" Margin="12,0,0,0" Width="110" SelectionChanged="Shape_SelectionChanged" ToolTip="The shape to put the texture on (a cube map goes round it, each part showing the face it looks at)">
+                        <ComboBoxItem Content="Sphere" IsSelected="True" />
+                        <ComboBoxItem Content="Box" />
+                        <ComboBoxItem Content="Cylinder" />
+                        <ComboBoxItem Content="Plane" />
+                    </ComboBox>
+                    <TextBlock Text="Light" VerticalAlignment="Center" Margin="14,0,8,0" Opacity="0.7" />
+                    <Slider x:Name="LightSlider" Width="110" Minimum="-180" Maximum="180" Value="45" VerticalAlignment="Center"
+                            ValueChanged="Light_ValueChanged" ToolTip="Where the light comes from, round the shape" />
+                </StackPanel>
             </StackPanel>
             <StackPanel Orientation="Horizontal" DockPanel.Dock="Right">
                 <Button x:Name="SavePngButton" Padding="12,5" Click="SavePng_Click" IsEnabled="False" ToolTip="Save the mip level shown as a PNG">
@@ -78,8 +91,15 @@
             </StackPanel>
         </DockPanel>
 
-        <Border Grid.Row="1" Margin="14,0,14,0" Style="{StaticResource Card}" ClipToBounds="True">
+        <Grid Grid.Row="1" Margin="14,0,14,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" MinWidth="300" />
+                <ColumnDefinition Width="8" />
+                <ColumnDefinition Width="360" MinWidth="220" />
+            </Grid.ColumnDefinitions>
+        <Border Style="{StaticResource Card}" ClipToBounds="True">
             <Grid>
+                <local:TexturePreview3D x:Name="Preview3D" Visibility="Collapsed" />
                 <ScrollViewer x:Name="Scroller" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" PreviewMouseWheel="Scroller_PreviewMouseWheel"
                               Background="Transparent">
                     <Border x:Name="Backdrop" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="12,12,26,26" Background="{StaticResource Checker}">
@@ -89,6 +109,20 @@
                 <TextBlock x:Name="BusyText" Text="Reading the texture…" HorizontalAlignment="Center" VerticalAlignment="Center" Opacity="0.7" />
             </Grid>
         </Border>
+        <GridSplitter Grid.Column="1" Width="8" HorizontalAlignment="Stretch" Background="Transparent" />
+        <Border Grid.Column="2" Style="{StaticResource Card}">
+            <DockPanel>
+                <Grid DockPanel.Dock="Top" Margin="10,10,10,6">
+                    <TextBox x:Name="PropertySearch" Padding="30,5,8,5" TextChanged="PropertySearch_TextChanged"
+                             ToolTip="Show only the properties whose name or value has this" />
+                    <TextBlock Style="{StaticResource IconText}" Text="&#xE721;" FontSize="12" Margin="10,0,0,0" Opacity="0.6" HorizontalAlignment="Left" IsHitTestVisible="False" />
+                    <TextBlock x:Name="PropertySearchPlaceholder" Text="Search properties" Margin="31,0,0,0" Opacity="0.55" VerticalAlignment="Center" IsHitTestVisible="False" />
+                </Grid>
+                <local:SourceNote x:Name="SourceNoteBar" DockPanel.Dock="Top" Margin="10,0,10,6" />
+                <local:PropertyListView x:Name="Properties" NameColumnWidth="190" TypeColumnWidth="0" LinkClicked="Properties_LinkClicked" />
+            </DockPanel>
+        </Border>
+        </Grid>
 
         <TextBlock x:Name="InfoText" Grid.Row="2" Margin="18,10,18,12" Opacity="0.8" TextTrimming="CharacterEllipsis" />
 

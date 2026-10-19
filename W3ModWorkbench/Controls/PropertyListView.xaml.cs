@@ -15,6 +15,26 @@ public partial class PropertyListView : UserControl
     private List<PropertyRow> _rows = [];
     private string _search = "";
 
+    public static readonly DependencyProperty NameColumnWidthProperty =
+        DependencyProperty.Register(nameof(NameColumnWidth), typeof(GridLength), typeof(PropertyListView), new(new GridLength(220)));
+
+    public static readonly DependencyProperty TypeColumnWidthProperty =
+        DependencyProperty.Register(nameof(TypeColumnWidth), typeof(GridLength), typeof(PropertyListView), new(new GridLength(150)));
+
+    /// <summary>How wide the names are.</summary>
+    public GridLength NameColumnWidth
+    {
+        get => (GridLength)GetValue(NameColumnWidthProperty);
+        set => SetValue(NameColumnWidthProperty, value);
+    }
+
+    /// <summary>How wide the types are; 0 leaves them out, as REDkit's narrower lists do, for more room for the values.</summary>
+    public GridLength TypeColumnWidth
+    {
+        get => (GridLength)GetValue(TypeColumnWidthProperty);
+        set => SetValue(TypeColumnWidthProperty, value);
+    }
+
     /// <summary>Raised when a file a property refers to is clicked, with its game path.</summary>
     public event EventHandler<string>? LinkClicked;
 

@@ -387,6 +387,10 @@
                                 <MenuItem x:Name="GridXmlItem" Header="Open in XML editor" Click="GridXmlEditor_Click" Visibility="Collapsed">
                                     <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE70F;" /></MenuItem.Icon>
                                 </MenuItem>
+                                <MenuItem x:Name="GridPropertiesItem" Header="Properties" Click="GridProperties_Click" Visibility="Collapsed"
+                                          ToolTip="Every object in the file and its properties, as REDkit shows a resource; one of the game's own files from REDkit's source file when it has one">
+                                    <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE946;" /></MenuItem.Icon>
+                                </MenuItem>
                                 <MenuItem x:Name="GridJsonItem" Header="Open as JSON" Click="GridJson_Click" Visibility="Collapsed"
                                           ToolTip="A CR2W file (.env, .w2ent, .w2mi…) as JSON to read and edit, saved back as CR2W; a .json file in the JSON editor">
                                     <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE943;" /></MenuItem.Icon>

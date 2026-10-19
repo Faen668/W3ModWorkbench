@@ -128,6 +128,8 @@
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="ItemTemplate" Value="{StaticResource PropertyTemplate}" />
+            <!-- click a picked row again to unpick it -->
+            <Setter Property="local:ListSelection.ClickToUnselect" Value="True" />
             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
             <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
             <Setter Property="VirtualizingPanel.IsVirtualizing" Value="True" />
@@ -281,12 +283,15 @@
                     <!-- one search for every property list, the way a find works across the editor's panels; it sits above
                          the tabs in their card, handed to the template as the control's Tag -->
                     <TabControl.Tag>
+                        <StackPanel>
+                        <local:SourceNote x:Name="SourceNoteBar" Margin="0,0,0,8" />
                         <Grid>
                             <TextBox x:Name="PropertySearch" Padding="30,5,8,5" VerticalContentAlignment="Center" TextChanged="PropertySearch_TextChanged" />
                             <TextBlock Style="{StaticResource IconText}" Text="&#xE721;" FontSize="12" Margin="10,0,0,0" Opacity="0.6" HorizontalAlignment="Left" IsHitTestVisible="False" />
                             <TextBlock x:Name="PropertySearchPlaceholder" Margin="31,0,0,0" Opacity="0.55" VerticalAlignment="Center" IsHitTestVisible="False"
                                        Text="Find properties by name or value  (Ctrl+F)" />
                         </Grid>
+                        </StackPanel>
                     </TabControl.Tag>
                     <!-- the search and the tabs in a card of their own, the tabs centred and wrapping as they are (the theme's
                          strip would stretch them and move the picked row), and the page picked in a card under it -->

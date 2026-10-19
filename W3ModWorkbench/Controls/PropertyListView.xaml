@@ -1,7 +1,8 @@
 <UserControl x:Class="W3ModWorkbench.PropertyListView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:vm="clr-namespace:W3ModWorkbench.ViewModels">
+             xmlns:vm="clr-namespace:W3ModWorkbench.ViewModels"
+             xmlns:local="clr-namespace:W3ModWorkbench">
     <UserControl.Resources>
         <Style x:Key="Small" TargetType="TextBlock">
             <Setter Property="FontSize" Value="11.5" />
@@ -23,8 +24,8 @@
             <Border x:Name="Row" CornerRadius="4" Padding="4,1" Background="Transparent">
                 <Grid Opacity="{Binding Opacity}">
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="220" />
-                        <ColumnDefinition Width="150" />
+                        <ColumnDefinition Width="{Binding NameColumnWidth, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                        <ColumnDefinition Width="{Binding TypeColumnWidth, RelativeSource={RelativeSource AncestorType=UserControl}}" />
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
                     <StackPanel Orientation="Horizontal" Margin="{Binding Indent}">
@@ -85,7 +86,7 @@
     </UserControl.Resources>
 
     <!-- the right-click menu is made in code: a Click on a menu item in XAML here is wired to the wrong element -->
-    <ListBox x:Name="List" IsSynchronizedWithCurrentItem="False" ItemContainerStyle="{StaticResource CompactItem}" ItemTemplate="{StaticResource PropertyTemplate}"
+    <ListBox x:Name="List" IsSynchronizedWithCurrentItem="False" local:ListSelection.ClickToUnselect="True" ItemContainerStyle="{StaticResource CompactItem}" ItemTemplate="{StaticResource PropertyTemplate}"
              BorderThickness="0" Background="Transparent" HorizontalContentAlignment="Stretch" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
              VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling" />
 </UserControl>

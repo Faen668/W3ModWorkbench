@@ -144,6 +144,47 @@ public static class FileSafety
         if (GameLocator.Resolve(null) is { } set) yield return set;
     }
 
+    /// <summary>
+    /// Whether an archive or file is one of the game's own: under its <c>content</c> or an official DLC's folder in
+    /// <c>dlc</c>, not a mod, a project or a file somewhere else.
+    /// </summary>
+    public static bool IsGameContent(string path)
+    {
+        string full;
+        try { full = Path.GetFullPath(path); }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException) { return false; }
+        if (GameFolderOf(full) is not { } root) return false;
+        string first = Path.GetRelativePath(root, full).Split('\\', '/')[0];
+        return first.Equals("content", StringComparison.OrdinalIgnoreCase) || first.Equals("dlc", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>Whether a file is one of REDkit's own, in its <c>r4data</c>.</summary>
+    public static bool IsRedkitFile(string path)
+    {
+        string full;
+        try { full = Path.GetFullPath(path); }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException) { return false; }
+        return RedkitFolders().Any(redkit => Under(Path.Combine(redkit, "r4data"), full));
+    }
+
+    /// <summary>Whether REDkit is installed: found from the wcc_lite in Settings, or in the usual Steam and GOG folders.</summary>
+    public static bool RedkitInstalled => RedkitFolders().Any();
+
+    /// <summary>
+    /// REDkit's own copy of a game file, before it's cooked (a loose file in its <c>r4data</c>), when REDkit is installed
+    /// and has one. Its resources keep the editor's properties that cooking leaves out.
+    /// </summary>
+    public static string? RedkitFile(string gamePath)
+    {
+        if (string.IsNullOrEmpty(gamePath) || Path.IsPathRooted(gamePath)) return null;
+        foreach (string redkit in RedkitFolders())
+        {
+            string file = Path.Combine(redkit, "r4data", gamePath);
+            if (File.Exists(file)) return file;
+        }
+        return null;
+    }
+
     private static IEnumerable<string> RedkitFolders()
     {
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

@@ -99,6 +99,7 @@
                                        Text="Find properties by name or value" />
                         </Grid>
                     </StackPanel>
+                    <local:SourceNote x:Name="SourceNoteBar" DockPanel.Dock="Top" Margin="0,0,0,6" />
                     <local:PropertyListView x:Name="Properties" LinkClicked="Properties_LinkClicked" />
                 </DockPanel>
             </Border>

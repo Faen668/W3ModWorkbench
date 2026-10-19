@@ -35,8 +35,9 @@ public partial class EntityWindow : Window, IMessageHost
     private readonly Dictionary<string, Task<BitmapSource?>> _textures = new(StringComparer.OrdinalIgnoreCase);
     private bool _syncing;
 
-    private EntityWindow(string path, string source, Func<byte[]> readData, ResourceLocator locator)
+    private EntityWindow(string path, string source, Func<byte[]> readData, ResourceLocator locator, string? origin)
     {
+        _origin = origin;
         InitializeComponent();
         Resources["PropertyMenu"] = Menu(("Copy value", CopyValue_Click), ("Copy name", CopyName_Click), ("Copy name and value", CopyBoth_Click));
         Resources["FileMenu"] = Menu(("Copy path", CopyPath_Click));
@@ -65,12 +66,12 @@ public partial class EntityWindow : Window, IMessageHost
     public static bool CanShow(string name) => EntityFile.IsEntity(name);
 
     /// <summary>Opens an entity in a window of its own. The files it uses are looked for with <paramref name="locator"/>.</summary>
-    public static void Open(string path, string source, byte[] data, ResourceLocator locator, Window owner) =>
-        new EntityWindow(path, source, () => data, locator).Standalone(owner).Show();
+    public static void Open(string path, string source, byte[] data, ResourceLocator locator, Window owner, IArchive? archive = null) =>
+        new EntityWindow(path, source, () => data, locator, archive?.FilePath).Standalone(owner).Show();
 
     /// <summary>Opens an entity file on disk: one in the project's game files, or one extracted from a bundle.</summary>
     public static void OpenFile(string file, ResourceLocator locator, Window owner) =>
-        new EntityWindow(Path.GetFileName(file), file, () => File.ReadAllBytes(file), locator).Standalone(owner).Show();
+        new EntityWindow(Path.GetFileName(file), file, () => File.ReadAllBytes(file), locator, file).Standalone(owner).Show();
 
     public Task ShowMessage(string? title, string message, MessageKind kind) => Message.Show(title, message, kind, primary: "OK");
 
@@ -95,8 +96,8 @@ public partial class EntityWindow : Window, IMessageHost
         Body.Visibility = Visibility.Visible;
 
         ShowLook(new EntityLook([.. e.Components], [.. e.Links]));
-        if (e.Entity is { } entity) ShowRows(EntityProperties, PropertyRow.Of(entity, e.Components.FirstOrDefault()?.File ?? e.File));
-        ShowRows(TemplateProperties, PropertyRow.Of(e.Template, e.File, leaveOut: ["flatCompiledData"]));
+        ShowEntityAndTemplate(e);
+        _ = LoadRedkitAsync(e);
         EntityClassRun.Text = e.EntityClass ?? "(none)";
         IncludeList.ItemsSource = e.Includes.Select(i => new CutsceneLinkItem(new CutsceneLink(i, "Included template"))).ToList();
         NoIncludesText.Visibility = e.Includes.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
@@ -122,6 +123,63 @@ public partial class EntityWindow : Window, IMessageHost
             .Where(l => l.Path.Length > 0)
             .DistinctBy(l => l.Path, StringComparer.OrdinalIgnoreCase);
 
+    // ---------------------------------------------------------------- properties from REDkit's source files
+
+    // where the entity was opened from (its archive, or the file on disk), which says whether it's one of the game's own
+    private readonly string? _origin;
+    // REDkit's copies of the entity and of the templates it includes, by game path, to take properties from
+    private readonly Dictionary<string, Cr2wFile> _redkit = new(StringComparer.OrdinalIgnoreCase);
+    private RedObject? _redkitTemplate;
+    private EntityComponent? _shownComponent;
+
+    /// <summary>
+    /// An object's properties: from REDkit's copy of the file it's in (<paramref name="gamePath"/>, the entity or the
+    /// template it's included from) when that has the same object, otherwise from the file opened.
+    /// </summary>
+    private List<PropertyRow> Rows(RedObject o, Cr2wFile file, string gamePath, string[] leaveOut)
+    {
+        if (_redkit.TryGetValue(gamePath, out var redkit))
+        {
+            var own = o.Export is not null ? RedkitSource.Match(redkit, o, file) : RedkitSource.MatchStruct(_redkitTemplate, o);
+            if (own is not null) return PropertyRow.Of(own, redkit, leaveOut: leaveOut);
+        }
+        return PropertyRow.Of(o, file, leaveOut: leaveOut);
+    }
+
+    private void ShowEntityAndTemplate(EntityFile e)
+    {
+        if (e.Entity is { } entity) ShowRows(EntityProperties, Rows(entity, e.Components.FirstOrDefault()?.File ?? e.File, _path, []));
+        ShowRows(TemplateProperties, Rows(e.Template, e.File, _path, ["flatCompiledData"]));
+    }
+
+    /// <summary>
+    /// Reads REDkit's copies of the entity and the templates its components come from, for one of the game's own, then
+    /// shows the properties again from them and says above them where they come from.
+    /// </summary>
+    private async Task LoadRedkitAsync(EntityFile e)
+    {
+        var (path, origin) = (_path, _origin);
+        var includes = e.Components.Select(c => c.Origin).OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        var (from, files) = await Task.Run(() =>
+        {
+            var from = RedkitSource.For(path, origin);
+            var files = new Dictionary<string, Cr2wFile>(StringComparer.OrdinalIgnoreCase);
+            if (from.Redkit is { } own)
+            {
+                files[path] = own;
+                foreach (string include in includes)
+                    if (RedkitSource.Read(include) is { } read) files[include] = read.File;
+            }
+            return (from, files);
+        });
+        foreach (var (key, file) in files) _redkit[key] = file;
+        _redkitTemplate = from.Redkit is { } redkit ? RedkitSource.Match(redkit, e.Template, e.File) : null;
+        SourceNoteBar.Show(from.Source, from.RedkitPath ?? origin, "entity");
+        if (files.Count == 0) return;
+        ShowEntityAndTemplate(e);
+        if (_shownComponent is { } c) ShowComponent(c);
+    }
+
     // ---------------------------------------------------------------- the template's lists
 
     /// <summary>One of a list tab's entries: what it's called, whether it comes from an include, and its properties.</summary>
@@ -142,7 +200,7 @@ public partial class EntityWindow : Window, IMessageHost
         var parameters = t.Array("templateParams").OfType<RedHandle>().Select(f.Object).OfType<RedObject>().ToList();
         static bool Included(RedObject o) => o["wasIncluded"] is true;
         string Named(RedObject o, string otherwise) => o["name"] is string n && n.Length > 0 && n != "None" ? n : otherwise;
-        ListEntry Entry(RedObject o, string label, bool included, IReadOnlyList<string>? files = null) => new(label, included, () => PropertyRow.Of(o, f, leaveOut: ["wasIncluded"]), files);
+        ListEntry Entry(RedObject o, string label, bool included, IReadOnlyList<string>? files = null) => new(label, included, () => Rows(o, f, _path, ["wasIncluded"]), files);
         string Kind(RedObject o) => CutsceneFile.Humanize(o.ClassName.Replace("Param", "").Replace("Template", ""), "C");
 
         bool IsAnimation(RedObject o) => o.ClassName.StartsWith("CAnim", StringComparison.Ordinal) && !IsAnimationSlots(o);
@@ -967,7 +1025,8 @@ public partial class EntityWindow : Window, IMessageHost
         var children = links.Where(l => l.Parent == c).Select(l => l.Child.Name).ToList();
         if (children.Count > 0) said.Add($"holds {string.Join(", ", children)}");
         ComponentDetail.Text = string.Join("  ·  ", said);
-        ShowRows(ComponentProperties, PropertyRow.Of(c.Object, c.File));
+        _shownComponent = c;
+        ShowRows(ComponentProperties, Rows(c.Object, c.File, c.Origin ?? _path, []));
     }
 
     // ---------------------------------------------------------------- files
@@ -1027,8 +1086,8 @@ public partial class EntityWindow : Window, IMessageHost
         if (MeshWindow.CanShow(path)) MeshWindow.Open(path, source, data, entry?.Archive, _locator, this);
         else if (CutsceneWindow.CanShow(path)) CutsceneWindow.Open(path, source, data, _locator, this);
         else if (SceneWindow.CanShow(path)) SceneWindow.Open(path, source, data, _locator, this);
-        else if (CanShow(path)) Open(path, source, data, _locator, this);
-        else if (BehTreeWindow.CanShow(path)) BehTreeWindow.Open(path, source, data, _locator, this);
+        else if (CanShow(path)) Open(path, source, data, _locator, this, entry?.Archive);
+        else if (BehTreeWindow.CanShow(path)) BehTreeWindow.Open(path, source, data, _locator, this, entry?.Archive);
         else if (XmlWindow.CanOpen(path)) XmlWindow.OpenData(name, $"{source}  ·  {path}", data, this, path);
         else if (!TextureWindow.Open(name, $"{source}  ·  {path}", data, this))
             await ShowMessage("It can't be shown", $"{path}\n\nIt isn't a picture the texture viewer understands.", MessageKind.Warning);

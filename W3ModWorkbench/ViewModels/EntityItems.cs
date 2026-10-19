@@ -150,7 +150,8 @@ public sealed class PropertyRow(string name, string type, string value, int dept
         }
     }
 
-    private static PropertyRow Child(List<PropertyRow> rows, PropertyRow row, PropertyRow? parent)
+    /// <summary>Adds a row to the list, under <paramref name="parent"/> (which folds it away), and gives it back.</summary>
+    public static PropertyRow Child(List<PropertyRow> rows, PropertyRow row, PropertyRow? parent)
     {
         row.Parent = parent;
         if (parent is not null) parent.HasChildren = true;

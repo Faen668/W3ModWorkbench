@@ -22,12 +22,17 @@ public partial class BehTreeWindow : Window, IMessageHost
     private readonly Func<byte[]> _readData;
     private readonly ResourceLocator _locator;
     private BehTreeFile? _tree;
+    // where the tree was opened from (its archive, or the file on disk), and REDkit's copy of it to take properties from
+    private readonly string? _origin;
+    private Cr2wFile? _redkit;
+    private BehTreeNode? _shown;
     private List<BehTreeNode> _matches = [];
     private int _match = -1;
 
-    private BehTreeWindow(string path, string source, Func<byte[]> readData, ResourceLocator locator)
+    private BehTreeWindow(string path, string source, Func<byte[]> readData, ResourceLocator locator, string? origin)
     {
         InitializeComponent();
+        _origin = origin;
         _path = path;
         _source = source;
         _readData = readData;
@@ -48,12 +53,12 @@ public partial class BehTreeWindow : Window, IMessageHost
     public static bool CanShow(string name) => BehTreeFile.IsBehTree(name);
 
     /// <summary>Opens a behaviour tree in a window of its own.</summary>
-    public static void Open(string path, string source, byte[] data, ResourceLocator locator, Window owner) =>
-        new BehTreeWindow(path, source, () => data, locator).Standalone(owner).Show();
+    public static void Open(string path, string source, byte[] data, ResourceLocator locator, Window owner, IArchive? archive = null) =>
+        new BehTreeWindow(path, source, () => data, locator, archive?.FilePath).Standalone(owner).Show();
 
     /// <summary>Opens a behaviour tree file on disk.</summary>
     public static void OpenFile(string file, ResourceLocator locator, Window owner) =>
-        new BehTreeWindow(Path.GetFileName(file), file, () => File.ReadAllBytes(file), locator).Standalone(owner).Show();
+        new BehTreeWindow(Path.GetFileName(file), file, () => File.ReadAllBytes(file), locator, file).Standalone(owner).Show();
 
     public Task ShowMessage(string? title, string message, MessageKind kind) => Message.Show(title, message, kind, primary: "OK");
 
@@ -76,6 +81,7 @@ public partial class BehTreeWindow : Window, IMessageHost
             return;
         }
         Graph.Show(_tree.Root);
+        _ = LoadRedkitAsync();
         FoldBox.SelectedIndex = 0;
         var tasks = _tree.Root.All().Count(n => n.Task is not null);
         InfoText.Text = $"{_path}   ·   {_source}   ·   CR2W {_tree.File.Version}, {Format.Count(_tree.NodeCount, "node")}, {Format.Count(tasks, "script task")}";
@@ -93,6 +99,7 @@ public partial class BehTreeWindow : Window, IMessageHost
     /// <summary>Shows a node's properties beside the tree, without the children the graph already shows, then its task's.</summary>
     private void ShowNode(BehTreeNode node)
     {
+        _shown = node;
         NodeTitle.Text = node.Title;
         var said = new List<string> { BehTreeGraph.Kind(node.Kind), node.Object.ClassName };
         if (node.Task is { } task) said.Add($"runs {task.ClassName}");
@@ -102,14 +109,30 @@ public partial class BehTreeWindow : Window, IMessageHost
         NodeDetail.Text = string.Join("  ·  ", said);
         NodeComment.Text = node.Comment ?? "";
         NodeComment.Visibility = node.Comment is null ? Visibility.Collapsed : Visibility.Visible;
-        var rows = PropertyRow.Of(node.Object, _tree!.File, leaveOut: [.. node.LinkNames, "taskOrigin"]);
+        var rows = Rows(node.Object, [.. node.LinkNames, "taskOrigin"]);
         if (node.Task is { } t)
         {
             // the task is a script class, which the engine's own list of classes hasn't got, so it's headed here
             rows.Add(new PropertyRow($"Task: {t.ClassName}", "", "", 0, null, heading: true));
-            rows.AddRange(PropertyRow.Of(t, _tree.File));
+            rows.AddRange(Rows(t, []));
         }
         Properties.Show(rows);
+    }
+
+    /// <summary>An object's properties: from REDkit's copy of the tree when it has the same object, otherwise from the tree opened.</summary>
+    private List<PropertyRow> Rows(RedObject o, string[] leaveOut) =>
+        _redkit is { } redkit && RedkitSource.Match(redkit, o, _tree!.File) is { } own
+            ? PropertyRow.Of(own, redkit, leaveOut: leaveOut)
+            : PropertyRow.Of(o, _tree!.File, leaveOut: leaveOut);
+
+    /// <summary>Reads REDkit's copy of the tree, for one of the game's own, and says above the properties where they come from.</summary>
+    private async Task LoadRedkitAsync()
+    {
+        var (path, origin) = (_path, _origin);
+        var from = await Task.Run(() => RedkitSource.For(path, origin));
+        _redkit = from.Redkit;
+        SourceNoteBar.Show(from.Source, from.RedkitPath ?? origin, "behaviour tree");
+        if (_shown is { } node) ShowNode(node);
     }
 
     private void PropertySearch_TextChanged(object sender, TextChangedEventArgs e)

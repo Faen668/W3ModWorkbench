@@ -6,61 +6,151 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Microsoft.Win32;
 using W3ModWorkbench.Core;
+using W3ModWorkbench.Core.Cr2w;
 using W3ModWorkbench.Core.Textures;
 using W3ModWorkbench.Core.Projects;
+using W3ModWorkbench.ViewModels;
 
 namespace W3ModWorkbench;
 
 /// <summary>
 /// Shows a texture from a texture.cache: its mip levels, a cube map's faces or an array's slices, one channel at a time,
-/// over a chequerboard for transparency. It can be saved as a PNG (the level shown) or as a .dds (every level and slice).
+/// over a chequerboard for transparency, or on a lit shape in 3D, as REDkit's texture viewer does. Beside it are the
+/// texture's properties, from its resource file (.xbm, .w2cube, .texarray) as REDkit lists them, and what the cache says
+/// about it. It can be saved as a PNG (the level shown) or as a .dds (every level and slice).
 /// </summary>
 public partial class TextureWindow : Window, IMessageHost
 {
+    private static readonly string[] FaceNames = ["+X", "−X", "+Y", "−Y", "+Z", "−Z"];
+
     private readonly string _path;
     private readonly TextureInfo? _info;
     private readonly Func<byte[]> _readPixels;
     private readonly DecodedImage? _picture;
+    private readonly Func<byte[]?>? _resource;
+    // finds the files the properties link to, as the window it was opened from finds them
+    private readonly ResourceLocator _locator;
+    // the cache a texture was opened from, which says whether it's one of the game's own; null for a picture file
+    private readonly string? _origin;
+    private readonly List<(string Name, string Value)> _facts;
     private byte[]? _pixels;
     private DecodedImage? _image;
     private double _zoom = 1;
 
-    private TextureWindow(string path, string detail, TextureInfo? info, Func<byte[]> readPixels, DecodedImage? picture, int mips)
+    private TextureWindow(string path, string title, string detail, TextureInfo? info, Func<byte[]> readPixels, DecodedImage? picture, int mips,
+        List<(string Name, string Value)> facts, Func<byte[]?>? resource, ResourceLocator? locator, int slice = 0)
     {
         InitializeComponent();
+        _locator = locator ?? GameLocatorOnly();
         _path = path;
         _info = info;
         _readPixels = readPixels;
         _picture = picture;
-        Title = $"{Path.GetFileName(path)} - Texture";
+        _facts = facts;
+        _resource = resource;
+        _origin = facts.FirstOrDefault(f => f.Name == "Cache").Value;
+        Title = $"{title} - Texture";
         int width = info?.Width ?? picture!.Width, height = info?.Height ?? picture!.Height;
         for (int level = 0; level < mips; level++)
             MipBox.Items.Add($"{Math.Max(1, width >> level)} x {Math.Max(1, height >> level)}" + (level == 0 ? "  (full)" : ""));
         MipBox.SelectedIndex = 0;
         if (info is { Slices: > 1 })
         {
-            string[] faces = ["+X", "−X", "+Y", "−Y", "+Z", "−Z"];
-            for (int slice = 0; slice < info.Slices; slice++) SliceBox.Items.Add(info.IsCube ? faces[slice] : $"{slice}");
-            SliceBox.SelectedIndex = 0;
+            for (int s = 0; s < info.Slices; s++) SliceBox.Items.Add(info.IsCube ? FaceNames[s] : $"texture_{s}");
+            SliceBox.SelectedIndex = Math.Clamp(slice, 0, info.Slices - 1);
             SliceLabel.Text = info.IsCube ? "Face" : "Slice";
             SliceLabel.Visibility = SliceBox.Visibility = Visibility.Visible;
         }
         InfoText.Text = $"{path}   ·   {detail}";
+        ShowProperties(null);
         Loaded += async (_, _) => await LoadAsync();
     }
 
-    /// <summary>Opens a texture from a texture.cache in a window of its own.</summary>
-    public static void Open(TextureEntry entry, Window owner)
+    /// <summary>
+    /// Opens a texture from a texture.cache in a window of its own; a texture array opens in the array viewer.
+    /// <paramref name="resource"/> reads the texture's resource file (its .xbm, .w2cube or .texarray) for its properties,
+    /// and may give null when there's none to be found.
+    /// </summary>
+    public static void Open(TextureEntry entry, Window owner, Func<byte[]?>? resource = null, ResourceLocator? locator = null)
+    {
+        if (entry.Info is { Slices: > 1, IsCube: false }) TextureArrayWindow.Open(entry, owner, resource, locator);
+        else OpenSlice(entry, owner, resource, 0, locator);
+    }
+
+    /// <summary>Finds files in the game alone, for a window opened without the archives the tool has open.</summary>
+    public static ResourceLocator GameLocatorOnly() => new([], null, GameLocator.Resolve(null));
+
+    /// <summary>
+    /// Opens a file a property links to: a texture (an .xbm, a cube map or an array) in the texture viewer, found as the
+    /// game would find it. For anything else the path is copied, as there's no viewer for it here.
+    /// </summary>
+    public static async void OpenLink(Window owner, MessageCard message, ResourceLocator locator, string path)
+    {
+        string kind = Path.GetExtension(path).ToLowerInvariant();
+        if (kind is not (".xbm" or ".w2cube" or ".texarray"))
+        {
+            try { Clipboard.SetText(path); }
+            catch (System.Runtime.InteropServices.COMException) { } // another program has the clipboard open
+            _ = message.Show(null, $"There's no viewer for {FileKinds.Of(path)?.Name.ToLowerInvariant() ?? "this kind of"} files here, so its path is copied:\n{path}",
+                MessageKind.Info, primary: "OK");
+            return;
+        }
+        var found = await Task.Run(() => locator.FindTexture(path));
+        if (found is null)
+        {
+            _ = message.Show("Not found", $"{path} isn't in the game's texture caches or the ones open.", MessageKind.Warning, primary: "OK");
+            return;
+        }
+        Open(found, owner, () => locator.ReadFile(path), locator);
+    }
+
+    private void Properties_LinkClicked(object? sender, string path) => OpenLink(this, Message, _locator, path);
+
+    /// <summary>Opens one texture of a cache entry (one slice of an array) in the texture viewer, as REDkit opens an array's texture.</summary>
+    public static void OpenSlice(TextureEntry entry, Window owner, Func<byte[]?>? resource, int slice, ResourceLocator? locator = null)
     {
         var info = entry.Info;
         var archive = entry.Archive;
         string detail = $"{entry.FormatText}   ·   {Format.Bytes(info.UnpackedSize)} unpacked, {Format.Bytes(info.PackedSize)} in the cache"
             + (info.IsCube ? "   ·   a cube map's six faces" : info.Slices > 1 ? $"   ·   an array of {info.Slices} textures" : "");
-        new TextureWindow(entry.Path, detail, info, () =>
+        string name = Path.GetFileName(entry.Path);
+        new TextureWindow(entry.Path, info is { Slices: > 1, IsCube: false } ? $"{name}.texture_{slice}" : name, detail, info, () =>
         {
             using var fs = new FileStream(archive.FilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
             return TextureCacheArchive.ReadPixels(fs, info);
-        }, null, info.Mips).Standalone(owner).Show();
+        }, null, info.Mips, CacheFacts(entry), resource, locator, slice).Standalone(owner).Show();
+    }
+
+    /// <summary>
+    /// A texture's resource file for its properties, and where they came from: REDkit's own copy before it's cooked, for
+    /// one of the game's own textures when REDkit has one, as it keeps the editor's properties that cooking leaves out;
+    /// otherwise the file itself, which <paramref name="read"/> reads. <paramref name="origin"/> is the cache the texture
+    /// was opened from. Run off the UI thread.
+    /// </summary>
+    public static (Cr2wFile? File, PropertySource Source, string? RedkitPath) ReadProperties(string gamePath, string? origin, Func<byte[]?>? read)
+    {
+        var from = RedkitSource.For(gamePath, origin);
+        if (from.Redkit is not null) return (from.Redkit, PropertySource.Redkit, from.RedkitPath);
+        var file = read is null ? null : RedkitSource.Parse(read);
+        return file is null ? (null, PropertySource.None, null) : (file, from.Source, from.RedkitPath);
+    }
+
+    /// <summary>What a texture cache says about a texture, for the top of the properties.</summary>
+    public static List<(string Name, string Value)> CacheFacts(TextureEntry entry)
+    {
+        var info = entry.Info;
+        var facts = new List<(string, string)>
+        {
+            ("Format", info.FormatName),
+            ("Size", $"{info.Width} x {info.Height}"),
+            ("Mip levels", $"{info.Mips}"),
+        };
+        if (info.IsCube) facts.Add(("Faces", "6 (a cube map)"));
+        else if (info.Slices > 1) facts.Add(("Textures", $"{info.Slices} (a texture array)"));
+        facts.Add(("Memory", Format.Bytes(info.UnpackedSize)));
+        facts.Add(("In the cache", Format.Bytes(info.PackedSize)));
+        facts.Add(("Cache", entry.Archive.FilePath));
+        return facts;
     }
 
     /// <summary>Whether a file's name says it's a picture this window can show: PNG, JPEG, BMP, GIF, TIFF or DDS.</summary>
@@ -70,11 +160,17 @@ public partial class TextureWindow : Window, IMessageHost
     /// <summary>Opens a picture file's bytes: an ordinary image, or a .dds, which keeps its mip levels. False when it couldn't be read as one.</summary>
     public static bool Open(string name, string source, byte[] data, Window owner)
     {
+        string file = Path.GetFileName(name);
         if (Path.GetExtension(name).Equals(".dds", StringComparison.OrdinalIgnoreCase))
         {
             if (!Dds.TryRead(data, out var info, out var pixels) || TextureDecoder.Decode(info, pixels, 0) is null) return false;
-            new TextureWindow(name, $"{source}   ·   {info.Description}   ·   {Format.Bytes(data.Length)}",
-                info, () => pixels, null, info.Mips).Standalone(owner).Show();
+            var facts = new List<(string, string)> { ("Format", info.FormatName), ("Size", $"{info.Width} x {info.Height}"), ("Mip levels", $"{info.Mips}") };
+            if (info.IsCube) facts.Add(("Faces", "6 (a cube map)"));
+            else if (info.Slices > 1) facts.Add(("Textures", $"{info.Slices} (a texture array)"));
+            facts.Add(("File size", Format.Bytes(data.Length)));
+            facts.Add(("From", source));
+            new TextureWindow(name, file, $"{source}   ·   {info.Description}   ·   {Format.Bytes(data.Length)}",
+                info, () => pixels, null, info.Mips, facts, null, null).Standalone(owner).Show();
             return true;
         }
         DecodedImage picture;
@@ -90,7 +186,12 @@ public partial class TextureWindow : Window, IMessageHost
         {
             return false;
         }
-        new TextureWindow(name, $"{source}   ·   {picture.Width}x{picture.Height}   ·   {Format.Bytes(data.Length)}", null, () => [], picture, 1).Standalone(owner).Show();
+        var pictureFacts = new List<(string, string)>
+        {
+            ("Size", $"{picture.Width} x {picture.Height}"), ("File size", Format.Bytes(data.Length)), ("From", source),
+        };
+        new TextureWindow(name, file, $"{source}   ·   {picture.Width}x{picture.Height}   ·   {Format.Bytes(data.Length)}", null, () => [], picture, 1,
+            pictureFacts, null, null).Standalone(owner).Show();
         return true;
     }
 
@@ -98,6 +199,8 @@ public partial class TextureWindow : Window, IMessageHost
 
     private async Task LoadAsync()
     {
+        var (resource, origin, path) = (_resource, _origin, _path);
+        var readResource = Task.Run(() => origin is null ? (null, PropertySource.None, null) : ReadProperties(path, origin, resource));
         try
         {
             _pixels = _picture is not null ? [] : await Task.Run(_readPixels);
@@ -110,11 +213,39 @@ public partial class TextureWindow : Window, IMessageHost
         }
         SaveDdsButton.IsEnabled = _info is { Format: not TextureFormat.Unknown };
         Render();
+        if (origin is not null)
+        {
+            var (file, source, redkitPath) = await readResource;
+            SourceNoteBar.Show(source, redkitPath, _info is { IsCube: true } ? "cube map" : "texture");
+            ShowProperties(file);
+        }
+    }
+
+    /// <summary>
+    /// The properties: what the cache or file says about the texture, then its resource's own properties as REDkit lists
+    /// them, under each class from CResource down, with those the file doesn't keep dimmed.
+    /// </summary>
+    private void ShowProperties(Cr2wFile? resource)
+    {
+        var rows = new List<PropertyRow>();
+        var heading = PropertyRow.Child(rows, new PropertyRow("Texture", "", "", 0, null, heading: true), null);
+        foreach (var (name, value) in _facts) PropertyRow.Child(rows, new PropertyRow(name, "", value, 1, null), heading);
+        if (resource is not null && resource.Exports.Count > 0)
+            rows.AddRange(PropertyRow.Of(resource.Object(0), resource));
+        Properties.Show(rows);
+    }
+
+    private void PropertySearch_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        PropertySearchPlaceholder.Visibility = PropertySearch.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
+        Properties.Search = PropertySearch.Text;
     }
 
     private int Level => Math.Max(0, MipBox.SelectedIndex);
 
     private int Slice => Math.Max(0, SliceBox.SelectedIndex);
+
+    private bool Is3D => View3D.IsChecked == true;
 
     private void Render()
     {
@@ -123,6 +254,7 @@ public partial class TextureWindow : Window, IMessageHost
         if (_image is null)
         {
             Picture.Source = null;
+            Preview3D.ShowTexture(null);
             BusyText.Visibility = Visibility.Visible;
             BusyText.Text = $"Texture format {_info?.RawFormat} can't be shown yet. Save DDS isn't available for it either.";
             SavePngButton.IsEnabled = false;
@@ -130,11 +262,23 @@ public partial class TextureWindow : Window, IMessageHost
         }
         BusyText.Visibility = Visibility.Collapsed;
         SavePngButton.IsEnabled = true;
-        var shown = Channels(_image);
-        var bitmap = BitmapSource.Create(_image.Width, _image.Height, 96, 96, PixelFormats.Bgra32, null, shown, _image.Width * 4);
-        bitmap.Freeze();
-        Picture.Source = bitmap;
+        if (Is3D)
+        {
+            // a cube map goes round the shape whole, each face where it looks
+            if (_info is { IsCube: true })
+                Preview3D.ShowCube([.. Enumerable.Range(0, 6).Select(face => Bitmap(TextureDecoder.Decode(_info, _pixels, Level, face)!))]);
+            else Preview3D.ShowTexture(Bitmap(_image));
+            return;
+        }
+        Picture.Source = Bitmap(_image);
         ApplyZoom();
+    }
+
+    private BitmapSource Bitmap(DecodedImage image)
+    {
+        var bitmap = BitmapSource.Create(image.Width, image.Height, 96, 96, PixelFormats.Bgra32, null, Channels(image), image.Width * 4);
+        bitmap.Freeze();
+        return bitmap;
     }
 
     /// <summary>The pixels as the channel buttons say: everything, the colour alone, or one channel as grey.</summary>
@@ -159,6 +303,27 @@ public partial class TextureWindow : Window, IMessageHost
     private void Channel_Checked(object sender, RoutedEventArgs e) => Render();
 
     private void Mip_SelectionChanged(object sender, SelectionChangedEventArgs e) => Render();
+
+    private void View_Checked(object sender, RoutedEventArgs e)
+    {
+        if (!IsInitialized) return;
+        Preview3D.Visibility = Is3D ? Visibility.Visible : Visibility.Collapsed;
+        Scroller.Visibility = Is3D ? Visibility.Collapsed : Visibility.Visible;
+        ShapeBar.Visibility = Is3D ? Visibility.Visible : Visibility.Collapsed;
+        FitToggle.Visibility = Is3D ? Visibility.Collapsed : Visibility.Visible;
+        Render();
+    }
+
+    private void Shape_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (Preview3D is null) return;
+        Preview3D.Shape = (PreviewShape)Math.Max(0, ShapeBox.SelectedIndex);
+    }
+
+    private void Light_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (Preview3D is not null) Preview3D.LightAngle = e.NewValue;
+    }
 
     private void Fit_Click(object sender, RoutedEventArgs e)
     {
@@ -222,9 +387,8 @@ public partial class TextureWindow : Window, IMessageHost
         if (dialog.ShowDialog(this) != true) return;
         try
         {
-            var bitmap = BitmapSource.Create(_image.Width, _image.Height, 96, 96, PixelFormats.Bgra32, null, Channels(_image), _image.Width * 4);
             var encoder = new PngBitmapEncoder();
-            encoder.Frames.Add(BitmapFrame.Create(bitmap));
+            encoder.Frames.Add(BitmapFrame.Create(Bitmap(_image)));
             FileSafety.CheckWrite(dialog.FileName);
             using var stream = File.Create(dialog.FileName);
             encoder.Save(stream);
