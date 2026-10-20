@@ -45,6 +45,7 @@ public partial class SceneWindow : Window, IMessageHost
     private SceneWindow(string path, string source, Func<byte[]> readData, ResourceLocator locator, string? origin)
     {
         InitializeComponent();
+        StageLoading.Prompt("Preview", PreviewPrompt);
         _path = path;
         _source = source;
         _readData = readData;
@@ -183,6 +184,19 @@ public partial class SceneWindow : Window, IMessageHost
         if (LanguageBox.SelectedItem is not W3Language language) return;
         _language = language.Handle;
         if (IsLoaded) _ = LoadStringsAsync();
+        if (IsLoaded) _ = RetimeAsync();
+    }
+
+    /// <summary>Times the lines again to the voices of the language picked, and shows the section shown with them.</summary>
+    private async Task RetimeAsync()
+    {
+        if (_scene is not { } s || _timelines.Count == 0 || _reading || _sectionPlaying is not null) return;
+        await ReadTimelinesAsync(s);
+        // the faces say the lines in that language too
+        _lipSyncs.Clear();
+        if (_timelineNode is not { } node) return;
+        _timelineNode = null;
+        ShowTimeline(node);
     }
 
     private void Pauses_Click(object sender, RoutedEventArgs e) => Rebuild();
@@ -272,10 +286,7 @@ public partial class SceneWindow : Window, IMessageHost
         _cameras = root is null ? [] : SceneStaging.Cameras(root);
         CameraGrid.ItemsSource = SceneCameraRow.Of(_cameras);
 
-        var locator = _locator;
-        var timelines = await Task.Run(() => s.Nodes.Where(n => s.File.Object(n.Export) is { ClassName: "CStorySceneSection" or "CStorySceneCutsceneSection" })
-            .Select(n => (Node: n, Timeline: SceneSectionTimeline.Read(s.File, s.File.Object(n.Export), CutsceneLines(n.Cutscene, locator)))).ToList());
-        foreach (var (node, timeline) in timelines) _timelines[node] = timeline;
+        var timelines = await ReadTimelinesAsync(s);
         var animations = SceneAnimationRow.Of(timelines.Select(t => t.Timeline));
         AnimationGrid.ItemsSource = animations;
         AnimationNote.Text = animations.Count == 0 ? "The scene's timelines play no animations."
@@ -283,6 +294,42 @@ public partial class SceneWindow : Window, IMessageHost
 
         var input = s.File.Exports.FirstOrDefault(x => x.ClassName == "CStorySceneInput") is { } first ? s.File.Object(first.Index) : null;
         StartProperties.Show(input is null ? [] : Rows(input, ["voicetagMappings", "nextLinkElement"]));
+    }
+
+    /// <summary>
+    /// Reads the sections' timelines, each line as long as its voice in the language picked when that's longer than
+    /// its approved length (voices differ in length from language to language), and keeps them.
+    /// </summary>
+    private async Task<List<(SceneNode Node, SceneSectionTimeline Timeline)>> ReadTimelinesAsync(SceneFile s)
+    {
+        var locator = _locator;
+        var speech = await SpeechAsync();
+        var timelines = await Task.Run(() =>
+        {
+            var lengths = new Dictionary<uint, float?>();
+            float? VoiceLength(uint id)
+            {
+                if (lengths.TryGetValue(id, out var known)) return known;
+                float? length = null;
+                try
+                {
+                    // the lip sync is as long as the voice
+                    if (speech.FirstOrDefault(sp => sp.Has(id))?.LipSync(id) is { } lip) length = Core.Animation.LipSync.Read(lip).Duration;
+                }
+                catch (Exception ex) when (ex is IOException or InvalidDataException or EndOfStreamException or IndexOutOfRangeException)
+                {
+                    // one that can't be read keeps its approved length
+                }
+                return lengths[id] = length;
+            }
+            return s.Nodes.Where(n => s.File.Object(n.Export) is { ClassName: "CStorySceneSection" or "CStorySceneCutsceneSection" })
+                .Select(n => (Node: n, Timeline: SceneSectionTimeline.Read(s.File, s.File.Object(n.Export), CutsceneLines(n.Cutscene, locator), VoiceLength))).ToList();
+        });
+        foreach (var (node, timeline) in timelines) _timelines[node] = timeline;
+        // what's worked out from them is worked out again
+        _tracks.Clear();
+        _propEvents.Clear();
+        return timelines;
     }
 
     /// <summary>The dialog marks of a cutscene a section plays (when and how long each line is said), or null when it can't be read.</summary>
@@ -347,25 +394,32 @@ public partial class SceneWindow : Window, IMessageHost
         // the lists inside the tabs raise this too
         if (e.Source != MainTabs || MainTabs.SelectedItem is not TabItem { Header: "Preview" }) return;
         BottomTabs.SelectedIndex = 1; // the timeline drives it
-        _stageLoad ??= LoadStageAsync();
     }
+
+    private const string PreviewPrompt = "Plays the scene in 3D with its timeline. Its actors, their textures, its props and every cutscene it "
+        + "plays are all loaded first so it plays smoothly, which can take a while for a big scene. Read through loads it too.";
+
+    private void StageLoading_LoadRequested(object? sender, EventArgs e) => StartStageLoad();
+
+    /// <summary>Loads the preview, unless it's loaded or loading already.</summary>
+    private void StartStageLoad() => _stageLoad ??= LoadStageAsync();
 
     /// <summary>
     /// Loads everything the preview plays the first time it's shown, as REDkit loads a scene's entities before it opens
     /// it, so it plays smoothly from the start: the scene's actors (each stood in its sections' dialog sets, with the
     /// idles, changes of stance and animations its sections play read from its animation sets) with all their
-    /// textures, and every cutscene the scene plays with its actors and theirs. A dialog shows how it's getting on.
+    /// textures, and every cutscene the scene plays with its actors and theirs. The view shows how it's getting on.
     /// </summary>
     private async Task LoadStageAsync()
     {
         if (_scene is not { } s) return;
-        StageText.Text = "Loading the scene…";
+        StageText.Text = "";
         var locator = _locator;
         var timelines = _timelines.ToList();
         var sets = _dialogsets;
         var cutscenes = s.Nodes.Where(n => n.Kind == SceneNodeKind.Cutscene && n.Cutscene is not null).Select(n => n.Cutscene!)
             .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-        var loaded = await Loading.RunAsync(this, $"Loading {Path.GetFileNameWithoutExtension(_path)}", async (report, token) =>
+        var loaded = await StageLoading.RunAsync($"Loading {Path.GetFileNameWithoutExtension(_path)}", async (report, token) =>
         {
             report.Step("Putting the actors together");
             var notes = new List<string>();
@@ -429,12 +483,12 @@ public partial class SceneWindow : Window, IMessageHost
         }, _closing.Token);
         if (loaded is null)
         {
-            // stopped: the preview loads again the next time it's opened
+            // stopped: it can be loaded again
             _stageLoad = null;
-            StageText.Text = "Loading the scene was stopped. Open the Preview again to load it.";
-            StageText.Visibility = Visibility.Visible;
+            StageLoading.Prompt("Loading was stopped", "Load the preview again to see the scene played in 3D. " + PreviewPrompt[(PreviewPrompt.IndexOf(". ") + 2)..]);
             return;
         }
+        StageControls.IsEnabled = true;
         (_idles, _dialogsetOf) = (loaded.Idles, loaded.BySection);
         var stageCast = loaded.Cast;
         _stage = stageCast;
@@ -633,7 +687,7 @@ public partial class SceneWindow : Window, IMessageHost
         {
             CutsceneView.Clear();
             var locator = _locator;
-            prepared = await Loading.RunAsync(this, $"Loading {Path.GetFileNameWithoutExtension(path)}", async (report, token) =>
+            prepared = await StageLoading.RunAsync($"Loading {Path.GetFileNameWithoutExtension(path)}", async (report, token) =>
             {
                 report.Step("Reading the cutscene");
                 var cutscene = await Task.Run(() => locator.ReadFile(path) is { } data ? CutsceneFile.Read(data) : throw new FileNotFoundException("The cutscene wasn't found.", path), token);
@@ -1207,6 +1261,8 @@ public partial class SceneWindow : Window, IMessageHost
         var token = Restart();
         SetReading(true);
         if (MainTabs.Items.OfType<TabItem>().FirstOrDefault(t => t.Header as string == "Preview") is { } preview) MainTabs.SelectedItem = preview;
+        // reading it through plays it in the preview, so it loads it
+        StartStageLoad();
         for (int hops = 0; hops < 1000; hops++)
         {
             Select(node);
@@ -1228,6 +1284,9 @@ public partial class SceneWindow : Window, IMessageHost
                 ReadLabel.Text = "Choosing…";
                 try { await Task.Delay(2000, token); }
                 catch (OperationCanceledException) { return; }
+                // not a shop, barber, Gwent and the like: those open a service rather than going on with the talk
+                var talk = options.Where(o => !o.OpensService).ToList();
+                if (talk.Count > 0) options = talk;
                 way = options[_random.Next(options.Count)];
                 ReadLabel.Text = "Stop";
             }

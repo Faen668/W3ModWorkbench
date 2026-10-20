@@ -1,0 +1,36 @@
+<UserControl x:Class="W3ModWorkbench.LoadingPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- over the view it stands in for: it takes the mouse, so the view can't be used until it's loaded -->
+    <Grid Background="#01000000">
+        <!-- solid underneath: the card's own fill is see-through -->
+        <Border HorizontalAlignment="Center" VerticalAlignment="Center" Width="440" Margin="16" CornerRadius="8"
+                Background="{DynamicResource SolidBackgroundFillColorBaseBrush}">
+            <Border Padding="22,18" CornerRadius="8" BorderThickness="1"
+                    Background="{DynamicResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}">
+                <StackPanel>
+                    <TextBlock x:Name="TitleText" FontSize="16" FontWeight="SemiBold" TextWrapping="Wrap" />
+                    <!-- before it loads: what loading does, and the button that does it -->
+                    <TextBlock x:Name="PromptText" Margin="0,8,0,0" TextWrapping="Wrap" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                    <Button x:Name="LoadButton" Margin="0,16,0,0" HorizontalAlignment="Left" Padding="16,6" Style="{DynamicResource AccentButtonStyle}" Click="Load_Click">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE768;" VerticalAlignment="Center" />
+                            <TextBlock x:Name="LoadButtonText" Margin="8,0,0,0" Text="Load preview" />
+                        </StackPanel>
+                    </Button>
+                    <!-- while it loads: the step, how far through, and Cancel -->
+                    <StackPanel x:Name="ProgressPart" Visibility="Collapsed">
+                        <TextBlock x:Name="StepText" Margin="0,10,0,0" TextTrimming="CharacterEllipsis" />
+                        <ProgressBar x:Name="Bar" Height="6" Margin="0,10,0,0" Maximum="1" />
+                        <DockPanel Margin="0,6,0,0">
+                            <TextBlock x:Name="CountText" DockPanel.Dock="Right" Margin="12,0,0,0" Opacity="0.75" FontFamily="Cascadia Mono, Consolas" FontSize="12" />
+                            <TextBlock x:Name="DetailText" Opacity="0.65" FontSize="12" TextTrimming="CharacterEllipsis" />
+                        </DockPanel>
+                        <Button x:Name="CancelButton" HorizontalAlignment="Right" Margin="0,14,0,0" Padding="16,5" Content="Cancel" Click="Cancel_Click"
+                                ToolTip="Stop loading" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </Border>
+    </Grid>
+</UserControl>

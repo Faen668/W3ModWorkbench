@@ -35,8 +35,12 @@ public sealed class SceneSectionTimeline
     /// Reads a section's timeline. A cutscene section's lines are said by its cutscene, not one after another:
     /// <paramref name="cutsceneLines"/> are the cutscene's dialog marks (start and length, in order), which put them
     /// at their times when there are as many as lines; without them a cutscene section's lines aren't placed.
+    /// <paramref name="voiceLength"/> gives a line's recorded voice length in the language played, by string ID: a
+    /// line lasts at least that long, as a voice longer than its approved length (recorded again after it was approved,
+    /// or in another language) is said whole in the game, and the events on it keep their shares of it.
     /// </summary>
-    public static SceneSectionTimeline Read(Cr2wFile file, RedObject section, IReadOnlyList<(float Start, float Duration)>? cutsceneLines = null)
+    public static SceneSectionTimeline Read(Cr2wFile file, RedObject section, IReadOnlyList<(float Start, float Duration)>? cutsceneLines = null,
+        Func<uint, float?>? voiceLength = null)
     {
         bool cutscene = section.ClassName == "CStorySceneCutsceneSection";
         var lineCount = section.Array("sceneElements").OfType<RedHandle>().Count(h => file.Object(h)?.ClassName == "CStorySceneLine");
@@ -69,6 +73,7 @@ public sealed class SceneSectionTimeline
                 _ => (SceneElementKind.Other, approved.GetValueOrDefault(id, e.Float("approvedDuration", e.Float("duration")))),
             };
             uint? stringId = e["dialogLine"] is { } line ? Convert.ToUInt32(line) : null;
+            if (!cutscene && kind == SceneElementKind.Line && stringId is { } said && voiceLength?.Invoke(said) is float voice && voice > duration) duration = voice;
             float start = time;
             if (cutscene && kind == SceneElementKind.Line)
             {

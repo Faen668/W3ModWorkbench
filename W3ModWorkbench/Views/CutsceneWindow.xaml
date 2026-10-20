@@ -181,8 +181,10 @@
                     </Grid.RowDefinitions>
                     <!-- through the cutscene's camera the picture is 16:9 (or the aspect ratio picked), with bars around it -->
                     <local:CutsceneStage x:Name="Stage" Margin="1,1,1,0" />
+                    <!-- nothing loads until it's asked for -->
+                    <local:LoadingPanel x:Name="StageLoading" Margin="1,1,1,0" LoadRequested="StageLoading_LoadRequested" />
                     <!-- the view's settings, as REDkit has them under its preview -->
-                    <DockPanel Grid.Row="1" Margin="10,6,10,0" LastChildFill="True">
+                    <DockPanel x:Name="ViewSettings" Grid.Row="1" Margin="10,6,10,0" LastChildFill="True" IsEnabled="False">
                         <StackPanel Orientation="Horizontal" DockPanel.Dock="Left">
                             <TextBlock Text="FOV" VerticalAlignment="Center" Margin="0,0,6,0" Opacity="0.75" />
                             <Slider x:Name="FovSlider" Width="90" Minimum="20" Maximum="100" Value="60" VerticalAlignment="Center" ValueChanged="Fov_ValueChanged"
@@ -206,7 +208,7 @@
                                    FontSize="12" Opacity="0.75" TextTrimming="CharacterEllipsis"
                                    ToolTip="What the cutscene's camera has at the time shown: its field of view and the depth of field in force" />
                     </DockPanel>
-                    <DockPanel Grid.Row="2" Margin="10,6,10,8" LastChildFill="True">
+                    <DockPanel x:Name="PlayControls" Grid.Row="2" Margin="10,6,10,8" LastChildFill="True" IsEnabled="False">
                         <Button x:Name="PlayButton" DockPanel.Dock="Left" Padding="10,5" Click="Play_Click" IsEnabled="False" ToolTip="Play or pause (Space)">
                             <TextBlock x:Name="PlayIcon" Style="{StaticResource IconText}" Text="&#xE768;" />
                         </Button>

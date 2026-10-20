@@ -131,7 +131,17 @@ public partial class CutsceneWindow : Window, IMessageHost
         InfoText.Text = $"{_path}   ·   {_source}   ·   CR2W {c.File.Version}, {CutsceneTimeline.FormatTime(c.Duration)}, "
                       + $"{Format.Count(c.Actors.Count, "actor")}, {Format.Count(_events.Count, "event")}, {Format.Count(c.Effects.Count, "effect")}";
         if (shown == 0) SearchPlaceholder.Text = "No events: the actors' animations play on their own";
-        await Task.WhenAll(LoadPlaybackAsync(c), LoadDialogLinesAsync(c), ShowTemplateAsync(c), LoadTrackAsync(c));
+        // the actors load when asked for: the events, properties and sound are there without them
+        StageLoading.Prompt("Preview", PreviewPrompt);
+        await Task.WhenAll(LoadDialogLinesAsync(c), ShowTemplateAsync(c), LoadTrackAsync(c));
+    }
+
+    private const string PreviewPrompt = "Plays the cutscene in 3D: its actors as they are in the game, through its camera, with its sound. "
+        + "Every actor and texture is loaded first so it plays smoothly, which can take a while for a big cutscene.";
+
+    private void StageLoading_LoadRequested(object? sender, EventArgs e)
+    {
+        if (_cutscene is { } c && !StageLoading.IsLoading) _ = LoadPlaybackAsync(c);
     }
 
     /// <summary>The cutscene's own properties, from REDkit's source file for one of the game's own when REDkit has it.</summary>
@@ -428,7 +438,21 @@ public partial class CutsceneWindow : Window, IMessageHost
     /// </summary>
     private async Task LoadPlaybackAsync(CutsceneFile c)
     {
-        if (await Stage.LoadPlaybackAsync(c, _path, _locator) is not { } p) return;
+        // every actor and texture read before it's shown, so it plays smoothly from the start; the view shows how it's getting on
+        CutscenePlayback? p = null;
+        var prepared = await StageLoading.RunAsync($"Loading {Path.GetFileNameWithoutExtension(_path)}", async (report, token) =>
+        {
+            report.Step("Reading the actors' animations");
+            p = await Stage.LoadPlaybackAsync(c, _path, _locator);
+            token.ThrowIfCancellationRequested();
+            return p is null ? null! : await CutsceneStage.PrepareAsync(c, p, _locator, Stage.TextureReader, report, token);
+        }, _closing.Token);
+        if (p is null)
+        {
+            if (prepared is null && !_closing.IsCancellationRequested && Stage.Message.Length == 0)
+                StageLoading.Prompt("Loading was stopped", "Load the preview again to see the cutscene played in 3D.");
+            return;
+        }
         _playback = p;
         ScrubSlider.Maximum = Math.Max(0.01, p.Duration);
         ScrubSlider.SmallChange = 1 / 30.0;
@@ -440,16 +464,14 @@ public partial class CutsceneWindow : Window, IMessageHost
         CameraBox.IsEnabled = p.Cameras.Count(c => c.Rig is not null) > 1;
         if (!CameraToggle.IsEnabled) CameraToggle.ToolTip = "The cutscene has no camera animation, or its rig wasn't found";
         SetTime(0);
-        // every actor and texture read before it's shown, so it plays smoothly from the start
-        var prepared = await Loading.RunAsync(this, $"Loading {Path.GetFileNameWithoutExtension(_path)}",
-            (report, token) => CutsceneStage.PrepareAsync(c, p, _locator, Stage.TextureReader, report, token), _closing.Token);
         if (prepared is null)
         {
-            Stage.Message = "Loading the actors was stopped. Open the cutscene again to load them.";
+            StageLoading.Prompt("Loading was stopped", "Load the preview again to see the cutscene played in 3D.");
             return;
         }
         Stage.Show(prepared, _locator);
         Stage.SetLines(_lines);
+        ViewSettings.IsEnabled = PlayControls.IsEnabled = true;
     }
 
     /// <summary>Shows a time everywhere: the actors' pose, the camera, the scrub bar, the timeline's playhead and the Camera tab.</summary>

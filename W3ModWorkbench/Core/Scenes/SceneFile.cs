@@ -23,6 +23,20 @@ public sealed class SceneLink
 
     /// <summary>A choice's option the game picks out (the main story's way on), as REDkit marks its emphasised lines.</summary>
     public bool Emphasis { get; internal set; }
+
+    /// <summary>The class of what picking a choice's option does (CShopStorySceneChoiceAction, CExitStorySceneChoiceAction…), or null for none.</summary>
+    public string? Action { get; internal set; }
+
+    // the actions that open a trader or a service rather than going on with the talk
+    private static readonly HashSet<string> Services = new(StringComparer.Ordinal)
+    {
+        "CShopStorySceneChoiceAction", "CArmorerStorySceneChoiceAction", "CBlacksmithStorySceneChoiceAction", "CRunesmithStorySceneChoiceAction",
+        "CHairCutSceneChoiceAction", "CShavingSceneChoiceAction", "CGameCardsChoiceAction", "CAuctionSceneChoiceAction",
+        "CTeacherStorySceneChoiceAction", "CFastTravelStorySceneChoiceAction",
+    };
+
+    /// <summary>Whether picking it opens a trader or a service (shop, armourer, barber, Gwent, fast travel…) instead of going on with the talk.</summary>
+    public bool OpensService => Action is not null && Services.Contains(Action);
     public SceneNode? Target { get; internal set; }
 }
 
@@ -264,6 +278,7 @@ public sealed class SceneFile
                             Words(Join(does, needs is null ? null : "only if " + needs, line["singleUseChoice"] is true ? "once" : null,
                                 line["isDefaultChoice"] is true ? "picked when time runs out" : null, line["hidden"] is true ? "hidden" : null)));
                         option.Emphasis = line["emphasisLine"] is true;
+                        option.Action = line["action"] is RedHandle act ? file.Object(act)?.ClassName : null;
                         choice.Options.Add(option);
                     }
                     node.Elements.Add(choice);

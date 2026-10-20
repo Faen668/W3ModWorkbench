@@ -345,7 +345,7 @@
                                 <DockPanel>
                                     <!-- the view's settings -->
                                     <DockPanel DockPanel.Dock="Bottom" Margin="2,6,2,0" LastChildFill="True">
-                                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                                        <StackPanel x:Name="StageControls" DockPanel.Dock="Right" Orientation="Horizontal" IsEnabled="False">
                                             <ToggleButton x:Name="StageCameraToggle" Padding="12,5" IsChecked="True" Click="StageCamera_Click"
                                                           ToolTip="See it through the section's cameras, cut as its camera events cut">
                                                 <StackPanel Orientation="Horizontal">
@@ -379,10 +379,12 @@
                                                 CornerRadius="4" Background="#A0000000" Visibility="Collapsed" IsHitTestVisible="False">
                                             <TextBlock x:Name="Subtitle" Foreground="White" FontSize="17" TextWrapping="Wrap" TextAlignment="Center" MaxWidth="900" />
                                         </Border>
-                                        <TextBlock x:Name="StageText" Text="Pick a section to see it played." HorizontalAlignment="Center" VerticalAlignment="Center"
+                                        <TextBlock x:Name="StageText" HorizontalAlignment="Center" VerticalAlignment="Center"
                                                    TextWrapping="Wrap" TextAlignment="Center" MaxWidth="560" Margin="16" Opacity="0.8" IsHitTestVisible="False" />
                                         <TextBlock x:Name="StageNotes" HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="12,0,12,10" MaxWidth="620"
                                                    TextWrapping="Wrap" FontSize="11.5" Opacity="0.7" IsHitTestVisible="False" />
+                                        <!-- nothing loads until it's asked for: Load preview, or Read through -->
+                                        <local:LoadingPanel x:Name="StageLoading" LoadRequested="StageLoading_LoadRequested" />
                                     </Grid>
                                 </DockPanel>
                             </TabItem>

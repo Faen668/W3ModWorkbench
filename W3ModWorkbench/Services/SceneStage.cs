@@ -1379,6 +1379,13 @@ public static class SceneStage
         if (e.ClassName == "CStorySceneEventCustomCameraInstance" && Named(o["customCameraName"]) is { } name
             && cameras.FirstOrDefault(c => c.Name.Equals(name, StringComparison.OrdinalIgnoreCase)) is { } defined)
             return (name, defined.Position, defined.Rotation.Y, defined.Rotation.Z, defined.FieldOfView);
+        // a camera of its own: as its camera definition places it, which is what the game uses (cameraAdjustVersion 2); the
+        // older cameraTranslation and cameraRotation beside it can be somewhere else entirely, left from before it was adjusted
+        if (e.ClassName == "CStorySceneEventCustomCamera" && o["cameraDefinition"] is RedObject definition && definition["cameraTransform"] is byte[] { Length: > 0 } placed)
+        {
+            var (position, rotation) = SceneStaging.Transform(placed);
+            return (e.Name, position, rotation.Y, rotation.Z, definition.Float("cameraFov", o.Float("cameraFov", 35)));
+        }
         if (e.ClassName == "CStorySceneEventCustomCamera" && o["cameraTranslation"] is RedObject at && o["cameraRotation"] is RedObject turn)
             return (e.Name, new Vector3(at.Float("X"), at.Float("Y"), at.Float("Z")), turn.Float("Pitch"), turn.Float("Yaw"), o.Float("cameraFov", 35));
         return null;
