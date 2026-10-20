@@ -131,7 +131,14 @@ public sealed class Cr2wFile
         if (_objects.TryGetValue(index, out var known)) return known;
         var export = Exports[index];
         var reader = new RedReader(this, Data, export.Offset, export.Offset + export.Size);
-        var result = reader.ReadObject(export.ClassName);
+        RedObject result;
+        try { result = reader.ReadObject(export.ClassName); }
+        catch (InvalidDataException) when (Cr2wLegacy.MarkerVaries(Version))
+        {
+            // files of 155 on can have objects either way about the zero byte before their properties
+            reader = new RedReader(this, Data, export.Offset, export.Offset + export.Size, otherMarker: true);
+            result = reader.ReadObject(export.ClassName);
+        }
         // before 139 an object's properties end with a 0
         if (Version < 139 && reader.Position < export.Offset + export.Size && Data[reader.Position] == 0) reader.Position++;
         result.Export = export;

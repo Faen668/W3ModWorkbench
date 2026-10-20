@@ -91,13 +91,14 @@ internal sealed class RedReader
     private readonly bool _marker, _pad;
     public int Position;
 
-    public RedReader(Cr2wFile file, byte[] data, int start, int end)
+    /// <param name="otherMarker">Read objects the other way about the zero byte from what their version usually has.</param>
+    public RedReader(Cr2wFile file, byte[] data, int start, int end, bool otherMarker = false)
     {
         _file = file;
         _data = data;
         Position = start;
         _end = end;
-        _marker = Cr2wLegacy.HasObjectMarker(file.Version);
+        _marker = Cr2wLegacy.HasObjectMarker(file.Version) != otherMarker;
         _pad = Cr2wLegacy.HasPropertyPad(file.Version);
     }
 

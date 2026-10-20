@@ -32,8 +32,17 @@ public static class Cr2wLegacy
     /// <summary>The oldest version there's a file of to check against (REDkit's r4data has none older).</summary>
     public const int FirstVersion = 120;
 
-    /// <summary>Whether a version's objects and structs start with a zero byte before their properties (155 on).</summary>
-    public static bool HasObjectMarker(int version) => version > LastVersion;
+    /// <summary>
+    /// Whether a version's objects and structs start with a zero byte before their properties: from 158. In 155 to 157
+    /// a few do already (about one object in a thousand); a reader tries the other way when the usual one doesn't fit.
+    /// </summary>
+    public static bool HasObjectMarker(int version) => version >= FirstMarkerVersion;
+
+    /// <summary>The first version whose objects start with a zero byte before their properties.</summary>
+    public const int FirstMarkerVersion = 158;
+
+    /// <summary>Whether a version's objects can be either way (with the zero byte or without), so a reader should try both: any in the newer layout.</summary>
+    public static bool MarkerVaries(int version) => version > LastVersion;
 
     /// <summary>Whether a version's properties have two bytes between their type and their size (before 139).</summary>
     public static bool HasPropertyPad(int version) => version < 139;

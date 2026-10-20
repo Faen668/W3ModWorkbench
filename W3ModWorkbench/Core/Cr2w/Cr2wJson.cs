@@ -174,7 +174,7 @@ public static partial class Cr2wJson
         int rawValues = decoder.RawValues, rawPaths = decoder.RawPaths.Count;
         var node = decoder.Export(export, $"objects[{export.Index}]");
         bool same = SameAgain(node, data, context);
-        if (context.Marker && (!same || decoder.RawValues > rawValues))
+        if (context.MarkerVaries && (!same || decoder.RawValues > rawValues))
         {
             // some files of 155 to 157 leave out the zero byte objects start with: read it that way too, and keep
             // whichever comes back the same with fewer values kept as bytes
@@ -182,9 +182,9 @@ public static partial class Cr2wJson
             var firstPaths = decoder.RawPaths.GetRange(rawPaths, decoder.RawPaths.Count - rawPaths);
             decoder.RawValues = rawValues;
             decoder.RawPaths.RemoveRange(rawPaths, decoder.RawPaths.Count - rawPaths);
-            decoder.NoMarker = true;
+            decoder.OtherMarker = true;
             var other = decoder.Export(export, $"objects[{export.Index}]");
-            decoder.NoMarker = false;
+            decoder.OtherMarker = false;
             if (SameAgain(other, data, context) && (!same || decoder.RawValues < firstValues)) { node = other; same = true; }
             else
             {
@@ -405,6 +405,8 @@ public static partial class Cr2wJson
         public Cr2wBuilder? Builder;
         /// <summary>Whether objects and structs start with a zero byte, and whether properties have two bytes after their type.</summary>
         public readonly bool Marker, Pad;
+        /// <summary>Whether the version's objects can be either way about the zero byte (the newer layout, 155 on).</summary>
+        public readonly bool MarkerVaries;
         /// <summary>The older layout's dependencies, which its soft references are to; null for the newer layout.</summary>
         public List<string>? Dependencies;
         private readonly Dictionary<string, int> _nameIndex = new(StringComparer.Ordinal);
@@ -416,6 +418,7 @@ public static partial class Cr2wJson
             Imports = imports;
             _adding = adding;
             Marker = Cr2wLegacy.HasObjectMarker(version);
+            MarkerVaries = Cr2wLegacy.MarkerVaries(version);
             Pad = Cr2wLegacy.HasPropertyPad(version);
             for (int i = 0; i < Names.Count; i++) _nameIndex.TryAdd(Names[i], i);
         }
@@ -520,19 +523,20 @@ public static partial class Cr2wJson
         public readonly List<string> RawPaths = [];
 
         /// <summary>
-        /// Read the object as having no zero byte before its properties. Some objects and structs in files of 155 to
-        /// 157 are saved that way while others beside them aren't; such an object or struct says <c>"$marker": false</c>.
+        /// Read the object the other way from its version about the zero byte before its properties: files of 155 to 157
+        /// mostly don't have it, but a few objects and structs in them do (and 158 to 159 may have the odd one without).
+        /// Such an object or struct says so: <c>"$marker": true</c> or <c>false</c>.
         /// </summary>
-        public bool NoMarker;
+        public bool OtherMarker;
 
         public JsonObject Export(Cr2wExport export, string path)
         {
             int pos = export.Offset, end = export.Offset + export.Size;
             var node = new JsonObject { ["$class"] = export.ClassName };
-            if (NoMarker) node["$marker"] = false;
+            if (OtherMarker) node["$marker"] = !context.Marker;
             try
             {
-                if (export.Size > 0) Struct(node, export.ClassName, ref pos, end, path, allowShort: true, marker: !NoMarker);
+                if (export.Size > 0) Struct(node, export.ClassName, ref pos, end, path, allowShort: true, marker: context.Marker != OtherMarker);
                 if (context.Pad && export.Size > 0)
                 {
                     // before 139 an object's properties end with a 0 (later versions have it before them instead)
@@ -601,12 +605,12 @@ public static partial class Cr2wJson
         }
 
         /// <summary>
-        /// A zero byte (not in the older layout, nor when <paramref name="marker"/> is false), then (name, type, size,
-        /// value) until a name of 0; before 139 there are two more bytes, always 0xFFFF, between the type and the size.
+        /// A zero byte (from 158, or as <paramref name="marker"/> says), then (name, type, size, value) until a name of 0;
+        /// before 139 there are two more bytes, always 0xFFFF, between the type and the size.
         /// </summary>
-        private void Struct(JsonObject node, string className, ref int pos, int end, string path, bool allowShort = false, bool marker = true)
+        private void Struct(JsonObject node, string className, ref int pos, int end, string path, bool allowShort = false, bool? marker = null)
         {
-            if (context.Marker && marker)
+            if (marker ?? context.Marker)
             {
                 if (pos >= end || _d[pos] != 0) throw new InvalidDataException();
                 pos++;
@@ -878,14 +882,14 @@ public static partial class Cr2wJson
             var node = new JsonObject();
             int start = pos, rawValues = RawValues, rawPaths = RawPaths.Count;
             try { Struct(node, type, ref pos, end, path); }
-            catch (Exception ex) when (context.Marker && ex is InvalidDataException or ArgumentOutOfRangeException or IndexOutOfRangeException)
+            catch (Exception ex) when (context.MarkerVaries && ex is InvalidDataException or ArgumentOutOfRangeException or IndexOutOfRangeException)
             {
-                // one saved without the zero byte (some in files of 155 to 157)
+                // one saved the other way about the zero byte (155 to 157 mostly lack it, but some objects have it)
                 pos = start;
                 RawValues = rawValues;
                 RawPaths.RemoveRange(rawPaths, RawPaths.Count - rawPaths);
-                node = new JsonObject { ["$marker"] = false };
-                Struct(node, type, ref pos, end, path, marker: false);
+                node = new JsonObject { ["$marker"] = !context.Marker };
+                Struct(node, type, ref pos, end, path, marker: !context.Marker);
             }
             if (type == "SAppearanceAttachment") node["$attachment"] = Attachment(ref pos, end, path + ".$attachment");
             return node;
@@ -933,14 +937,14 @@ public static partial class Cr2wJson
                 Struct(attachment, className, ref pos, objectEnd, path);
                 if (pos != objectEnd) throw new InvalidDataException();
             }
-            catch (Exception ex) when (context.Marker && ex is InvalidDataException or ArgumentOutOfRangeException or IndexOutOfRangeException)
+            catch (Exception ex) when (context.MarkerVaries && ex is InvalidDataException or ArgumentOutOfRangeException or IndexOutOfRangeException)
             {
-                // one saved without the zero byte (some in files of 155 to 157)
+                // one saved the other way about the zero byte (155 to 157 mostly lack it, but some objects have it)
                 pos = start;
                 RawValues = rawValues;
                 RawPaths.RemoveRange(rawPaths, RawPaths.Count - rawPaths);
-                attachment = new JsonObject { ["$class"] = className, ["$marker"] = false };
-                Struct(attachment, className, ref pos, objectEnd, path, marker: false);
+                attachment = new JsonObject { ["$class"] = className, ["$marker"] = !context.Marker };
+                Struct(attachment, className, ref pos, objectEnd, path, marker: !context.Marker);
                 if (pos != objectEnd) throw new InvalidDataException();
             }
             return attachment;
@@ -1073,7 +1077,7 @@ public static partial class Cr2wJson
 
         private void Struct(string className, JsonObject node)
         {
-            if (context.Marker && !(node["$marker"] is JsonValue marker && marker.TryGetValue(out bool has) && !has)) _out.WriteByte(0);
+            if (node["$marker"] is JsonValue marker && marker.TryGetValue(out bool has) ? has : context.Marker) _out.WriteByte(0);
             foreach (var (property, value) in node)
             {
                 if (property.StartsWith('$')) continue;

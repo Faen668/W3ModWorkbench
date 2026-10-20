@@ -1235,7 +1235,7 @@ A converted file is the CR2W file's objects in order, then a `file` block with w
 - An entity reference (`EntityHandle`) is `{ "type": 1, "guids": [two GUIDs] }`, or `{ "type": 2, "idTag": { "type", "guid" } }`. A physical collision is `{ "version": 2, "types": [collision type names], "masks": [two numbers] }`; the masks are what the engine works out from the names.
 - A tag list the engine saved empty in its other way is `null` rather than `[]`; both are no tags.
 - A NaN that isn't the usual one keeps its bits as `"NaN:ffffffff"` (some files have them where a value was never set).
-- `"$marker": false` on an object or struct says it was saved without the zero byte objects start with (some of REDkit's files of versions 155 to 157). Leave it as it is.
+- `"$marker"` on an object or struct says it was saved the other way about the zero byte objects start with than its version has them (158 on have it, 155 to 157 mostly don't): `true` or `false`. Leave it as it is.
 - A curve point's properties are saved by the engine under shortened names (`me`, `ntrolPoint`, `lue`, `rveTypeL`, `rveTypeR`). The JSON calls them `time`, `controlPoint`, `value`, `curveTypeL` and `curveTypeR`, and they're saved back under the engine's names.
 - A material instance's parameters (its textures, colours and numbers) are in `$parameters`, each `{ "name", "type", "value" }`, after its properties.
 - `"$end": false` on an object of a file before version 139 says its properties don't end with the zero those files have. Leave it as it is.
