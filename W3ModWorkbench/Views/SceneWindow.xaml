@@ -4,7 +4,7 @@
         xmlns:local="clr-namespace:W3ModWorkbench"
         xmlns:vm="clr-namespace:W3ModWorkbench.ViewModels"
         Title="Scene" Icon="pack://application:,,,/W3ModWorkbench;component/Assets/app.ico"
-        Width="1180" Height="860" MinWidth="720" MinHeight="480"
+        Width="1500" Height="940" MinWidth="900" MinHeight="560"
         WindowStartupLocation="CenterOwner" PreviewKeyDown="Window_PreviewKeyDown" PreviewMouseDown="Window_PreviewMouseDown">
 
     <Window.Resources>
@@ -74,23 +74,149 @@
             <TextBlock Text="{Binding Text}" FontStyle="{Binding Style}" FontWeight="{Binding Weight}" Opacity="{Binding Opacity}"
                        TextWrapping="Wrap" Margin="0,3" />
         </DataTemplate>
+        <!-- a choice's option: numbered, the story's way on picked out as the game does, what it needs or does, and where it leads -->
         <DataTemplate DataType="{x:Type vm:SceneOptionRow}">
-            <Grid Margin="14,3,0,3">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <TextBlock Text="▸" Margin="0,0,8,0" Opacity="0.6" />
-                <StackPanel Grid.Column="1">
-                    <TextBlock Text="{Binding Text}" TextWrapping="Wrap" />
-                    <TextBlock Text="{Binding Detail}" Visibility="{Binding DetailVisibility}" FontSize="11" TextWrapping="Wrap"
-                               Foreground="{DynamicResource TextFillColorTertiaryBrush}" />
-                    <Button Style="{StaticResource LinkButton}" HorizontalAlignment="Left" Click="Link_Click" Tag="{Binding Link}" IsEnabled="{Binding Link.CanGo}">
-                        <TextBlock Text="{Binding Link.Text}" FontSize="12" TextTrimming="CharacterEllipsis" />
-                    </Button>
-                </StackPanel>
-            </Grid>
+            <Border x:Name="Option" CornerRadius="6" Padding="10,6" Margin="0,3,0,3" BorderThickness="1"
+                    BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" Background="{DynamicResource CardBackgroundFillColorDefaultBrush}" ToolTip="{Binding Tip}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Border x:Name="Badge" Width="22" Height="22" CornerRadius="11" VerticalAlignment="Top" Margin="0,0,10,0"
+                            Background="{DynamicResource SubtleFillColorTertiaryBrush}">
+                        <TextBlock Text="{Binding Number}" FontSize="11.5" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Text="{Binding Text}" FontWeight="{Binding Weight}" TextWrapping="Wrap" />
+                        <TextBlock Text="{Binding Detail}" Visibility="{Binding DetailVisibility}" FontSize="11.5" TextWrapping="Wrap" Margin="0,2,0,0"
+                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                        <Button Style="{StaticResource LinkButton}" HorizontalAlignment="Left" Margin="0,3,0,0" Click="Link_Click" Tag="{Binding Link}" IsEnabled="{Binding Link.CanGo}">
+                            <TextBlock Text="{Binding Link.Text}" FontSize="12" TextTrimming="CharacterEllipsis" />
+                        </Button>
+                    </StackPanel>
+                </Grid>
+            </Border>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding Emphasis}" Value="True">
+                    <Setter TargetName="Option" Property="BorderBrush" Value="{DynamicResource AccentFillColorDefaultBrush}" />
+                    <Setter TargetName="Option" Property="BorderThickness" Value="1.5" />
+                    <Setter TargetName="Badge" Property="Background" Value="{DynamicResource AccentFillColorDefaultBrush}" />
+                    <Setter TargetName="Badge" Property="TextElement.Foreground" Value="{DynamicResource TextOnAccentFillColorPrimaryBrush}" />
+                </DataTrigger>
+            </DataTemplate.Triggers>
         </DataTemplate>
+
+        <!-- as the cutscene viewer has them -->
+        <Style x:Key="Small" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
+        </Style>
+        <Style x:Key="CellText" TargetType="TextBlock">
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+            <Setter Property="Margin" Value="6,0" />
+            <Setter Property="ToolTip" Value="{Binding Text, RelativeSource={RelativeSource Self}}" />
+        </Style>
+        <Style x:Key="CodeCellText" TargetType="TextBlock" BasedOn="{StaticResource CellText}">
+            <Setter Property="FontFamily" Value="Cascadia Mono, Consolas" />
+            <Setter Property="FontSize" Value="12.5" />
+        </Style>
+        <Style x:Key="ResultCell" TargetType="DataGridCell">
+            <Setter Property="OverridesDefaultStyle" Value="True" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="MinHeight" Value="28" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="DataGridCell">
+                        <Grid SnapsToDevicePixels="True" Background="Transparent">
+                            <Rectangle x:Name="Highlight" Fill="{DynamicResource AccentFillColorDefaultBrush}" Opacity="0" />
+                            <ContentPresenter VerticalAlignment="Center" />
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Highlight" Property="Opacity" Value="0.22" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="Grid" TargetType="DataGrid" BasedOn="{StaticResource {x:Type DataGrid}}">
+            <Setter Property="AutoGenerateColumns" Value="False" />
+            <Setter Property="IsReadOnly" Value="True" />
+            <Setter Property="CanUserAddRows" Value="False" />
+            <Setter Property="HeadersVisibility" Value="Column" />
+            <Setter Property="GridLinesVisibility" Value="None" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="SelectionMode" Value="Single" />
+            <Setter Property="SelectionUnit" Value="FullRow" />
+            <Setter Property="CanUserResizeRows" Value="False" />
+            <Setter Property="CellStyle" Value="{StaticResource ResultCell}" />
+            <Setter Property="VirtualizingPanel.IsVirtualizing" Value="True" />
+            <Setter Property="VirtualizingPanel.VirtualizationMode" Value="Recycling" />
+        </Style>
+        <Style x:Key="CompactItem" TargetType="ListBoxItem">
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+            <Setter Property="Padding" Value="6,4" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="Back" Background="Transparent" CornerRadius="4" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Back" Property="Background" Value="{DynamicResource SubtleFillColorTertiaryBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Back" Property="Background" Value="{DynamicResource SubtleFillColorSecondaryBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="PanelTabs" TargetType="TabControl">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TabControl">
+                        <DockPanel>
+                            <WrapPanel DockPanel.Dock="Top" IsItemsHost="True" Margin="2,0,2,4" />
+                            <Border DockPanel.Dock="Top" Height="1" Background="{DynamicResource CardStrokeColorDefaultBrush}" Margin="0,0,0,2" />
+                            <ContentPresenter ContentSource="SelectedContent" TextElement.Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                        </DockPanel>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="PanelTab" TargetType="TabItem">
+            <!-- what's in a tab takes its text colour from the tab: the theme's, not the plain black a tab has without the theme's style -->
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TabItem">
+                        <Border x:Name="Back" Padding="9,4" Margin="0,0,2,4" CornerRadius="5" Background="Transparent" Cursor="Hand"
+                                TextElement.Foreground="{DynamicResource TextFillColorSecondaryBrush}">
+                            <ContentPresenter ContentSource="Header" TextElement.FontSize="12.5" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Back" Property="Background" Value="{DynamicResource SubtleFillColorTertiaryBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Back" Property="Background" Value="{DynamicResource AccentFillColorDefaultBrush}" />
+                                <Setter TargetName="Back" Property="TextElement.Foreground" Value="{DynamicResource TextOnAccentFillColorPrimaryBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Window.Resources>
 
     <Grid>
@@ -99,19 +225,14 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <Grid x:Name="Body" Margin="14,12,14,0" Visibility="Hidden">
+        <Grid x:Name="Body" Margin="12,10,12,0" Visibility="Hidden">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="320" MinWidth="220" />
-                <ColumnDefinition Width="8" />
-                <ColumnDefinition Width="*" />
-            </Grid.ColumnDefinitions>
 
-            <!-- search, language and back -->
-            <DockPanel Grid.Row="0" Grid.ColumnSpan="3" Margin="0,0,0,10" LastChildFill="True">
+            <!-- back, search, read through, pauses and language -->
+            <DockPanel Grid.Row="0" Margin="0,0,0,8" LastChildFill="True">
                 <Button x:Name="BackButton" DockPanel.Dock="Left" Padding="10,5" Margin="0,0,8,0" Click="Back_Click" IsEnabled="False"
                         ToolTip="Back to where you followed a link from (Alt+Left)">
                     <TextBlock Style="{StaticResource IconText}" Text="&#xE72B;" />
@@ -142,142 +263,335 @@
                 </Grid>
             </DockPanel>
 
-            <!-- the flow at a glance, who's in it and the files it uses -->
-            <Border Grid.Row="1" Grid.Column="0" Style="{StaticResource Card}">
-                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="12,10">
-                    <StackPanel>
-                        <TextBlock Style="{StaticResource Heading}" Text="Flow" />
-                        <ListBox x:Name="FlowList" BorderThickness="0" Background="Transparent" SelectionChanged="FlowList_SelectionChanged"
-                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled" PreviewMouseWheel="Nested_PreviewMouseWheel">
-                            <ListBox.ItemTemplate>
-                                <DataTemplate DataType="{x:Type vm:SceneNodeItem}">
-                                    <Grid Margin="0,1">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="30" />
-                                            <ColumnDefinition Width="*" />
-                                        </Grid.ColumnDefinitions>
-                                        <TextBlock Text="{Binding Number}" Opacity="0.6" FontFamily="Cascadia Mono, Consolas" FontSize="12" VerticalAlignment="Center" />
-                                        <StackPanel Grid.Column="1" Orientation="Horizontal">
-                                            <Border Width="9" Height="9" CornerRadius="2" Background="{Binding Swatch}" VerticalAlignment="Center" Margin="0,1,7,0" />
-                                            <TextBlock TextTrimming="CharacterEllipsis">
-                                                <Run Text="{Binding Title, Mode=OneWay}" />
-                                                <Run Text="{Binding Summary, Mode=OneWay}" Foreground="{DynamicResource TextFillColorTertiaryBrush}" FontSize="11" />
-                                            </TextBlock>
-                                        </StackPanel>
-                                    </Grid>
-                                </DataTemplate>
-                            </ListBox.ItemTemplate>
-                        </ListBox>
+            <!-- as REDkit's scene editor: the scene's own tabs above, the flow below, what's picked at the side -->
+            <Grid Grid.Row="1">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" MinWidth="420" />
+                    <ColumnDefinition Width="8" />
+                    <ColumnDefinition Width="400" MinWidth="260" />
+                </Grid.ColumnDefinitions>
+                <Grid Grid.Column="0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*" MinHeight="160" />
+                        <RowDefinition Height="8" />
+                        <RowDefinition Height="320" MinHeight="140" />
+                    </Grid.RowDefinitions>
 
-                        <TextBlock Style="{StaticResource Heading}" Text="Actors" Margin="2,16,0,8" />
-                        <ItemsControl x:Name="ActorList">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate DataType="{x:Type vm:SceneActorItem}">
-                                    <StackPanel Margin="0,0,0,6">
-                                        <TextBlock TextTrimming="CharacterEllipsis">
-                                            <Run Text="{Binding Name, Mode=OneWay}" FontWeight="SemiBold" />
-                                            <Run Text="{Binding Detail, Mode=OneWay}" Foreground="{DynamicResource TextFillColorSecondaryBrush}" FontSize="11" />
-                                        </TextBlock>
-                                        <Button Style="{StaticResource LinkButton}" Click="File_Click" Tag="{Binding Template}" HorizontalAlignment="Left" ToolTip="{Binding Template}">
-                                            <TextBlock Text="{Binding TemplateName}" FontSize="12" TextTrimming="CharacterEllipsis" />
-                                        </Button>
-                                    </StackPanel>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-
-                        <TextBlock Style="{StaticResource Heading}" Text="Files it uses" Margin="2,16,0,8" />
-                        <ItemsControl x:Name="LinkList">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate DataType="{x:Type vm:CutsceneLinkItem}">
-                                    <StackPanel Margin="0,0,0,6">
-                                        <Button Style="{StaticResource LinkButton}" Click="File_Click" Tag="{Binding GamePath}" HorizontalAlignment="Left" ToolTip="{Binding GamePath}">
-                                            <Button.ContextMenu>
-                                                <ContextMenu>
-                                                    <MenuItem Header="Copy path" Click="CopyPath_Click" Tag="{Binding GamePath}" />
-                                                </ContextMenu>
-                                            </Button.ContextMenu>
-                                            <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
-                                        </Button>
-                                        <TextBlock Text="{Binding Role}" FontSize="11" Foreground="{DynamicResource TextFillColorTertiaryBrush}" />
-                                    </StackPanel>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </StackPanel>
-                </ScrollViewer>
-            </Border>
-
-            <GridSplitter Grid.Row="1" Grid.Column="1" Width="8" HorizontalAlignment="Stretch" Background="Transparent" />
-
-            <!-- every part as a card, in flow order -->
-            <Border Grid.Row="1" Grid.Column="2" Style="{StaticResource Card}">
-                <ListBox x:Name="Cards" BorderThickness="0" Background="Transparent" HorizontalContentAlignment="Stretch"
-                         ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.CanContentScroll="True"
-                         VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling" VirtualizingPanel.ScrollUnit="Pixel">
-                    <ListBox.ItemContainerStyle>
-                        <Style TargetType="ListBoxItem">
-                            <Setter Property="Padding" Value="0" />
-                            <Setter Property="Margin" Value="8,4" />
-                            <Setter Property="Focusable" Value="False" />
-                            <Setter Property="Template">
-                                <Setter.Value>
-                                    <ControlTemplate TargetType="ListBoxItem">
-                                        <Border x:Name="Frame" CornerRadius="6" BorderThickness="1.5" BorderBrush="Transparent"
-                                                Background="{DynamicResource SubtleFillColorSecondaryBrush}" Padding="12,9">
-                                            <ContentPresenter />
-                                        </Border>
-                                        <ControlTemplate.Triggers>
-                                            <Trigger Property="IsSelected" Value="True">
-                                                <Setter TargetName="Frame" Property="BorderBrush" Value="{DynamicResource AccentFillColorDefaultBrush}" />
-                                            </Trigger>
-                                        </ControlTemplate.Triggers>
-                                    </ControlTemplate>
-                                </Setter.Value>
-                            </Setter>
-                        </Style>
-                    </ListBox.ItemContainerStyle>
-                    <ListBox.ItemTemplate>
-                        <DataTemplate DataType="{x:Type vm:SceneNodeItem}">
-                            <StackPanel>
-                                <DockPanel>
-                                    <TextBlock DockPanel.Dock="Right" Text="{Binding From}" FontSize="11" Foreground="{DynamicResource TextFillColorTertiaryBrush}"
-                                               VerticalAlignment="Center" Margin="12,0,0,0" />
-                                    <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text="{Binding Number}" FontFamily="Cascadia Mono, Consolas" Opacity="0.6" VerticalAlignment="Center" Margin="0,0,8,0" />
-                                        <Border CornerRadius="4" Background="{Binding Swatch}" Padding="7,1" VerticalAlignment="Center" Margin="0,0,8,0">
-                                            <TextBlock Text="{Binding Kind}" FontSize="11" Foreground="Black" />
-                                        </Border>
-                                        <TextBlock Text="{Binding Title}" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-                                    </StackPanel>
-                                </DockPanel>
-                                <TextBlock Text="{Binding Detail}" Visibility="{Binding DetailVisibility}" TextWrapping="Wrap" FontSize="12" Margin="0,4,0,0"
-                                           Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
-                                <Button Style="{StaticResource LinkButton}" HorizontalAlignment="Left" Margin="0,4,0,0" Click="File_Click" Tag="{Binding Cutscene}"
-                                        Visibility="{Binding CutsceneVisibility}" ToolTip="{Binding Cutscene}">
-                                    <TextBlock Text="{Binding CutsceneName, StringFormat=Open {0}}" FontSize="12" />
-                                </Button>
-                                <ItemsControl ItemsSource="{Binding Rows}" Visibility="{Binding RowsVisibility}" Margin="0,8,0,0" />
-                                <ItemsControl ItemsSource="{Binding Next}" Visibility="{Binding NextVisibility}" Margin="0,6,0,0">
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate DataType="{x:Type vm:SceneLinkItem}">
-                                            <Button Style="{StaticResource LinkButton}" HorizontalAlignment="Left" Click="Link_Click" Tag="{Binding Link}" IsEnabled="{Binding CanGo}" Margin="0,1">
-                                                <TextBlock Text="{Binding Text}" FontSize="12" TextTrimming="CharacterEllipsis" />
-                                            </Button>
+                    <Border Grid.Row="0" Style="{StaticResource Card}" Padding="8,8,8,4">
+                        <TabControl x:Name="MainTabs" Style="{StaticResource PanelTabs}" ItemContainerStyle="{StaticResource PanelTab}" SelectionChanged="MainTabs_SelectionChanged">
+                            <TabItem Header="Screenplay">
+                                <!-- every part as a card, in flow order -->
+                                <ListBox x:Name="Cards" BorderThickness="0" Background="Transparent" HorizontalContentAlignment="Stretch" SelectionChanged="Cards_SelectionChanged"
+                                         ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.CanContentScroll="True"
+                                         VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling" VirtualizingPanel.ScrollUnit="Pixel">
+                                    <ListBox.ItemContainerStyle>
+                                        <Style TargetType="ListBoxItem">
+                                            <Setter Property="Padding" Value="0" />
+                                            <Setter Property="Margin" Value="4,4" />
+                                            <Setter Property="Template">
+                                                <Setter.Value>
+                                                    <ControlTemplate TargetType="ListBoxItem">
+                                                        <Border x:Name="Frame" CornerRadius="6" BorderThickness="1.5" BorderBrush="Transparent"
+                                                                Background="{DynamicResource SubtleFillColorSecondaryBrush}" Padding="12,9">
+                                                            <ContentPresenter />
+                                                        </Border>
+                                                        <ControlTemplate.Triggers>
+                                                            <Trigger Property="IsSelected" Value="True">
+                                                                <Setter TargetName="Frame" Property="BorderBrush" Value="{DynamicResource AccentFillColorDefaultBrush}" />
+                                                            </Trigger>
+                                                        </ControlTemplate.Triggers>
+                                                    </ControlTemplate>
+                                                </Setter.Value>
+                                            </Setter>
+                                        </Style>
+                                    </ListBox.ItemContainerStyle>
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type vm:SceneNodeItem}">
+                                            <StackPanel>
+                                                <DockPanel>
+                                                    <TextBlock DockPanel.Dock="Right" Text="{Binding From}" FontSize="11" Foreground="{DynamicResource TextFillColorTertiaryBrush}"
+                                                               VerticalAlignment="Center" Margin="12,0,0,0" />
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <TextBlock Text="{Binding Number}" FontFamily="Cascadia Mono, Consolas" Opacity="0.6" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                                        <Border CornerRadius="4" Background="{Binding Swatch}" Padding="7,1" VerticalAlignment="Center" Margin="0,0,8,0">
+                                                            <TextBlock Text="{Binding Kind}" FontSize="11" Foreground="Black" />
+                                                        </Border>
+                                                        <TextBlock Text="{Binding Title}" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                                    </StackPanel>
+                                                </DockPanel>
+                                                <TextBlock Text="{Binding Detail}" Visibility="{Binding DetailVisibility}" TextWrapping="Wrap" FontSize="12" Margin="0,4,0,0"
+                                                           Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                                <Button Style="{StaticResource LinkButton}" HorizontalAlignment="Left" Margin="0,4,0,0" Click="File_Click" Tag="{Binding Cutscene}"
+                                                        Visibility="{Binding CutsceneVisibility}" ToolTip="{Binding Cutscene}">
+                                                    <TextBlock Text="{Binding CutsceneName, StringFormat=Open {0}}" FontSize="12" />
+                                                </Button>
+                                                <ItemsControl ItemsSource="{Binding Rows}" Visibility="{Binding RowsVisibility}" Margin="0,8,0,0" />
+                                                <ItemsControl ItemsSource="{Binding Next}" Visibility="{Binding NextVisibility}" Margin="0,6,0,0">
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate DataType="{x:Type vm:SceneLinkItem}">
+                                                            <Button Style="{StaticResource LinkButton}" HorizontalAlignment="Left" Click="Link_Click" Tag="{Binding Link}" IsEnabled="{Binding CanGo}" Margin="0,1">
+                                                                <TextBlock Text="{Binding Text}" FontSize="12" TextTrimming="CharacterEllipsis" />
+                                                            </Button>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                            </StackPanel>
                                         </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                            </StackPanel>
-                        </DataTemplate>
-                    </ListBox.ItemTemplate>
-                </ListBox>
-            </Border>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                            </TabItem>
+
+                            <TabItem Header="Preview">
+                                <DockPanel>
+                                    <!-- the view's settings -->
+                                    <DockPanel DockPanel.Dock="Bottom" Margin="2,6,2,0" LastChildFill="True">
+                                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                                            <ToggleButton x:Name="StageCameraToggle" Padding="12,5" IsChecked="True" Click="StageCamera_Click"
+                                                          ToolTip="See it through the section's cameras, cut as its camera events cut">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock Style="{StaticResource IconText}" Text="&#xE722;" />
+                                                    <TextBlock Margin="8,0,0,0" Text="Through the camera" />
+                                                </StackPanel>
+                                            </ToggleButton>
+                                            <Button Margin="6,0,0,0" Padding="10,5" Click="StageFit_Click" ToolTip="See everyone (double-click the view)">
+                                                <TextBlock Style="{StaticResource IconText}" Text="&#xE9A6;" />
+                                            </Button>
+                                            <ToggleButton x:Name="StageTexturedToggle" Margin="6,0,0,0" Padding="10,5" IsChecked="True" Click="StageTextured_Click" ToolTip="Textures">
+                                                <TextBlock Style="{StaticResource IconText}" Text="&#xE790;" />
+                                            </ToggleButton>
+                                            <ToggleButton x:Name="StageFloorToggle" Margin="6,0,0,0" Padding="10,5" IsChecked="True" Click="StageFloor_Click" ToolTip="The floor grid">
+                                                <TextBlock Style="{StaticResource IconText}" Text="&#xE80F;" />
+                                            </ToggleButton>
+                                        </StackPanel>
+                                        <TextBlock x:Name="StageCameraText" Style="{StaticResource Small}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                    </DockPanel>
+                                    <!-- through a camera the picture is 16:9, with bars around it -->
+                                    <Grid x:Name="StageArea" Background="Transparent" SizeChanged="StageArea_SizeChanged" ClipToBounds="True">
+                                        <Border x:Name="StageBars" Background="#E0000000" />
+                                        <local:MeshView x:Name="StageView" ShowFloor="True"
+                                                        ToolTip="Drag to turn around, right-drag to move, wheel to come closer, double-click to see everyone" />
+                                        <!-- a cutscene section plays its cutscene, as the cutscene viewer does -->
+                                        <local:CutsceneStage x:Name="CutsceneView" Visibility="Collapsed" />
+                                        <!-- the section's fades, over the picture -->
+                                        <Border x:Name="FadeCover" Visibility="Collapsed" IsHitTestVisible="False" />
+                                        <!-- the line being said, as REDkit's preview shows it -->
+                                        <Border x:Name="SubtitleBar" VerticalAlignment="Bottom" HorizontalAlignment="Center" Margin="40,0,40,36" Padding="14,6"
+                                                CornerRadius="4" Background="#A0000000" Visibility="Collapsed" IsHitTestVisible="False">
+                                            <TextBlock x:Name="Subtitle" Foreground="White" FontSize="17" TextWrapping="Wrap" TextAlignment="Center" MaxWidth="900" />
+                                        </Border>
+                                        <TextBlock x:Name="StageText" Text="Pick a section to see it played." HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                   TextWrapping="Wrap" TextAlignment="Center" MaxWidth="560" Margin="16" Opacity="0.8" IsHitTestVisible="False" />
+                                        <TextBlock x:Name="StageNotes" HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="12,0,12,10" MaxWidth="620"
+                                                   TextWrapping="Wrap" FontSize="11.5" Opacity="0.7" IsHitTestVisible="False" />
+                                    </Grid>
+                                </DockPanel>
+                            </TabItem>
+                            <TabItem Header="Starting Conditions">
+                                <DockPanel Margin="4,6,4,4">
+                                    <TextBlock DockPanel.Dock="Top" Style="{StaticResource Small}" TextWrapping="Wrap" Margin="2,0,0,8"
+                                               Text="Who each start of the scene needs: the actors found by their voice tags when it begins, and what's asked of them." />
+                                    <DataGrid x:Name="StartGrid" Style="{StaticResource Grid}" DockPanel.Dock="Top" MaxHeight="260">
+                                        <DataGrid.Columns>
+                                            <DataGridTextColumn Header="Start" Binding="{Binding Input}" Width="110" ElementStyle="{StaticResource CellText}" />
+                                            <DataGridTextColumn Header="Voice tag" Binding="{Binding Voicetag}" Width="*" ElementStyle="{StaticResource CellText}" />
+                                            <DataGridTextColumn Header="Must use context actor" Binding="{Binding ContextActor}" Width="Auto" ElementStyle="{StaticResource CellText}" />
+                                            <DataGridTextColumn Header="Invulnerable" Binding="{Binding Invulnerable}" Width="Auto" ElementStyle="{StaticResource CellText}" />
+                                            <DataGridTextColumn Header="Optional" Binding="{Binding Optional}" Width="Auto" ElementStyle="{StaticResource CellText}" />
+                                        </DataGrid.Columns>
+                                    </DataGrid>
+                                    <TextBlock DockPanel.Dock="Top" Style="{StaticResource Heading}" Text="The start's settings" Margin="2,12,0,6" />
+                                    <local:PropertyListView x:Name="StartProperties" NameColumnWidth="220" TypeColumnWidth="0" LinkClicked="Properties_LinkClicked" />
+                                </DockPanel>
+                            </TabItem>
+
+                            <TabItem Header="Definitions">
+                                <DockPanel Margin="4,6,4,4">
+                                    <TextBlock DockPanel.Dock="Top" Style="{StaticResource Small}" TextWrapping="Wrap" Margin="2,0,0,8"
+                                               Text="The actors and props the scene uses, and the entities they're made from. Click a template to open it." />
+                                    <DataGrid x:Name="ActorGrid" Style="{StaticResource Grid}">
+                                        <DataGrid.Columns>
+                                            <DataGridTextColumn Header="Id" Binding="{Binding Id}" Width="160" ElementStyle="{StaticResource CellText}" />
+                                            <DataGridTextColumn Header="Tags" Binding="{Binding Tags}" Width="110" ElementStyle="{StaticResource CellText}" />
+                                            <DataGridTemplateColumn Header="Template" Width="*">
+                                                <DataGridTemplateColumn.CellTemplate>
+                                                    <DataTemplate>
+                                                        <Button Style="{StaticResource LinkButton}" Click="File_Click" Tag="{Binding Template}" ToolTip="{Binding Template}" Margin="6,3">
+                                                            <TextBlock Text="{Binding TemplateName}" TextTrimming="CharacterEllipsis" />
+                                                        </Button>
+                                                    </DataTemplate>
+                                                </DataGridTemplateColumn.CellTemplate>
+                                            </DataGridTemplateColumn>
+                                            <DataGridTextColumn Header="Lines" Binding="{Binding Lines}" Width="55" ElementStyle="{StaticResource CellText}" />
+                                            <DataGridTextColumn Header="Appearance filter" Binding="{Binding AppearanceFilter}" Width="120" ElementStyle="{StaticResource CellText}" />
+                                            <DataGridTextColumn Header="Settings" Binding="{Binding Flags}" Width="160" ElementStyle="{StaticResource CellText}" />
+                                        </DataGrid.Columns>
+                                    </DataGrid>
+                                </DockPanel>
+                            </TabItem>
+
+                            <TabItem Header="Files">
+                                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="6,8">
+                                    <ItemsControl x:Name="LinkList">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate DataType="{x:Type vm:CutsceneLinkItem}">
+                                                <StackPanel Margin="0,0,0,6">
+                                                    <Button Style="{StaticResource LinkButton}" Click="File_Click" Tag="{Binding GamePath}" HorizontalAlignment="Left" ToolTip="{Binding GamePath}">
+                                                        <Button.ContextMenu>
+                                                            <ContextMenu>
+                                                                <MenuItem Header="Copy path" Click="CopyPath_Click" Tag="{Binding GamePath}" />
+                                                            </ContextMenu>
+                                                        </Button.ContextMenu>
+                                                        <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                                                    </Button>
+                                                    <TextBlock Text="{Binding Role}" FontSize="11" Foreground="{DynamicResource TextFillColorTertiaryBrush}" />
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </ScrollViewer>
+                            </TabItem>
+                        </TabControl>
+                    </Border>
+
+                    <GridSplitter Grid.Row="1" Height="8" HorizontalAlignment="Stretch" Background="Transparent" />
+
+                    <Border Grid.Row="2" Style="{StaticResource Card}" Padding="8,8,8,4">
+                        <TabControl x:Name="BottomTabs" Style="{StaticResource PanelTabs}" ItemContainerStyle="{StaticResource PanelTab}">
+                            <TabItem Header="Graph">
+                                <DockPanel>
+                                    <DockPanel DockPanel.Dock="Top" Margin="2,0,0,4">
+                                        <Button DockPanel.Dock="Right" Padding="10,3" Click="GraphFit_Click" ToolTip="Zoom out to see the whole flow">
+                                            <TextBlock Style="{StaticResource IconText}" Text="&#xE9A6;" FontSize="12" />
+                                        </Button>
+                                        <TextBlock x:Name="GraphNote" Style="{StaticResource Small}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                    </DockPanel>
+                                    <local:SceneGraphView x:Name="Graph" NodeClicked="Graph_NodeClicked" />
+                                </DockPanel>
+                            </TabItem>
+                            <TabItem Header="Timeline">
+                                <DockPanel>
+                                    <DockPanel DockPanel.Dock="Top" Margin="2,0,0,4" LastChildFill="True">
+                                        <Button x:Name="PlaySectionButton" DockPanel.Dock="Left" Padding="10,4" Click="PlaySection_Click" IsEnabled="False"
+                                                ToolTip="Play the section: the playhead runs along it and each line is spoken when it comes">
+                                            <TextBlock x:Name="PlaySectionIcon" Style="{StaticResource IconText}" Text="&#xE768;" FontSize="12" />
+                                        </Button>
+                                        <TextBlock x:Name="SectionTimeText" DockPanel.Dock="Left" Width="110" Margin="10,0,6,0" VerticalAlignment="Center"
+                                                   FontFamily="Cascadia Mono, Consolas" FontSize="12" />
+                                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                                            <ToggleButton x:Name="TimelineFitToggle" Padding="10,3" IsChecked="True" Click="TimelineZoom_Changed" ToolTip="Fit the section to the width">
+                                                <TextBlock Style="{StaticResource IconText}" Text="&#xE9A6;" FontSize="12" />
+                                            </ToggleButton>
+                                            <Slider x:Name="TimelineZoom" Width="110" Margin="8,0,0,0" Minimum="20" Maximum="600" Value="120" VerticalAlignment="Center"
+                                                    ValueChanged="TimelineZoom_Changed" ToolTip="How wide a second is" />
+                                        </StackPanel>
+                                        <TextBlock x:Name="TimelineTitle" Style="{StaticResource Small}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                                                   Text="Click a section to see its timeline: its lines, cameras and each actor's animations, looks and faces." />
+                                    </DockPanel>
+                                    <ScrollViewer x:Name="TimelineScroll" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                                        <local:SceneTimelineView x:Name="SectionTimeline" ItemClicked="SectionTimeline_ItemClicked" Seeked="SectionTimeline_Seeked" />
+                                    </ScrollViewer>
+                                </DockPanel>
+                            </TabItem>
+                            <TabItem Header="Dialog sets">
+                                <Grid Margin="2,4,2,2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="220" />
+                                        <ColumnDefinition Width="10" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="10" />
+                                        <ColumnDefinition Width="300" />
+                                    </Grid.ColumnDefinitions>
+                                    <ListBox x:Name="DialogsetList" ItemContainerStyle="{StaticResource CompactItem}" BorderThickness="0" Background="Transparent"
+                                             SelectionChanged="DialogsetList_SelectionChanged">
+                                        <ListBox.ItemTemplate>
+                                            <DataTemplate DataType="{x:Type vm:SceneDialogsetRow}">
+                                                <StackPanel>
+                                                    <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                                                    <TextBlock Text="{Binding Detail}" Style="{StaticResource Small}" TextTrimming="CharacterEllipsis" />
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </ListBox.ItemTemplate>
+                                    </ListBox>
+                                    <DataGrid x:Name="SlotGrid" Grid.Column="2" Style="{StaticResource Grid}">
+                                        <DataGrid.Columns>
+                                            <DataGridTextColumn Header="Place" Binding="{Binding Slot}" Width="70" ElementStyle="{StaticResource CellText}" />
+                                            <DataGridTextColumn Header="Who stands there" Binding="{Binding Actor}" Width="*" ElementStyle="{StaticResource CellText}" />
+                                            <DataGridTextColumn Header="Position" Binding="{Binding Place}" Width="140" ElementStyle="{StaticResource CodeCellText}" />
+                                            <DataGridTextColumn Header="Facing" Binding="{Binding Facing}" Width="70" ElementStyle="{StaticResource CodeCellText}" />
+                                        </DataGrid.Columns>
+                                    </DataGrid>
+                                    <local:PropertyListView x:Name="DialogsetProperties" Grid.Column="4" NameColumnWidth="150" TypeColumnWidth="0" LinkClicked="Properties_LinkClicked" />
+                                </Grid>
+                            </TabItem>
+                        </TabControl>
+                    </Border>
+                </Grid>
+
+                <GridSplitter Grid.Column="1" Width="8" HorizontalAlignment="Stretch" Background="Transparent" />
+
+                <Border Grid.Column="2" Style="{StaticResource Card}" Padding="8,8,8,4">
+                    <TabControl x:Name="SideTabs" Style="{StaticResource PanelTabs}" ItemContainerStyle="{StaticResource PanelTab}">
+                        <TabItem Header="Properties">
+                            <DockPanel Margin="2,6,2,2">
+                                <TextBlock x:Name="PartHeading" DockPanel.Dock="Top" Style="{StaticResource Heading}" TextTrimming="CharacterEllipsis" Text="Click a part in the graph or the screenplay" />
+                                <local:SourceNote x:Name="SourceNoteBar" DockPanel.Dock="Top" Margin="0,0,0,6" />
+                                <local:PropertyListView x:Name="PartProperties" NameColumnWidth="190" TypeColumnWidth="0" LinkClicked="Properties_LinkClicked" />
+                            </DockPanel>
+                        </TabItem>
+                        <TabItem Header="Cameras">
+                            <Grid Margin="2,6,2,2">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="*" />
+                                    <RowDefinition Height="8" />
+                                    <RowDefinition Height="*" />
+                                </Grid.RowDefinitions>
+                                <DataGrid x:Name="CameraGrid" Style="{StaticResource Grid}" SelectionChanged="CameraGrid_SelectionChanged">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="Camera" Binding="{Binding Name}" Width="*" ElementStyle="{StaticResource CellText}" />
+                                        <DataGridTextColumn Header="Lens" Binding="{Binding Lens}" Width="55" ElementStyle="{StaticResource CodeCellText}" />
+                                        <DataGridTextColumn Header="Position" Binding="{Binding Place}" Width="130" ElementStyle="{StaticResource CodeCellText}" />
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                                <GridSplitter Grid.Row="1" Height="8" HorizontalAlignment="Stretch" Background="Transparent" />
+                                <local:PropertyListView x:Name="CameraProperties" Grid.Row="2" NameColumnWidth="150" TypeColumnWidth="0" LinkClicked="Properties_LinkClicked" />
+                            </Grid>
+                        </TabItem>
+                        <TabItem Header="Animations">
+                            <DockPanel Margin="2,6,2,2">
+                                <TextBlock x:Name="AnimationNote" DockPanel.Dock="Top" Style="{StaticResource Small}" TextWrapping="Wrap" Margin="2,0,0,8" />
+                                <DataGrid x:Name="AnimationGrid" Style="{StaticResource Grid}">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="Actor" Binding="{Binding Actor}" Width="80" ElementStyle="{StaticResource CellText}" />
+                                        <DataGridTextColumn Header="Kind" Binding="{Binding Kind}" Width="60" ElementStyle="{StaticResource CellText}" />
+                                        <DataGridTextColumn Header="Animation" Binding="{Binding Animation}" Width="*" ElementStyle="{StaticResource CodeCellText}" />
+                                        <DataGridTextColumn Header="Uses" Binding="{Binding Uses}" Width="42" ElementStyle="{StaticResource CellText}" />
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                            </DockPanel>
+                        </TabItem>
+                        <TabItem Header="Section">
+                            <DockPanel Margin="2,6,2,2">
+                                <TextBlock x:Name="VariantNote" DockPanel.Dock="Top" Style="{StaticResource Small}" TextWrapping="Wrap" Margin="2,0,0,8"
+                                           Text="Click a section to see its versions: each language can play its own, timed to its voices." />
+                                <DataGrid x:Name="VariantGrid" Style="{StaticResource Grid}">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="Version" Binding="{Binding Variant}" Width="*" ElementStyle="{StaticResource CellText}" />
+                                        <DataGridTextColumn Header="Language" Binding="{Binding Language}" Width="70" ElementStyle="{StaticResource CellText}" />
+                                        <DataGridTextColumn Header="Events" Binding="{Binding Events}" Width="55" ElementStyle="{StaticResource CellText}" />
+                                        <DataGridTextColumn Header="Length" Binding="{Binding Length}" Width="100" ElementStyle="{StaticResource CellText}" />
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                            </DockPanel>
+                        </TabItem>
+                    </TabControl>
+                </Border>
+            </Grid>
         </Grid>
 
         <TextBlock x:Name="BusyText" Text="Reading the scene…" HorizontalAlignment="Center" VerticalAlignment="Center" Opacity="0.8"
                    TextWrapping="Wrap" TextAlignment="Center" MaxWidth="520" />
 
-        <TextBlock x:Name="InfoText" Grid.Row="1" Margin="18,10,18,12" Opacity="0.8" TextTrimming="CharacterEllipsis" />
+        <TextBlock x:Name="InfoText" Grid.Row="1" Margin="18,8,18,10" Opacity="0.8" TextTrimming="CharacterEllipsis" />
         <local:MessageCard x:Name="Message" Grid.RowSpan="2" IsModal="True" />
     </Grid>
 </Window>

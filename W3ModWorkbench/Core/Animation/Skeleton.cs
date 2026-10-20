@@ -22,7 +22,12 @@ public sealed class Skeleton
     public static Skeleton Read(byte[] data)
     {
         var file = Cr2wFile.Read(data);
-        var skeleton = file.First("CSkeleton") ?? throw new InvalidDataException("There's no skeleton in it: it has no CSkeleton.");
+        return FromObject(file.First("CSkeleton") ?? throw new InvalidDataException("There's no skeleton in it: it has no CSkeleton."));
+    }
+
+    /// <summary>A skeleton from its CSkeleton object: a rig file's, or one kept inside another file (a face's).</summary>
+    public static Skeleton FromObject(RedObject skeleton)
+    {
         var names = skeleton.Array("bones").OfType<RedObject>().Select(b => b["nameAsCName"] as string ?? b["name"] as string ?? "").ToArray();
         var parents = skeleton.Array("parentIndices").Select(p => p is short s ? s : (short)-1).ToArray();
         if (parents.Length != names.Length) throw new InvalidDataException("The skeleton's bones and parents don't match.");

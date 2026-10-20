@@ -180,15 +180,7 @@
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
                     <!-- through the cutscene's camera the picture is 16:9 (or the aspect ratio picked), with bars around it -->
-                    <Grid x:Name="StageArea" Margin="1,1,1,0" Background="Transparent" SizeChanged="StageArea_SizeChanged" ClipToBounds="True">
-                        <Border x:Name="Bars" Background="#E0000000" Visibility="Collapsed" />
-                        <local:MeshView x:Name="View" ShowFloor="True"
-                                        ToolTip="Drag to turn around, right-drag to move, wheel to come closer, double-click to see everyone" />
-                        <TextBlock x:Name="StageText" Text="Reading the actors…" HorizontalAlignment="Center" VerticalAlignment="Center"
-                                   TextWrapping="Wrap" TextAlignment="Center" MaxWidth="560" Margin="16" Opacity="0.8" IsHitTestVisible="False" />
-                        <TextBlock x:Name="StageNotes" HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="12,0,12,10" MaxWidth="620"
-                                   TextWrapping="Wrap" FontSize="11.5" Opacity="0.7" IsHitTestVisible="False" />
-                    </Grid>
+                    <local:CutsceneStage x:Name="Stage" Margin="1,1,1,0" />
                     <!-- the view's settings, as REDkit has them under its preview -->
                     <DockPanel Grid.Row="1" Margin="10,6,10,0" LastChildFill="True">
                         <StackPanel Orientation="Horizontal" DockPanel.Dock="Left">

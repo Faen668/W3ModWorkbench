@@ -12,6 +12,9 @@ public sealed class PlayedActor
     public required AnimationClip Clip { get; init; }
     public Skeleton? Rig { get; init; }
 
+    /// <summary>Its face animation, when the cutscene has one: how far each face control is on, and its neck's and head's turns.</summary>
+    public AnimationClip? Face { get; init; }
+
     /// <summary>The rig's file, or why there's none.</summary>
     public required string RigNote { get; init; }
 
@@ -63,6 +66,23 @@ public sealed class CutscenePlayback
         var cameras = new List<PlayedActor>();
         var rigs = new Dictionary<string, Skeleton?>(StringComparer.OrdinalIgnoreCase);
 
+        // the faces' animations (actor:face:…), which move the face's controls rather than the body's bones
+        var faces = new Dictionary<string, AnimationClip>(StringComparer.OrdinalIgnoreCase);
+        foreach (var export in file.Exports.Where(e => e.ClassName == "CSkeletalAnimation"))
+        {
+            var animation = file.Object(export.Index);
+            var parts = (animation["name"] as string ?? "").Split(':', 3);
+            if (parts.Length != 3 || !parts[1].Equals("face", StringComparison.OrdinalIgnoreCase)) continue;
+            try
+            {
+                if (AnimationClip.Read(file, animation, n => locator.ReadBuffer(path, n, owner)) is { } face) faces.TryAdd(parts[0], face);
+            }
+            catch (Exception ex) when (ex is InvalidDataException or IOException or ArgumentOutOfRangeException)
+            {
+                // the face stays still
+            }
+        }
+
         foreach (var export in file.Exports.Where(e => e.ClassName == "CSkeletalAnimation"))
         {
             var animation = file.Object(export.Index);
@@ -86,7 +106,7 @@ public sealed class CutscenePlayback
             }
             var actor = cutscene.Actors.FirstOrDefault(a => a.Name == name);
             var (rig, note) = FindRig(actor?.Template, clip.BoneCount, locator, rigs);
-            var played = new PlayedActor { Name = name, Clip = clip, Rig = rig, RigNote = note };
+            var played = new PlayedActor { Name = name, Clip = clip, Rig = rig, RigNote = note, Face = faces.GetValueOrDefault(name) };
             if (actor?.Type == "Camera" || name.StartsWith("camera", StringComparison.OrdinalIgnoreCase)) cameras.Add(played);
             else actors.Add(played);
         }

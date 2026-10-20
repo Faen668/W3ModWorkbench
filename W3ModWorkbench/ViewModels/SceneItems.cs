@@ -41,7 +41,8 @@ public sealed class SceneNodeItem
                     break;
                 case SceneElementKind.Choice:
                     Rows.Add(new SceneNoteRow(Join("Choice", e.Detail), false, true));
-                    foreach (var option in e.Options) Rows.Add(new SceneOptionRow(Words(option.StringId, text), option.Detail ?? "", new SceneLinkItem(option)));
+                    for (int o = 0; o < e.Options.Count; o++)
+                        Rows.Add(new SceneOptionRow(o + 1, Words(e.Options[o].StringId, text), e.Options[o].Detail ?? "", e.Options[o].Emphasis, new SceneLinkItem(e.Options[o])));
                     break;
                 default:
                     Rows.Add(new SceneNoteRow(e.Detail ?? "", false));
@@ -181,10 +182,12 @@ public sealed record SceneNoteRow(string Text, bool Comment, bool Heading = fals
     public double Opacity => Heading ? 1 : 0.65;
 }
 
-/// <summary>An option of a choice: the line it shows, what it needs or does, and where it leads.</summary>
-public sealed record SceneOptionRow(string Text, string Detail, SceneLinkItem Link)
+/// <summary>An option of a choice: its number, the line it shows, what it needs or does, whether it's picked out, and where it leads.</summary>
+public sealed record SceneOptionRow(int Number, string Text, string Detail, bool Emphasis, SceneLinkItem Link)
 {
     public Visibility DetailVisibility => Detail.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+    public FontWeight Weight => Emphasis ? FontWeights.SemiBold : FontWeights.Normal;
+    public string Tip => Emphasis ? "Picked out in the game: the story's way on" : "";
 }
 
 /// <summary>A way out of a part, as a button that goes to the part it reaches.</summary>

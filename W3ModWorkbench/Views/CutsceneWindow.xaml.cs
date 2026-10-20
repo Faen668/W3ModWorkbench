@@ -32,7 +32,6 @@ public partial class CutsceneWindow : Window, IMessageHost
 {
     // the zoom slider runs from 4 to 400 pixels a second, evenly in its logarithm
     private const double MinZoom = 4, MaxZoom = 400;
-    private const int TextureSize = 1024;
 
     private readonly string _path;
     private readonly string _source;
@@ -48,10 +47,6 @@ public partial class CutsceneWindow : Window, IMessageHost
     private float _playedFrom, _time;
     private bool _playing, _scrubbing;
 
-    // the actors drawn, and for each part of the 3D view the actor it belongs to and which of its meshes it is
-    private List<CastMember> _cast = [];
-    private readonly List<(CastMember Member, int Part)> _parts = [];
-    private readonly Dictionary<string, Task<BitmapSource?>> _textures = new(StringComparer.OrdinalIgnoreCase);
     private readonly CancellationTokenSource _closing = new();
 
     private CutsceneWindow(string path, string source, Func<byte[]> readData, ResourceLocator locator, string? origin)
@@ -65,7 +60,7 @@ public partial class CutsceneWindow : Window, IMessageHost
         Title = $"{Path.GetFileName(path)} - Cutscene";
         InfoText.Text = $"{path}   ·   {source}";
         ZoomSlider.Value = ZoomToSlider(40);
-        View.FieldOfView = FovSlider.Value; // REDkit's preview starts at 60°
+        Stage.View.FieldOfView = FovSlider.Value; // REDkit's preview starts at 60°
         Loaded += async (_, _) => await LoadAsync();
         Closed += (_, _) =>
         {
@@ -196,6 +191,8 @@ public partial class CutsceneWindow : Window, IMessageHost
     private sealed record Voice(float Start, float[] Stereo, string Name);
 
     private List<Voice> _voices = [];
+    // the lines' lip sync, for the faces: given to the stage again once its actors are on it
+    private List<(float, string, Core.Animation.LipSync)> _lines = [];
     // the cutscene's recorded music and effects, in stereo at 48 kHz
     private float[]? _track;
     private NAudio.Wave.WaveOutEvent? _output;
@@ -214,18 +211,31 @@ public partial class CutsceneWindow : Window, IMessageHost
         {
             var speech = await W3Speech.ForLanguage(game, en);
             var token = _closing.Token;
+            var lines = new List<(float, string, Core.Animation.LipSync)>();
             _voices = await Task.Run(() =>
             {
                 var voices = new List<Voice>();
                 for (int i = 0; i < marks.Count; i++)
                 {
                     token.ThrowIfCancellationRequested();
-                    if (ids[i] is not { } id || speech.FirstOrDefault(s => s.Has(id))?.Sound(id) is not { } riff) continue;
+                    if (ids[i] is not { } id) continue;
+                    // its lip sync, for the speaker's face to say it
+                    try
+                    {
+                        if (speech.Select(s => s.LipSync(id)).FirstOrDefault(b => b is not null) is { } blob) lines.Add((marks[i].Start, marks[i].Detail, Core.Animation.LipSync.Read(blob)));
+                    }
+                    catch (Exception ex) when (ex is InvalidDataException or IndexOutOfRangeException or ArgumentException)
+                    {
+                        // said with the face still
+                    }
+                    if (speech.FirstOrDefault(s => s.Has(id))?.Sound(id) is not { } riff) continue;
                     var (samples, channels) = WwiseOpus.Decode(riff);
                     if (channels > 0 && samples.Length > 0) voices.Add(new Voice(marks[i].Start, Stereo(samples, channels), $"{i + 1:00} {marks[i].Detail} {id}"));
                 }
                 return voices;
             }, token);
+            _lines = lines;
+            Stage.SetLines(lines);
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or OperationCanceledException)
         {
@@ -418,16 +428,8 @@ public partial class CutsceneWindow : Window, IMessageHost
     /// </summary>
     private async Task LoadPlaybackAsync(CutsceneFile c)
     {
-        try
-        {
-            _playback = await Task.Run(() => CutscenePlayback.Load(c, _locator, _path, _locator.Find(_path)?.Archive));
-        }
-        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or NotSupportedException)
-        {
-            StageText.Text = "The animations could not be read.\n\n" + ex.Message;
-            return;
-        }
-        var p = _playback;
+        if (await Stage.LoadPlaybackAsync(c, _path, _locator) is not { } p) return;
+        _playback = p;
         ScrubSlider.Maximum = Math.Max(0.01, p.Duration);
         ScrubSlider.SmallChange = 1 / 30.0;
         ScrubSlider.LargeChange = 1;
@@ -437,170 +439,9 @@ public partial class CutsceneWindow : Window, IMessageHost
         CameraBox.SelectedItem = p.Camera?.Name;
         CameraBox.IsEnabled = p.Cameras.Count(c => c.Rig is not null) > 1;
         if (!CameraToggle.IsEnabled) CameraToggle.ToolTip = "The cutscene has no camera animation, or its rig wasn't found";
-        StageText.Text = p.Actors.Count == 0 ? "There are no body animations to play." : "Putting the actors together…";
         SetTime(0);
-        await LoadCastAsync(c, p);
-    }
-
-    /// <summary>Reads each actor's entity and meshes, shows them all in their pose at the time shown, then puts their textures on.</summary>
-    private async Task LoadCastAsync(CutsceneFile c, CutscenePlayback p)
-    {
-        var token = _closing.Token;
-        var notes = new List<string>(p.Problems);
-        List<CastMember> cast;
-        try
-        {
-            cast = await Task.Run(() => CutsceneCast.Load(c, p, _locator, notes, token), token);
-        }
-        catch (OperationCanceledException)
-        {
-            return;
-        }
-        _cast = cast;
-        _parts.Clear();
-        var parts = new List<(MeshFile Mesh, Matrix4x4 Place)>();
-        foreach (var member in cast)
-            for (int i = 0; i < member.Parts.Count; i++)
-            {
-                // placed by the pose, which puts the actor where the cutscene has it
-                parts.Add((member.Parts[i].Mesh, Matrix4x4.Identity));
-                _parts.Add((member, i));
-            }
-        View.ShowParts(parts);
-        PoseCast();
-        SetFloor(cast);
-        FitActors();
-        // again once the view has its size, as the first fit can come before it's laid out
-        _ = Dispatcher.InvokeAsync(() => { if (!View.IsLookingThrough) FitActors(); }, System.Windows.Threading.DispatcherPriority.Loaded);
-        StageText.Text = cast.Count > 0 ? "" : p.Actors.Count == 0 ? "There are no body animations to play." : "None of the actors could be put together.";
-        StageText.Visibility = cast.Count > 0 ? Visibility.Collapsed : Visibility.Visible;
-        StageNotes.Text = string.Join("\n", notes.Take(6)) + (notes.Count > 6 ? $"\n… and {notes.Count - 6} more" : "");
-        if (CameraToggle.IsChecked == true) SetTime(_time);
-
-        // the colour textures, put on as each is read, in the colours each actor's appearance gives each component
-        for (int part = 0; part < _parts.Count; part++)
-        {
-            var (member, local) = _parts[part];
-            var mesh = member.Parts[local].Mesh;
-            var (colorEntity, colorAppearance) = member.ColoredBy[local];
-            var coloring = LookTextures.Coloring(colorEntity, colorAppearance, member.DrawnBy[local].Name);
-            // a stand-in piece of the player's gear is undyed: its dye's red and blue parts as plain dark leather
-            if (coloring is null && !ReferenceEquals(colorEntity, member.Entity)) coloring = (Undyed, Undyed);
-            for (int m = 0; m < mesh.Materials.Count; m++)
-            {
-                int at = part, material = m;
-                var (picture, leaveOut) = await Task.Run(() => LookTextures.ForMaterial(mesh, material, _locator, Texture, coloring), token)
-                    .ContinueWith(t => t.IsCompletedSuccessfully ? t.Result : ((BitmapSource?)null, false), TaskScheduler.Default);
-                if (token.IsCancellationRequested) return;
-                if (leaveOut) View.LeaveOut(at, material);
-                else if (picture is not null) View.SetTexture(at, material, picture);
-            }
-        }
-    }
-
-    /// <summary>The colour the parts of an undyed piece of gear that take a dye are shown in: no colour, a little darker.</summary>
-    private static readonly ColorShift Undyed = new(0, -100, -35);
-
-    private Task<BitmapSource?> Texture(string path)
-    {
-        lock (_textures)
-        {
-            if (!_textures.TryGetValue(path, out var task))
-                _textures[path] = task = Task.Run(() => MeshTextures.Load(_locator, path, TextureSize));
-            return task;
-        }
-    }
-
-    /// <summary>
-    /// The floor grid under everywhere the actors go in the whole cutscene, at the lowest any of them gets (their feet),
-    /// so it stays put as they move about.
-    /// </summary>
-    private float _ground;
-
-    private void SetFloor(List<CastMember> cast)
-    {
-        if (cast.Count == 0 || _playback is null) return;
-        var min = new Vector3(float.MaxValue);
-        var max = new Vector3(float.MinValue);
-        var lowest = new List<float>();
-        foreach (var member in cast)
-        {
-            var rig = member.Played.Rig!;
-            var pose = new Core.Animation.BoneTransform[rig.Count];
-            var model = new Matrix4x4[rig.Count];
-            float low = float.MaxValue;
-            for (int s = 0; s <= 24; s++)
-            {
-                rig.Pose.CopyTo(pose, 0);
-                member.Played.Clip.Sample(_playback.Duration * s / 24, pose);
-                rig.ToModel(pose, model);
-                foreach (var m in model)
-                {
-                    min = Vector3.Min(min, m.Translation);
-                    max = Vector3.Max(max, m.Translation);
-                    low = Math.Min(low, m.Translation.Z);
-                }
-            }
-            lowest.Add(low);
-        }
-        // the ground is where most of the actors' feet get to: one parked below it out of sight (Ciri, before she comes in) doesn't pull it down
-        var sorted = lowest.Order().ToList();
-        _ground = sorted[sorted.Count / 2];
-        // an actor parked far from the rest (a prop out of sight) would spread the grid thin: kept to 200 m across
-        var middle = (min + max) / 2;
-        var half = Vector3.Min((max - min) / 2, new Vector3(100));
-        View.SetFloorArea(middle - half, middle + half, _ground);
-    }
-
-    /// <summary>
-    /// Turns the free camera to see the actors where they are at the time shown, leaving out any far from the rest (one
-    /// parked out of sight until it comes in), as the stage the actors were drawn on before did.
-    /// </summary>
-    private void FitActors()
-    {
-        if (_cast.Count == 0 || _playback is null)
-        {
-            View.FitToView();
-            return;
-        }
-        var boxes = new List<(Vector3 Min, Vector3 Max)>();
-        foreach (var member in _cast)
-        {
-            var rig = member.Played.Rig!;
-            var pose = rig.Pose.ToArray();
-            member.Played.Clip.Sample(_time, pose);
-            var model = new Matrix4x4[rig.Count];
-            rig.ToModel(pose, model);
-            // the body's bones, not the handles the engine keeps away from it (Trajectory, Trajectory01…, Reference, IK_…)
-            var points = model.Where((_, i) => rig.Parents[i] >= 0 && rig.Names[i] != "Reference"
-                    && !rig.Names[i].StartsWith("Trajectory", StringComparison.OrdinalIgnoreCase)
-                    && !rig.Names[i].StartsWith("IK_", StringComparison.OrdinalIgnoreCase))
-                .Select(m => m.Translation).ToList();
-            // a helper with no body, or an actor parked under the floor out of sight, isn't what's being looked at
-            if (points.Count == 0 || points.Max(q => q.Z) < _ground - 0.2f) continue;
-            // a little round the bones, for the hair, gear and swords beyond them
-            boxes.Add((points.Aggregate(Vector3.Min) - new Vector3(0.3f), points.Aggregate(Vector3.Max) + new Vector3(0.3f)));
-        }
-        if (boxes.Count == 0)
-        {
-            View.FitToView();
-            return;
-        }
-        var centres = boxes.Select(b => (b.Min + b.Max) / 2).ToList();
-        float Median(IEnumerable<float> values) { var sorted = values.Order().ToList(); return sorted[sorted.Count / 2]; }
-        var middle = new Vector3(Median(centres.Select(c => c.X)), Median(centres.Select(c => c.Y)), Median(centres.Select(c => c.Z)));
-        float spread = Math.Max(5, 3 * Median(centres.Select(c => Vector3.Distance(c, middle))));
-        var kept = boxes.Where((_, i) => Vector3.Distance(centres[i], middle) <= spread).ToList();
-        if (kept.Count == 0) kept = boxes;
-        View.FitTo(kept.Select(b => b.Min).Aggregate(Vector3.Min), kept.Select(b => b.Max).Aggregate(Vector3.Max));
-    }
-
-    /// <summary>Puts every actor's meshes in their pose at the time shown.</summary>
-    private void PoseCast()
-    {
-        if (_cast.Count == 0) return;
-        var posers = _cast.ToDictionary(m => m, m => CutsceneCast.Pose(m, _time));
-        View.Pose((part, chunk) => part < _parts.Count && posers[_parts[part].Member] is { } pose ? pose(_parts[part].Part, chunk) : null);
+        await Stage.LoadCastAsync(_closing.Token);
+        Stage.SetLines(_lines);
     }
 
     /// <summary>Shows a time everywhere: the actors' pose, the camera, the scrub bar, the timeline's playhead and the Camera tab.</summary>
@@ -608,9 +449,8 @@ public partial class CutsceneWindow : Window, IMessageHost
     {
         if (_playback is null) return;
         _time = time = Math.Clamp(time, 0, _playback.Duration);
-        PoseCast();
+        Stage.SetTime(time);
         var camera = _playback.CameraAt(time);
-        if (CameraToggle.IsChecked == true && camera is { } through) View.LookThrough(through.Position, through.Forward, through.Up, through.FieldOfView, NearPlaneAt(time));
         Timeline.Playhead = time;
         TimeText.Text = $"{CutsceneTimeline.FormatTime(time)} / {CutsceneTimeline.FormatTime(_playback.Duration)}";
         _scrubbing = true;
@@ -619,11 +459,6 @@ public partial class CutsceneWindow : Window, IMessageHost
         ShowCamera(time, camera);
         LensText.Text = camera is { } lens ? $"FOV {lens.FieldOfView:0.0}°   DOF {CameraDof.Text}" : "";
     }
-
-    /// <summary>The near clipping plane the cutscene sets for its camera at a time: its last clipping-planes event's.</summary>
-    private double? NearPlaneAt(float time) =>
-        _cutscene?.SceneEvents.Where(e => e.ClassName == "CExtAnimCutsceneSetClippingPlanesEvent" && e.Start <= time + 1e-3f && e.Source is not null)
-            .OrderBy(e => e.Start).LastOrDefault() is { Source: { } clipping } ? CutsceneFile.NearPlane(clipping) : null;
 
     /// <summary>The Camera tab: where the camera is, its field of view, and the depth of field, clipping planes and fade at a time.</summary>
     private void ShowCamera(float time, CameraPose? camera)
@@ -706,48 +541,23 @@ public partial class CutsceneWindow : Window, IMessageHost
     private void CameraToggle_Click(object sender, RoutedEventArgs e) => ApplyCameraMode();
 
     /// <summary>Looks through the cutscene's camera, in a 16:9 picture with bars around it, or gives the view back to the mouse.</summary>
-    private void ApplyCameraMode()
-    {
-        bool through = CameraToggle.IsChecked == true && _playback?.Camera?.Rig is not null;
-        Bars.Visibility = through ? Visibility.Visible : Visibility.Collapsed;
-        LayoutStage();
-        if (through) SetTime(_time);
-        else View.StopLookingThrough();
-    }
-
-    private void StageArea_SizeChanged(object sender, SizeChangedEventArgs e) => LayoutStage();
-
-    /// <summary>The view fills the stage, or through the camera is the largest 16:9 picture that fits.</summary>
-    private void LayoutStage()
-    {
-        if (Bars.Visibility == Visibility.Visible)
-        {
-            double width = Math.Min(StageArea.ActualWidth, StageArea.ActualHeight * Aspect);
-            View.Width = Math.Max(1, width);
-            View.Height = Math.Max(1, width / Aspect);
-        }
-        else
-        {
-            View.Width = double.NaN;
-            View.Height = double.NaN;
-        }
-    }
+    private void ApplyCameraMode() => Stage.ThroughCamera = CameraToggle.IsChecked == true;
 
     private void FitView_Click(object sender, RoutedEventArgs e)
     {
         CameraToggle.IsChecked = false;
         ApplyCameraMode();
-        FitActors();
+        Stage.FitActors();
     }
 
     private void Fov_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
         if (FovText is null) return;
         FovText.Text = $"{e.NewValue:0}°";
-        View.FieldOfView = e.NewValue;
+        Stage.View.FieldOfView = e.NewValue;
     }
 
-    private void Light_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e) => View.LightAngle = e.NewValue;
+    private void Light_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e) => Stage.View.LightAngle = e.NewValue;
 
     /// <summary>The shape of the picture through the camera: width over height.</summary>
     private double Aspect => AspectBox?.SelectedIndex switch { 1 => 21.0 / 9, 2 => 2.39, 3 => 4.0 / 3, _ => 16.0 / 9 };
@@ -755,7 +565,7 @@ public partial class CutsceneWindow : Window, IMessageHost
     private void Aspect_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (!IsLoaded) return;
-        LayoutStage();
+        Stage.Aspect = Aspect;
     }
 
     private void CameraBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -765,11 +575,11 @@ public partial class CutsceneWindow : Window, IMessageHost
         SetTime(_time);
     }
 
-    private void Textured_Click(object sender, RoutedEventArgs e) => View.Textured = TexturedToggle.IsChecked == true;
+    private void Textured_Click(object sender, RoutedEventArgs e) => Stage.View.Textured = TexturedToggle.IsChecked == true;
 
-    private void Wire_Click(object sender, RoutedEventArgs e) => View.Wireframe = WireToggle.IsChecked == true;
+    private void Wire_Click(object sender, RoutedEventArgs e) => Stage.View.Wireframe = WireToggle.IsChecked == true;
 
-    private void Floor_Click(object sender, RoutedEventArgs e) => View.ShowFloor = FloorToggle.IsChecked == true;
+    private void Floor_Click(object sender, RoutedEventArgs e) => Stage.View.ShowFloor = FloorToggle.IsChecked == true;
 
     // ---------------------------------------------------------------- filters
 

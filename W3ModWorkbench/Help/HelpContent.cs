@@ -353,7 +353,7 @@ A cutscene is recorded: each actor (and the camera) has an animation for its bod
 
 ## Playing it
 
-The actors are drawn as they are in the game: each put together from the entity it's made from, in the appearance the cutscene gives it, with its textures and colours, and its body animation played on its rig, so it moves where the cutscene puts it. Press **Play** (**Space**), **Home** to go back to the start, the loop button (**L**) to play it round again, or drag the bar; the line on the timeline shows where it is, and clicking or dragging on the timeline's ruler moves it. Drag the view to turn around, right-drag to move, use the wheel to come closer, and double-click (or the fit button) to see everyone again. **Through the camera** (**C**) shows it as the cutscene's camera sees it, with its field of view, in a 16:9 picture. The buttons beside it turn textures, wireframe and the floor grid on and off. The floor is laid under everywhere the actors go in the whole cutscene, at their feet.
+The actors are drawn as they are in the game: each put together from the entity it's made from, in the appearance the cutscene gives it, with its textures and colours, and its body animation played on its rig, so it moves where the cutscene puts it. Faces move too: each actor's face animation (eyes, brows, expressions) and the lip sync of each line it says, from the speech files beside the voices. Press **Play** (**Space**), **Home** to go back to the start, the loop button (**L**) to play it round again, or drag the bar; the line on the timeline shows where it is, and clicking or dragging on the timeline's ruler moves it. Drag the view to turn around, right-drag to move, use the wheel to come closer, and double-click (or the fit button) to see everyone again. **Through the camera** (**C**) shows it as the cutscene's camera sees it, with its field of view, in a 16:9 picture. The buttons beside it turn textures, wireframe and the floor grid on and off. The floor is laid under everywhere the actors go in the whole cutscene, at their feet.
 
 It plays with its sound, as REDkit does: its recorded music and effects (the audio track it names, from the game's sound caches) and each dialog line's voice (from the speech files, in English, when the line was found in the scene that plays it), mixed as they play. The music button turns the music and effects on and off and the microphone button the voices (**V**); **M** turns them both on or off. **Save sound…** in **Dialogs** saves the music and effects, each voiced line and the two mixed as WAV files.
 
@@ -437,21 +437,45 @@ Double-click a `.w2scene`, or select it and press **Enter**, to open it in the s
 
 A scene is the flow of a conversation, or of the cutscenes a quest plays: from a **Start**, through **sections** that play lines, choices, cutscenes and videos, and through branches (a **Condition** on facts, a **Switch**, a **Random** pick, a **Script** run), to an **End**. A quest starts a scene at one of its starts and goes on from the end it reaches.
 
-## The flow
+The window is laid out as REDkit's scene editor is: the scene's own tabs above, the flow below, and what's picked at the side.
 
-Every part is a card, numbered in the order the flow reaches it from the starts; parts nothing leads to come last. A section shows its lines with who says them and to whom, and its choice with each option, what it needs or does (pay, leave, only if a fact is set) and where it leads. A branch shows its condition and where each way goes. Click any **→** link to go to that part, and **Back** (**Alt+Left**, or the mouse's back button) to return. A cutscene section links to its cutscene, which opens in the cutscene viewer.
+## The screenplay
+
+**Screenplay** shows every part as a card, numbered in the order the flow reaches it from the starts; parts nothing leads to come last. A section shows its lines with who says them and to whom, and its choice with each option numbered, what it needs or does (pay, leave, only if a fact is set, picked when time runs out) and where it leads; the options the game picks out (the story's way on, REDkit's emphasised lines) are outlined. A branch shows its condition and where each way goes. Click any **→** link to go to that part, and **Back** (**Alt+Left**, or the mouse's back button) to return. A cutscene section links to its cutscene, which opens in the cutscene viewer.
+
+## The graph
+
+**Graph** (below) draws the flow: a box for each part, coloured by what it is, with its first lines, its options or its condition, and a curve from each way out to where it goes, named when the way has a name. For one of the game's own scenes with REDkit installed, it's laid out as the writers laid it out in REDkit (REDkit's copy keeps the graph; the game's doesn't); otherwise left to right by the flow. Click a box to pick the part; **Ctrl** and the wheel zoom, the right or middle button drags, and the fit button shows the whole flow.
+
+## The rest of the scene
+
+- **Starting Conditions**: who each start needs, by voice tag, and what's asked of them (must be the context actor, invulnerable, optional), with the start's settings below.
+- **Definitions**: the actors and props, with their tags, the entity each is made from (click to open it), how many lines each has, appearance filters and settings.
+- **Files**: the entities, cutscenes and dialog sets it uses.
+- **Dialog sets** (below): where the actors stand in each of the scene's dialog sets: each place, who stands there, where and which way they face, and the set's settings.
+- **Properties** (side): the part picked, from REDkit's copy for one of the game's own scenes (a note says where they came from, as in the other viewers).
+- **Cameras**: the cameras the scene defines by name, with their lens and position; click one for its settings.
+- **Animations**: every animation the sections' timelines play, by actor and kind (body, face, additive, camera), and how often.
+- **Section**: the picked section's versions: the game can time a section to each language's voices, and plays the default for any without its own.
 
 ## Hearing it
 
-The ▷ beside a line plays its voice, from the game's speech files (`enpc.w3speech` and the DLC's, in the language picked, and in English for any line it has no voice for: the game installs the voices of one language, set in Steam or GOG apart from the text). **Read through** (**R**) plays the lines from the part picked, or from the start, one after another, marking the one being spoken and following the flow from part to part. At a choice or a condition it waits for you to click the way you want, a random pick goes a random way, and it stops at an end. Click **Stop** to stop.
+The ▷ beside a line plays its voice, from the game's speech files (`enpc.w3speech` and the DLC's, in the language picked, and in English for any line it has no voice for: the game installs the voices of one language, set in Steam or GOG apart from the text). **Read through** (**R**) plays the scene from the part picked, or from the start, as the game would: it opens the **Preview** and plays each section on its timeline, its lines said at their times as its actors play it (a cutscene section its cutscene, with its music), marking the line being spoken and following the flow from part to part. At a choice it shows "Choosing…" for a moment and picks an option at random (click one meanwhile to go that way instead); at a condition or a random pick it goes a random way; and it stops at an end. Click **Stop** to stop. While it reads, the timeline's **Play** waits, and the other way round.
 
 ## Finding your way
 
-**Flow** on the left lists every part to jump to. **Search** (**Ctrl+F**) keeps the cards whose lines, speakers or names match. **Pauses** shows the pauses between lines. **Language** picks the language the lines are shown in, read from the game's strings; without the game folder set they show as string IDs. The writers' comments are shown where the game's strings have them.
+**Search** (**Ctrl+F**) keeps the cards whose lines, speakers or names match. **Pauses** shows the pauses between lines. **Language** picks the language the lines are shown in, read from the game's strings; without the game folder set they show as string IDs. The writers' comments are shown where the game's strings have them.
 
-**Actors** lists the voice tags and props the scene uses, with the entity each is made from and how many lines it has, and **Files it uses** its entities, cutscenes and dialog sets. Click one to open it where the tool has a viewer for it.
+**Timeline**, under the screenplay, shows the section picked as REDkit's timeline does (a cutscene section its cutscene, with its lines where the cutscene says them): its lines and pauses along the top, coloured by speaker, then its camera cuts (by the camera they cut to), lights and fades, and for each actor their body animations, faces and looks, timed along the lines. Animations show where they blend in and out, and events that happen at a moment are diamonds. Click an event for its properties at the side, or click the ruler to move the line that shows the time. **Play** runs the section from there, saying each line when it comes; paused part way through a line, it goes on from there. The fit button fits the section to the width; the slider zooms in to see events up close.
 
-The cameras, animations and other events each section times along its lines aren't read yet.
+**Preview**, beside the screenplay, plays the section picked in 3D, in time with the timeline: its actors put together from their entities (textured and coloured, the player in Geralt's default gear) and stood where the section's dialog set puts them, each in the idle the game picks for how they stand (from its `scene_body_animations` tables), with what the section does to them played at its times:
+
+- their body animations, changes of stance and additive gestures, and walks on and off;
+- their faces, as the game moves them: the face's pose, eyes and idle (which blinks), its expressions and nods, and each line's **lip sync**, read from the speech files beside its voice;
+- who they look at, turning their head (or their upper body too);
+- where the section moves them, and when it hides or shows them.
+
+**Through the camera** sees it through the section's cameras in a 16:9 picture, cut as its camera events cut and moved along their blends' curves, with the line being said as a subtitle and the section's fades; turn it off (or press the fit button) to look round freely. A cutscene section plays its cutscene, as the cutscene viewer does. An actor the scene gives no appearance is shown in the one its entity gives its voice tag, as a crowd character is in the game. The first time the preview opens it takes a few seconds to put the actors together. Lights, props and cloth aren't played.
 """),
 
         new(Basics, "Projects", "\uE821", """

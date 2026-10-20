@@ -1087,7 +1087,7 @@ public partial class EntityWindow : Window, IMessageHost
         string name = Path.GetFileName(path);
         if (MeshWindow.CanShow(path)) MeshWindow.Open(path, source, data, entry?.Archive, _locator, this);
         else if (CutsceneWindow.CanShow(path)) CutsceneWindow.Open(path, source, data, _locator, this, entry?.Archive);
-        else if (SceneWindow.CanShow(path)) SceneWindow.Open(path, source, data, _locator, this);
+        else if (SceneWindow.CanShow(path)) SceneWindow.Open(path, source, data, _locator, this, entry?.Archive);
         else if (CanShow(path)) Open(path, source, data, _locator, this, entry?.Archive);
         else if (BehTreeWindow.CanShow(path)) BehTreeWindow.Open(path, source, data, _locator, this, entry?.Archive);
         else if (XmlWindow.CanOpen(path)) XmlWindow.OpenData(name, $"{source}  ·  {path}", data, this, path);

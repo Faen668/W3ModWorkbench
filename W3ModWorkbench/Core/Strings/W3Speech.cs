@@ -15,11 +15,13 @@ public sealed class W3Speech
 
     public string Path { get; }
     private readonly Dictionary<uint, (long Offset, long Size)> _sounds;
+    private readonly Dictionary<uint, (long Offset, long Size)> _lipSyncs;
 
-    private W3Speech(string path, Dictionary<uint, (long, long)> sounds)
+    private W3Speech(string path, Dictionary<uint, (long, long)> sounds, Dictionary<uint, (long, long)> lipSyncs)
     {
         Path = path;
         _sounds = sounds;
+        _lipSyncs = lipSyncs;
     }
 
     public int Count => _sounds.Count;
@@ -50,14 +52,17 @@ public sealed class W3Speech
         var table = new byte[count * 40L];
         fs.ReadExactly(table);
         var sounds = new Dictionary<uint, (long, long)>(count);
+        var lipSyncs = new Dictionary<uint, (long, long)>(count);
         for (int i = 0; i < count; i++)
         {
             var entry = table.AsSpan(i * 40, 40);
             uint id = BinaryPrimitives.ReadUInt32LittleEndian(entry) ^ language.Magic;
             long offset = BinaryPrimitives.ReadInt64LittleEndian(entry[8..]), size = BinaryPrimitives.ReadInt64LittleEndian(entry[16..]);
             if (offset > 0 && size > 4 && size < 64 << 20) sounds.TryAdd(id, (offset, size));
+            long lipOffset = BinaryPrimitives.ReadInt64LittleEndian(entry[24..]), lipSize = BinaryPrimitives.ReadInt64LittleEndian(entry[32..]);
+            if (lipOffset > 0 && lipSize > 16 && lipSize < 16 << 20) lipSyncs.TryAdd(id, (lipOffset, lipSize));
         }
-        return new W3Speech(path, sounds);
+        return new W3Speech(path, sounds, lipSyncs);
     }
 
     /// <summary>A line's sound as a Wwise RIFF file, or null when this file hasn't got it.</summary>
@@ -71,6 +76,17 @@ public sealed class W3Speech
         // its length comes first
         int length = BinaryPrimitives.ReadInt32LittleEndian(data);
         return length > 0 && length <= data.Length - 4 ? data.AsSpan(4, length).ToArray() : data[4..];
+    }
+
+    /// <summary>A line's lip sync as saved (see <see cref="Animation.LipSync"/>), or null when this file hasn't got it.</summary>
+    public byte[]? LipSync(uint stringId)
+    {
+        if (!_lipSyncs.TryGetValue(stringId, out var at)) return null;
+        using var fs = new FileStream(Path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        fs.Position = at.Offset;
+        var data = new byte[at.Size];
+        fs.ReadExactly(data);
+        return data;
     }
 
     private static readonly Dictionary<string, Task<List<W3Speech>>> Cache = new(StringComparer.OrdinalIgnoreCase);

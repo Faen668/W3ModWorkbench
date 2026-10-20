@@ -1185,7 +1185,7 @@ public partial class MainWindow : Window, IMessageHost
         {
             var entry = item.Entry;
             byte[] data = await ReadAsync(entry);
-            SceneWindow.Open(entry.Path, item.BundleName, data, LocatorFor(entry), this);
+            SceneWindow.Open(entry.Path, item.BundleName, data, LocatorFor(entry), this, entry.Archive);
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
         {

@@ -38,6 +38,20 @@ public sealed class CastMember
     /// </summary>
     public required List<(int Bone, Matrix4x4 Offset)> AttachedTo { get; init; }
 
+    /// <summary>
+    /// The rig its meshes are skinned to: the body's, with its face's bones after them when it has a face
+    /// (<see cref="FaceIndex"/> says where each is), so its face animation moves the face.
+    /// </summary>
+    public required Skeleton Rig { get; init; }
+    public MimicFace? Face { get; init; }
+    public int[] FaceIndex { get; init; } = [];
+
+    /// <summary>Its voice tag, which says which of the cutscene's lines are its own.</summary>
+    public string? VoiceTag { get; init; }
+
+    /// <summary>The lip sync of each line it says, from when it says it: the cutscene's face animation leaves the lips to these.</summary>
+    public List<(float Start, LipSync Lips)> Lines { get; set; } = [];
+
     public string Name => Played.Name;
 }
 
@@ -82,51 +96,33 @@ public static class CutsceneCast
                 notes.Add($"{played.Name} isn't drawn: its entity could not be read ({ex.Message}).");
                 continue;
             }
-            // the appearance the cutscene names, else the entity's default one
+            // the appearance the cutscene names, else the one the entity gives its voice tag, else its default one
             var appearance = actor.Appearance is { } wanted
-                ? entity.Appearances.FirstOrDefault(a => a.Name.Equals(wanted, StringComparison.OrdinalIgnoreCase)) ?? entity.DefaultAppearance
-                : entity.DefaultAppearance;
+                ? entity.Appearances.FirstOrDefault(a => a.Name.Equals(wanted, StringComparison.OrdinalIgnoreCase)) ?? SceneStage.Appearance(entity, actor.VoiceTag, locator)
+                : SceneStage.Appearance(entity, actor.VoiceTag, locator);
             var look = entity.Look(appearance, locator.ReadFile);
             var (parts, drawnBy, _, missing) = EntityWindow.ReadMeshes(look, locator, token);
             var coloredBy = parts.Select(_ => (entity, appearance?.Name)).ToList();
-            var attachedTo = parts.Select(_ => (-1, Matrix4x4.Identity)).ToList();
-            if (IsPlayer(template))
-            {
-                // the game dresses the player in what's equipped; drawn here in what his default inventory gives him
-                int before = parts.Count;
-                foreach (var piece in PlayerGear.Default(locator))
-                {
-                    try
-                    {
-                        if (locator.ReadFile(piece.Template) is not { } itemData) continue;
-                        var itemEntity = EntityFile.Read(itemData);
-                        // a dyeable piece has an appearance for each dye: undyed, as it starts, is dye_default
-                        var itemAppearance = itemEntity.DefaultAppearance;
-                        var itemLook = itemEntity.Look(itemAppearance, locator.ReadFile);
-                        var (itemParts, itemDrawnBy, _, _) = EntityWindow.ReadMeshes(itemLook, locator, token);
-                        var hung = piece.Slot is { } slot ? SlotPlace(entity, look, slot, rig, locator) : (-1, Matrix4x4.Identity);
-                        parts.AddRange(itemParts);
-                        drawnBy.AddRange(itemDrawnBy);
-                        coloredBy.AddRange(itemParts.Select(_ => (itemEntity, itemAppearance?.Name)));
-                        attachedTo.AddRange(itemParts.Select(_ => hung));
-                    }
-                    catch (InvalidDataException)
-                    {
-                        // a piece that can't be read is left off
-                    }
-                }
-                if (parts.Count > before) notes.Add($"{played.Name} is the player, whom the game dresses in what's equipped: shown here with Geralt's default gear (his starting armour, swords and hairstyle).");
-            }
+            // its face's bones go on the body's rig when the cutscene moves its face, for the head to be skinned to them
+            var face = played.Face is not null ? SceneStage.Face(look, IsPlayer(template), locator) : null;
+            var (skinned, faceIndex) = face is null ? (rig, []) : SceneStage.Merge(rig, face.Skeleton);
+            var attachedTo = AttachToRig(look, parts, drawnBy, rig);
+            if (IsPlayer(template) && Dress(entity, look, rig, locator, parts, drawnBy, coloredBy, attachedTo, token))
+                notes.Add($"{played.Name} is the player, whom the game dresses in what's equipped: shown here with Geralt's default gear (his starting armour, swords and hairstyle).");
             if (parts.Count == 0)
             {
                 notes.Add($"{played.Name} isn't drawn: " + (missing > 0 ? "its meshes could not be read." : "its entity has no meshes."));
                 continue;
             }
             if (missing > 0) notes.Add($"{played.Name}: {Format.Count(missing, "mesh", "meshes")} not found or not read.");
-            var rest = new Matrix4x4[rig.Count];
-            rig.ToModel(rig.Pose, rest);
+            var rest = new Matrix4x4[skinned.Count];
+            skinned.ToModel(skinned.Pose, rest);
             cast.Add(new CastMember
             {
+                Rig = skinned,
+                Face = face,
+                FaceIndex = faceIndex,
+                VoiceTag = actor.VoiceTag,
                 Played = played,
                 Entity = entity,
                 Appearance = appearance?.Name,
@@ -134,12 +130,60 @@ public static class CutsceneCast
                 DrawnBy = drawnBy,
                 ColoredBy = coloredBy,
                 Rest = rest,
-                Maps = parts.Select(p => Skinning.MapBones(p.Mesh, rig, rest)).ToList(),
+                Maps = parts.Select(p => Skinning.MapBones(p.Mesh, skinned, rest)).ToList(),
                 Carrier = Carrier(played, rig),
                 AttachedTo = attachedTo,
             });
         }
         return cast;
+    }
+
+    /// <summary>
+    /// For each mesh, the bone of the rig it hangs from, or -1 for one that's skinned or carried: a rigid part the entity
+    /// hangs on a bone of its own rig goes with that bone, a prop's pieces each on theirs (the training pendulum's ring and
+    /// log), rather than all carried by the one bone that moves furthest.
+    /// </summary>
+    public static List<(int Bone, Matrix4x4 Offset)> AttachToRig(EntityLook look, List<(MeshFile Mesh, Matrix4x4 Place)> parts, List<EntityComponent> drawnBy, Skeleton rig)
+    {
+        var attachedTo = parts.Select(_ => (-1, Matrix4x4.Identity)).ToList();
+        for (int i = 0; i < parts.Count && i < drawnBy.Count; i++)
+            if (!parts[i].Mesh.Chunks.Any(c => c.BonesPerVertex > 0)
+                && look.Links.FirstOrDefault(l => l.Child == drawnBy[i] && l.Slot is { Length: > 0 }) is { Slot: { } slot }
+                && Array.FindIndex(rig.Names, n => n.Equals(slot, StringComparison.OrdinalIgnoreCase)) is int bone and >= 0)
+                attachedTo[i] = (bone, Matrix4x4.Identity);
+        return attachedTo;
+    }
+
+    /// <summary>
+    /// Dresses the player, whom the game dresses in what's equipped, in what his default inventory gives him: each
+    /// piece's meshes added to the lists, a sword on its slot. Whether any were added.
+    /// </summary>
+    public static bool Dress(EntityFile entity, EntityLook look, Skeleton rig, ResourceLocator locator, List<(MeshFile Mesh, Matrix4x4 Place)> parts,
+        List<EntityComponent> drawnBy, List<(EntityFile Entity, string? Appearance)> coloredBy, List<(int Bone, Matrix4x4 Offset)> attachedTo, CancellationToken token)
+    {
+        int before = parts.Count;
+        foreach (var piece in PlayerGear.Default(locator))
+        {
+            try
+            {
+                if (locator.ReadFile(piece.Template) is not { } itemData) continue;
+                var itemEntity = EntityFile.Read(itemData);
+                // a dyeable piece has an appearance for each dye: undyed, as it starts, is dye_default
+                var itemAppearance = itemEntity.DefaultAppearance;
+                var itemLook = itemEntity.Look(itemAppearance, locator.ReadFile);
+                var (itemParts, itemDrawnBy, _, _) = EntityWindow.ReadMeshes(itemLook, locator, token);
+                var hung = piece.Slot is { } slot ? SlotPlace(entity, look, slot, rig, locator) : (-1, Matrix4x4.Identity);
+                parts.AddRange(itemParts);
+                drawnBy.AddRange(itemDrawnBy);
+                coloredBy.AddRange(itemParts.Select(_ => (itemEntity, itemAppearance?.Name)));
+                attachedTo.AddRange(itemParts.Select(_ => hung));
+            }
+            catch (InvalidDataException)
+            {
+                // a piece that can't be read is left off
+            }
+        }
+        return parts.Count > before;
     }
 
     /// <summary>
@@ -211,9 +255,28 @@ public static class CutsceneCast
     /// </summary>
     public static Func<int, MeshChunk, Vector3[]?> Pose(CastMember member, float time)
     {
-        var rig = member.Played.Rig!;
+        var rig = member.Rig;
         var pose = rig.Pose.ToArray();
         member.Played.Clip.Sample(time, pose);
+        if (member.Face is { } face && member.Played.Face is { } faceClip)
+        {
+            // its face as the cutscene moves it: each control as far on as its track says, and its neck and head turned
+            var weights = new float[face.Controls.Length];
+            for (int c = 0; c < weights.Length && c < faceClip.TrackCount; c++) weights[c] = faceClip.Track(c, time);
+            // the line it's saying moves its lips
+            foreach (var (start, lips) in member.Lines)
+                if (time >= start && time - start <= lips.Duration)
+                    for (int c = 0; c < weights.Length && c < lips.TrackCount; c++) weights[c] += lips.Value(c, time - start);
+            for (int c = 0; c < weights.Length; c++) weights[c] = Math.Clamp(weights[c], -1, 1);
+            face.Apply(weights, pose, member.FaceIndex);
+            if (faceClip.BoneCount >= 2)
+            {
+                var turns = new BoneTransform[] { BoneTransform.Identity, BoneTransform.Identity };
+                faceClip.Sample(time, turns);
+                foreach (var (name, turn) in new[] { ("neck", turns[0].Rotation), ("head", turns[1].Rotation) })
+                    if (SceneStage.Bone(rig, name) is int b and >= 0) pose[b] = pose[b] with { Rotation = Quaternion.Normalize(pose[b].Rotation * turn) };
+            }
+        }
         var model = new Matrix4x4[rig.Count];
         rig.ToModel(pose, model);
         var bones = member.Parts.Select((p, i) => Skinning.BoneMatrices(p.Mesh, member.Maps[i], member.Rest, model)).ToList();

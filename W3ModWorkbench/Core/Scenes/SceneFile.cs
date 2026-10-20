@@ -20,6 +20,9 @@ public sealed class SceneLink
 
     /// <summary>What picking it does or needs, for a choice's option: "pay 100", "only if …".</summary>
     public string? Detail { get; init; }
+
+    /// <summary>A choice's option the game picks out (the main story's way on), as REDkit marks its emphasised lines.</summary>
+    public bool Emphasis { get; internal set; }
     public SceneNode? Target { get; internal set; }
 }
 
@@ -257,8 +260,11 @@ public sealed class SceneFile
                     {
                         string? needs = line["questCondition"] is RedHandle q ? Condition(file, q) : null;
                         string? does = line["action"] is RedHandle a && file.Object(a) is { } action ? Action(action) : null;
-                        choice.Options.Add(link("", line["nextLinkElement"], line["choiceLine"] as uint?,
-                            Words(Join(does, needs is null ? null : "only if " + needs, line["singleUseChoice"] is true ? "once" : null))));
+                        var option = link("", line["nextLinkElement"], line["choiceLine"] as uint?,
+                            Words(Join(does, needs is null ? null : "only if " + needs, line["singleUseChoice"] is true ? "once" : null,
+                                line["isDefaultChoice"] is true ? "picked when time runs out" : null, line["hidden"] is true ? "hidden" : null)));
+                        option.Emphasis = line["emphasisLine"] is true;
+                        choice.Options.Add(option);
                     }
                     node.Elements.Add(choice);
                     break;

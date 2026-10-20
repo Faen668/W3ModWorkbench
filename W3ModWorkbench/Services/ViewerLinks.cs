@@ -46,7 +46,7 @@ public static class ViewerLinks
         string name = Path.GetFileName(path);
         if (MeshWindow.CanShow(path)) MeshWindow.Open(path, source, data, entry?.Archive, locator, owner);
         else if (CutsceneWindow.CanShow(path)) CutsceneWindow.Open(path, source, data, locator, owner, entry?.Archive);
-        else if (SceneWindow.CanShow(path)) SceneWindow.Open(path, source, data, locator, owner);
+        else if (SceneWindow.CanShow(path)) SceneWindow.Open(path, source, data, locator, owner, entry?.Archive);
         else if (EntityWindow.CanShow(path)) EntityWindow.Open(path, source, data, locator, owner, entry?.Archive);
         else if (BehTreeWindow.CanShow(path)) BehTreeWindow.Open(path, source, data, locator, owner, entry?.Archive);
         else if (XmlWindow.CanOpen(path)) XmlWindow.OpenData(name, $"{source}  ·  {path}", data, owner, path);
