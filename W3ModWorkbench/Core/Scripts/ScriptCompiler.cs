@@ -88,6 +88,7 @@ public static partial class ScriptCompiler
             start.ArgumentList.Add(gameScripts);
             start.ArgumentList.Add("-patch=" + Path.GetFullPath(scriptsFolder));
             start.ArgumentList.Add("-out=" + work);
+            start.ArgumentList.Add("-agreetoterms"); // or wcc_lite shows its EULA window every run
 
             using var process = new Process { StartInfo = start };
             int parsing = 0;

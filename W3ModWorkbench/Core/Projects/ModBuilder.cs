@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.IO;
 using System.Text;
 using System.Text.Json;
@@ -16,8 +15,9 @@ public sealed record BuildResult(bool Success, string ModFolder, string? Failure
 /// <list type="bullet">
 /// <item>the project's scripts are compiled into <c>content\precompiled.rsblob</c>, and go in <c>content\scripts</c> as they are,
 /// as the project chooses (with both, an <c>info.json</c> tells the game to run the blob);</item>
-/// <item>the workspace's game files go in <c>content\blob0.bundle</c>, packed by REDkit's wcc_lite, with the
-/// <c>metadata.store</c> the game needs to read a mod's bundle;</item>
+/// <item>the workspace's game files go in <c>content\blob0.bundle</c> (and <c>buffers0.bundle</c>) with the
+/// <c>metadata.store</c> the game needs to read a mod's bundle, its textures' mip levels in <c>content\texture.cache</c>
+/// and its sounds in <c>content\soundspc.cache</c>, all made by <see cref="Packing.ModPacker"/> as REDkit's tools make them;</item>
 /// <item>the project's <c>.w3strings</c> files go in <c>content</c>.</item>
 /// </list>
 /// Install copies that folder into the game's mods folder, in place of the one installed before. Those are the only
@@ -29,10 +29,14 @@ public static class ModBuilder
     public const string InstallMarker = "w3bench-install.json";
 
     /// <param name="compiler">What compiles the scripts into the mod's blob, or null when nothing can.</param>
-    public static Task<BuildResult> BuildAsync(WorkbenchProject project, string? wccLite, CompilerChoice? compiler, IProgress<string>? progress, CancellationToken cancel) =>
-        Task.Run(() => Build(project, wccLite, compiler, progress, cancel), cancel);
+    /// <param name="gameFile">
+    /// Reads a game file by its path (the texture a picture in the workspace takes the place of, whose settings it
+    /// keeps), or null when the game isn't at hand.
+    /// </param>
+    public static Task<BuildResult> BuildAsync(WorkbenchProject project, CompilerChoice? compiler, Func<string, byte[]?>? gameFile, IProgress<string>? progress, CancellationToken cancel) =>
+        Task.Run(() => Build(project, compiler, gameFile, progress, cancel), cancel);
 
-    private static BuildResult Build(WorkbenchProject project, string? wccLite, CompilerChoice? compiler, IProgress<string>? progress, CancellationToken cancel)
+    private static BuildResult Build(WorkbenchProject project, CompilerChoice? compiler, Func<string, byte[]?>? gameFile, IProgress<string>? progress, CancellationToken cancel)
     {
         var log = new StringBuilder();
         var made = new List<string>();
@@ -126,22 +130,17 @@ public static class ModBuilder
                 made.Add($"content\\{Path.GetFileName(strings)}");
             }
 
-            // the workspace's game files, packed into the mod's bundle
-            var files = Directory.Exists(project.WorkspacePath)
-                ? Directory.EnumerateFiles(project.WorkspacePath, "*", SearchOption.AllDirectories).ToList() : [];
-            if (files.Count > 0)
+            // the workspace's game files, packed into the mod's bundle, its textures cooked and its sounds cached
+            if (Directory.Exists(project.WorkspacePath))
             {
-                if (string.IsNullOrEmpty(wccLite) || !File.Exists(wccLite))
-                    return Failed($"The workspace has {files.Count:N0} game file{(files.Count == 1 ? "" : "s")} to pack into the mod's bundle, which needs REDkit's wcc_lite. Set where it is in Settings (REDkit is free on Steam and GOG), then build again.");
-                progress?.Report($"Packing {files.Count:N0} file{(files.Count == 1 ? "" : "s")} into the bundle…");
-                if (Run(wccLite, ["pack", "-dir=" + project.WorkspacePath, "-outdir=" + content], log, cancel) is { } packFailure)
-                    return Failed("wcc_lite couldn't pack the workspace: " + packFailure);
-                progress?.Report("Writing the bundle's metadata…");
-                if (Run(wccLite, ["metadatastore", "-path=" + content], log, cancel) is { } metaFailure)
-                    return Failed("wcc_lite couldn't write metadata.store: " + metaFailure);
-                var bundles = Directory.GetFiles(content, "*.bundle");
-                if (bundles.Length == 0) return Failed("wcc_lite finished without making a bundle. Its log says more.");
-                made.Add($"{files.Count:N0} game file{(files.Count == 1 ? "" : "s")} in content\\{string.Join(", ", bundles.Select(Path.GetFileName))}");
+                progress?.Report("Packing the workspace…");
+                if (Packing.ModPacker.Pack(project.WorkspacePath, content, gameFile, progress, cancel) is { } packed)
+                {
+                    made.AddRange(packed.Made);
+                    foreach (string note in packed.Notes) log.AppendLine(note);
+                    made.AddRange(packed.Notes.Take(10).Select(note => "Note: " + note));
+                    if (packed.Notes.Count > 10) made.Add($"…and {packed.Notes.Count - 10:N0} more notes");
+                }
             }
             if (made.Count == 0) return Failed("There's nothing to build yet: the project has no scripts, no workspace files and no strings.");
             return new BuildResult(true, mod, null, made, log.ToString(), compiled);
@@ -154,13 +153,11 @@ public static class ModBuilder
 
     // ---------------------------------------------------------------- checking the workspace
 
-    /// <summary>Pictures a modder may put in the workspace as a texture, which go in a texture cache, not a bundle.</summary>
-    private static readonly HashSet<string> PictureExtensions = new(StringComparer.OrdinalIgnoreCase) { ".dds", ".png", ".tga", ".jpg", ".jpeg", ".bmp" };
-
     /// <summary>
-    /// Files in the workspace that a build would pack but the game wouldn't use, and why: a file that isn't cooked
-    /// (one of REDkit's source files, which the game can't load until it's cooked), or a picture meant as a texture
-    /// (a mod's textures go in its own texture cache, which Build doesn't make yet). Everything else is fine to pack.
+    /// Files in the workspace that a build would pack but the game wouldn't use, and why: REDkit's source files Build
+    /// can't cook (anything but a texture: a mesh, an entity, a cube map…), which the game can't load until they're cooked.
+    /// Textures are cooked when the mod is built (REDkit's source <c>.xbm</c> files, and pictures made into textures), and
+    /// everything else is fine to pack.
     /// <para>
     /// A cooked file is told by its objects: the game's cook marks each one with flag 0x2000, and REDkit's source files
     /// have none marked. Of the game's, its DLC's and installed mods' bundles, every file has at least one.
@@ -171,18 +168,14 @@ public static class ModBuilder
         var issues = new List<WorkspaceIssue>();
         if (!Directory.Exists(project.WorkspacePath)) return issues;
         foreach (string file in Directory.EnumerateFiles(project.WorkspacePath, "*", SearchOption.AllDirectories))
-        {
-            string gamePath = Path.GetRelativePath(project.WorkspacePath, file);
-            if (PictureExtensions.Contains(Path.GetExtension(file)))
-            {
-                issues.Add(new WorkspaceIssue(gamePath, "is a picture: a mod's textures go in its own texture cache, which Build doesn't make yet, so the game won't see it."));
-                continue;
-            }
-            if (IsUncooked(file))
-                issues.Add(new WorkspaceIssue(gamePath, "isn't cooked (it's a REDkit source file): the game won't load it until it's cooked, which Build doesn't do yet."));
-        }
+            if (IsUncooked(file) && !BuildCooks(file))
+                issues.Add(new WorkspaceIssue(Path.GetRelativePath(project.WorkspacePath, file),
+                    "isn't cooked (it's a REDkit source file): the game won't load it until it's cooked, and Build only cooks textures (.xbm) so far."));
         return issues;
     }
+
+    /// <summary>Whether Build cooks a file of this kind when it isn't cooked: textures (<c>.xbm</c>).</summary>
+    public static bool BuildCooks(string file) => file.EndsWith(".xbm", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Whether a file is a CR2W resource that hasn't been cooked: none of its objects carry the cook's flag.</summary>
     public static bool IsUncooked(string file)
@@ -205,39 +198,6 @@ public static class ModBuilder
         {
             return false;
         }
-    }
-
-    /// <summary>Runs wcc_lite. Null when it worked, otherwise what went wrong.</summary>
-    private static string? Run(string wccLite, string[] arguments, StringBuilder log, CancellationToken cancel)
-    {
-        var start = new ProcessStartInfo(wccLite)
-        {
-            WorkingDirectory = Path.GetDirectoryName(wccLite)!,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            StandardOutputEncoding = Encoding.UTF8,
-        };
-        foreach (string argument in arguments) start.ArgumentList.Add(argument);
-        lock (log) log.AppendLine("> wcc_lite " + string.Join(' ', arguments));
-        using var process = new Process { StartInfo = start };
-        string? lastError = null;
-        void OnLine(string? line)
-        {
-            if (line is null) return;
-            lock (log) log.AppendLine(line);
-            if (line.Contains("[Error]", StringComparison.OrdinalIgnoreCase)) lastError = line.Trim();
-        }
-        process.OutputDataReceived += (_, e) => OnLine(e.Data);
-        process.ErrorDataReceived += (_, e) => OnLine(e.Data);
-        process.Start();
-        process.BeginOutputReadLine();
-        process.BeginErrorReadLine();
-        using (cancel.Register(() => { try { process.Kill(entireProcessTree: true); } catch (InvalidOperationException) { } }))
-            process.WaitForExit();
-        cancel.ThrowIfCancellationRequested();
-        return process.ExitCode == 0 ? null : lastError ?? $"it stopped with exit code {process.ExitCode}.";
     }
 
     // ---------------------------------------------------------------- installing

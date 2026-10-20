@@ -808,11 +808,12 @@ public partial class MainWindow : Window, IMessageHost
             : existing.Count > 0 ? $"{project.Name} has {(existing.Count == 1 ? "that file" : "those files")} already; nothing was copied" : "Nothing was copied");
         if (failed.Count > 0) ShowError("Some files could not be copied:\n\n" + string.Join("\n", failed.Take(15)));
         // REDkit's source files can be copied, but the game can't load them uncooked: said now, not at the first build
-        var uncooked = copied.Where(p => project.GamePathOf(p) is not null && ModBuilder.IsUncooked(p)).ToList();
+        // (textures excepted, which Build cooks)
+        var uncooked = copied.Where(p => project.GamePathOf(p) is not null && ModBuilder.IsUncooked(p) && !ModBuilder.BuildCooks(p)).ToList();
         if (uncooked.Count > 0)
             ShowError($"{(uncooked.Count == 1 ? "The copy isn't" : $"{uncooked.Count} of the copies aren't")} cooked\n\n"
                 + string.Join("\n", uncooked.Take(10).Select(p => "• " + project.GamePathOf(p)))
-                + "\n\nThey're REDkit source files, which the game can't load until they're cooked, and Build doesn't cook yet. The same files from the game's bundles are cooked already.");
+                + "\n\nThey're REDkit source files, which the game can't load until they're cooked, and Build only cooks textures so far. The same files from the game's bundles are cooked already.");
         if (open && copied.Concat(existing).FirstOrDefault() is { } first) OpenProjectFile(first);
         return copied.Count > 0;
     }
@@ -2595,10 +2596,6 @@ public partial class MainWindow : Window, IMessageHost
 
     private bool _building;
 
-    /// <summary>wcc_lite, for packing the workspace: the one in Settings, or REDkit's where it's usually installed.</summary>
-    private string? WccLite() =>
-        ScriptCompiler.IsWccLite(_settings.WccLitePath) ? _settings.WccLitePath : ScriptCompiler.Find();
-
     /// <summary>Builds the open project's mod into its build folder, ready to install. True when it was built.</summary>
     public async Task<bool> BuildModAsync()
     {
@@ -2628,7 +2625,9 @@ public partial class MainWindow : Window, IMessageHost
         try
         {
             var progress = new Progress<string>(text => SetStatus($"Building {project.ModFolderName}: {text}"));
-            var result = await ModBuilder.BuildAsync(project, WccLite(), compiler, progress, CancellationToken.None);
+            // the game's files, for the textures pictures in the workspace take the place of
+            var game = new ResourceLocator(OpenArchives(), null, GameLocator.Resolve(null));
+            var result = await ModBuilder.BuildAsync(project, compiler, game.ReadFile, progress, CancellationToken.None);
             if (!result.Success)
             {
                 SetStatus($"{project.ModFolderName} wasn't built");
