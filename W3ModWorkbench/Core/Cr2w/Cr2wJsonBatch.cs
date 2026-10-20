@@ -135,15 +135,55 @@ public static class Cr2wJsonBatch
             return new Cr2wJsonResult(file, output, null, note);
         });
 
+    /// <param name="asLatest">Write files of older versions as version 164 (see <see cref="Cr2wJson.UpgradeToLatest(JsonObject, out Cr2wUpgradeReport)"/>).</param>
     public static List<Cr2wJsonResult> FromJson(IReadOnlyList<(string File, string Root)> inputs, string? outputFolder, bool overwrite,
-        IProgress<Cr2wJsonProgress>? progress = null, CancellationToken token = default) =>
+        IProgress<Cr2wJsonProgress>? progress = null, CancellationToken token = default, bool asLatest = false) =>
         Each(inputs, progress, token, (file, root) =>
         {
             string output = OutputPath(file, root, outputFolder, Cr2wName(file));
             if (!overwrite && File.Exists(output)) return new Cr2wJsonResult(file, null, $"{Path.GetFileName(output)} is there already (turn on Overwrite to replace it).");
-            Write(output, Cr2wJson.FromJsonText(File.ReadAllText(file, Encoding.UTF8)));
-            return new Cr2wJsonResult(file, output, null);
+            if (!asLatest)
+            {
+                Write(output, Cr2wJson.FromJsonText(File.ReadAllText(file, Encoding.UTF8)));
+                return new Cr2wJsonResult(file, output, null);
+            }
+            var document = Load(file);
+            byte[] data = Cr2wJson.FromJson(Cr2wJson.UpgradeToLatest(document, out var report));
+            Cr2wJson.ToJson(Cr2wFile.Read(data), out _); // what was written must read
+            Write(output, data);
+            return new Cr2wJsonResult(file, output, null, UpgradeNote(report));
         });
+
+    /// <summary>
+    /// Saves CR2W files of older versions as version 164, the way the engine would after loading them (see
+    /// <see cref="Cr2wJson.UpgradeToLatest(JsonObject, out Cr2wUpgradeReport)"/>), under <paramref name="outputFolder"/> or
+    /// over themselves (with <paramref name="overwrite"/>). Files that are 164 already are left as they are.
+    /// </summary>
+    public static List<Cr2wJsonResult> ResaveAsLatest(IReadOnlyList<(string File, string Root)> inputs, string? outputFolder, bool overwrite,
+        IProgress<Cr2wJsonProgress>? progress = null, CancellationToken token = default) =>
+        Each(inputs, progress, token, (file, root) =>
+        {
+            var source = Cr2wFile.Read(File.ReadAllBytes(file));
+            if (source.Version >= Cr2wFile.LastVersion) return new Cr2wJsonResult(file, null, null, $"It's version {source.Version} already.");
+            string output = OutputPath(file, root, outputFolder);
+            if (!overwrite && File.Exists(output))
+                return new Cr2wJsonResult(file, null, output.Equals(file, StringComparison.OrdinalIgnoreCase)
+                    ? "It would be saved over itself: turn on Overwrite to replace it, or save into a folder."
+                    : $"{Path.GetFileName(output)} is there already (turn on Overwrite to replace it).");
+            byte[] data = Cr2wJson.UpgradeToLatest(source, out var report);
+            Cr2wJson.ToJson(Cr2wFile.Read(data), out _); // what was written must read
+            Write(output, data);
+            return new Cr2wJsonResult(file, output, null, UpgradeNote(report));
+        });
+
+    /// <summary>What saving as the newest version did, in a line.</summary>
+    private static string? UpgradeNote(Cr2wUpgradeReport report)
+    {
+        if (!report.Changed) return null;
+        string note = $"version {report.FromVersion} saved as {report.ToVersion}";
+        if (report.Notes.Count > 0) note += $"; {report.Notes.Count} change{(report.Notes.Count == 1 ? "" : "s")} the engine makes: {string.Join(" ", report.Notes.Take(2))}{(report.Notes.Count > 2 ? " …" : "")}";
+        return note;
+    }
 
     /// <summary>
     /// For extracting from the game's bundles: a CR2W file as its JSON (name.env as name.env.json), or null to write it

@@ -11,7 +11,8 @@ namespace W3ModWorkbench;
 /// edits. Anything else on the command line opens the window as usual.
 /// <code>
 /// W3ModWorkbench.exe --to-json   &lt;files or folders…&gt; [--out folder] [--recursive] [--overwrite]
-/// W3ModWorkbench.exe --from-json &lt;files or folders…&gt; [--out folder] [--recursive] [--overwrite]
+/// W3ModWorkbench.exe --from-json &lt;files or folders…&gt; [--out folder] [--recursive] [--overwrite] [--as-164]
+/// W3ModWorkbench.exe --resave-164 &lt;files or folders…&gt; [--out folder] [--recursive] [--overwrite]
 /// W3ModWorkbench.exe --edit      &lt;files or folders…&gt; edits… [--class name] [--out folder] [--recursive]
 ///   edits: --copy &lt;source file&gt; &lt;path&gt;   --set &lt;path&gt; &lt;json&gt;   --remove &lt;path&gt;
 ///          --scale &lt;path&gt; &lt;factor&gt;   --offset &lt;path&gt; &lt;amount&gt;   (--fields a,b after a scale or offset)
@@ -19,7 +20,7 @@ namespace W3ModWorkbench;
 /// </summary>
 public static class CommandLine
 {
-    private static readonly string[] Commands = ["--to-json", "--from-json", "--edit", "--help-json"];
+    private static readonly string[] Commands = ["--to-json", "--from-json", "--resave-164", "--edit", "--help-json"];
 
     public static bool Handles(string[] args) => args.Length > 0 && Commands.Contains(args[0], StringComparer.OrdinalIgnoreCase);
 
@@ -41,7 +42,7 @@ public static class CommandLine
             var paths = new List<string>();
             var edits = new List<Cr2wBulkEdit>();
             string? outputFolder = null, className = null;
-            bool recursive = false, overwrite = false;
+            bool recursive = false, overwrite = false, asLatest = false;
             for (int i = 1; i < args.Length; i++)
             {
                 string a = args[i];
@@ -51,6 +52,7 @@ public static class CommandLine
                     case "--out": outputFolder = Next(); break;
                     case "--recursive" or "-r": recursive = true; break;
                     case "--overwrite": overwrite = true; break;
+                    case "--as-164": asLatest = true; break;
                     case "--class": className = Next(); break;
                     case "--copy":
                     {
@@ -105,7 +107,8 @@ public static class CommandLine
             var results = command switch
             {
                 "--to-json" => Cr2wJsonBatch.ToJson(inputs, outputFolder, overwrite),
-                "--from-json" => Cr2wJsonBatch.FromJson(inputs, outputFolder, overwrite),
+                "--from-json" => Cr2wJsonBatch.FromJson(inputs, outputFolder, overwrite, asLatest: asLatest),
+                "--resave-164" => Cr2wJsonBatch.ResaveAsLatest(inputs, outputFolder, overwrite),
                 _ => Cr2wJsonBatch.BulkEdit(inputs, edits, outputFolder),
             };
             foreach (var r in results)
@@ -141,12 +144,15 @@ public static class CommandLine
 
           --to-json   <files or folders…>  Write name.env.json beside each CR2W file (or under --out)
           --from-json <files or folders…>  Write name.env back from each name.env.json (or under --out)
+          --resave-164 <files or folders…> Save older CR2W files (REDkit's go back to version 120) as version 164,
+                                           as the engine would after loading them (under --out, or over themselves with --overwrite)
           --edit      <files or folders…>  Make edits to CR2W or JSON files; they're written over themselves, or under --out
 
         Options
           --out <folder>     Write the results under this folder, keeping the folders they were in
           --recursive, -r    Look in subfolders of the folders given
-          --overwrite        Replace files that are there already (to and from JSON)
+          --overwrite        Replace files that are there already (to and from JSON, and resaving)
+          --as-164           With --from-json: write files of older versions as version 164
           --class <name>     Edit only objects of this class (CEnvironmentDefinition)
 
         Edits, made in order; a path is property names from an object down, with [n] for an item of a list

@@ -38,6 +38,8 @@
     <EmbeddedResource Include="Highlighting\witcherscript.tmLanguage.json" />
     <!-- The engine's native classes and enums for the standalone compiler: REDkit's wcc_lite -dumprtti, slimmed -->
     <EmbeddedResource Include="Core\Scripts\Standalone\rtti.txt.gz" LogicalName="W3ModWorkbench.Core.Scripts.Standalone.rtti.txt.gz" />
+    <!-- The game's script classes and the class each extends, from the vanilla scripts: what an object of a script class is -->
+    <EmbeddedResource Include="Core\Cr2w\scriptclasses.txt.gz" LogicalName="W3ModWorkbench.Core.Cr2w.scriptclasses.txt.gz" />
   </ItemGroup>
 
   <ItemGroup>

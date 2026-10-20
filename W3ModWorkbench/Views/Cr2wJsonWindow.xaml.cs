@@ -170,7 +170,7 @@ public partial class Cr2wJsonWindow : Window, IMessageHost
         Add(Tabs.SelectedIndex == 0 ? _convertInputs : _bulkInputs, paths);
         // dropping JSON files on the convert tab means converting them back
         if (Tabs.SelectedIndex == 0 && paths.All(p => p.EndsWith(Cr2wJsonBatch.Suffix, StringComparison.OrdinalIgnoreCase))) FromJsonRadio.IsChecked = true;
-        else if (Tabs.SelectedIndex == 0 && paths.All(File.Exists) && paths.All(Cr2wJsonBatch.IsCr2w)) ToJsonRadio.IsChecked = true;
+        else if (Tabs.SelectedIndex == 0 && ResaveRadio.IsChecked != true && paths.All(File.Exists) && paths.All(Cr2wJsonBatch.IsCr2w)) ToJsonRadio.IsChecked = true;
     }
 
     private static bool IsInside(DependencyObject? element, DependencyObject container)
@@ -195,18 +195,19 @@ public partial class Cr2wJsonWindow : Window, IMessageHost
             await ShowMessage("Nothing to convert", "Add files or folders first, or drop them on the window.", MessageKind.Info);
             return;
         }
-        bool fromJson = FromJsonRadio.IsChecked == true;
+        bool fromJson = FromJsonRadio.IsChecked == true, resave = ResaveRadio.IsChecked == true, asLatest = AsLatestCheck.IsChecked == true;
         string? output = OutputFolder(ConvertFolderRadio, ConvertOutputBox);
         if (output == "") return;
         bool recursive = ConvertRecursiveCheck.IsChecked == true, overwrite = OverwriteCheck.IsChecked == true;
         var paths = _convertInputs.Select(r => r.Path).ToList();
 
         await RunAsync(ConvertButton, ConvertStopButton, ConvertProgress, ConvertStatus, ConvertResults, dryRun: false,
-            fromJson ? "Converting back" : "Converting", (progress, token) =>
+            resave ? "Resaving" : fromJson ? "Converting back" : "Converting", (progress, token) =>
             {
                 var inputs = Cr2wJsonBatch.Inputs(paths, fromJson, recursive);
                 return inputs.Count == 0 ? null
-                    : fromJson ? Cr2wJsonBatch.FromJson(inputs, output, overwrite, progress, token)
+                    : resave ? Cr2wJsonBatch.ResaveAsLatest(inputs, output, overwrite, progress, token)
+                    : fromJson ? Cr2wJsonBatch.FromJson(inputs, output, overwrite, progress, token, asLatest)
                     : Cr2wJsonBatch.ToJson(inputs, output, overwrite, progress, token);
             },
             fromJson ? "No .json files made by this tool were found there." : "No CR2W files were found there.");

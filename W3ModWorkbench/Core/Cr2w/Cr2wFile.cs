@@ -132,6 +132,8 @@ public sealed class Cr2wFile
         var export = Exports[index];
         var reader = new RedReader(this, Data, export.Offset, export.Offset + export.Size);
         var result = reader.ReadObject(export.ClassName);
+        // before 139 an object's properties end with a 0
+        if (Version < 139 && reader.Position < export.Offset + export.Size && Data[reader.Position] == 0) reader.Position++;
         result.Export = export;
         result.Tail = Data.AsSpan(reader.Position, export.Offset + export.Size - reader.Position).ToArray();
         return _objects[index] = result;

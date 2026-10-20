@@ -750,7 +750,14 @@ Some values are whole CR2W files kept inside another, as base64 starting `"Q1IyV
 Add files or folders, or drop them on the window, and choose a direction:
 
 - **CR2W to JSON** writes `name.env.json` for each `name.env`. In a folder it takes every CR2W file, whatever its extension.
-- **JSON back to CR2W** writes `name.env` from each `name.env.json` it made. Other `.json` files are left alone.
+- **JSON back to CR2W** writes `name.env` from each `name.env.json` it made. Other `.json` files are left alone. Tick **Save older files as version 164** to write JSON made from an older file as version 164 (see below).
+- **Resave as version 164** saves older CR2W files as version 164, CR2W to CR2W. Files that are 164 already are left alone. Saving beside each file replaces it, so it needs **Replace files that are there already**; or save into a folder.
+
+### Resaving as version 164
+
+REDkit's source files go back to version 120, from early in the game's making. The engine still reads them, but other tools often don't, and the oldest are in the Witcher 2's layout. Resaving makes each one what the engine itself saves after loading it: in the 164 layout, with the changes the engine makes as it loads. Curves become the list of points they are now (`dataCurveValues`). Properties the engine no longer has are left out, and renamed ones moved (`m_ssao` to `m_ssaoNV`). Types take the engine's names. Entities and components lose the world transform 162 stopped saving, and area shapes get their newer version. Each of these was worked out from REDkit's own files of every version and checked against the game's cooked copies of the same files: the game's environments, materials and the rest come out the same, but for textures the game doesn't have.
+
+Some classes keep data of their own after their properties, in a form that's changed for some of them. A file with one whose newer form isn't known yet (older behaviour graphs, some entity templates, older cube maps) isn't resaved, and the result says which class. Nothing is written that might not load. Each result also says what changed.
 
 Save **beside each file**, or **into a folder**, where each file keeps the folders it was in below the folder you added. Turn on **Replace files that are there already** to write over earlier results. Double-click a result to show it in File Explorer.
 
@@ -778,11 +785,12 @@ The same work runs with no window, so a batch file or a Python script can use it
 ```
 W3ModWorkbench.exe --to-json "D:\mymod\envs" -r --out "D:\mymod\envs json"
 W3ModWorkbench.exe --from-json "D:\mymod\envs json" -r --out "D:\mymod\envs"
+W3ModWorkbench.exe --resave-164 "D:\redkit envs" -r --out "D:\mymod\envs"
 W3ModWorkbench.exe --edit "D:\mymod\envs" -r --copy "D:\my_look.env" envParams.m_toneMapping
 W3ModWorkbench.exe --edit "D:\mymod\envs" -r --scale envParams.m_globalFog 0.8 --fields value
 ```
 
-`-r` looks in subfolders, `--out` saves under another folder, `--overwrite` replaces files that are there, and `--class` limits edits to one class. The edits are `--copy <file> <path>`, `--set <path> <json>`, `--remove <path>`, `--scale <path> <factor>` and `--offset <path> <amount>`. `--help-json` lists them all. Each file's result is printed, and the exit code is 0 when every file worked. It's a windowed program, so a Command Prompt doesn't wait for it to finish: in a batch file use `start /wait "" W3ModWorkbench.exe …`, or in PowerShell `Start-Process -Wait -NoNewWindow`. Python's `subprocess.run` waits by itself.
+`-r` looks in subfolders, `--out` saves under another folder, `--overwrite` replaces files that are there, `--as-164` makes `--from-json` write older files as version 164, and `--class` limits edits to one class. The edits are `--copy <file> <path>`, `--set <path> <json>`, `--remove <path>`, `--scale <path> <factor>` and `--offset <path> <amount>`. `--help-json` lists them all. Each file's result is printed, and the exit code is 0 when every file worked. It's a windowed program, so a Command Prompt doesn't wait for it to finish: in a batch file use `start /wait "" W3ModWorkbench.exe …`, or in PowerShell `Start-Process -Wait -NoNewWindow`. Python's `subprocess.run` waits by itself.
 
 In Python, convert to JSON, change the files with the `json` module, and convert back:
 
@@ -1227,6 +1235,8 @@ A converted file is the CR2W file's objects in order, then a `file` block with w
 - A NaN that isn't the usual one keeps its bits as `"NaN:ffffffff"` (some files have them where a value was never set).
 - `"$marker": false` on an object or struct says it was saved without the zero byte objects start with (some of REDkit's files of versions 155 to 157). Leave it as it is.
 - A curve point's properties are saved by the engine under shortened names (`me`, `ntrolPoint`, `lue`, `rveTypeL`, `rveTypeR`). The JSON calls them `time`, `controlPoint`, `value`, `curveTypeL` and `curveTypeR`, and they're saved back under the engine's names.
+- A material instance's parameters (its textures, colours and numbers) are in `$parameters`, each `{ "name", "type", "value" }`, after its properties.
+- `"$end": false` on an object of a file before version 139 says its properties don't end with the zero those files have. Leave it as it is.
 - `{"$raw": "base64"}` is a value kept as its bytes, and an object with `$data` is a whole object kept as its bytes. Leave them as they are.
 
 ## Types

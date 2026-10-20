@@ -181,8 +181,13 @@
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock Text="Convert" Style="{StaticResource Label}" />
                                     <RadioButton x:Name="ToJsonRadio" Content="CR2W to JSON" IsChecked="True" GroupName="Direction" MinWidth="0" Margin="0,0,18,0" />
-                                    <RadioButton x:Name="FromJsonRadio" Content="JSON back to CR2W" GroupName="Direction" MinWidth="0" />
+                                    <RadioButton x:Name="FromJsonRadio" Content="JSON back to CR2W" GroupName="Direction" MinWidth="0" Margin="0,0,18,0" />
+                                    <RadioButton x:Name="ResaveRadio" Content="Resave as version 164" GroupName="Direction" MinWidth="0"
+                                                 ToolTip="Save older CR2W files (REDkit's go back to version 120) as version 164, the way the engine would after loading them" />
                                 </StackPanel>
+                                <CheckBox x:Name="AsLatestCheck" Margin="110,6,0,0" MinWidth="0" Content="Save older files as version 164"
+                                          IsEnabled="{Binding IsChecked, ElementName=FromJsonRadio}"
+                                          ToolTip="JSON made from an older CR2W file is written back as version 164 rather than the version it was" />
                                 <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
                                     <TextBlock Text="Save" Style="{StaticResource Label}" />
                                     <RadioButton x:Name="ConvertBesideRadio" Content="Beside each file" GroupName="ConvertOut" MinWidth="0" Margin="0,0,18,0" IsChecked="True" />

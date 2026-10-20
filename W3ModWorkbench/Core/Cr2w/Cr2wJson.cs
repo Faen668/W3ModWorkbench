@@ -533,12 +533,70 @@ public static partial class Cr2wJson
             try
             {
                 if (export.Size > 0) Struct(node, export.ClassName, ref pos, end, path, allowShort: true, marker: !NoMarker);
+                if (context.Pad && export.Size > 0)
+                {
+                    // before 139 an object's properties end with a 0 (later versions have it before them instead)
+                    if (pos < end && _d[pos] == 0) pos++;
+                    else node["$end"] = false;
+                }
+                if (export.ClassName == "CMaterialInstance" && pos < end && Parameters(ref pos, end, path) is { } parameters)
+                    node["$parameters"] = parameters;
                 if (pos < end) node["$tail"] = Convert.ToBase64String(_d, pos, end - pos);
                 return node;
             }
             catch (Exception ex) when (ex is InvalidDataException or ArgumentOutOfRangeException or IndexOutOfRangeException or FormatException)
             {
                 return new JsonObject { ["$class"] = export.ClassName, ["$data"] = Convert.ToBase64String(_d, export.Offset, export.Size) };
+            }
+        }
+
+        /// <summary>
+        /// A material instance's parameters, which it keeps after its properties: how many, then each its size (counting
+        /// itself, the name and the type), name, type and value. Null, and nothing read, when they can't all be read.
+        /// </summary>
+        private JsonArray? Parameters(ref int pos, int end, string path)
+        {
+            int start = pos, rawValues = RawValues, rawPaths = RawPaths.Count;
+            try
+            {
+                Need(pos, 4, end);
+                int count = I32(_d, pos);
+                pos += 4;
+                if (count < 0 || count > 10_000) throw new InvalidDataException();
+                var list = new JsonArray();
+                for (int i = 0; i < count; i++)
+                {
+                    Need(pos, 8, end);
+                    int size = I32(_d, pos), valueEnd = pos + size;
+                    string name = context.NameAt(U16(_d, pos + 4)), type = context.NameAt(U16(_d, pos + 6));
+                    if (size < 8 || valueEnd > end) throw new InvalidDataException();
+                    pos += 8;
+                    string here = $"{path}.$parameters[{i}]";
+                    int valueStart = pos;
+                    JsonNode? value;
+                    try
+                    {
+                        value = Value(type, ref pos, valueEnd, tagged: true, here);
+                        if (pos != valueEnd) throw new InvalidDataException();
+                        if (!_d.AsSpan(valueStart, valueEnd - valueStart).SequenceEqual(new Encoder(context).Value(type, value, tagged: true))) throw new InvalidDataException();
+                    }
+                    catch (Exception ex) when (ex is InvalidDataException or ArgumentOutOfRangeException or IndexOutOfRangeException or FormatException or InvalidOperationException)
+                    {
+                        value = new JsonObject { ["$raw"] = Convert.ToBase64String(_d, valueStart, valueEnd - valueStart) };
+                        RawValues++;
+                        RawPaths.Add($"{here} ({type})");
+                    }
+                    pos = valueEnd;
+                    list.Add(new JsonObject { ["name"] = name, ["type"] = type, ["value"] = value });
+                }
+                return list;
+            }
+            catch (Exception ex) when (ex is InvalidDataException or ArgumentOutOfRangeException or IndexOutOfRangeException)
+            {
+                pos = start;
+                RawValues = rawValues;
+                RawPaths.RemoveRange(rawPaths, RawPaths.Count - rawPaths);
+                return null;
             }
         }
 
@@ -984,6 +1042,25 @@ public static partial class Cr2wJson
             if (node["$data"] is { } data) return Convert.FromBase64String((string)data!);
             string className = (string?)node["$class"] ?? throw new InvalidDataException("An object has no \"$class\".");
             Struct(className, node);
+            if (context.Pad && !(node["$end"] is JsonValue end && end.TryGetValue(out bool has) && !has)) _out.WriteByte(0);
+            if (node["$parameters"] is JsonArray parameters)
+            {
+                I32(parameters.Count);
+                for (int i = 0; i < parameters.Count; i++)
+                {
+                    var parameter = parameters[i] as JsonObject ?? throw new InvalidDataException($"$parameters[{i}] isn't an object.");
+                    string type = Str(parameter["type"]);
+                    long sizeAt = _out.Position;
+                    I32(0);
+                    U16(context.Name(Str(parameter["name"])));
+                    U16(context.Name(type));
+                    Write(type, parameter["value"], tagged: true, $"$parameters[{i}]");
+                    long after = _out.Position;
+                    _out.Position = sizeAt;
+                    I32((int)(after - sizeAt));
+                    _out.Position = after;
+                }
+            }
             if (node["$tail"] is { } tail) _out.Write(Convert.FromBase64String((string)tail!));
             return _out.ToArray();
         }
