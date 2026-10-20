@@ -16,9 +16,9 @@ public sealed record Cr2wBuffer(int Index, int Flags, int Offset, int DiskSize, 
 /// <summary>
 /// A file in the engine's CR2W format, which most of the game's resources use (<c>.w2mesh</c>, <c>.w2mi</c>, <c>.xbm</c>,
 /// <c>.w2ent</c>…). It's a header, tables of names, imports, objects and buffers, and each object's properties, saved as
-/// a list of (name, type, value). Versions 159 to 164 are read: the original game, the Remastered, which re-cooked the
-/// base game as 164 but still has older files in some DLC, and the oldest of REDkit's own source files (159), which are
-/// laid out the same.
+/// a list of (name, type, value). Every version there is a file of is read, 120 to 164: the game's are 161 to 164 (the
+/// Remastered re-cooked the base game as 164 but still has older files in some DLC), and REDkit's own source files go
+/// back to 120. Those up to 154 are in the older layout <see cref="Cr2wLegacy"/> reads.
 /// </summary>
 public sealed class Cr2wFile
 {
@@ -30,6 +30,12 @@ public sealed class Cr2wFile
     public IReadOnlyList<Cr2wImport> Imports { get; }
     public IReadOnlyList<Cr2wExport> Exports { get; }
     public IReadOnlyList<Cr2wBuffer> Buffers { get; }
+
+    /// <summary>The file taken apart, when it's in the older layout (version 154 and before); null otherwise.</summary>
+    public Cr2wLegacy.Layout? Legacy { get; private init; }
+
+    /// <summary>The oldest and newest versions read. Newer than the newest may well read too: the game's last change was at 164.</summary>
+    public const int FirstVersion = Cr2wLegacy.FirstVersion, LastVersion = 164;
 
     private readonly Dictionary<int, RedObject> _objects = [];
 
@@ -44,13 +50,15 @@ public sealed class Cr2wFile
     }
 
     /// <summary>Whether the bytes start like a CR2W file.</summary>
-    public static bool IsCr2w(ReadOnlySpan<byte> data) => data.Length >= 160 && BinaryPrimitives.ReadUInt32LittleEndian(data) == Magic;
+    public static bool IsCr2w(ReadOnlySpan<byte> data) => data.Length >= 44 && BinaryPrimitives.ReadUInt32LittleEndian(data) == Magic;
 
     public static Cr2wFile Read(byte[] data)
     {
         if (!IsCr2w(data)) throw new InvalidDataException("This isn't a CR2W resource file.");
         int version = I32(data, 4);
-        if (version is < 159 or > 170) throw new InvalidDataException($"CR2W version {version} isn't supported (159 to 164 are).");
+        if (version is < FirstVersion or > 170) throw new InvalidDataException($"CR2W version {version} isn't supported ({FirstVersion} to {LastVersion} are).");
+        if (version <= Cr2wLegacy.LastVersion) return ReadLegacy(data);
+        if (data.Length < 160) throw new InvalidDataException("The CR2W file is cut short.");
 
         // ten tables after the header, each an offset, a count and a checksum
         (int Offset, int Count) Table(int i) => (I32(data, 40 + i * 12), I32(data, 44 + i * 12));
@@ -102,6 +110,15 @@ public sealed class Cr2wFile
             buffers.Add(new Cr2wBuffer(I32(data, at + 4), I32(data, at), I32(data, at + 8), I32(data, at + 12), I32(data, at + 16)));
         }
         return new Cr2wFile(data, version, names, imports, exports, buffers);
+    }
+
+    private static Cr2wFile ReadLegacy(byte[] data)
+    {
+        var layout = Cr2wLegacy.Read(data);
+        string Name(int i) => i >= 0 && i < layout.Names.Count ? layout.Names[i] : "";
+        var imports = layout.Links.Select(l => new Cr2wImport(l.Path, Name(l.ClassName), l.Flags)).ToList();
+        var exports = layout.Exports.Select((e, i) => new Cr2wExport(i, Name(e.ClassName), e.Parent - 1, e.Offset, e.Size)).ToList();
+        return new Cr2wFile(data, layout.Version, [.. layout.Names], imports, exports, []) { Legacy = layout };
     }
 
     /// <summary>The first object of a class, read; null when there's none.</summary>

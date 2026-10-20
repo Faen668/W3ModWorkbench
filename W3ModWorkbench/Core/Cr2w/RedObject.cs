@@ -79,13 +79,16 @@ public readonly record struct RedBufferRef(int Index);
 /// Reads properties as the engine saves them. An object or struct is a zero byte, then (name, type, size, value) until a
 /// name of 0; the size counts its own four bytes. Arrays are a count and that many values, untagged. Types are known by
 /// their names (<c>Float</c>, <c>array:2,0,handle:IMaterial</c>…), so a property of a type this doesn't understand
-/// is kept as its bytes and skipped by its size.
+/// is kept as its bytes and skipped by its size. Files in the older layout (154 and before) leave out the zero byte,
+/// have two more bytes after a property's type before 139, and may name types the Witcher 2's way (<c>@Float</c>
+/// for an array, <c>*CEntity</c> for a handle).
 /// </summary>
 internal sealed class RedReader
 {
     private readonly Cr2wFile _file;
     private readonly byte[] _data;
     private readonly int _end;
+    private readonly bool _marker, _pad;
     public int Position;
 
     public RedReader(Cr2wFile file, byte[] data, int start, int end)
@@ -94,6 +97,8 @@ internal sealed class RedReader
         _data = data;
         Position = start;
         _end = end;
+        _marker = Cr2wLegacy.HasObjectMarker(file.Version);
+        _pad = Cr2wLegacy.HasPropertyPad(file.Version);
     }
 
     private string Name(int index) => index >= 0 && index < _file.Names.Count ? _file.Names[index] : $"#{index}";
@@ -103,14 +108,18 @@ internal sealed class RedReader
         if (end < 0) end = _end;
         var result = new RedObject(className);
         if (Position >= end) return result;
-        Need(1);
-        if (_data[Position] != 0) throw new InvalidDataException($"A {className} doesn't start the way properties do.");
-        Position++;
+        if (_marker)
+        {
+            Need(1);
+            if (_data[Position] != 0) throw new InvalidDataException($"A {className} doesn't start the way properties do.");
+            Position++;
+        }
         while (Position + 2 <= end)
         {
             int name = U16();
             if (name == 0) break;
             int type = U16();
+            if (_pad) U16();
             int size = I32();
             int valueEnd = Position - 4 + size;
             if (size < 4 || valueEnd > end) throw new InvalidDataException($"A property of {className} is longer than the object.");
@@ -199,8 +208,8 @@ internal sealed class RedReader
             case "Uint8": return Byte();
             case "Int16": return (short)U16();
             case "Uint16": return (ushort)U16();
-            case "Int32": return I32();
-            case "Uint32": return (uint)I32();
+            case "Int32" or "Int": return I32();
+            case "Uint32" or "Uint": return (uint)I32();
             case "Int64": Need(8); Position += 8; return BinaryPrimitives.ReadInt64LittleEndian(_data.AsSpan(Position - 8));
             case "Uint64": Need(8); Position += 8; return BinaryPrimitives.ReadUInt64LittleEndian(_data.AsSpan(Position - 8));
             case "Float": Need(4); Position += 4; return BinaryPrimitives.ReadSingleLittleEndian(_data.AsSpan(Position - 4));
@@ -211,11 +220,11 @@ internal sealed class RedReader
             case "DeferredDataBuffer": return new RedBufferRef(U16());
             case "CGUID": Need(16); Position += 16; return new Guid(_data.AsSpan(Position - 16, 16));
         }
-        if (type.StartsWith("handle:", StringComparison.Ordinal) || type.StartsWith("ptr:", StringComparison.Ordinal))
+        if (type.StartsWith("handle:", StringComparison.Ordinal) || type.StartsWith("ptr:", StringComparison.Ordinal) || type.StartsWith('*') || type.StartsWith('#'))
             return new RedHandle(I32(), false);
-        if (type.StartsWith("soft:", StringComparison.Ordinal))
+        if (type.StartsWith("soft:", StringComparison.Ordinal) || type.StartsWith('~'))
             return new RedHandle(U16(), true);
-        if (type.StartsWith("array:", StringComparison.Ordinal) || type.StartsWith("static:", StringComparison.Ordinal))
+        if (type.StartsWith("array:", StringComparison.Ordinal) || type.StartsWith("static:", StringComparison.Ordinal) || type.StartsWith('@'))
         {
             // array:2,0,T and static:N,T; the element type is after the last comma that isn't inside it
             string element = ElementType(type);
@@ -246,7 +255,7 @@ internal sealed class RedReader
             }
             return new RedEnum(values);
         }
-        if (end >= 0 && end - Position >= 1 && _data[Position] != 0)
+        if (_marker && end >= 0 && end - Position >= 1 && _data[Position] != 0)
             throw new InvalidDataException(); // not a struct: kept as its bytes
         return ReadObject(type, end >= 0 ? end : _end);
     }
@@ -256,7 +265,8 @@ internal sealed class RedReader
 
     private static string ElementType(string type)
     {
-        // "array:2,0,handle:IMaterial" → "handle:IMaterial"; "array:2,0,array:2,0,Float" → "array:2,0,Float"
+        // "array:2,0,handle:IMaterial" → "handle:IMaterial"; "array:2,0,array:2,0,Float" → "array:2,0,Float"; "@*CEntity" → "*CEntity"
+        if (type.StartsWith('@')) return type[1..];
         int colon = type.IndexOf(':');
         string rest = type[(colon + 1)..];
         for (int i = 0, commas = type.StartsWith("static:") ? 1 : 2; i < rest.Length; i++)

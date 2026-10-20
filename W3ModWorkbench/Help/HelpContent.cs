@@ -269,7 +269,7 @@ So the dedicated viewers (textures, texture arrays, meshes, entities and behavio
 
 - **Properties from REDkit's source file**, with its path in `r4data`: everything REDkit shows.
 - **REDkit has no source file for this…**: REDkit hasn't got a copy of this one (it keeps only some meshes, for one), so only what the cooked file keeps is shown.
-- **REDkit has a source file… in an older format**: REDkit's copy is from early in the game's making (an old CR2W version, such as some fonts), which the tool can't read yet, so the cooked file's properties are shown.
+- **REDkit has a source file… in an older format**: REDkit's copy couldn't be read, so the cooked file's properties are shown. Every CR2W version REDkit has (back to 120, from early in the game's making) is read now, so this should only be a damaged file.
 - **REDkit isn't installed**: install it (it's free on Steam and GOG for owners of the game) to see the properties cooking leaves out. It's found from the wcc_lite set in Settings, or in the usual Steam and GOG folders.
 - **Properties from this file itself**: the file is from a mod, a project or somewhere on disk, so its own properties are shown, as that's what you're looking at. REDkit's copy would show the game's version instead.
 
@@ -751,7 +751,9 @@ Add files or folders, or drop them on the window, and choose a direction:
 
 Save **beside each file**, or **into a folder**, where each file keeps the folders it was in below the folder you added. Turn on **Replace files that are there already** to write over earlier results. Double-click a result to show it in File Explorer.
 
-Every file is checked as it's converted: its JSON must turn back into exactly the same bytes, or it isn't written. A value the converter doesn't understand is kept as its bytes (`{"$raw": "…"}`) so it still survives, it just can't be edited; the result says which. Across the game's files that's rare.
+Every CR2W version there is a file of is converted: the game's own (161 to 164) and all of REDkit's source files in `r4data`, back to version 120 from early in the game's making, including those saved in the older layout (154 and before). Each converts back to the version it was.
+
+Every file is checked as it's converted: its JSON must turn back into exactly the same bytes, or it isn't written. A value the converter doesn't understand is kept as its bytes (`{"$raw": "…"}`) so it still survives, it just can't be edited; the result says which. Of the game's and REDkit's 438,000 CR2W files, 12 have one: some cooked terrain data in 10 worlds, and a buffer in 2 of REDkit's oldest animation files.
 
 ## Bulk edit
 
@@ -1216,7 +1218,11 @@ A converted file is the CR2W file's objects in order, then a `file` block with w
 - Structs are objects and arrays are lists. Numbers, `true`/`false` and strings are what they look like; a name (`CName`) is a string too.
 - An enum is its value's name (`"SCT_Color"`); a flags enum is a list of names.
 - A reference is `null`, `"export:N"` for another object in the file (counting from 0), or `"import:path"` for another file, such as a texture. Point it at a new path and the file gains the import.
-- A transform is `{ "position": {X, Y, Z}, "rotation": {Pitch, Yaw, Roll}, "scale": {X, Y, Z} }`, each part optional. A variant (`CVariant`) is `{ "type": "Float", "value": 1 }`. Byte arrays and data buffers are base64 strings.
+- A transform is `{ "position": {X, Y, Z}, "rotation": {Pitch, Yaw, Roll}, "scale": {X, Y, Z} }`, each part optional; a bone's (`EngineQsTransform`) has its rotation as a quaternion, `{X, Y, Z, W}`. A variant (`CVariant`) is `{ "type": "Float", "value": 1 }`. Byte arrays and data buffers are base64 strings.
+- An entity reference (`EntityHandle`) is `{ "type": 1, "guids": [two GUIDs] }`, or `{ "type": 2, "idTag": { "type", "guid" } }`. A physical collision is `{ "version": 2, "types": [collision type names], "masks": [two numbers] }`; the masks are what the engine works out from the names.
+- A tag list the engine saved empty in its other way is `null` rather than `[]`; both are no tags.
+- A NaN that isn't the usual one keeps its bits as `"NaN:ffffffff"` (some files have them where a value was never set).
+- `"$marker": false` on an object or struct says it was saved without the zero byte objects start with (some of REDkit's files of versions 155 to 157). Leave it as it is.
 - A curve point's properties are saved by the engine under shortened names (`me`, `ntrolPoint`, `lue`, `rveTypeL`, `rveTypeR`). The JSON calls them `time`, `controlPoint`, `value`, `curveTypeL` and `curveTypeR`, and they're saved back under the engine's names.
 - `{"$raw": "base64"}` is a value kept as its bytes, and an object with `$data` is a whole object kept as its bytes. Leave them as they are.
 
@@ -1226,7 +1232,15 @@ A property's engine type isn't repeated on every value. `file.types` lists the t
 
 ## The file block
 
-`names` and `imports` are the file's tables, in order, so the numbers its objects use stay right; new names and imports go on the end. The rest (`version`, `flags`, `buffers`, `trailer`, `stringOrder`, `nameHashes`, `latin1`, and `$flags`, `$parent` and `$crc` on objects) keeps the header and layout the file had, so it comes back byte for byte. Leave them as they are.
+`names` and `imports` are the file's tables, in order, so the numbers its objects use stay right; new names and imports go on the end. The rest (`version`, `flags`, `buffers`, `trailer`, `stringOrder`, `nameHashes`, `latin1`, `tableHeaders`, and `$flags`, `$parent` and `$crc` on objects) keeps the header and layout the file had, so it comes back byte for byte. Leave them as they are.
+
+## Older files
+
+REDkit's oldest source files (CR2W version 154 and before) are in the Witcher 2's layout, and their JSON says so in a few places:
+
+- Types can have the Witcher 2's names: `@Float` is an array of floats, `*CEntity` and `#CEntity` references, `~CEntityTemplate` a soft reference, `Uint` and `Int` are `Uint32` and `Int32`.
+- A soft reference is to one of the file's `dependencies` (in the file block) rather than its imports, but is written `"import:path"` all the same.
+- Objects can have `$name`, `$extra` and `$template`, fields of that layout's object table, and the file block `dependencyCount`. Leave them as they are.
 """),
 
         new(Advanced, "Enum names", "", """

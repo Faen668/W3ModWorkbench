@@ -28,7 +28,7 @@ public sealed record Cr2wJsonReport(int RawValues, int RawObjects, IReadOnlyList
 /// the engine's own type list. The file block also keeps the header, names and imports, so indices stay right.
 /// </para>
 /// </summary>
-public static class Cr2wJson
+public static partial class Cr2wJson
 {
     public const string FormatName = "w3mw-cr2w-json";
     public const int FormatVersion = 1;
@@ -65,13 +65,14 @@ public static class Cr2wJson
 
     public static JsonObject ToJson(Cr2wFile file, out Cr2wJsonReport report, string? source = null)
     {
+        if (file.Legacy is { } layout) return ToJsonLegacy(file, layout, out report, source);
         var d = file.Data;
         (int Offset, int Count) Table(int i) => (I32(d, 40 + i * 12), I32(d, 44 + i * 12));
         for (int i = 6; i < 10; i++)
             if (Table(i).Count > 0) throw new NotSupportedException("This file has embedded files of its own, which can't be converted yet.");
 
         var (fileNames, latin1) = Strings(d);
-        var context = new FileContext(fileNames, fileNames.Count == file.Names.Count
+        var context = new FileContext(file.Version, fileNames, fileNames.Count == file.Names.Count
             ? file.Imports.Select((i, n) => (Text(d, I32(d, Table(2).Offset + n * 8), latin1), i.ClassName, i.Flags)).ToList()
             : throw new InvalidDataException("The names table can't be read."), adding: false);
         var decoder = new Decoder(file, context);
@@ -82,35 +83,14 @@ public static class Cr2wJson
             int at = exportsAt + export.Index * 24;
             int flags = U16(d, at + 2), parent = I32(d, at + 4), template = I32(d, at + 16);
             uint crc = (uint)I32(d, at + 20);
-            var data = d.AsSpan(export.Offset, export.Size);
-            var node = decoder.Export(export, $"objects[{export.Index}]");
-            if (node["$data"] is null)
+            objects.Add(ObjectNode(decoder, context, export, d, head =>
             {
-                // the whole object must come back the same, its tail included; when it wouldn't, keep its bytes
-                byte[]? again = null;
-                try { again = new Encoder(context).Export(node); }
-                catch (Exception ex) when (ex is InvalidDataException or FormatException or InvalidOperationException) { }
-                if (again is null || !data.SequenceEqual(again))
-                {
-                    node = new JsonObject { ["$class"] = export.ClassName, ["$data"] = Convert.ToBase64String(data) };
-                    decoder.RawObjects++;
-                    decoder.RawPaths.Add($"objects[{export.Index}] ({export.ClassName})");
-                }
-            }
-            // the export entry's fields that aren't the usual ones, after $class and before the properties
-            var head = new JsonObject { ["$class"] = node["$class"]!.DeepClone() };
-            if (parent != 0) head["$parent"] = parent - 1;
-            if (flags != 0) head["$flags"] = flags;
-            if (template != 0) head["$template"] = template;
-            uint actual = Checksums.Crc32(data);
-            if (crc != actual) head["$crc"] = new JsonArray(crc, actual);
-            foreach (var (key, value) in node.ToList())
-            {
-                if (key == "$class") continue;
-                node.Remove(key);
-                head[key] = value;
-            }
-            objects.Add(head);
+                if (parent != 0) head["$parent"] = parent - 1;
+                if (flags != 0) head["$flags"] = flags;
+                if (template != 0) head["$template"] = template;
+                uint actual = Checksums.Crc32(d.AsSpan(export.Offset, export.Size));
+                if (crc != actual) head["$crc"] = new JsonArray(crc, actual);
+            }));
         }
 
         var names = new JsonArray();
@@ -172,6 +152,7 @@ public static class Cr2wJson
             fileBlock["propertyCount"] = propertyCount;
             fileBlock["properties"] = Convert.ToBase64String(properties);
         }
+        if (TableQuirks(d) is { } quirks) fileBlock["tableHeaders"] = quirks;
         fileBlock["types"] = types;
 
         var root = new JsonObject { ["$format"] = FormatName, ["$formatVersion"] = FormatVersion };
@@ -180,6 +161,140 @@ public static class Cr2wJson
         root["file"] = fileBlock;
         report = new Cr2wJsonReport(decoder.RawValues, decoder.RawObjects, decoder.RawPaths);
         return root;
+    }
+
+    /// <summary>
+    /// An object as JSON: its class, then its export entry's fields that aren't the usual ones (<paramref name="entry"/>
+    /// adds them), then its properties. The whole object must come back the same, its tail included; when it wouldn't,
+    /// it's kept as its bytes.
+    /// </summary>
+    private static JsonObject ObjectNode(Decoder decoder, FileContext context, Cr2wExport export, byte[] d, Action<JsonObject> entry)
+    {
+        var data = d.AsSpan(export.Offset, export.Size);
+        int rawValues = decoder.RawValues, rawPaths = decoder.RawPaths.Count;
+        var node = decoder.Export(export, $"objects[{export.Index}]");
+        bool same = SameAgain(node, data, context);
+        if (context.Marker && (!same || decoder.RawValues > rawValues))
+        {
+            // some files of 155 to 157 leave out the zero byte objects start with: read it that way too, and keep
+            // whichever comes back the same with fewer values kept as bytes
+            int firstValues = decoder.RawValues;
+            var firstPaths = decoder.RawPaths.GetRange(rawPaths, decoder.RawPaths.Count - rawPaths);
+            decoder.RawValues = rawValues;
+            decoder.RawPaths.RemoveRange(rawPaths, decoder.RawPaths.Count - rawPaths);
+            decoder.NoMarker = true;
+            var other = decoder.Export(export, $"objects[{export.Index}]");
+            decoder.NoMarker = false;
+            if (SameAgain(other, data, context) && (!same || decoder.RawValues < firstValues)) { node = other; same = true; }
+            else
+            {
+                decoder.RawValues = firstValues;
+                decoder.RawPaths.RemoveRange(rawPaths, decoder.RawPaths.Count - rawPaths);
+                decoder.RawPaths.AddRange(firstPaths);
+            }
+        }
+        if (!same)
+        {
+            node = new JsonObject { ["$class"] = export.ClassName, ["$data"] = Convert.ToBase64String(data) };
+            decoder.RawValues = rawValues;
+            decoder.RawPaths.RemoveRange(rawPaths, decoder.RawPaths.Count - rawPaths);
+            decoder.RawObjects++;
+            decoder.RawPaths.Add($"objects[{export.Index}] ({export.ClassName})");
+        }
+        var head = new JsonObject { ["$class"] = node["$class"]!.DeepClone() };
+        entry(head);
+        foreach (var (key, value) in node.ToList())
+        {
+            if (key == "$class") continue;
+            node.Remove(key);
+            head[key] = value;
+        }
+        return head;
+    }
+
+    /// <summary>Whether an object read as JSON comes back as the same bytes.</summary>
+    private static bool SameAgain(JsonObject node, ReadOnlySpan<byte> data, FileContext context)
+    {
+        if (node["$data"] is not null) return false;
+        try { return data.SequenceEqual(new Encoder(context).Export(node)); }
+        catch (Exception ex) when (ex is InvalidDataException or FormatException or InvalidOperationException) { return false; }
+    }
+
+    /// <summary>
+    /// A file in the older layout (154 and before). Its objects are as a newer file's; the file block has what that
+    /// layout has instead of tables: the names, the imports, the dependencies and the trailer.
+    /// </summary>
+    private static JsonObject ToJsonLegacy(Cr2wFile file, Cr2wLegacy.Layout layout, out Cr2wJsonReport report, string? source)
+    {
+        var d = file.Data;
+        var context = new FileContext(file.Version, layout.Names, file.Imports.Select(i => (i.Path, i.ClassName, i.Flags)).ToList(), adding: false)
+        {
+            Dependencies = [.. layout.Dependencies],
+        };
+        var decoder = new Decoder(file, context);
+        var objects = new JsonArray();
+        foreach (var export in file.Exports)
+        {
+            var e = layout.Exports[export.Index];
+            objects.Add(ObjectNode(decoder, context, export, d, head =>
+            {
+                if (e.Parent != 0) head["$parent"] = e.Parent - 1;
+                if (e.Flags != 0) head["$flags"] = e.Flags;
+                if (e.Template != 0) head["$template"] = e.Template;
+                if (e.Name.Length > 0) head["$name"] = e.Name;
+                if (e.Extra.AsSpan().ContainsAnyExcept((byte)0)) head["$extra"] = Convert.ToBase64String(e.Extra);
+            }));
+        }
+
+        var imports = new JsonArray();
+        foreach (var import in context.Imports)
+        {
+            var entry = new JsonObject { ["path"] = import.Path, ["class"] = import.ClassName };
+            if (import.Flags != 0) entry["flags"] = import.Flags;
+            imports.Add(entry);
+        }
+        var types = new JsonObject();
+        foreach (var (key, type) in context.Types) types[key] = type;
+        var fileBlock = new JsonObject
+        {
+            ["version"] = file.Version,
+            ["flags"] = layout.Flags,
+            ["names"] = new JsonArray([.. layout.Names.Select(n => (JsonNode)n)]),
+            ["imports"] = imports,
+        };
+        if (layout.Dependencies.Count > 0) fileBlock["dependencies"] = new JsonArray([.. layout.Dependencies.Select(n => (JsonNode)n)]);
+        if (layout.DependencyCount != layout.Dependencies.Count + 1) fileBlock["dependencyCount"] = layout.DependencyCount;
+        if (layout.DataEnd < d.Length) fileBlock["trailer"] = Convert.ToBase64String(d, layout.DataEnd, d.Length - layout.DataEnd);
+        fileBlock["types"] = types;
+
+        var root = new JsonObject { ["$format"] = FormatName, ["$formatVersion"] = FormatVersion };
+        if (source is not null) root["$source"] = source;
+        root["objects"] = objects;
+        root["file"] = fileBlock;
+        report = new Cr2wJsonReport(decoder.RawValues, decoder.RawObjects, decoder.RawPaths);
+        return root;
+    }
+
+    /// <summary>The size in bytes of each of the ten tables' entries; the strings table's count is its size.</summary>
+    private static readonly int[] TableEntrySizes = [1, 8, 8, 16, 24, 24, 0, 0, 0, 0];
+
+    /// <summary>
+    /// The table headers that aren't what writing the file would give: an empty table with an offset or a checksum
+    /// (some tools leave them), or a checksum that isn't of the table's bytes (REDkit saves a few like that). Each is
+    /// kept as [offset, checksum, the checksum of the bytes]; null when there are none.
+    /// </summary>
+    private static JsonObject? TableQuirks(byte[] d)
+    {
+        var quirks = new JsonObject();
+        for (int i = 0; i < 6; i++)
+        {
+            int offset = I32(d, 40 + i * 12), count = I32(d, 44 + i * 12);
+            uint crc = (uint)I32(d, 48 + i * 12);
+            uint actual = count == 0 ? 0 : Checksums.Crc32(d.AsSpan(offset, count * TableEntrySizes[i]));
+            if ((count == 0 && offset != 0) || crc != actual)
+                quirks[i.ToString(CultureInfo.InvariantCulture)] = new JsonArray(offset, crc, actual);
+        }
+        return quirks.Count > 0 ? quirks : null;
     }
 
     // ---------------------------------------------------------------- from JSON
@@ -206,18 +321,25 @@ public static class Cr2wJson
         var imports = new List<(string, string, int)>();
         foreach (var entry in fileBlock["imports"] as JsonArray ?? [])
             imports.Add(((string?)entry?["path"] ?? "", (string?)entry?["class"] ?? "", (int?)entry?["flags"] ?? 0));
+        int version = (int?)fileBlock["version"] ?? 164;
+        if (version is < Cr2wFile.FirstVersion or > 170)
+            throw new InvalidDataException($"CR2W version {version} can't be written ({Cr2wFile.FirstVersion} to {Cr2wFile.LastVersion} can).");
+        if (version <= Cr2wLegacy.LastVersion) return FromJsonLegacy(fileBlock, objects, version, names, imports);
         byte[] properties = fileBlock["properties"] is { } p ? Convert.FromBase64String((string)p!) : new byte[16];
         int propertyCount = (int?)fileBlock["propertyCount"] ?? properties.Length / 16;
         byte[] trailer = fileBlock["trailer"] is { } t ? Convert.FromBase64String((string)t!) : [];
 
-        var builder = Cr2wBuilder.Create((int?)fileBlock["version"] ?? 164, (int?)fileBlock["flags"] ?? 0, (long?)fileBlock["timestamp"] ?? 0,
+        var builder = Cr2wBuilder.Create(version, (int?)fileBlock["flags"] ?? 0, (long?)fileBlock["timestamp"] ?? 0,
             (int?)fileBlock["build"] ?? 0, (int?)fileBlock["chunks"] ?? 6, names, imports, properties, propertyCount, trailer,
             (fileBlock["latin1"] as JsonArray ?? []).Select(n => (string?)n ?? ""),
             (fileBlock["nameHashes"] as JsonObject ?? []).Where(h => int.TryParse(h.Key, out _) && h.Value is not null)
                 .ToDictionary(h => int.Parse(h.Key, CultureInfo.InvariantCulture), h => (uint)h.Value!),
-            (fileBlock["stringOrder"] as JsonArray)?.Select(n => (int?)n ?? -1).ToList());
+            (fileBlock["stringOrder"] as JsonArray)?.Select(n => (int?)n ?? -1).ToList(),
+            (fileBlock["tableHeaders"] as JsonObject ?? []).Where(h => int.TryParse(h.Key, out _) && h.Value is JsonArray { Count: 3 })
+                .ToDictionary(h => int.Parse(h.Key, CultureInfo.InvariantCulture),
+                    h => ((int)h.Value![0]!, (uint)h.Value![1]!, (uint)h.Value![2]!)));
 
-        var context = new FileContext(names, imports, adding: true) { Builder = builder };
+        var context = new FileContext(version, names, imports, adding: true) { Builder = builder };
         foreach (var (key, type) in fileBlock["types"] as JsonObject ?? [])
             if ((string?)type is { } text) context.Types[key] = text;
 
@@ -243,6 +365,34 @@ public static class Cr2wJson
         return builder.Build();
     }
 
+    /// <summary>A file in the older layout (154 and before), from the file block <see cref="ToJsonLegacy"/> makes.</summary>
+    private static byte[] FromJsonLegacy(JsonObject fileBlock, JsonArray objects, int version, List<string> names, List<(string, string, int)> imports)
+    {
+        var dependencies = (fileBlock["dependencies"] as JsonArray ?? []).Select(n => (string?)n ?? "").ToList();
+        var context = new FileContext(version, names, imports, adding: true) { Dependencies = dependencies };
+        foreach (var (key, type) in fileBlock["types"] as JsonObject ?? [])
+            if ((string?)type is { } text) context.Types[key] = text;
+
+        var exports = new List<(Cr2wLegacy.Export, byte[])>();
+        for (int i = 0; i < objects.Count; i++)
+        {
+            var node = objects[i] as JsonObject ?? throw new InvalidDataException($"objects[{i}] isn't an object.");
+            string className = (string?)node["$class"] ?? throw new InvalidDataException($"objects[{i}] has no \"$class\".");
+            byte[] data;
+            try { data = new Encoder(context).Export(node); }
+            catch (InvalidDataException ex) { throw new InvalidDataException($"objects[{i}] ({className}): {ex.Message}"); }
+            int parent = node["$parent"] is { } at ? (int)at! + 1 : 0;
+            byte[] extra = node["$extra"] is { } e ? Convert.FromBase64String((string)e!) : new byte[8];
+            if (extra.Length != 8) throw new InvalidDataException($"objects[{i}] ({className}): \"$extra\" should be 8 bytes.");
+            exports.Add((new Cr2wLegacy.Export(context.Name(className), parent, 0, data.Length, (int?)node["$flags"] ?? 0,
+                (int?)node["$template"] ?? 0, (string?)node["$name"] ?? "", extra), data));
+        }
+        var links = context.Imports.Select(i => new Cr2wLegacy.Link(i.Path, context.Name(i.ClassName), i.Flags)).ToList();
+        int dependencyCount = (int?)fileBlock["dependencyCount"] ?? dependencies.Count + 1;
+        byte[] trailer = fileBlock["trailer"] is { } t ? Convert.FromBase64String((string)t!) : [];
+        return Cr2wLegacy.Write(version, (int?)fileBlock["flags"] ?? 0, context.Names, links, dependencies, dependencyCount, exports, trailer);
+    }
+
     // ---------------------------------------------------------------- shared
 
     /// <summary>The names, imports and property types both directions work with.</summary>
@@ -251,15 +401,22 @@ public static class Cr2wJson
         public readonly List<string> Names;
         public readonly List<(string Path, string ClassName, int Flags)> Imports;
         public readonly Dictionary<string, string> Types = new(StringComparer.Ordinal);
+        /// <summary>The newer layout's writer, which keeps the names and imports itself; null for the older layout.</summary>
         public Cr2wBuilder? Builder;
+        /// <summary>Whether objects and structs start with a zero byte, and whether properties have two bytes after their type.</summary>
+        public readonly bool Marker, Pad;
+        /// <summary>The older layout's dependencies, which its soft references are to; null for the newer layout.</summary>
+        public List<string>? Dependencies;
         private readonly Dictionary<string, int> _nameIndex = new(StringComparer.Ordinal);
         private readonly bool _adding;
 
-        public FileContext(IReadOnlyList<string> names, List<(string, string, int)> imports, bool adding)
+        public FileContext(int version, IReadOnlyList<string> names, List<(string, string, int)> imports, bool adding)
         {
             Names = [.. names];
             Imports = imports;
             _adding = adding;
+            Marker = Cr2wLegacy.HasObjectMarker(version);
+            Pad = Cr2wLegacy.HasPropertyPad(version);
             for (int i = 0; i < Names.Count; i++) _nameIndex.TryAdd(Names[i], i);
         }
 
@@ -269,10 +426,20 @@ public static class Cr2wJson
         {
             if (_nameIndex.TryGetValue(text, out int index)) return index;
             if (!_adding) throw new InvalidDataException($"The name \"{text}\" isn't in the file.");
-            index = Builder!.Name(text);
+            index = Builder?.Name(text) ?? Names.Count;
             Names.Add(text);
             _nameIndex[text] = index;
             return index;
+        }
+
+        /// <summary>A dependency's 0-based index by its path, adding it when the file doesn't have it.</summary>
+        public int Dependency(string path)
+        {
+            int index = Dependencies!.FindIndex(d => d.Equals(path, StringComparison.OrdinalIgnoreCase));
+            if (index >= 0) return index;
+            if (!_adding) throw new InvalidDataException($"\"{path}\" isn't one of the file's dependencies.");
+            Dependencies.Add(path);
+            return Dependencies.Count - 1;
         }
 
         /// <summary>An import's 0-based index by its path, adding it (of the class the reference is to) when the file doesn't have it.</summary>
@@ -281,7 +448,8 @@ public static class Cr2wJson
             int index = Imports.FindIndex(i => i.Path.Equals(path, StringComparison.OrdinalIgnoreCase));
             if (index >= 0) return index;
             if (!_adding) throw new InvalidDataException($"\"{path}\" isn't one of the file's imports.");
-            index = Builder!.Import(path, className);
+            if (Builder is null) Name(className);
+            index = Builder?.Import(path, className) ?? Imports.Count;
             Imports.Add((path, className, 0));
             return index;
         }
@@ -313,7 +481,8 @@ public static class Cr2wJson
 
     private static string ElementType(string type)
     {
-        // "array:2,0,handle:IMaterial" → "handle:IMaterial"; "static:4,Float" → "Float"
+        // "array:2,0,handle:IMaterial" → "handle:IMaterial"; "static:4,Float" → "Float"; "@*CEntity" → "*CEntity"
+        if (type.StartsWith('@')) return type[1..];
         int colon = type.IndexOf(':');
         string rest = type[(colon + 1)..];
         for (int i = 0, commas = type.StartsWith("static:", StringComparison.Ordinal) ? 1 : 2; i < rest.Length; i++)
@@ -332,13 +501,15 @@ public static class Cr2wJson
         return element.Length > 0;
     }
 
-    private static bool IsArray(string type) => type.StartsWith("array:", StringComparison.Ordinal) || type.StartsWith("static:", StringComparison.Ordinal);
-    private static bool IsHandle(string type) => type.StartsWith("handle:", StringComparison.Ordinal) || type.StartsWith("ptr:", StringComparison.Ordinal);
-    private static bool IsSoft(string type) => type.StartsWith("soft:", StringComparison.Ordinal);
+    // the Witcher 2's way of naming them, which files before 155 can have: @T for an array of T, *T and #T for a handle
+    // to one (#T only in one file of REDkit's, a reference to a resource), ~T for a soft reference
+    private static bool IsArray(string type) => type.StartsWith("array:", StringComparison.Ordinal) || type.StartsWith("static:", StringComparison.Ordinal) || type.StartsWith('@');
+    private static bool IsHandle(string type) => type.StartsWith("handle:", StringComparison.Ordinal) || type.StartsWith("ptr:", StringComparison.Ordinal) || type.StartsWith('*') || type.StartsWith('#');
+    private static bool IsSoft(string type) => type.StartsWith("soft:", StringComparison.Ordinal) || type.StartsWith('~');
     /// <summary>The engine's enums, and by the usual naming (E and a capital) those it doesn't list.</summary>
     private static bool IsEnum(string type) =>
         !type.Contains(':') && (RttiEnums.Value.Contains(type) || type.Length > 1 && type[0] == 'E' && char.IsUpper(type[1]) && !RttiClasses.Value.ContainsKey(type));
-    private static string Target(string type) => type[(type.IndexOf(':') + 1)..];
+    private static string Target(string type) => type.StartsWith('*') || type.StartsWith('~') || type.StartsWith('#') ? type[1..] : type[(type.IndexOf(':') + 1)..];
 
     // ---------------------------------------------------------------- reading
 
@@ -348,13 +519,20 @@ public static class Cr2wJson
         public int RawValues, RawObjects;
         public readonly List<string> RawPaths = [];
 
+        /// <summary>
+        /// Read the object as having no zero byte before its properties. Some objects and structs in files of 155 to
+        /// 157 are saved that way while others beside them aren't; such an object or struct says <c>"$marker": false</c>.
+        /// </summary>
+        public bool NoMarker;
+
         public JsonObject Export(Cr2wExport export, string path)
         {
             int pos = export.Offset, end = export.Offset + export.Size;
             var node = new JsonObject { ["$class"] = export.ClassName };
+            if (NoMarker) node["$marker"] = false;
             try
             {
-                if (export.Size > 0) Struct(node, export.ClassName, ref pos, end, path, allowShort: true);
+                if (export.Size > 0) Struct(node, export.ClassName, ref pos, end, path, allowShort: true, marker: !NoMarker);
                 if (pos < end) node["$tail"] = Convert.ToBase64String(_d, pos, end - pos);
                 return node;
             }
@@ -364,11 +542,17 @@ public static class Cr2wJson
             }
         }
 
-        /// <summary>A zero byte, then (name, type, size, value) until a name of 0.</summary>
-        private void Struct(JsonObject node, string className, ref int pos, int end, string path, bool allowShort = false)
+        /// <summary>
+        /// A zero byte (not in the older layout, nor when <paramref name="marker"/> is false), then (name, type, size,
+        /// value) until a name of 0; before 139 there are two more bytes, always 0xFFFF, between the type and the size.
+        /// </summary>
+        private void Struct(JsonObject node, string className, ref int pos, int end, string path, bool allowShort = false, bool marker = true)
         {
-            if (pos >= end || _d[pos] != 0) throw new InvalidDataException();
-            pos++;
+            if (context.Marker && marker)
+            {
+                if (pos >= end || _d[pos] != 0) throw new InvalidDataException();
+                pos++;
+            }
             while (true)
             {
                 if (pos + 2 > end)
@@ -382,8 +566,15 @@ public static class Cr2wJson
                 Need(pos, 6, end);
                 string stored = context.NameAt(name), property = Shown(className, stored);
                 string type = context.NameAt(U16(_d, pos));
-                int size = I32(_d, pos + 2);
-                pos += 6;
+                pos += 2;
+                if (context.Pad)
+                {
+                    Need(pos, 6, end);
+                    if (U16(_d, pos) != 0xFFFF) throw new InvalidDataException();
+                    pos += 2;
+                }
+                int size = I32(_d, pos);
+                pos += 4;
                 int valueEnd = pos - 4 + size;
                 if (size < 4 || valueEnd > end) throw new InvalidDataException();
                 if (node.ContainsKey(property)) throw new InvalidDataException(); // can't be keyed by name
@@ -424,8 +615,8 @@ public static class Cr2wJson
                 case "Uint8": Need(pos, 1, end); return (long)_d[pos++];
                 case "Int16": Need(pos, 2, end); pos += 2; return (long)(short)U16(_d, pos - 2);
                 case "Uint16": Need(pos, 2, end); pos += 2; return (long)U16(_d, pos - 2);
-                case "Int32": Need(pos, 4, end); pos += 4; return (long)I32(_d, pos - 4);
-                case "Uint32" or "LocalizedString": Need(pos, 4, end); pos += 4; return (long)(uint)I32(_d, pos - 4);
+                case "Int32" or "Int": Need(pos, 4, end); pos += 4; return (long)I32(_d, pos - 4);
+                case "Uint32" or "Uint" or "LocalizedString": Need(pos, 4, end); pos += 4; return (long)(uint)I32(_d, pos - 4);
                 case "Int64": Need(pos, 8, end); pos += 8; return BinaryPrimitives.ReadInt64LittleEndian(_d.AsSpan(pos - 8));
                 case "Uint64" or "CDateTime": Need(pos, 8, end); pos += 8; return BinaryPrimitives.ReadUInt64LittleEndian(_d.AsSpan(pos - 8));
                 case "Float": Need(pos, 4, end); pos += 4; return Number(BinaryPrimitives.ReadSingleLittleEndian(_d.AsSpan(pos - 4)));
@@ -434,23 +625,48 @@ public static class Cr2wJson
                 case "String": return Text(ref pos, end);
                 case "StringAnsi":
                 {
-                    // a byte of its length, then that many 8-bit characters
-                    Need(pos, 1, end);
-                    int length = _d[pos++];
+                    // its length as a compressed number, counting the 0 it ends with, then that many 8-bit characters;
+                    // an empty one is the number written as -0
+                    int length = Compressed(ref pos, end, out bool negative);
+                    if (negative) return length == 0 ? "" : throw new InvalidDataException();
                     Need(pos, length, end);
                     pos += length;
-                    return Encoding.Latin1.GetString(_d, pos - length, length);
+                    string text = Encoding.Latin1.GetString(_d, pos - length, length);
+                    return text.EndsWith('\0') ? text[..^1] : text;
                 }
                 case "DeferredDataBuffer": Need(pos, 2, end); pos += 2; return (long)U16(_d, pos - 2);
                 case "CGUID": Need(pos, 16, end); pos += 16; return new Guid(_d.AsSpan(pos - 16, 16)).ToString();
                 case "TagList":
                 {
-                    Need(pos, 1, end);
-                    int count = _d[pos++];
+                    // how many as a compressed number, then the names; an empty list is sometimes -0, which is null here
+                    int count = Compressed(ref pos, end, out bool negative);
+                    if (negative) return count == 0 ? null : throw new InvalidDataException();
                     var tags = new JsonArray();
                     for (int i = 0; i < count; i++) { Need(pos, 2, end); tags.Add(context.NameAt(U16(_d, pos))); pos += 2; }
                     return tags;
                 }
+                case "CPhysicalCollision":
+                {
+                    // a version (2), how many collision types as a compressed number, their names, then two 64-bit
+                    // masks the engine works out from them
+                    Need(pos, 4, end);
+                    var collision = new JsonObject { ["version"] = (long)I32(_d, pos) };
+                    pos += 4;
+                    int count = Compressed(ref pos, end, out bool negative);
+                    if (negative) throw new InvalidDataException();
+                    var types = new JsonArray();
+                    for (int i = 0; i < count; i++) { Need(pos, 2, end); types.Add(context.NameAt(U16(_d, pos))); pos += 2; }
+                    collision["types"] = types;
+                    Need(pos, 16, end);
+                    collision["masks"] = new JsonArray(BinaryPrimitives.ReadUInt64LittleEndian(_d.AsSpan(pos)), BinaryPrimitives.ReadUInt64LittleEndian(_d.AsSpan(pos + 8)));
+                    pos += 16;
+                    return collision;
+                }
+                case "SMeshTypeResourceLODLevel":
+                    // the distance the level starts at
+                    Need(pos, 4, end);
+                    pos += 4;
+                    return Number(BinaryPrimitives.ReadSingleLittleEndian(_d.AsSpan(pos - 4)));
                 case "EngineTransform":
                 {
                     // a byte of which parts there are, then each as three floats
@@ -469,13 +685,44 @@ public static class Cr2wJson
                     return new JsonObject { ["type"] = (long)_d[pos - 17], ["guid"] = new Guid(_d.AsSpan(pos - 16, 16)).ToString() };
                 case "EntityHandle":
                 {
-                    // a byte of what kind it is, then GUIDs to the end
-                    if (!tagged || (end - pos - 1) % 16 != 0) throw new InvalidDataException();
-                    var handle = new JsonObject { ["type"] = (long)_d[pos++] };
-                    var guids = new JsonArray();
-                    while (pos < end) { guids.Add(new Guid(_d.AsSpan(pos, 16)).ToString()); pos += 16; }
-                    handle["guids"] = guids;
+                    // a byte of what kind it is, then by the kind: nothing (0), two GUIDs (1), an IdTag (2)
+                    Need(pos, 1, end);
+                    int kind = _d[pos++];
+                    var handle = new JsonObject { ["type"] = (long)kind };
+                    switch (kind)
+                    {
+                        case 0: break;
+                        case 1:
+                            Need(pos, 32, end);
+                            handle["guids"] = new JsonArray(new Guid(_d.AsSpan(pos, 16)).ToString(), new Guid(_d.AsSpan(pos + 16, 16)).ToString());
+                            pos += 32;
+                            break;
+                        case 2:
+                            Need(pos, 17, end);
+                            handle["idTag"] = new JsonObject { ["type"] = (long)_d[pos], ["guid"] = new Guid(_d.AsSpan(pos + 1, 16)).ToString() };
+                            pos += 17;
+                            break;
+                        default:
+                            // one this doesn't know: GUIDs to the end, when it's a property of its own
+                            if (!tagged || (end - pos) % 16 != 0) throw new InvalidDataException();
+                            var guids = new JsonArray();
+                            while (pos < end) { guids.Add(new Guid(_d.AsSpan(pos, 16)).ToString()); pos += 16; }
+                            handle["guids"] = guids;
+                            break;
+                    }
                     return handle;
+                }
+                case "EngineQsTransform":
+                {
+                    // a byte of which parts there are, then the position, the rotation (a quaternion) and the scale
+                    Need(pos, 1, end);
+                    int parts = _d[pos++];
+                    if ((parts & ~7) != 0) throw new InvalidDataException();
+                    var transform = new JsonObject();
+                    if ((parts & 1) != 0) transform["position"] = Floats(ref pos, end, "X", "Y", "Z");
+                    if ((parts & 2) != 0) transform["rotation"] = Floats(ref pos, end, "X", "Y", "Z", "W");
+                    if ((parts & 4) != 0) transform["scale"] = Floats(ref pos, end, "X", "Y", "Z");
+                    return transform;
                 }
                 case "SharedDataBuffer" or "DataBuffer":
                 {
@@ -495,6 +742,8 @@ public static class Cr2wJson
                     pos += 6;
                     int valueEnd = pos - 4 + size;
                     if (size < 4 || valueEnd > end) throw new InvalidDataException();
+                    // one with no type has no value
+                    if (inner.Length == 0) return size == 4 ? new JsonObject { ["type"] = "", ["value"] = null } : throw new InvalidDataException();
                     var variant = new JsonObject { ["type"] = inner, ["value"] = Value(inner, ref pos, valueEnd, tagged: true, path) };
                     if (pos != valueEnd) throw new InvalidDataException();
                     return variant;
@@ -514,12 +763,17 @@ public static class Cr2wJson
                 Need(pos, 2, end);
                 int raw = U16(_d, pos);
                 pos += 2;
-                return raw == 0 ? null : ImportText(raw - 1);
+                return raw == 0 ? null : context.Dependencies is { } dependencies ? DependencyText(dependencies, raw - 1) : ImportText(raw - 1);
             }
             if (IsFixed(type, out string fixedElement, out int fixedCount))
             {
+                // how many there are, which is the size the type says, then them
+                Need(pos, 4, end);
+                int count = I32(_d, pos);
+                pos += 4;
+                if (count != fixedCount) throw new InvalidDataException();
                 var items = new JsonArray();
-                for (int i = 0; i < fixedCount; i++) items.Add(Value(fixedElement, ref pos, end, tagged: false, $"{path}[{i}]"));
+                for (int i = 0; i < count; i++) items.Add(Value(fixedElement, ref pos, end, tagged: false, $"{path}[{i}]"));
                 return items;
             }
             if (IsArray(type))
@@ -529,6 +783,13 @@ public static class Cr2wJson
                 int count = I32(_d, pos);
                 pos += 4;
                 if (count < 0 || count > 50_000_000) throw new InvalidDataException();
+                if (context.Pad)
+                {
+                    // before 139, the element type's name and 0xFFFF follow the count
+                    Need(pos, 4, end);
+                    if (context.NameAt(U16(_d, pos)) != element || U16(_d, pos + 2) != 0xFFFF) throw new InvalidDataException();
+                    pos += 4;
+                }
                 if (element is "Uint8" or "Int8")
                 {
                     Need(pos, count, end);
@@ -554,10 +815,46 @@ public static class Cr2wJson
                 }
                 return values;
             }
+            // an enum the scripts declare, which the engine's list doesn't have: a name, where a struct couldn't be
+            if (tagged && end - pos == 2 && U16(_d, pos) != 0 && !RttiClasses.Value.ContainsKey(type)) { pos += 2; return context.NameAt(U16(_d, pos - 2)); }
             var node = new JsonObject();
-            Struct(node, type, ref pos, end, path);
+            int start = pos, rawValues = RawValues, rawPaths = RawPaths.Count;
+            try { Struct(node, type, ref pos, end, path); }
+            catch (Exception ex) when (context.Marker && ex is InvalidDataException or ArgumentOutOfRangeException or IndexOutOfRangeException)
+            {
+                // one saved without the zero byte (some in files of 155 to 157)
+                pos = start;
+                RawValues = rawValues;
+                RawPaths.RemoveRange(rawPaths, RawPaths.Count - rawPaths);
+                node = new JsonObject { ["$marker"] = false };
+                Struct(node, type, ref pos, end, path, marker: false);
+            }
             if (type == "SAppearanceAttachment") node["$attachment"] = Attachment(ref pos, end, path + ".$attachment");
             return node;
+        }
+
+        /// <summary>
+        /// A compressed number: the first byte has the sign (0x80), whether more bytes follow (0x40) and the low six
+        /// bits; each byte after has seven more bits and 0x80 when another follows.
+        /// </summary>
+        private int Compressed(ref int pos, int end, out bool negative)
+        {
+            Need(pos, 1, end);
+            int first = _d[pos++];
+            negative = (first & 0x80) != 0;
+            int value = first & 0x3F;
+            if ((first & 0x40) != 0)
+            {
+                int shift = 6, b;
+                do
+                {
+                    Need(pos, 1, end);
+                    b = _d[pos++];
+                    value |= (b & 0x7F) << shift;
+                    shift += 7;
+                } while ((b & 0x80) != 0 && shift < 32);
+            }
+            return value;
         }
 
         /// <summary>
@@ -572,8 +869,22 @@ public static class Cr2wJson
             string className = context.NameAt(U16(_d, pos + 5));
             pos += 7;
             var attachment = new JsonObject { ["$class"] = className };
-            Struct(attachment, className, ref pos, objectEnd, path);
-            if (pos != objectEnd) throw new InvalidDataException();
+            int start = pos, rawValues = RawValues, rawPaths = RawPaths.Count;
+            try
+            {
+                Struct(attachment, className, ref pos, objectEnd, path);
+                if (pos != objectEnd) throw new InvalidDataException();
+            }
+            catch (Exception ex) when (context.Marker && ex is InvalidDataException or ArgumentOutOfRangeException or IndexOutOfRangeException)
+            {
+                // one saved without the zero byte (some in files of 155 to 157)
+                pos = start;
+                RawValues = rawValues;
+                RawPaths.RemoveRange(rawPaths, RawPaths.Count - rawPaths);
+                attachment = new JsonObject { ["$class"] = className, ["$marker"] = false };
+                Struct(attachment, className, ref pos, objectEnd, path, marker: false);
+                if (pos != objectEnd) throw new InvalidDataException();
+            }
             return attachment;
         }
 
@@ -587,6 +898,14 @@ public static class Cr2wJson
                 pos += 4;
             }
             return result;
+        }
+
+        /// <summary>A soft reference in the older layout, which is to one of the file's dependencies.</summary>
+        private static string DependencyText(List<string> dependencies, int index)
+        {
+            if (index < 0 || index >= dependencies.Count) throw new InvalidDataException();
+            int first = dependencies.FindIndex(d => d.Equals(dependencies[index], StringComparison.OrdinalIgnoreCase));
+            return first == index ? "import:" + dependencies[index] : $"import#{index}";
         }
 
         private string ImportText(int index)
@@ -627,10 +946,17 @@ public static class Cr2wJson
         }
     }
 
-    /// <summary>A float as a JSON number, or as a string for the values JSON has no number for.</summary>
+    /// <summary>
+    /// A float as a JSON number, or as a string for the values JSON has no number for. A NaN that isn't the usual one
+    /// keeps its bits: <c>"NaN:ffffffff"</c> (some files have them, where a value was never set).
+    /// </summary>
     private static JsonNode Number(double value)
     {
-        if (double.IsNaN(value)) return "NaN";
+        if (double.IsNaN(value))
+        {
+            long bits = BitConverter.DoubleToInt64Bits(value);
+            return bits == BitConverter.DoubleToInt64Bits(double.NaN) ? "NaN" : $"NaN:{bits:x16}";
+        }
         if (double.IsPositiveInfinity(value)) return "Infinity";
         if (double.IsNegativeInfinity(value)) return "-Infinity";
         return JsonValue.Create(value)!;
@@ -638,7 +964,12 @@ public static class Cr2wJson
 
     private static JsonNode Number(float value)
     {
-        if (float.IsNaN(value) || float.IsInfinity(value)) return Number((double)value);
+        if (float.IsNaN(value))
+        {
+            int bits = BitConverter.SingleToInt32Bits(value);
+            return bits == BitConverter.SingleToInt32Bits(float.NaN) ? "NaN" : $"NaN:{bits:x8}";
+        }
+        if (float.IsInfinity(value)) return Number((double)value);
         return JsonValue.Create(value)!;
     }
 
@@ -665,7 +996,7 @@ public static class Cr2wJson
 
         private void Struct(string className, JsonObject node)
         {
-            _out.WriteByte(0);
+            if (context.Marker && !(node["$marker"] is JsonValue marker && marker.TryGetValue(out bool has) && !has)) _out.WriteByte(0);
             foreach (var (property, value) in node)
             {
                 if (property.StartsWith('$')) continue;
@@ -673,6 +1004,7 @@ public static class Cr2wJson
                 string type = TypeOf(context, className, stored, node);
                 U16(context.Name(stored));
                 U16(context.Name(type));
+                if (context.Pad) U16(0xFFFF);
                 long sizeAt = _out.Position;
                 I32(0);
                 Write(type, value, tagged: true, $"{className}.{property}");
@@ -707,8 +1039,8 @@ public static class Cr2wJson
                 case "Uint8": _out.WriteByte(checked((byte)Integer(value))); return;
                 case "Int16": U16((ushort)checked((short)Integer(value))); return;
                 case "Uint16": U16(checked((ushort)Integer(value))); return;
-                case "Int32": I32(checked((int)Integer(value))); return;
-                case "Uint32" or "LocalizedString": I32((int)checked((uint)Integer(value))); return;
+                case "Int32" or "Int": I32(checked((int)Integer(value))); return;
+                case "Uint32" or "Uint" or "LocalizedString": I32((int)checked((uint)Integer(value))); return;
                 case "Int64": Span8(s => BinaryPrimitives.WriteInt64LittleEndian(s, checked((long)Integer(value)))); return;
                 case "Uint64" or "CDateTime": Span8(s => BinaryPrimitives.WriteUInt64LittleEndian(s, checked((ulong)Integer(value)))); return;
                 case "Float":
@@ -723,18 +1055,41 @@ public static class Cr2wJson
                 case "String": Text(Str(value)); return;
                 case "StringAnsi":
                 {
-                    byte[] text = Encoding.Latin1.GetBytes(Str(value));
-                    _out.WriteByte(checked((byte)text.Length));
-                    _out.Write(text);
+                    string text = value is null ? "" : Str(value);
+                    if (text.Length == 0) { Compressed(0, negative: true); return; }
+                    byte[] bytes = Encoding.Latin1.GetBytes(text.EndsWith('\0') ? text : text + "\0");
+                    Compressed(bytes.Length, negative: false);
+                    _out.Write(bytes);
                     return;
                 }
                 case "DeferredDataBuffer": U16(checked((ushort)Integer(value))); return;
                 case "CGUID": _out.Write(Guid.Parse(Str(value)).ToByteArray()); return;
                 case "TagList":
                 {
+                    if (value is null) { Compressed(0, negative: true); return; }
                     var tags = value as JsonArray ?? throw new FormatException();
-                    _out.WriteByte(checked((byte)tags.Count));
+                    Compressed(tags.Count, negative: false);
                     foreach (var tag in tags) U16(context.Name(Str(tag)));
+                    return;
+                }
+                case "CPhysicalCollision":
+                {
+                    var collision = value as JsonObject ?? throw new FormatException();
+                    I32(checked((int)Integer(collision["version"] ?? 2)));
+                    var types = collision["types"] as JsonArray ?? [];
+                    Compressed(types.Count, negative: false);
+                    foreach (var type2 in types) U16(context.Name(Str(type2)));
+                    var masks = collision["masks"] as JsonArray ?? throw new FormatException();
+                    if (masks.Count != 2) throw new FormatException();
+                    Span8(s2 => BinaryPrimitives.WriteUInt64LittleEndian(s2, checked((ulong)Integer(masks[0]))));
+                    Span8(s2 => BinaryPrimitives.WriteUInt64LittleEndian(s2, checked((ulong)Integer(masks[1]))));
+                    return;
+                }
+                case "SMeshTypeResourceLODLevel":
+                {
+                    Span<byte> s = stackalloc byte[4];
+                    BinaryPrimitives.WriteSingleLittleEndian(s, Single(value));
+                    _out.Write(s);
                     return;
                 }
                 case "EngineTransform":
@@ -755,8 +1110,25 @@ public static class Cr2wJson
                     return;
                 case "EntityHandle":
                     _out.WriteByte(checked((byte)Integer(value?["type"])));
+                    if (value?["idTag"] is JsonObject idTag)
+                    {
+                        _out.WriteByte(checked((byte)Integer(idTag["type"])));
+                        _out.Write(Guid.Parse(Str(idTag["guid"])).ToByteArray());
+                    }
                     foreach (var guid in value?["guids"] as JsonArray ?? []) _out.Write(Guid.Parse(Str(guid)).ToByteArray());
                     return;
+                case "EngineQsTransform":
+                {
+                    var transform = value as JsonObject ?? throw new FormatException();
+                    var position = transform["position"] as JsonObject;
+                    var rotation = transform["rotation"] as JsonObject;
+                    var scale = transform["scale"] as JsonObject;
+                    _out.WriteByte((byte)((position is null ? 0 : 1) | (rotation is null ? 0 : 2) | (scale is null ? 0 : 4)));
+                    if (position is not null) Floats(position, "X", "Y", "Z");
+                    if (rotation is not null) Floats(rotation, "X", "Y", "Z", "W");
+                    if (scale is not null) Floats(scale, "X", "Y", "Z");
+                    return;
+                }
                 case "SharedDataBuffer" or "DataBuffer":
                 {
                     byte[] bytes = Convert.FromBase64String(Str(value));
@@ -770,7 +1142,7 @@ public static class Cr2wJson
                     U16(context.Name(inner));
                     long sizeAt = _out.Position;
                     I32(0);
-                    Write(inner, value?["value"], tagged: true, where + ".value");
+                    if (inner.Length > 0) Write(inner, value?["value"], tagged: true, where + ".value");
                     long after = _out.Position;
                     _out.Position = sizeAt;
                     I32((int)(after - sizeAt));
@@ -784,6 +1156,7 @@ public static class Cr2wJson
             {
                 var items = value as JsonArray ?? throw new FormatException();
                 if (items.Count != fixedCount) throw new FormatException();
+                I32(items.Count);
                 for (int i = 0; i < items.Count; i++) Write(fixedElement, items[i], tagged: false, $"{where}[{i}]");
                 return;
             }
@@ -794,11 +1167,13 @@ public static class Cr2wJson
                 {
                     byte[] bytes = Convert.FromBase64String(Str(value));
                     I32(bytes.Length);
+                    ArrayPad(element);
                     _out.Write(bytes);
                     return;
                 }
                 var list = value as JsonArray ?? throw new FormatException();
                 I32(list.Count);
+                ArrayPad(element);
                 for (int i = 0; i < list.Count; i++) Write(element, list[i], tagged: false, $"{where}[{i}]");
                 return;
             }
@@ -813,6 +1188,8 @@ public static class Cr2wJson
                 U16(context.Name(Str(value)));
                 return;
             }
+            // an enum the scripts declare, which the engine's list doesn't have
+            if (value is JsonValue && tagged && !RttiClasses.Value.ContainsKey(type)) { U16(context.Name(Str(value))); return; }
             var fields = value as JsonObject ?? throw new FormatException();
             Struct(type, fields);
             if (type == "SAppearanceAttachment") Attachment(fields["$attachment"] as JsonObject ?? throw new FormatException(), where + ".$attachment");
@@ -842,13 +1219,38 @@ public static class Cr2wJson
             }
         }
 
-        /// <summary>null, "export:N" (0-based), "import:path" or "import#N" as a handle's value.</summary>
+        /// <summary>A compressed number: sign, more-follows and six bits in the first byte, then seven bits a byte.</summary>
+        private void Compressed(int value, bool negative)
+        {
+            int first = (negative ? 0x80 : 0) | (value & 0x3F);
+            if (value > 0x3F) first |= 0x40;
+            _out.WriteByte((byte)first);
+            for (int rest = value >> 6; rest > 0; rest >>= 7)
+                _out.WriteByte((byte)((rest & 0x7F) | (rest > 0x7F ? 0x80 : 0)));
+        }
+
+        /// <summary>Before 139, an array's count is followed by its element type's name and 0xFFFF.</summary>
+        private void ArrayPad(string element)
+        {
+            if (!context.Pad) return;
+            U16(context.Name(element));
+            U16(0xFFFF);
+        }
+
+        /// <summary>null, "export:N" (0-based), "import:path" or "import#N" as a handle's value. A soft reference in the
+        /// older layout is to one of the file's dependencies.</summary>
         private int Reference(string targetClass, JsonNode? value, bool soft)
         {
             if (value is null) return 0;
             string text = Str(value);
             if (text.StartsWith("export:", StringComparison.Ordinal) && !soft)
                 return int.Parse(text.AsSpan(7), CultureInfo.InvariantCulture) + 1;
+            if (soft && context.Dependencies is not null)
+            {
+                if (text.StartsWith("import#", StringComparison.Ordinal)) return int.Parse(text.AsSpan(7), CultureInfo.InvariantCulture) + 1;
+                if (!text.StartsWith("import:", StringComparison.Ordinal)) throw new FormatException();
+                return context.Dependency(text[7..]) + 1;
+            }
             int import;
             if (text.StartsWith("import#", StringComparison.Ordinal)) import = int.Parse(text.AsSpan(7), CultureInfo.InvariantCulture);
             else if (text.StartsWith("import:", StringComparison.Ordinal)) import = context.Import(text[7..], targetClass);
@@ -896,8 +1298,15 @@ public static class Cr2wJson
         {
             JsonElement { ValueKind: JsonValueKind.Number } e => e.GetSingle(),
             float f => f,
+            JsonElement { ValueKind: JsonValueKind.String } e when NaNBits(e.GetString()!, 8) is long bits => BitConverter.Int32BitsToSingle((int)bits),
+            string t when NaNBits(t, 8) is long bits => BitConverter.Int32BitsToSingle((int)bits),
             _ => (float)Real(value),
         };
+
+        /// <summary>The bits of a NaN written as "NaN:" and hex digits (8 for a float, 16 for a double).</summary>
+        private static long? NaNBits(string text, int digits) =>
+            text.Length == 4 + digits && text.StartsWith("NaN:", StringComparison.Ordinal)
+            && ulong.TryParse(text.AsSpan(4), NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out ulong bits) ? (long)bits : null;
 
         private static double Real(JsonNode? value) => Held(value) switch
         {
@@ -914,6 +1323,7 @@ public static class Cr2wJson
             "NaN" => double.NaN,
             "Infinity" => double.PositiveInfinity,
             "-Infinity" => double.NegativeInfinity,
+            _ when NaNBits(s, 16) is long bits => BitConverter.Int64BitsToDouble(bits),
             _ => throw new FormatException(),
         };
 

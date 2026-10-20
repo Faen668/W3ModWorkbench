@@ -37,6 +37,7 @@ public sealed class Cr2wBuilder
     private readonly List<ExportEntry> _exports = [];
     private readonly List<BufferEntry> _buffers = [];
     private readonly byte[] _trailer;
+    private IReadOnlyDictionary<int, (int Offset, uint Crc, uint Actual)> _tableHeaders = new Dictionary<int, (int, uint, uint)>();
 
     private Cr2wBuilder(int version, int flags, long timestamp, int build, int chunks, byte[] properties, int propertyCount, byte[] trailer)
     {
@@ -61,6 +62,8 @@ public sealed class Cr2wBuilder
     /// <summary>A copy of a file that was read, to change.</summary>
     public static Cr2wBuilder From(Cr2wFile file)
     {
+        if (file.Legacy is not null)
+            throw new NotSupportedException($"This file is in the older CR2W layout (version {file.Version}); save it as version 164 first (CR2W ⇄ JSON can).");
         var d = file.Data;
         (int Offset, int Count) Table(int i) => (I32(d, 40 + i * 12), I32(d, 44 + i * 12));
         for (int i = 6; i < 10; i++)
@@ -121,12 +124,16 @@ public sealed class Cr2wBuilder
     /// A name's hash is worked out, unless <paramref name="hashes"/> has the one the file was saved with.
     /// <paramref name="order"/>, when given, is the order the strings go in instead: numbers into the names, then on
     /// into the import paths (the engine often writes an import's path just before its class's name).
+    /// <paramref name="tableHeaders"/> has the table headers the file had that writing it wouldn't give: by the table's
+    /// number, its offset and checksum, and the checksum of its bytes, kept only while they're still those bytes.
     /// </summary>
     public static Cr2wBuilder Create(int version, int flags, long timestamp, int build, int chunks, IEnumerable<string> names,
         IEnumerable<(string Path, string ClassName, int Flags)> imports, byte[] properties, int propertyCount, byte[] trailer,
-        IEnumerable<string>? latin1 = null, IReadOnlyDictionary<int, uint>? hashes = null, IEnumerable<int>? order = null)
+        IEnumerable<string>? latin1 = null, IReadOnlyDictionary<int, uint>? hashes = null, IEnumerable<int>? order = null,
+        IReadOnlyDictionary<int, (int Offset, uint Crc, uint Actual)>? tableHeaders = null)
     {
         var builder = new Cr2wBuilder(version, flags, timestamp, build, chunks, properties, propertyCount, trailer);
+        if (tableHeaders is not null) builder._tableHeaders = tableHeaders;
         if (latin1 is not null) builder._latin1.UnionWith(latin1);
         names = names as IReadOnlyList<string> ?? names.ToList();
         imports = imports as IReadOnlyList<(string, string, int)> ?? imports.ToList();
@@ -276,7 +283,12 @@ public sealed class Cr2wBuilder
         tables[4] = (exportsAt, _exports.Count, Checksums.Crc32(exports));
         tables[5] = (buffersAt, _buffers.Count, Checksums.Crc32(buffers));
         for (int i = 0; i < 10; i++)
+        {
             if (tables[i].Count == 0) tables[i] = (0, 0, 0);
+            // what the file had instead, while the table is still what it was: an empty one's offset, a checksum not of the bytes
+            if (_tableHeaders.TryGetValue(i, out var kept) && tables[i].Crc == kept.Actual)
+                tables[i] = (tables[i].Count == 0 ? kept.Offset : tables[i].Offset, tables[i].Count, kept.Crc);
+        }
 
         Put(output, 0, (int)Magic);
         Put(output, 4, _version);
