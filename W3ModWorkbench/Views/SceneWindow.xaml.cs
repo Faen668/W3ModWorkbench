@@ -522,7 +522,7 @@ public partial class SceneWindow : Window, IMessageHost
     /// <summary>What loading the preview read: the actors, how they stand, the dialog sets, their textures, and what went wrong.</summary>
     private sealed record LoadedStage(List<StageActor> Cast, List<StageProp> Props, Dictionary<string, Core.Animation.AnimationClip> CameraAnimations,
         Dictionary<ActorStance, string> Idles, Dictionary<SceneNode, SceneDialogset?> BySection,
-        List<(int Part, int Material, System.Windows.Media.Imaging.BitmapSource? Picture, bool LeaveOut)> Textures, List<string> Notes);
+        List<(int Part, int Material, System.Windows.Media.Imaging.BitmapSource? Picture, MaterialLook? Look, bool LeaveOut)> Textures, List<string> Notes);
 
     // the lights the scene defines, by id, and whether each is a spot
     private Dictionary<string, bool>? _lightKinds;

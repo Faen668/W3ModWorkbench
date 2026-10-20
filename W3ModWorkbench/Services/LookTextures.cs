@@ -1,4 +1,5 @@
 using System.Numerics;
+using HelixToolkit.SharpDX;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using W3ModWorkbench.Core.Cr2w;
@@ -50,7 +51,23 @@ public static class LookTextures
     /// </summary>
     public static bool IsOverlay(MeshMaterial material) => material.Shader.Contains("eye_shadow", StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// The engine's default material (<c>engine\materials\defaults\mesh.w2mg</c>, plain grey), left on a chunk nobody
+    /// gave a material: never meant to be seen, such as the strip under Yennefer's gown that her cloth hides in the game.
+    /// Drawn, it shows as a grey sheet through clothes the viewers show unsimulated, so it's left out.
+    /// </summary>
+    public static bool IsPlaceholder(MeshMaterial material) =>
+        material.Bases.Count == 0 && material.Source.Replace('/', '\\').EndsWith(@"engine\materials\defaults\mesh.w2mg", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>The hair graphs that multiply the colour by the vertex colour, as REDkit's copies of them have it.</summary>
+    private static readonly HashSet<string> HairGraphs = new(StringComparer.OrdinalIgnoreCase)
+        { "pbr_hair", "pbr_hair_moving", "pbr_hair_simple", "pbr_hair_dissolve", "pbr_hair_simple_dissolve" };
+
     private static bool IsHair(MeshMaterial material) => material.Shader.StartsWith("pbr_hair", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Skin (pbr_skin, pbr_skin_decal and the like), but not the teeth and eyes' own skin-shaded parts.</summary>
+    private static bool IsSkin(MeshMaterial material) => material.Shader.StartsWith("pbr_skin", StringComparison.OrdinalIgnoreCase)
+        && material.Diffuse?.Path is { } path && !path.Contains("teeth", StringComparison.OrdinalIgnoreCase) && !path.Contains("eye", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// The colour entry an appearance gives a component: the entity's own first, then those of the templates it
@@ -71,22 +88,43 @@ public static class LookTextures
     }
 
     /// <summary>
-    /// The picture to show a mesh's material with, or null for none; and whether to leave its chunks out. Reads from
-    /// disk, so it belongs off the UI thread. <paramref name="texture"/> reads a texture, as the caller keeps them.
+    /// The picture to show a mesh's material with, or null for none; what the view's shader needs of the material beside
+    /// it (its normal map, masks, detail maps and numbers, see <see cref="MaterialLook"/>); and whether to leave its
+    /// chunks out. Reads from disk, so it belongs off the UI thread, where the graphics card's copies are made too.
+    /// <paramref name="texture"/> reads a texture, as the caller keeps them.
     /// </summary>
-    public static async Task<(BitmapSource? Picture, bool LeaveOut)> ForMaterial(MeshFile mesh, int material, ResourceLocator locator,
+    public static async Task<(BitmapSource? Picture, MaterialLook? Look, bool LeaveOut)> ForMaterial(MeshFile mesh, int material, ResourceLocator locator,
         Func<string, Task<BitmapSource?>> texture, (ColorShift? First, ColorShift? Second)? coloring = null)
     {
         var resolved = MeshMaterial.Resolve(mesh.File, mesh.Materials[material], locator.ReadFile);
-        if (IsOverlay(resolved)) return (null, true);
-        if (resolved.Diffuse is not { } diffuse || await texture(diffuse.Path) is not { } picture) return (null, false);
+        if (IsOverlay(resolved) || IsPlaceholder(resolved)) return (null, null, true);
+        var look = await LookOf(resolved, locator, texture);
+        if (resolved.Diffuse is not { } diffuse) return (null, look, false);
+        var picture = await texture(diffuse.Path);
+        // the engine's grey placeholder (a neck transition's), tinted by the material's VarianceColor: never cooked into a
+        // texture cache, so it's made here, the 50% grey it is
+        bool placeholder = picture is null && System.IO.Path.GetFileName(diffuse.Path).Equals("grey.xbm", StringComparison.OrdinalIgnoreCase)
+            && Parameter(resolved, "VarianceColor") is ColorValue;
+        if (placeholder) picture = Grey;
+        if (picture is null) return (null, look, false);
 
         var paint = new Paint();
-        if (IsHair(resolved))
+        if (IsHair(resolved) || placeholder)
         {
-            paint.Vertex = VertexColor(mesh, material);
+            // hair's vertex colour, dark at the roots and light at the tips: the view's shader takes it from each vertex,
+            // or without it the material's chunks' average goes into the picture. Only the engine's hair graphs multiply
+            // it in; Geralt's own pbr_hair_new keeps masks there (mostly green), and its graph is cooked away
+            bool coloured = !IsHair(resolved) || HairGraphs.Contains(resolved.Shader);
+            if (IsHair(resolved) && coloured && W3Shading.Problem is null)
+                look.Constants.Glow.Y = mesh.Chunks.Any(c => c.Material == material && c.Colors.Length > 0) ? 1 : 0;
+            else if (coloured && VertexColor(mesh, material) is { } average)
+                paint.Vertex = IsHair(resolved) ? Linear3(average) : average;
             if (Parameter(resolved, "VarianceColor") is ColorValue variance)
                 paint.Variance = (variance.R / 255f, variance.G / 255f, variance.B / 255f, Parameter(resolved, "VarianceOffset") as float? ?? 0);
+            // pbr_hair_simple: the colour scaled by its DiffuseMul
+            if (Parameter(resolved, "DiffuseMul") is float scale) paint.Scale = scale;
+            // painted here, so the shader doesn't again
+            look.Constants.Variance = new(1, 1, 1, 1);
         }
         // a colour entry recolours a material that can be: one with a tint mask. ColorShift_Enabled says whether the
         // mask is used; without it the whole texture is shifted (as Ciri's bath towel is, white in the game)
@@ -105,14 +143,190 @@ public static class LookTextures
             paint.BlendColors = Parameter(resolved, "ColorShift_ BlendColors") is float and > 0;
         }
         var shown = paint.Does ? paint.Apply(picture) : picture;
-        // hair is cards cut out by the texture's alpha, as the game tests it: drawn whole they're solid sheets
+        // a face's stubble or beard shadow (pbr_skin_decal): a grey picture in the face's own UVs, darker where the hair
+        // is, laid over the skin as an overlay (mid-grey leaves it as it is)
+        if (resolved.Textures.FirstOrDefault(t => t.Parameter.Equals("Decal", StringComparison.OrdinalIgnoreCase)) is { } decal
+            && await texture(decal.Path) is { } decalPicture)
+            shown = Overlay(shown, decalPicture);
+        // hair is cards cut out by the texture's alpha: drawn whole they're solid sheets
         if (IsHair(resolved) && MeshTextures.LoadWithAlpha(locator, diffuse.Path, Math.Max(shown.PixelWidth, shown.PixelHeight)) is { } alpha)
-            shown = CutOut(shown, alpha);
-        return (shown, false);
+            shown = WithAlpha(shown, alpha);
+        GpuTextures.Prepare(shown);
+        return (shown, look, false);
     }
 
-    /// <summary>A picture with the parts another's alpha leaves out made transparent (under a fifth: a strand's soft edges count, as layered cards fill a beard out in the game), the rest solid.</summary>
-    private static BitmapSource CutOut(BitmapSource picture, BitmapSource alphaFrom)
+    /// <summary>
+    /// What the view's shader needs of a material beside its colour texture, as the game's material graph reads it
+    /// (traced from REDkit's <c>engine\materials\graphs</c>): its kind, normal map, masks, detail maps and numbers, each
+    /// the graph's own default where the material doesn't set it.
+    /// </summary>
+    public static async Task<MaterialLook> LookOf(MeshMaterial material, ResourceLocator locator, Func<string, Task<BitmapSource?>> texture)
+    {
+        async Task<BitmapSource?> Read(params string[] parameters)
+        {
+            foreach (var parameter in parameters)
+            {
+                var found = material.Textures.FirstOrDefault(t => t.Parameter.Equals(parameter, StringComparison.OrdinalIgnoreCase));
+                if (found is null || !found.Path.EndsWith(".xbm", StringComparison.OrdinalIgnoreCase)) continue;
+                if (await texture(found.Path) is not { } picture) continue;
+                GpuTextures.Prepare(picture);
+                return picture;
+            }
+            return null;
+        }
+        float Number(string name, float fallback) => Parameter(material, name) is float f ? f : fallback;
+        Vector4 Linear(string name, Vector4 fallback) => Parameter(material, name) is ColorValue c
+            ? new(LinearF(c.R / 255f), LinearF(c.G / 255f), LinearF(c.B / 255f), 0) : fallback;
+        Vector2 Tile(string name) => Parameter(material, name) is Vector4 v ? new(v.X, v.Y) : new(5, 5);
+
+        string shader = material.Shader.ToLowerInvariant();
+        var kind = shader.StartsWith("pbr_hair") ? SurfaceKind.Hair
+            : shader.StartsWith("pbr_eye") ? SurfaceKind.Eye
+            : IsSkin(material) ? SurfaceKind.Skin
+            : shader.StartsWith("transparent") ? SurfaceKind.Glass
+            : SurfaceKind.Plain;
+        var normal = await Read("Normal", "Normalmap", "NormalBase");
+        var c = W3Constants.Plain(normal is not null);
+        c.Kind = new((int)kind, 0, 0, 0);
+        c.Spec = new(Number("RSpecScale", 1), Number("RSpecBase", 0), Number("Roughness_min", 0), Number("Roughness_max", 1));
+        c.SpecColor = Linear("SpecularColor", new(0.017f, 0.017f, 0.017f, 0));
+        c.SpecColor.W = Number("AOPower", Number("AmbientPower", 0.5f));
+        c.Misc = new(0.7f, Math.Clamp(Number("Translucency", 0), 0, 1), 0, 0);
+        // the graphs that draw the colour toward VarianceColor (customColoring): pbr_std, pbr_spec, pbr_det, the skins
+        if (shader is "pbr_std" or "pbr_spec" or "pbr_det" or "pbr_std_no_wetness" || kind == SurfaceKind.Skin)
+        {
+            var variance = Parameter(material, "VarianceColor") is ColorValue v ? new Vector3(v.R / 255f, v.G / 255f, v.B / 255f) : Vector3.One;
+            c.Variance = new(variance, Number("VarianceOffset", 1));
+        }
+
+        BitmapSource? mask = null, detail1 = null, detail2 = null, shift = null;
+        TextureModel? blick = null;
+        switch (kind)
+        {
+            case SurfaceKind.Skin:
+                // the packed "Ambient" map: red where the pores go, green roughness, blue specularity
+                mask = await Read("Ambient");
+                detail1 = await Read("DetailNormal");
+                c.Spec = new(Number("RSpecScale", 0.25f), Number("RSpecBase", 0), Number("RoughnessBias", 0), 1);
+                c.SpecColor = Linear("SpecularColor", Vector4.One);
+                var skinTile = Tile("DetailTile");
+                c.Detail = new(skinTile.X, skinTile.Y, Number("DetailPower", 0.5f), Number("DetailRange", 5));
+                c.Detail2.W = detail1 is null ? 0 : 4;
+                c.Kind = new(1, 0, 0.3f, 0.45f);
+                break;
+            case SurfaceKind.Hair when shader.StartsWith("pbr_hair_simple"):
+                // the beard's or hair's inner layer, lit as an ordinary surface rather than along its strands and alpha
+                // tested at its alpha plus MaskAdd. Roughness is the normal map's alpha between RoughMin and RoughMax; the
+                // shine goes from SpecShiftRInt_1 to SpecShiftRInt_2 as the alpha falls, times the shift texture's red
+                // (taken as its half on average), here put as RSpecScale and RSpecBase on the remapped roughness
+                {
+                    float least = Number("RoughMin", 0), most = Number("RoughMax", 1);
+                    float from = Number("SpecShiftRInt_1", 0), to = Number("SpecShiftRInt_2", 1);
+                    float span = Math.Max(most - least, 1e-3f);
+                    float scale = (to - from) / span;
+                    c.Spec = new(0.5f * scale, 0.5f * (from - scale * (1 - most)), least, most);
+                    c.Kind = new((int)SurfaceKind.Plain, 0.5f - Number("MaskAdd", 0), 0, 0);
+                    c.Misc.Y = 0;
+                }
+                break;
+            case SurfaceKind.Hair:
+                shift = await Read("SpecularShiftTexture");
+                c.Flags.Z = shift is null ? 0 : 1;
+                c.Flags.W = Number("SpecularShiftScale", 0.5f);
+                c.Kind = new(2, 0.5f, 0.15f, 0);
+                break;
+            case SurfaceKind.Eye:
+                c.Eye = new(Number("Specularity", 0.6f), Number("Roughness", 0.1f), Number("SpecularityMeat", 0.1f), Number("BlickScale", 1));
+                if (material.Textures.FirstOrDefault(t => t.Parameter.Equals("BlickCube", StringComparison.OrdinalIgnoreCase)) is { } cube)
+                    blick = GpuTextures.Cube(locator, cube.Path);
+                if (blick is null) c.Eye.W = 0;
+                break;
+            case SurfaceKind.Glass:
+                c.Emissive.W = Number("Opacity", 0.3f);
+                break;
+            default:
+                mask = await Read("TintMask");
+                if (shader.Contains("2det"))
+                {
+                    detail1 = await Read("DetailNormal1");
+                    detail2 = await Read("DetailNormal2");
+                    var t1 = Tile("DetailTile1");
+                    var t2 = Tile("DetailTile2");
+                    c.Detail = new(t1.X, t1.Y, Number("DetailPower", 0.5f), Number("DetailRange", 5));
+                    c.Detail2 = new(t2.X, t2.Y, Number("DetailAlbedoPower", 0), detail1 is not null && detail2 is not null && mask is not null ? 2 : 0);
+                }
+                else if (shader.Contains("_det") || shader == "pbr_det")
+                {
+                    detail1 = await Read("DetailNormal");
+                    var t1 = Tile("DetailTile");
+                    c.Detail = new(t1.X, t1.Y, Number("DetailPower", 0.5f), Number("DetailRange", 5));
+                    c.Detail2 = new(1, 1, Number("DetailAlbedoPower", 0), detail1 is null ? 0 : shader == "pbr_det" ? 3 : mask is null ? 0 : 1);
+                }
+                // pbr_spec: the specular colour from a texture of its own
+                if (await Read("SpecularTexture") is { } specular)
+                {
+                    shift = specular;
+                    c.Misc.W = 1;
+                }
+                break;
+        }
+        c.Flags.Y = mask is null ? 0 : 1;
+        if (mask is null) c.SpecColor.W = 0;
+        // what glows, as the emissive graphs have it (the dissolve effects' glow is driven by the game as they play)
+        var emissive = await Read("emissive");
+        if (emissive is not null)
+        {
+            // pbr_std_tint_mask_det_emissive: half the noise's range on average
+            float multiplier = Number("emissive_multiplier", 1) * 0.75f;
+            c.Emissive = new(multiplier, multiplier, multiplier, c.Emissive.W);
+            c.Glow.X = 1;
+        }
+        else if (await Read("emissive_mask") is { } glowMask && Parameter(material, "emissive_color_mask") is ColorValue glow)
+        {
+            emissive = glowMask;
+            float multiplier = Number("emissive_color_mask_mlt", 1);
+            c.Emissive = new(LinearF(glow.R / 255f) * multiplier, LinearF(glow.G / 255f) * multiplier, LinearF(glow.B / 255f) * multiplier, c.Emissive.W);
+            c.Glow.X = 2;
+        }
+        return new MaterialLook { Kind = kind, Normal = normal, Mask = mask, Detail1 = detail1, Detail2 = detail2, Shift = shift, Blick = blick, Emissive = emissive, Constants = c };
+    }
+
+    /// <summary>A picture times twice another (scaled to its size), each channel: mid-grey changes nothing, darker darkens.</summary>
+    private static BitmapSource Overlay(BitmapSource picture, BitmapSource over)
+    {
+        var colour = picture.Format == PixelFormats.Bgr32 ? picture : new FormatConvertedBitmap(picture, PixelFormats.Bgr32, null, 0);
+        int width = colour.PixelWidth, height = colour.PixelHeight, stride = width * 4;
+        var pixels = new byte[stride * height];
+        colour.CopyPixels(pixels, stride, 0);
+        BitmapSource scaled = over.PixelWidth == width && over.PixelHeight == height ? over
+            : new TransformedBitmap(over, new ScaleTransform((double)width / over.PixelWidth, (double)height / over.PixelHeight));
+        var layer = new FormatConvertedBitmap(scaled, PixelFormats.Bgr32, null, 0);
+        if (layer.PixelWidth != width || layer.PixelHeight != height) return picture;
+        var mask = new byte[stride * height];
+        layer.CopyPixels(mask, stride, 0);
+        for (int i = 0; i < pixels.Length; i++)
+            if ((i & 3) != 3) pixels[i] = (byte)Math.Min(255, pixels[i] * mask[i] / 128);
+        var laid = BitmapSource.Create(width, height, 96, 96, PixelFormats.Bgr32, null, pixels, stride);
+        laid.Freeze();
+        return laid;
+    }
+
+    /// <summary>The engine's grey placeholder texture: 50% grey.</summary>
+    private static readonly BitmapSource Grey = MakeGrey();
+
+    private static BitmapSource MakeGrey()
+    {
+        var pixels = Enumerable.Repeat((byte)128, 4 * 4 * 4).ToArray();
+        var grey = BitmapSource.Create(4, 4, 96, 96, PixelFormats.Bgr32, null, pixels, 16);
+        grey.Freeze();
+        return grey;
+    }
+
+    /// <summary>
+    /// A picture with another's alpha (hair's), for the view's alpha test. Straight, not premultiplied: the colour is
+    /// kept where it's see-through, so a strand's edges don't go dark when its mip levels are made.
+    /// </summary>
+    private static BitmapSource WithAlpha(BitmapSource picture, BitmapSource alphaFrom)
     {
         var colour = picture.Format == PixelFormats.Bgr32 ? picture : new FormatConvertedBitmap(picture, PixelFormats.Bgr32, null, 0);
         int width = colour.PixelWidth, height = colour.PixelHeight, stride = width * 4;
@@ -127,16 +341,13 @@ public static class LookTextures
         bool any = false;
         for (int i = 3; i < pixels.Length; i += 4)
         {
-            bool keep = mask[i] >= 51;
-            any |= !keep;
-            // premultiplied: a left-out pixel is all zero
-            if (keep) pixels[i] = 255;
-            else pixels[i - 3] = pixels[i - 2] = pixels[i - 1] = pixels[i] = 0;
+            pixels[i] = mask[i];
+            any |= pixels[i] < 255;
         }
         if (!any) return picture;
-        var cut = BitmapSource.Create(width, height, 96, 96, PixelFormats.Pbgra32, null, pixels, stride);
-        cut.Freeze();
-        return cut;
+        var blended = BitmapSource.Create(width, height, 96, 96, PixelFormats.Bgra32, null, pixels, stride);
+        blended.Freeze();
+        return blended;
     }
 
     private static object? Parameter(MeshMaterial material, string name) =>
@@ -160,12 +371,13 @@ public static class LookTextures
     {
         public (float R, float G, float B, float Offset)? Variance;
         public (float R, float G, float B)? Vertex;
+        public float Scale = 1;
         public bool Shifting;
         public BitmapSource? Mask;
         public Matrix4x4 Red = Matrix4x4.Identity, Blue = Matrix4x4.Identity;
         public bool KeepGray, BlendColors;
 
-        public bool Does => Variance is not null || Vertex is not null || Shifting;
+        public bool Does => Variance is not null || Vertex is not null || Scale != 1 || Shifting;
 
         public BitmapSource Apply(BitmapSource picture)
         {
@@ -189,6 +401,7 @@ public static class LookTextures
                 // the shaders work in linear light, as the texture is read; shown again as the screen takes it
                 float r = Linear(pixels[i + 2]), g = Linear(pixels[i + 1]), b = Linear(pixels[i]);
                 if (Variance is { } v) (r, g, b) = CustomColoring(v.Offset, r, g, b, v.R, v.G, v.B);
+                (r, g, b) = (r * Scale, g * Scale, b * Scale);
                 if (Vertex is { } c) (r, g, b) = (r * c.R, g * c.G, b * c.B);
                 if (Shifting) (r, g, b) = ShiftColor(r, g, b, mask is null ? 1 : mask[i + 1] / 255f);
                 pixels[i + 2] = Screen(r);

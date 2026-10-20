@@ -14,38 +14,38 @@ namespace W3ModWorkbench;
 public static class MeshTextures
 {
     /// <summary>
-    /// The texture no larger than <paramref name="max"/> across (a smaller mip level when it has one). Null when no
-    /// cache has it or its format can't be read. Reads from disk, so it belongs off the UI thread.
+    /// The texture no larger than <paramref name="max"/> across (a smaller mip level when it has one), without its alpha.
+    /// Null when no cache has it or its format can't be read. Reads from disk, so it belongs off the UI thread. The 3D
+    /// view is given the stored blocks for it (with the alpha), see <see cref="GpuTextures.Store"/>.
     /// </summary>
-    public static BitmapSource? Load(ResourceLocator locator, string xbmPath, int max)
-    {
-        if (locator.FindTexture(xbmPath) is not { } texture) return null;
-        try
-        {
-            if (EntryImages.FromTexture(texture, max)?.Image is not { } image) return null;
-            var opaque = new FormatConvertedBitmap(image, PixelFormats.Bgr32, null, 0);
-            opaque.Freeze();
-            return opaque;
-        }
-        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or NotSupportedException)
-        {
-            return null;
-        }
-    }
+    public static BitmapSource? Load(ResourceLocator locator, string xbmPath, int max) => Read(locator, xbmPath, max, PixelFormats.Bgr32);
 
     /// <summary>
     /// The texture with its alpha, for a material that's cut out by it (hair cards): null when it can't be read. Reads
     /// from disk, so it belongs off the UI thread.
     /// </summary>
-    public static BitmapSource? LoadWithAlpha(ResourceLocator locator, string xbmPath, int max)
+    public static BitmapSource? LoadWithAlpha(ResourceLocator locator, string xbmPath, int max) => Read(locator, xbmPath, max, PixelFormats.Bgra32);
+
+    private static BitmapSource? Read(ResourceLocator locator, string xbmPath, int max, PixelFormat format)
     {
         if (locator.FindTexture(xbmPath) is not { } texture) return null;
         try
         {
-            if (EntryImages.FromTexture(texture, max)?.Image is not { } image) return null;
-            var withAlpha = new FormatConvertedBitmap(image, PixelFormats.Bgra32, null, 0);
-            withAlpha.Freeze();
-            return withAlpha;
+            var info = texture.Info;
+            if (info.Format == TextureFormat.Unknown) return null;
+            byte[] pixels;
+            using (var fs = new FileStream(texture.Archive.FilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+                pixels = TextureCacheArchive.ReadPixels(fs, info);
+            // the largest mip level no larger than asked for, as the texture viewer picks one
+            int level = 0;
+            while (level + 1 < info.Mips && Math.Max(info.Width >> (level + 1), info.Height >> (level + 1)) >= max) level++;
+            if (TextureDecoder.Decode(info, pixels, level) is not { } image) return null;
+            var decoded = BitmapSource.Create(image.Width, image.Height, 96, 96, PixelFormats.Bgra32, null, image.Bgra, image.Width * 4);
+            decoded.Freeze();
+            BitmapSource picture = format == PixelFormats.Bgra32 ? decoded : new FormatConvertedBitmap(decoded, format, null, 0);
+            picture.Freeze();
+            GpuTextures.Store(picture, GpuTextures.DdsOf(info, pixels, level));
+            return picture;
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or NotSupportedException)
         {

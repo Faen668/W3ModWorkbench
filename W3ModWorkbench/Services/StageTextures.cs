@@ -27,17 +27,17 @@ public static class StageTextures
     }
 
     /// <summary>
-    /// Every material's texture for each mesh, by its place in <paramref name="parts"/>: the picture to draw it with, or
-    /// that it's left out (a shadow drawn over the eyes). <paramref name="progress"/> hears how many are done of how many.
+    /// Every material's texture for each mesh, by its place in <paramref name="parts"/>: the picture to draw it with and its
+    /// normal map, or that it's left out (a shadow drawn over the eyes). <paramref name="progress"/> hears how many are done of how many.
     /// </summary>
-    public static async Task<List<(int Part, int Material, BitmapSource? Picture, bool LeaveOut)>> LoadAsync(
+    public static async Task<List<(int Part, int Material, BitmapSource? Picture, MaterialLook? Look, bool LeaveOut)>> LoadAsync(
         IReadOnlyList<(MeshFile Mesh, (ColorShift? First, ColorShift? Second)? Coloring)> parts, ResourceLocator locator,
         Func<string, Task<BitmapSource?>> texture, IProgress<(int Done, int Total)>? progress, CancellationToken token)
     {
         var jobs = new List<(int Part, int Material)>();
         for (int p = 0; p < parts.Count; p++)
             for (int m = 0; m < parts[p].Mesh.Materials.Count; m++) jobs.Add((p, m));
-        var results = new (int, int, BitmapSource?, bool)[jobs.Count];
+        var results = new (int, int, BitmapSource?, MaterialLook?, bool)[jobs.Count];
         int done = 0;
         progress?.Report((0, jobs.Count));
         using var gate = new SemaphoreSlim(Math.Clamp(Environment.ProcessorCount - 1, 2, 8));
@@ -47,9 +47,9 @@ public static class StageTextures
             try
             {
                 var (mesh, coloring) = parts[job.Part];
-                var (picture, leaveOut) = await Task.Run(() => LookTextures.ForMaterial(mesh, job.Material, locator, texture, coloring), token)
-                    .ContinueWith(t => t.IsCompletedSuccessfully ? t.Result : ((BitmapSource?)null, false), TaskScheduler.Default);
-                results[i] = (job.Part, job.Material, picture, leaveOut);
+                var (picture, look, leaveOut) = await Task.Run(() => LookTextures.ForMaterial(mesh, job.Material, locator, texture, coloring), token)
+                    .ContinueWith(t => t.IsCompletedSuccessfully ? t.Result : ((BitmapSource?)null, (MaterialLook?)null, false), TaskScheduler.Default);
+                results[i] = (job.Part, job.Material, picture, look, leaveOut);
             }
             finally
             {

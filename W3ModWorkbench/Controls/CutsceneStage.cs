@@ -45,7 +45,7 @@ public sealed class CutsceneStage : Grid
     {
         Background = System.Windows.Media.Brushes.Transparent;
         ClipToBounds = true;
-        View = new MeshView { ShowFloor = true, ToolTip = "Drag to turn around, right-drag to move, wheel to come closer, double-click to see everyone" };
+        View = new MeshView { ShowFloor = true, AutoLod = true, ToolTip = "Drag to turn around, right-drag to move, wheel to come closer, double-click to see everyone" };
         Children.Add(_bars);
         Children.Add(View);
         Children.Add(_text);
@@ -130,7 +130,7 @@ public sealed class CutsceneStage : Grid
     /// stage needs to play it smoothly from the start.
     /// </summary>
     public sealed record PreparedCast(CutsceneFile Cutscene, CutscenePlayback Playback, List<CastMember> Cast,
-        List<(int Part, int Material, BitmapSource? Picture, bool LeaveOut)> Textures, List<string> Notes);
+        List<(int Part, int Material, BitmapSource? Picture, MaterialLook? Look, bool LeaveOut)> Textures, List<string> Notes);
 
     /// <summary>
     /// Puts a cutscene's actors together from their entities and reads every texture they're drawn with (several at

@@ -231,46 +231,50 @@
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
-            <!-- back, search, read through, pauses and language -->
-            <DockPanel Grid.Row="0" Margin="0,0,0,8" LastChildFill="True">
-                <Button x:Name="BackButton" DockPanel.Dock="Left" Padding="10,5" Margin="0,0,8,0" Click="Back_Click" IsEnabled="False"
-                        ToolTip="Back to where you followed a link from (Alt+Left)">
-                    <TextBlock Style="{StaticResource IconText}" Text="&#xE72B;" />
-                </Button>
-                <StackPanel Orientation="Horizontal" DockPanel.Dock="Right">
-                    <Button x:Name="ReadButton" Padding="12,5" Margin="10,0,0,0" Click="Read_Click"
+            <!-- as REDkit's scene editor: the scene's own tabs above, the flow below, what's picked at the side -->
+            <Grid Grid.Row="0" Grid.RowSpan="2">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" MinWidth="420" />
+                    <ColumnDefinition Width="8" />
+                    <ColumnDefinition Width="400" MinWidth="260" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+                <!-- back and search above the flow and tabs, read through, pauses and language above the side panel, so
+                     their edges line up with the panels under them however the splitter moves -->
+                <DockPanel Grid.Row="0" Grid.Column="0" Margin="0,0,0,8" LastChildFill="True">
+                    <Button x:Name="BackButton" DockPanel.Dock="Left" Padding="10,5" Margin="0,0,8,0" Click="Back_Click" IsEnabled="False"
+                            ToolTip="Back to where you followed a link from (Alt+Left)">
+                        <TextBlock Style="{StaticResource IconText}" Text="&#xE72B;" />
+                    </Button>
+                    <Grid>
+                        <TextBox x:Name="SearchBox" Padding="32,6,8,6" VerticalContentAlignment="Center" TextChanged="SearchBox_TextChanged" />
+                        <TextBlock Style="{StaticResource IconText}" Text="&#xE721;" FontSize="13" Margin="11,0,0,0" Opacity="0.6"
+                                   HorizontalAlignment="Left" IsHitTestVisible="False" />
+                        <TextBlock x:Name="SearchPlaceholder" Margin="33,0,0,0" Opacity="0.55" VerticalAlignment="Center" IsHitTestVisible="False"
+                                   Text="Search lines, speakers and sections  (Ctrl+F)" />
+                    </Grid>
+                </DockPanel>
+                <DockPanel Grid.Row="0" Grid.Column="2" Margin="0,0,0,8" LastChildFill="True">
+                    <Button x:Name="ReadButton" DockPanel.Dock="Left" Padding="12,5" Click="Read_Click"
                             ToolTip="Play the voices from the part picked (or the start), following the flow; stops at a choice or a condition for you to pick a way (R)">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock x:Name="ReadIcon" Style="{StaticResource IconText}" Text="&#xE768;" />
                             <TextBlock x:Name="ReadLabel" Margin="8,0,0,0" Text="Read through" />
                         </StackPanel>
                     </Button>
-                    <ToggleButton x:Name="PausesToggle" Padding="12,5" Margin="10,0,0,0" Click="Pauses_Click" ToolTip="Show the pauses between lines">
+                    <ToggleButton x:Name="PausesToggle" DockPanel.Dock="Left" Padding="12,5" Margin="8,0,0,0" Click="Pauses_Click" ToolTip="Show the pauses between lines">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Style="{StaticResource IconText}" Text="&#xE916;" />
                             <TextBlock Margin="8,0,0,0" Text="Pauses" />
                         </StackPanel>
                     </ToggleButton>
-                    <TextBlock Text="Language" VerticalAlignment="Center" Margin="14,0,8,0" Opacity="0.7" />
-                    <ComboBox x:Name="LanguageBox" Width="90" SelectionChanged="LanguageBox_SelectionChanged" ToolTip="The language the lines are shown in" />
-                </StackPanel>
-                <Grid>
-                    <TextBox x:Name="SearchBox" Padding="32,6,8,6" VerticalContentAlignment="Center" TextChanged="SearchBox_TextChanged" />
-                    <TextBlock Style="{StaticResource IconText}" Text="&#xE721;" FontSize="13" Margin="11,0,0,0" Opacity="0.6"
-                               HorizontalAlignment="Left" IsHitTestVisible="False" />
-                    <TextBlock x:Name="SearchPlaceholder" Margin="33,0,0,0" Opacity="0.55" VerticalAlignment="Center" IsHitTestVisible="False"
-                               Text="Search lines, speakers and sections  (Ctrl+F)" />
-                </Grid>
-            </DockPanel>
-
-            <!-- as REDkit's scene editor: the scene's own tabs above, the flow below, what's picked at the side -->
-            <Grid Grid.Row="1">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" MinWidth="420" />
-                    <ColumnDefinition Width="8" />
-                    <ColumnDefinition Width="400" MinWidth="260" />
-                </Grid.ColumnDefinitions>
-                <Grid Grid.Column="0">
+                    <TextBlock Text="Language" DockPanel.Dock="Left" VerticalAlignment="Center" Margin="14,0,8,0" Opacity="0.7" />
+                    <ComboBox x:Name="LanguageBox" MinWidth="70" SelectionChanged="LanguageBox_SelectionChanged" ToolTip="The language the lines are shown in" />
+                </DockPanel>
+                <Grid Grid.Row="1" Grid.Column="0">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="*" MinHeight="160" />
                         <RowDefinition Height="8" />
@@ -368,7 +372,7 @@
                                     <!-- through a camera the picture is 16:9, with bars around it -->
                                     <Grid x:Name="StageArea" Background="Transparent" SizeChanged="StageArea_SizeChanged" ClipToBounds="True">
                                         <Border x:Name="StageBars" Background="#E0000000" />
-                                        <local:MeshView x:Name="StageView" ShowFloor="True"
+                                        <local:MeshView x:Name="StageView" ShowFloor="True" AutoLod="True"
                                                         ToolTip="Drag to turn around, right-drag to move, wheel to come closer, double-click to see everyone" />
                                         <!-- a cutscene section plays its cutscene, as the cutscene viewer does -->
                                         <local:CutsceneStage x:Name="CutsceneView" Visibility="Collapsed" />
@@ -529,10 +533,10 @@
                     </Border>
                 </Grid>
 
-                <GridSplitter Grid.Column="1" Width="8" HorizontalAlignment="Stretch" Background="Transparent" />
+                <GridSplitter Grid.Row="1" Grid.Column="1" Width="8" HorizontalAlignment="Stretch" Background="Transparent" />
 
                 <!-- where the file's properties come from, over its panel -->
-                <DockPanel Grid.Column="2">
+                <DockPanel Grid.Row="1" Grid.Column="2">
                 <local:SourceNote x:Name="SourceNoteBar" DockPanel.Dock="Top" Margin="0,0,0,8" />
                 <Border Style="{StaticResource Card}" Padding="8,8,8,4">
                     <TabControl x:Name="SideTabs" Style="{StaticResource PanelTabs}" ItemContainerStyle="{StaticResource PanelTab}">

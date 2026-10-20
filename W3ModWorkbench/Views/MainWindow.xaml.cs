@@ -1874,10 +1874,10 @@ public partial class MainWindow : Window, IMessageHost
                 for (int i = 0; i < mesh.Materials.Count; i++)
                 {
                     int material = i;
-                    var (picture, leaveOut) = await Task.Run(() => LookTextures.ForMaterial(mesh, material, locator, PreviewTexture(locator)), token);
+                    var (picture, look, leaveOut) = await Task.Run(() => LookTextures.ForMaterial(mesh, material, locator, PreviewTexture(locator)), token);
                     if (token.IsCancellationRequested || !ReferenceEquals(PreviewMesh.Mesh, mesh)) return;
                     if (leaveOut) PreviewMesh.LeaveOut(0, material);
-                    else PreviewMesh.SetTexture(material, picture);
+                    else PreviewMesh.SetTexture(material, picture, look);
                 }
             }
             else if (CutsceneWindow.CanShow(item.Name))
@@ -1938,10 +1938,10 @@ public partial class MainWindow : Window, IMessageHost
                     {
                         int part = p, material = m;
                         var mesh = parts[p].Mesh;
-                        var (picture, leaveOut) = await Task.Run(() => LookTextures.ForMaterial(mesh, material, locator, texture, coloring), token);
+                        var (picture, look, leaveOut) = await Task.Run(() => LookTextures.ForMaterial(mesh, material, locator, texture, coloring), token);
                         if (token.IsCancellationRequested || !ReferenceEquals(PreviewMesh.Mesh, parts[0].Mesh)) return;
                         if (leaveOut) PreviewMesh.LeaveOut(part, material);
-                        else PreviewMesh.SetTexture(part, material, picture);
+                        else PreviewMesh.SetTexture(part, material, picture, look);
                     }
                 }
             }

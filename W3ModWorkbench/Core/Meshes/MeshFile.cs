@@ -22,6 +22,12 @@ public sealed class MeshChunk
     public required Vector3[] Normals { get; init; }
     public required Vector2[] Uvs { get; init; }
 
+    /// <summary>
+    /// Each vertex's tangent, the way the normal map's red runs across the surface, with its handedness in W: the way
+    /// its green runs is the normal crossed with the tangent, times W. Empty when the mesh doesn't keep them.
+    /// </summary>
+    public Vector4[] Tangents { get; init; } = [];
+
     /// <summary>Three per triangle, into this chunk's own vertices.</summary>
     public required int[] Indices { get; init; }
 
@@ -54,7 +60,8 @@ public sealed class MeshChunk
 /// normals and two more streams start in the buffer; where its triangles start after the vertices; its vertex and
 /// index counts; its material; its render mask; and its LOD bits. Positions are three 16-bit numbers scaled into the
 /// mesh's box (with bone indices and weights after them when the mesh is skinned), UVs two half floats, and normals
-/// three 10-bit numbers in a 32-bit word followed by the tangent the same way. Each stream starts on 16 bytes.
+/// three 10-bit numbers in a 32-bit word followed by the tangent the same way, its top two bits its handedness (both
+/// set when the normal map's green runs along normal × tangent, clear when against it). Each stream starts on 16 bytes.
 /// </para>
 /// </summary>
 public sealed class MeshFile
@@ -215,6 +222,7 @@ public sealed class MeshFile
             var positions = new Vector3[vertices];
             var uvs = new Vector2[vertices];
             var normals = new Vector3[vertices];
+            var tangents = Array.Empty<Vector4>();
             // a skinned vertex has its bones' numbers, then their weights as bytes, after its 8 bytes of position
             int bones = vertexType == 3 ? (stride - 8) / 2 : 0;
             var boneIndices = new byte[vertices * bones];
@@ -249,6 +257,14 @@ public sealed class MeshFile
                     uint n = BinaryPrimitives.ReadUInt32LittleEndian(buffer.AsSpan((int)(normalsAt + v * 8)));
                     normals[v] = Vector3.Normalize(new Vector3(Ten(n), Ten(n >> 10), Ten(n >> 20)));
                 }
+                tangents = new Vector4[vertices];
+                for (int v = 0; v < vertices; v++)
+                {
+                    uint t = BinaryPrimitives.ReadUInt32LittleEndian(buffer.AsSpan((int)(normalsAt + v * 8 + 4)));
+                    var tangent = new Vector3(Ten(t), Ten(t >> 10), Ten(t >> 20));
+                    tangent = tangent.LengthSquared() > 1e-8f ? Vector3.Normalize(tangent) : Vector3.UnitX;
+                    tangents[v] = new Vector4(tangent, t >> 30 == 3 ? 1 : -1);
+                }
             }
 
             // after the normals, a vertex's colour (red, green, blue and a byte the engine uses otherwise) and 4 more bytes
@@ -277,6 +293,7 @@ public sealed class MeshFile
                 Positions = positions,
                 Normals = normals,
                 Uvs = uvs,
+                Tangents = tangents,
                 Indices = triangles,
                 BonesPerVertex = bones,
                 BoneIndices = boneIndices,
@@ -290,7 +307,8 @@ public sealed class MeshFile
     /// <summary>
     /// A mesh as REDkit keeps it before it's cooked (the loose files in r4data): every vertex in full, 152 bytes of floats
     /// (position, bone indices and weights, normal, colour, two UVs, tangent and more), and 16-bit triangles, both in
-    /// buffers inside the file, with the <c>chunks</c> list saying which belong to which chunk. Its LODs, when it has
+    /// buffers inside the file, with the <c>chunks</c> list saying which belong to which chunk. The tangent is at byte
+    /// 64 and the binormal at 76 (checked against tangents worked out from the UVs: the same on 99% of vertices). Its LODs, when it has
     /// some, list their chunks in <c>lodLevelInfo</c>.
     /// </summary>
     private static List<MeshChunk> ReadUncooked(RedObject mesh, byte[] vertexData, byte[] indexData, List<float> lods)
@@ -322,6 +340,7 @@ public sealed class MeshFile
             var positions = new Vector3[vertices];
             var normals = new Vector3[vertices];
             var uvs = new Vector2[vertices];
+            var tangents = stride >= 88 ? new Vector4[vertices] : [];
             bool skinned = info["vertexType"] is RedEnum t && t.Values.Contains("MVT_SkinnedMesh");
             // the bones' numbers as four bytes after the position, their weights as four floats after those
             var boneIndices = new byte[skinned ? vertices * 4 : 0];
@@ -339,6 +358,13 @@ public sealed class MeshFile
                 var normal = new Vector3(F(s, 32), F(s, 36), F(s, 40));
                 normals[v] = normal.LengthSquared() > 1e-8f ? Vector3.Normalize(normal) : Vector3.UnitZ;
                 uvs[v] = new Vector2(F(s, 48), F(s, 52));
+                if (tangents.Length > 0)
+                {
+                    var tangent = new Vector3(F(s, 64), F(s, 68), F(s, 72));
+                    var binormal = new Vector3(F(s, 76), F(s, 80), F(s, 84));
+                    tangent = tangent.LengthSquared() > 1e-8f ? Vector3.Normalize(tangent) : Vector3.UnitX;
+                    tangents[v] = new Vector4(tangent, Vector3.Dot(Vector3.Cross(normals[v], tangent), binormal) >= 0 ? 1 : -1);
+                }
             }
             var triangles = new int[indices - indices % 3];
             for (int i = 0; i < triangles.Length; i++)
@@ -356,6 +382,7 @@ public sealed class MeshFile
                 Positions = positions,
                 Normals = normals,
                 Uvs = uvs,
+                Tangents = tangents,
                 Indices = triangles,
                 BonesPerVertex = skinned ? 4 : 0,
                 BoneIndices = boneIndices,

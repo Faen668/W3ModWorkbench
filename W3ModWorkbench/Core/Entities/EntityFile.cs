@@ -149,9 +149,12 @@ public sealed class EntityFile
                     GraphX = (int)o.Integer("graphPositionX"),
                     GraphY = (int)o.Integer("graphPositionY"),
                     Local = Transform(o.Bytes("transform")),
-                    // a cloth component's shape is its cloth resource, which is drawn as a mesh
+                    // a cloth component's shape is its cloth resource, which is drawn as a mesh; a morphed mesh is drawn as
+                    // the mesh it morphs from, as the game shows it until a quest or script morphs it (a siren's head,
+                    // Chappelle's face)
                     Mesh = o["mesh"] is RedHandle m ? f.Import(m)?.Path
-                        : o.ClassName == "CClothComponent" && o["resource"] is RedHandle r ? f.Import(r)?.Path : null,
+                        : o.ClassName == "CClothComponent" && o["resource"] is RedHandle r ? f.Import(r)?.Path
+                        : o.ClassName == "CMorphedMeshComponent" && o["morphSource"] is RedHandle s ? f.Import(s)?.Path : null,
                     Resources = resources,
                     Streamed = isStreamed,
                 };

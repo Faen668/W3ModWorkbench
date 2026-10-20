@@ -177,8 +177,20 @@ public partial class MeshWindow : Window, IMessageHost
         if (!_textures.TryGetValue(path, out var task))
             _textures[path] = task = Task.Run(() => MeshTextures.Load(_locator, path, TextureSize));
         var picture = await task;
+        // the material as the game draws it under its colour texture (normal map, masks, detail maps, its numbers); not
+        // under another texture picked to look at (a mask, or the normal map itself)
+        MaterialLook? look = null;
+        if (string.Equals(path, item.Current.Diffuse?.Path, StringComparison.OrdinalIgnoreCase))
+        {
+            Task<BitmapSource?> Texture(string p)
+            {
+                if (!_textures.TryGetValue(p, out var t)) _textures[p] = t = Task.Run(() => MeshTextures.Load(_locator, p, TextureSize));
+                return t;
+            }
+            look = await LookTextures.LookOf(item.Current, _locator, Texture);
+        }
         if (!ReferenceEquals(item.Selected, choice)) return; // another was picked meanwhile
-        View.SetTexture(item.Index, picture);
+        View.SetTexture(item.Index, picture, look);
         item.Status = picture is not null ? await Task.Run(() => MeshTextures.Describe(_locator, path))
             : "Its pixels weren't found in a texture cache (open the mod's texture.cache, or the game's), or its format can't be read.";
     }

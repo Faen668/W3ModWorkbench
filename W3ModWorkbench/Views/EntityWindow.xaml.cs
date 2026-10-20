@@ -390,8 +390,8 @@ public partial class EntityWindow : Window, IMessageHost
     }
 
     /// <summary>
-    /// Reads the meshes of an appearance (or the entity alone) and shows them together, then puts their colour
-    /// textures on as each is read.
+    /// Reads the meshes of an appearance (or the entity alone) and their textures, several at once, and shows them
+    /// together.
     /// </summary>
     private async Task ShowMeshesAsync(EntityAppearance? appearance)
     {
@@ -405,12 +405,21 @@ public partial class EntityWindow : Window, IMessageHost
         List<EntityComponent> drawnBy;
         int wanted, missing;
         EntityLook look;
+        List<(int Part, int Material, BitmapSource? Picture, MaterialLook? Look, bool LeaveOut)> textures;
         try
         {
             look = await Task.Run(() => e.Look(appearance, _locator.ReadFile), token);
             if (token.IsCancellationRequested) return;
             ShowLook(look);
             (parts, drawnBy, wanted, missing) = await Task.Run(() => ReadMeshes(look, _locator, token), token);
+            if (token.IsCancellationRequested) return;
+            // every material's texture read several at once, then put on with the meshes, rather than popping in one by one
+            var coloured = parts.Select((part, p) => (part.Mesh, LookTextures.Coloring(e, appearance?.Name, drawnBy[p].Name))).ToList();
+            var progress = new Progress<(int Done, int Total)>(n =>
+            {
+                if (!token.IsCancellationRequested && n.Total > 0) ViewText.Text = $"Loading textures, {n.Done} of {n.Total}…";
+            });
+            textures = await StageTextures.LoadAsync(coloured, _locator, Texture, progress, token);
         }
         catch (OperationCanceledException)
         {
@@ -421,7 +430,7 @@ public partial class EntityWindow : Window, IMessageHost
         // the animation playing carries on in the new look, from where it was
         (_resumeAt, _resumePlaying) = _clip is null ? (0f, true) : (_time, _playing);
         StopAnimation();
-        View.ShowParts(parts);
+        View.ShowParts(parts, textures);
         _meshesNote = $"{Format.Count(parts.Count, "mesh", "meshes")} shown" + (missing > 0 ? $", {missing:N0} not found or not read" : "")
                     + (appearance is null ? "" : $"  ·  {Format.Count(appearance.Templates.Count, "template")} in {appearance.Name}");
         _syncing = true;
@@ -433,23 +442,6 @@ public partial class EntityWindow : Window, IMessageHost
         ViewText.Text = parts.Count == 0 ? (wanted == 0 ? "It has no meshes to show." : "None of its meshes could be read.") : "";
         ViewText.Visibility = parts.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         _ = FindRigAsync(look, parts, token);
-
-        // the colour textures, put on as each is read, in the colours the appearance gives each component; a texture
-        // used by several meshes is read once
-        for (int p = 0; p < parts.Count; p++)
-        {
-            var mesh = parts[p].Mesh;
-            var coloring = LookTextures.Coloring(e, appearance?.Name, drawnBy[p].Name);
-            for (int m = 0; m < mesh.Materials.Count; m++)
-            {
-                int part = p, material = m;
-                var (picture, leaveOut) = await Task.Run(() => LookTextures.ForMaterial(mesh, material, _locator, Texture, coloring), token)
-                    .ContinueWith(t => t.IsCompletedSuccessfully ? t.Result : ((BitmapSource?)null, false), TaskScheduler.Default);
-                if (token.IsCancellationRequested) return;
-                if (leaveOut) View.LeaveOut(part, material);
-                else if (picture is not null) View.SetTexture(part, material, picture);
-            }
-        }
     }
 
     /// <summary>
@@ -580,7 +572,7 @@ public partial class EntityWindow : Window, IMessageHost
         if (now - _framesSince < 0.5) return;
         _framesPerSecond = _framesDrawn / (now - _framesSince);
         (_framesDrawn, _framesSince) = (0, now);
-        ShowInfo();
+        ShowStats();
     }
 
     private void LodBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
