@@ -101,7 +101,7 @@ public partial class OtherCopiesWindow : Window, IMessageHost
     private const int OutsideGroup = 4;
 
     /// <summary>Where a file from <paramref name="path"/> loads: from mod.io, the dlc or mods folder, the game's content, or somewhere else.</summary>
-    private static Place PlaceOf(string path, Dictionary<string, (bool Enabled, int? Priority)> settings, string? modioRoot)
+    public static Place PlaceOf(string path, Dictionary<string, (bool Enabled, int? Priority)> settings, string? modioRoot)
     {
         string full = Path.GetFullPath(path);
         if (modioRoot is not null && full.StartsWith(Path.GetFullPath(modioRoot).TrimEnd('\\') + "\\", StringComparison.OrdinalIgnoreCase))

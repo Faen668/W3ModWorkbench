@@ -33,6 +33,30 @@ public sealed class GameFilesArchive : IArchive
     /// <summary>The bundles and texture caches it's made of, in the order the game looks in them.</summary>
     public IReadOnlyList<IArchive> Parts { get; }
 
+    private Dictionary<string, List<ArchiveEntry>>? _copies;
+
+    /// <summary>
+    /// Every copy of a file the game's archives have, in the order the game looks for it (the first is the one it loads):
+    /// a mod's, a DLC's and content0's. A texture in a cache and an .xbm in a bundle share a path but aren't copies, so a
+    /// cache's textures are only copies of each other.
+    /// </summary>
+    public IReadOnlyList<ArchiveEntry> CopiesOf(ArchiveEntry entry)
+    {
+        if (_copies is null)
+        {
+            var copies = new Dictionary<string, List<ArchiveEntry>>(StringComparer.OrdinalIgnoreCase);
+            foreach (var part in Parts)
+                foreach (var e in part.Entries)
+                {
+                    string key = (e is TextureEntry ? "cache:" : "") + e.Path;
+                    if (!copies.TryGetValue(key, out var list)) copies[key] = list = [];
+                    list.Add(e);
+                }
+            _copies = copies;
+        }
+        return _copies.TryGetValue((entry is TextureEntry ? "cache:" : "") + entry.Path, out var found) ? found : [entry];
+    }
+
     /// <summary>
     /// Reads the indexes of every bundle and texture cache in the game's folder. A texture is listed from a cache only
     /// when no bundle has its .xbm, as the bundle's is the game file and the cache holds its pixels. Archives that can't

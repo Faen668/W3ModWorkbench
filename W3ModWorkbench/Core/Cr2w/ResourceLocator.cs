@@ -16,17 +16,43 @@ public sealed class ResourceLocator
     private readonly string? _near;
     private readonly string? _game;
     private readonly Func<string?>? _projectFiles;
+    private readonly bool _otherMods;
 
     /// <param name="open">The archives open in the tool, which are looked in first.</param>
     /// <param name="near">The file being looked at (its bundle or cache), whose folder is looked in next.</param>
     /// <param name="projectFiles">The open project's workspace, asked each time as a project can be opened while a mesh is shown.</param>
-    public ResourceLocator(IEnumerable<IArchive> open, IArchive? near, string? gameFolder, Func<string?>? projectFiles = null)
+    /// <param name="otherMods">
+    /// False to look in no installed mod but the one the file is from: what it uses comes from its own mod, then the
+    /// game (its DLC, then content0), as when a mod is looked at on its own; another mod's copy of a file never wins.
+    /// </param>
+    public ResourceLocator(IEnumerable<IArchive> open, IArchive? near, string? gameFolder, Func<string?>? projectFiles = null, bool otherMods = true)
     {
         _projectFiles = projectFiles;
-        _open = open.ToList();
-        if (near is not null && !_open.Contains(near)) _open.Insert(0, near);
         _near = near is null ? null : Path.GetDirectoryName(near.FilePath);
         _game = gameFolder;
+        _otherMods = otherMods;
+        _open = open.Where(a => otherMods || !IsOtherMod(a.FilePath)).ToList();
+        if (near is not null && !_open.Contains(near)) _open.Insert(0, near);
+    }
+
+    /// <summary>Whether a file is in an installed mod other than the one the file looked at is from.</summary>
+    private bool IsOtherMod(string path)
+    {
+        if (_game is null || ModFolder(path) is not { } mod) return false;
+        return _near is null || !mod.Equals(ModFolder(Path.Combine(_near, "x")), StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>The installed mod's folder (game\mods\modName) a file is in, or null for one that isn't in one.</summary>
+    private string? ModFolder(string path)
+    {
+        if (_game is null) return null;
+        string mods = Path.GetFullPath(Path.Combine(_game, "mods")).TrimEnd('\\') + "\\";
+        string full;
+        try { full = Path.GetFullPath(path); }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException) { return null; }
+        if (!full.StartsWith(mods, StringComparison.OrdinalIgnoreCase)) return null;
+        int slash = full.IndexOf('\\', mods.Length);
+        return slash < 0 ? null : full[..slash];
     }
 
     // ---------------------------------------------------------------- files in bundles
@@ -113,7 +139,7 @@ public sealed class ResourceLocator
         if (_near is not null) places.Add(Path.Combine(_near, "collision.cache"));
         if (_game is not null)
         {
-            foreach (string folder in new[] { "mods", "dlc" })
+            foreach (string folder in _otherMods ? new[] { "mods", "dlc" } : ["dlc"])
             {
                 string root = Path.Combine(_game, folder);
                 if (!Directory.Exists(root)) continue;
@@ -164,7 +190,7 @@ public sealed class ResourceLocator
         if (_game is null) yield break;
         if (Cache(Path.Combine(_game, "content", "content0", "texture.cache")) is { } content0) yield return content0;
         foreach (string path in GameCachePaths(_game))
-            if (Cache(path) is { } cache) yield return cache;
+            if ((_otherMods || !IsOtherMod(path)) && Cache(path) is { } cache) yield return cache;
     }
 
     /// <summary>Each cache's textures by path, made the first time a cache is looked in, so finding one is quick.</summary>
@@ -290,7 +316,7 @@ public sealed class ResourceLocator
             }
         }
         foreach (string path in paths)
-            if (!_open.Any(a => a.FilePath.Equals(path, StringComparison.OrdinalIgnoreCase)) && OpenBundle(path) is { } bundle)
+            if ((_otherMods || !IsOtherMod(path)) && !_open.Any(a => a.FilePath.Equals(path, StringComparison.OrdinalIgnoreCase)) && OpenBundle(path) is { } bundle)
                 yield return bundle;
     }
 }

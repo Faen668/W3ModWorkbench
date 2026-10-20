@@ -39,6 +39,9 @@ public sealed class Settings
     /// <summary>Folders (ending in a backslash) and files bookmarked in the asset browser, by game path.</summary>
     public List<string> AssetBookmarks { get; set; } = [];
 
+    /// <summary>Whether opening a file from the asset browser that more than one archive has asks which copy to open.</summary>
+    public bool AskWhichCopy { get; set; } = true;
+
     /// <summary>Bundles, files and folders opened most recently, newest first.</summary>
     public List<string> RecentPaths { get; set; } = [];
 

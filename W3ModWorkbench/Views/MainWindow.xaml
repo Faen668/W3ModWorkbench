@@ -173,12 +173,6 @@
                         <TextBlock Style="{StaticResource IconText}" Text="&#xE70D;" FontSize="9" Margin="6,2,0,0" />
                     </StackPanel>
                 </Button>
-                <Button Margin="6,0,0,0" Click="AssetBrowser_Click" ToolTip="Browse every file the game has, from its content, DLC and installed mods, in one tree (Ctrl+Shift+A)">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Style="{StaticResource IconText}" Text="&#xE8F1;" Margin="0,1,0,0" />
-                        <TextBlock Margin="8,0,0,0" Text="Asset Browser" />
-                    </StackPanel>
-                </Button>
                 <Button x:Name="ProjectButton" Margin="6,0,0,0" Click="Project_Click"
                         ToolTip="New project, open a project (Ctrl+Shift+O), project properties, add files to the project">
                     <StackPanel Orientation="Horizontal">
@@ -194,7 +188,7 @@
                     </StackPanel>
                 </Button>
                 <Button x:Name="ToolsButton" Margin="6,0,0,0" Click="Tools_Click"
-                        ToolTip="Find in files, browse the game's scripts and mods, search the game's strings, generate stubs, build a mod menu, compare mods">
+                        ToolTip="The asset browser (Ctrl+Shift+A), find in files, browse the game's scripts and mods, search the game's strings, generate stubs, build a mod menu, compare mods">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Style="{StaticResource IconText}" Text="&#xE90F;" Margin="0,1,0,0" />
                         <TextBlock x:Name="ToolsLabel" Margin="8,0,0,0" Text="Tools" />
@@ -226,51 +220,8 @@
                     <TextBlock x:Name="SettingsLabel" Margin="8,0,0,0" Text="Settings" />
                 </StackPanel>
             </Button>
-            <!-- fills what the buttons leave, up to 340, so a narrow window squeezes the search box rather than overlapping the buttons -->
-            <Grid Margin="12,0,0,0">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="*" MinWidth="150" MaxWidth="340" />
-                </Grid.ColumnDefinitions>
-              <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="0,0,8,0">
-                <Button x:Name="BookmarkButton" Padding="8,6" Click="Bookmark_Click" IsEnabled="False"
-                        ToolTip="Bookmark the asset browser folder you're in, to come back to it from the bookmarks list">
-                    <TextBlock x:Name="BookmarkGlyph" Style="{StaticResource IconText}" Text="&#xE734;" />
-                </Button>
-                <Button x:Name="BookmarksButton" Margin="4,0,0,0" Padding="8,6" Click="Bookmarks_Click" ToolTip="Go to a bookmarked folder or file in the asset browser">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Style="{StaticResource IconText}" Text="&#xE8A4;" Margin="0,1,0,0" />
-                        <TextBlock Style="{StaticResource IconText}" Text="&#xE70D;" FontSize="9" Margin="6,2,0,0" />
-                    </StackPanel>
-                </Button>
-                <TextBlock Text="Class" VerticalAlignment="Center" Margin="12,0,8,0" Opacity="0.7" />
-                <ComboBox x:Name="ClassBox" Width="230" IsTextSearchEnabled="True" TextSearch.TextPath="Name"
-                          SelectionChanged="ClassBox_SelectionChanged"
-                          ToolTip="Show only files that hold one class of resource, as REDkit's asset browser does (CMesh, CBitmapTexture, CEntityTemplate…)">
-                    <ComboBox.ItemTemplate>
-                        <DataTemplate>
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="{Binding Name}" />
-                                <TextBlock Text="{Binding CountText}" Opacity="0.5" Margin="8,0,0,0" />
-                            </StackPanel>
-                        </DataTemplate>
-                    </ComboBox.ItemTemplate>
-                </ComboBox>
-              </StackPanel>
-              <Grid Grid.Column="2">
-                <TextBox x:Name="SearchBox" VerticalContentAlignment="Center" Padding="34,6,30,6"
-                         TextChanged="SearchBox_TextChanged" ToolTip="Words must all appear in the path. Use * and ? to match file names, e.g. *.redswf" />
-                <TextBlock Style="{StaticResource IconText}" Text="&#xE721;" Margin="12,0,0,0" Opacity="0.6"
-                           HorizontalAlignment="Left" IsHitTestVisible="False" />
-                <TextBlock x:Name="SearchPlaceholder" Text="Search files  (Ctrl+F)" Margin="35,0,0,0" Opacity="0.55"
-                           VerticalAlignment="Center" IsHitTestVisible="False" />
-                <Button x:Name="ClearSearchButton" HorizontalAlignment="Right" Margin="0,0,4,0" Padding="6,3"
-                        Background="Transparent" BorderThickness="0" Visibility="Collapsed" Click="ClearSearch_Click" ToolTip="Clear search">
-                    <TextBlock Style="{StaticResource IconText}" FontSize="11" Text="&#xE711;" />
-                </Button>
-              </Grid>
-            </Grid>
+            <!-- fills what the buttons leave -->
+            <Border />
         </DockPanel>
 
         <!-- Content -->
@@ -350,7 +301,51 @@
 
                 <GridSplitter Grid.Column="1" Width="8" HorizontalAlignment="Stretch" Background="Transparent" />
 
-                <Border Grid.Column="2" Style="{StaticResource Card}" ClipToBounds="True">
+                <!-- the list, and under it what narrows it: class, file type and search -->
+                <DockPanel Grid.Column="2">
+                <!-- search, then file type, then class: kept low, so the list keeps the room -->
+                <Border x:Name="FilterBar" DockPanel.Dock="Bottom" Style="{StaticResource Card}" Margin="0,6,0,0" Padding="6,4">
+                  <DockPanel LastChildFill="True">
+                    <ComboBox x:Name="ClassBox" DockPanel.Dock="Right" Width="210" Height="28" MinHeight="28" Padding="8,2" IsTextSearchEnabled="True" TextSearch.TextPath="Name"
+                              SelectionChanged="ClassBox_SelectionChanged"
+                              ToolTip="Show only files that hold one class of resource, as REDkit's asset browser does (CMesh, CBitmapTexture, CEntityTemplate…)">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="{Binding Name}" />
+                                    <TextBlock Text="{Binding CountText}" Opacity="0.5" Margin="8,0,0,0" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                    <TextBlock DockPanel.Dock="Right" Text="Class" VerticalAlignment="Center" Margin="14,0,8,0" Opacity="0.7" />
+                    <ComboBox x:Name="FileTypeBox" DockPanel.Dock="Right" Width="150" Height="28" MinHeight="28" Padding="8,2" IsTextSearchEnabled="True" TextSearch.TextPath="Name"
+                              SelectionChanged="FileTypeBox_SelectionChanged" ToolTip="Show only files of one type (.w2mesh, .xbm, .w2ent…)">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="{Binding Name}" />
+                                    <TextBlock Text="{Binding CountText}" Opacity="0.5" Margin="8,0,0,0" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                    <TextBlock DockPanel.Dock="Right" Text="File type" VerticalAlignment="Center" Margin="14,0,8,0" Opacity="0.7" />
+                    <Grid>
+                        <TextBox x:Name="SearchBox" VerticalContentAlignment="Center" Height="28" MinHeight="28" Padding="30,2,26,2"
+                                 TextChanged="SearchBox_TextChanged" ToolTip="Words must all appear in the path. Use * and ? to match file names, e.g. *.redswf" />
+                        <TextBlock Style="{StaticResource IconText}" Text="&#xE721;" FontSize="12" Margin="10,0,0,0" Opacity="0.6"
+                                   HorizontalAlignment="Left" IsHitTestVisible="False" />
+                        <TextBlock x:Name="SearchPlaceholder" Text="Search files  (Ctrl+F)" Margin="31,0,0,0" Opacity="0.55"
+                                   VerticalAlignment="Center" IsHitTestVisible="False" />
+                        <Button x:Name="ClearSearchButton" HorizontalAlignment="Right" Margin="0,0,2,0" Padding="5,2"
+                                Background="Transparent" BorderThickness="0" Visibility="Collapsed" Click="ClearSearch_Click" ToolTip="Clear search">
+                            <TextBlock Style="{StaticResource IconText}" FontSize="10" Text="&#xE711;" />
+                        </Button>
+                    </Grid>
+                  </DockPanel>
+                </Border>
+                <Border Style="{StaticResource Card}" ClipToBounds="True">
                   <Grid>
                     <DataGrid x:Name="FileGrid" AutoGenerateColumns="False" IsReadOnly="True"
                               HeadersVisibility="Column" GridLinesVisibility="None" BorderThickness="0" Background="Transparent"
@@ -394,10 +389,6 @@
                                 <MenuItem x:Name="GridJsonItem" Header="Open as JSON" Click="GridJson_Click" Visibility="Collapsed"
                                           ToolTip="A CR2W file (.env, .w2ent, .w2mi…) as JSON to read and edit, saved back as CR2W; a .json file in the JSON editor">
                                     <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE943;" /></MenuItem.Icon>
-                                </MenuItem>
-                                <MenuItem x:Name="GridBookmarkItem" Header="Bookmark" Click="GridBookmark_Click" Visibility="Collapsed"
-                                          ToolTip="Add the file to the asset browser's bookmarks, or take it off">
-                                    <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE734;" /></MenuItem.Icon>
                                 </MenuItem>
                                 <MenuItem x:Name="GridCopyToProjectItem" Header="Copy to project" Click="GridCopyToProject_Click" Visibility="Collapsed"
                                           ToolTip="Copy into the open project at the same game path (scripts into its scripts folder, the rest into its workspace), to change the copy">
@@ -459,6 +450,7 @@
                     </ScrollViewer>
                   </Grid>
                 </Border>
+                </DockPanel>
 
                 <GridSplitter x:Name="PreviewSplitter" Grid.Column="3" Width="8" HorizontalAlignment="Stretch" Background="Transparent"
                               Visibility="Collapsed" DragCompleted="PreviewSplitter_DragCompleted" />

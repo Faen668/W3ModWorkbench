@@ -947,7 +947,6 @@ public partial class MainWindow : Window, IMessageHost
     private void FolderTree_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
     {
         RefreshView();
-        UpdateBookmarkButton();
     }
 
     private void SearchBox_TextChanged(object sender, TextChangedEventArgs e)
@@ -971,10 +970,13 @@ public partial class MainWindow : Window, IMessageHost
             ? [.. node.AllFiles()]
             : [.. _roots.SelectMany(r => r.AllFiles())];
         FillClassChoices(scope);
+        FillTypeChoices(scope);
 
         IEnumerable<EntryItem> items = scope;
         if (_classFilter is { } resourceClass)
             items = items.Where(i => i.ResourceClass == resourceClass);
+        if (_typeFilter is { } type)
+            items = items.Where(i => TypeOf(i).Equals(type, StringComparison.OrdinalIgnoreCase));
         var match = BuildMatcher(SearchBox.Text);
         if (match is not null)
             items = items.Where(match);
@@ -988,7 +990,7 @@ public partial class MainWindow : Window, IMessageHost
     }
 
     /// <summary>Every word must appear in the path; words with * or ? are wildcards on the file name.</summary>
-    private static Func<EntryItem, bool>? BuildMatcher(string text)
+    internal static Func<EntryItem, bool>? BuildMatcher(string text)
     {
         var words = text.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         if (words.Length == 0) return null;
@@ -1090,8 +1092,11 @@ public partial class MainWindow : Window, IMessageHost
 
     private static TextureEntry? FindInCache(TextureCacheArchive cache, string path) => ResourceLocator.FindInCache(cache, path);
 
-    /// <summary>What finds a file's buffers, materials and textures: the archives open here, those beside it, and the game's.</summary>
-    private ResourceLocator LocatorFor(ArchiveEntry entry) => new(OpenArchives(), entry.Archive, GameLocator.Resolve(null), ProjectFiles);
+    /// <summary>
+    /// What finds a file's buffers, materials and textures: the archives open here, those beside it, and the game's.
+    /// Of the installed mods only the file's own is looked in, so what it uses comes from its mod and then the game.
+    /// </summary>
+    private ResourceLocator LocatorFor(ArchiveEntry entry) => new(OpenArchives(), entry.Archive, GameLocator.Resolve(null), ProjectFiles, otherMods: false);
 
     /// <summary>Reads a cached texture's resource (its .xbm, .w2cube or .texarray) from the bundles, for the texture viewer's properties.</summary>
     private Func<byte[]?> ResourceReader(TextureEntry texture)
@@ -1379,9 +1384,6 @@ public partial class MainWindow : Window, IMessageHost
         // the game's files and installed mods' are copied into a project, not added to it: added, they'd still be read-only
         GridAddToProjectItem.Visibility = project is not null && loose.Any(l => !project.Contains(l.FullPath) && FileSafety.CanEdit(l.FullPath)) ? Visibility.Visible : Visibility.Collapsed;
         GridCopyToProjectItem.Visibility = Highlighted().Any(i => CopySource(i) is not null) ? Visibility.Visible : Visibility.Collapsed;
-        var game = InAssetBrowser ? Highlighted() : [];
-        GridBookmarkItem.Visibility = game.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
-        GridBookmarkItem.Header = game.Count > 0 && game.All(i => IsBookmarked(i.Path)) ? "Remove bookmark" : "Bookmark";
         GridRemoveFromProjectItem.Visibility = project is not null && loose.Any(l => project.Include.Any(s => project.Resolve(s).Equals(l.FullPath, StringComparison.OrdinalIgnoreCase)))
             ? Visibility.Visible : Visibility.Collapsed;
     }
@@ -2030,7 +2032,9 @@ public partial class MainWindow : Window, IMessageHost
 
     /// <summary>The archives open in the main window, for script lookups and for Find in files.</summary>
     /// <summary>The archives open in the tree; the asset browser's game files count as the bundles and caches they're from.</summary>
-    public IEnumerable<IArchive> OpenArchives() => _roots.SelectMany(r => r.Archive is GameFilesArchive game ? game.Parts : [r.Archive]);
+    public IEnumerable<IArchive> OpenArchives() => _roots.SelectMany(r => r.Archive is GameFilesArchive game ? game.Parts : [r.Archive])
+        // and those of files another window is acting on, so a mesh copied from the asset browser brings its buffers
+        .Concat(_actOn?.Select(i => i.Entry.Archive) ?? []).Distinct();
 
     /// <summary>Opens the game's own scripts (content\content0\scripts) in the file list, to read, with no project needed.</summary>
     private async Task BrowseGameScriptsAsync()
@@ -2045,56 +2049,11 @@ public partial class MainWindow : Window, IMessageHost
         await BrowseAsync([scripts], scripts);
     }
 
-    private void AssetBrowser_Click(object sender, RoutedEventArgs e) => _ = BrowseGameFilesAsync();
-
-    /// <summary>
-    /// The asset browser: every file the game has (content0, DLC and installed mods) as one tree, each path from where
-    /// the game loads it, to search, preview, open and copy into the project like any open archive's. It's read once and
-    /// kept at the top of the tree; asking again goes back to it.
-    /// </summary>
-    private async Task BrowseGameFilesAsync()
+    /// <summary>The asset browser, a tool window of its own: every file the game has (content0, DLC and installed mods).</summary>
+    private Task BrowseGameFilesAsync()
     {
-        if (_roots.FirstOrDefault(r => r.Archive is GameFilesArchive) is { } open)
-        {
-            open.IsExpanded = true;
-            open.IsSelected = true;
-            SearchBox.Focus();
-            return;
-        }
-        string? game = GameLocator.Resolve(null);
-        if (game is null || !Directory.Exists(Path.Combine(game, "content")))
-        {
-            ShowError("The game folder isn't set.\n\nThe asset browser lists the files of The Witcher 3's content, DLC and mods. Set the game's folder in Settings.");
-            return;
-        }
-        LoadingOverlay.Visibility = Visibility.Visible;
-        EmptyState.Visibility = Visibility.Collapsed;
-        BrowserPanel.Visibility = Visibility.Collapsed;
-        LoadingProgress.IsIndeterminate = true;
-        LoadingText.Text = "Reading the game's bundles…";
-        FolderNode node;
-        try
-        {
-            node = await Task.Run(() => FolderNode.Build(GameFilesArchive.Open(game,
-                name => Dispatcher.BeginInvoke(() => LoadingText.Text = $"Reading {name}…")), OnEntryChecked));
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            ShowError($"The game's files could not be read.\n\n{ex.Message}");
-            return;
-        }
-        finally
-        {
-            LoadingProgress.IsIndeterminate = false;
-            LoadingOverlay.Visibility = Visibility.Collapsed;
-            UpdateEmptyState();
-        }
-        // below the project, which stays at the top
-        _roots.Insert(ProjectNode is null ? 0 : 1, node);
-        UpdateEmptyState();
-        node.IsSelected = true;
-        SearchBox.Focus();
-        SetStatus($"Asset browser: {Format.Count(node.TotalFiles, "file")} from {node.Archive.Name}");
+        AssetBrowserWindow.Open(this);
+        return Task.CompletedTask;
     }
 
     /// <summary>Opens everything in the game's mods folder, as Open folder does: loose scripts, compiled scripts, bundles and strings.</summary>
@@ -2204,7 +2163,45 @@ public partial class MainWindow : Window, IMessageHost
         if (paths.Count > 0) Clipboard.SetText(string.Join(Environment.NewLine, paths));
     }
 
-    private List<EntryItem> Highlighted() => ThumbsMode ? [.. _shown.Where(i => i.IsSelected)] : [.. FileGrid.SelectedItems.OfType<EntryItem>()];
+    private List<EntryItem> Highlighted() => _actOn is { } acting ? [.. acting]
+        : ThumbsMode ? [.. _shown.Where(i => i.IsSelected)] : [.. FileGrid.SelectedItems.OfType<EntryItem>()];
+
+    // the files another window (the asset browser) asked to act on, in place of those highlighted in the list
+    private List<EntryItem>? _actOn;
+
+    /// <summary>
+    /// Does what the file list's menu does to some files from another window, such as the asset browser: preview, open,
+    /// copy into the project, extract, copy their paths, show them in Explorer.
+    /// </summary>
+    public void Act(FileAction action, IReadOnlyList<EntryItem> items)
+    {
+        if (items.Count == 0) return;
+        _actOn = [.. items];
+        try
+        {
+            var none = new RoutedEventArgs();
+            switch (action)
+            {
+                case FileAction.Open: OpenItem(items[0]); break;
+                case FileAction.Preview: GridPreview_Click(this, none); break;
+                case FileAction.Properties: GridProperties_Click(this, none); break;
+                case FileAction.Json: GridJson_Click(this, none); break;
+                case FileAction.Xml: GridXmlEditor_Click(this, none); break;
+                case FileAction.External: GridExternal_Click(this, none); break;
+                case FileAction.CopyToProject: GridCopyToProject_Click(this, none); break;
+                case FileAction.Extract: GridExtract_Click(this, none); break;
+                case FileAction.CopyPath: CopyHighlightedPaths(); break;
+                case FileAction.CopyName: GridCopyName_Click(this, none); break;
+                case FileAction.CopyFolder: GridCopyFolder_Click(this, none); break;
+                case FileAction.CopyLocation: GridCopyLocation_Click(this, none); break;
+                case FileAction.Reveal: RevealHighlighted(); break;
+            }
+        }
+        finally
+        {
+            _actOn = null;
+        }
+    }
 
     private void QueueStatusUpdate()
     {
