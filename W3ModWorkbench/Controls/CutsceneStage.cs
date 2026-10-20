@@ -125,7 +125,69 @@ public sealed class CutsceneStage : Grid
         return Playback;
     }
 
-    /// <summary>Reads each actor's entity and meshes, shows them all in their pose at the time shown, then puts their textures on.</summary>
+    /// <summary>
+    /// A cutscene's actors put together and every texture they're drawn with read, ready to show at once: what the
+    /// stage needs to play it smoothly from the start.
+    /// </summary>
+    public sealed record PreparedCast(CutsceneFile Cutscene, CutscenePlayback Playback, List<CastMember> Cast,
+        List<(int Part, int Material, BitmapSource? Picture, bool LeaveOut)> Textures, List<string> Notes);
+
+    /// <summary>
+    /// Puts a cutscene's actors together from their entities and reads every texture they're drawn with (several at
+    /// once), off the UI thread. <paramref name="texture"/> reads one texture, so a window can share what it has read.
+    /// </summary>
+    public static async Task<PreparedCast> PrepareAsync(CutsceneFile cutscene, CutscenePlayback playback, ResourceLocator locator,
+        Func<string, Task<BitmapSource?>> texture, LoadingReporter? report, CancellationToken token, string label = "")
+    {
+        report?.Step($"{label}Putting the actors together", $"{playback.Actors.Count} animated");
+        var notes = new List<string>(playback.Problems);
+        var cast = await Task.Run(() => CutsceneCast.Load(cutscene, playback, locator, notes, token), token);
+        var parts = cast.SelectMany(m => m.Parts.Select((part, i) =>
+            (part.Mesh, StageTextures.Coloring(m.Entity, m.ColoredBy[i].Entity, m.ColoredBy[i].Appearance, m.DrawnBy[i].Name)))).ToList();
+        report?.Step($"{label}Loading textures", string.Join(", ", cast.Select(m => m.Name)));
+        var textures = await StageTextures.LoadAsync(parts, locator, texture, report?.Counter, token);
+        return new PreparedCast(cutscene, playback, cast, textures, notes);
+    }
+
+    /// <summary>Reads the textures with this stage's own store of them, for a viewer of its own.</summary>
+    public Func<string, Task<BitmapSource?>> TextureReader => Texture;
+
+    /// <summary>Puts a prepared cutscene on the stage, all of it at once, in its pose at the time shown.</summary>
+    public void Show(PreparedCast prepared, ResourceLocator locator)
+    {
+        if (!ReferenceEquals(prepared.Cutscene, _cutscene))
+        {
+            Clear();
+            _cutscene = prepared.Cutscene;
+            Playback = prepared.Playback;
+        }
+        _locator = locator;
+        _cast = prepared.Cast;
+        _parts.Clear();
+        var parts = new List<(MeshFile Mesh, Matrix4x4 Place)>();
+        foreach (var member in _cast)
+            for (int i = 0; i < member.Parts.Count; i++)
+            {
+                // placed by the pose, which puts the actor where the cutscene has it
+                parts.Add((member.Parts[i].Mesh, Matrix4x4.Identity));
+                _parts.Add((member, i));
+            }
+        View.ShowParts(parts, prepared.Textures);
+        PoseCast();
+        SetFloor();
+        FitActors();
+        // again once the view has its size, as the first fit can come before it's laid out
+        _ = Dispatcher.InvokeAsync(() => { if (!View.IsLookingThrough) FitActors(); }, System.Windows.Threading.DispatcherPriority.Loaded);
+        var p = prepared.Playback;
+        Message = _cast.Count > 0 ? "" : p.Actors.Count == 0 ? "There are no body animations to play." : "None of the actors could be put together.";
+        var notes = prepared.Notes;
+        _notes.Text = string.Join("\n", notes.Take(6)) + (notes.Count > 6 ? $"\n… and {notes.Count - 6} more" : "");
+        if (ThroughCamera) ThroughCamera = true; // the bars, now there's a camera to look through
+        SetTime(_time);
+        _ready.TrySetResult();
+    }
+
+    /// <summary>Puts the actors of the cutscene loaded with <see cref="LoadPlaybackAsync"/> together and shows them, textures and all.</summary>
     public async Task LoadCastAsync(CancellationToken token)
     {
         if (_cutscene is not { } c || Playback is not { } p || _locator is not { } locator)
@@ -133,57 +195,14 @@ public sealed class CutsceneStage : Grid
             _ready.TrySetResult();
             return;
         }
-        var notes = new List<string>(p.Problems);
-        List<CastMember> cast;
         try
         {
-            cast = await Task.Run(() => CutsceneCast.Load(c, p, locator, notes, token), token);
+            var prepared = await PrepareAsync(c, p, locator, Texture, null, token);
+            if (ReferenceEquals(c, _cutscene)) Show(prepared, locator);
         }
         catch (OperationCanceledException)
         {
             _ready.TrySetResult();
-            return;
-        }
-        if (!ReferenceEquals(c, _cutscene)) return; // another was loaded meanwhile
-        _cast = cast;
-        _parts.Clear();
-        var parts = new List<(MeshFile Mesh, Matrix4x4 Place)>();
-        foreach (var member in cast)
-            for (int i = 0; i < member.Parts.Count; i++)
-            {
-                // placed by the pose, which puts the actor where the cutscene has it
-                parts.Add((member.Parts[i].Mesh, Matrix4x4.Identity));
-                _parts.Add((member, i));
-            }
-        View.ShowParts(parts);
-        PoseCast();
-        SetFloor();
-        FitActors();
-        // again once the view has its size, as the first fit can come before it's laid out
-        _ = Dispatcher.InvokeAsync(() => { if (!View.IsLookingThrough) FitActors(); }, System.Windows.Threading.DispatcherPriority.Loaded);
-        Message = cast.Count > 0 ? "" : p.Actors.Count == 0 ? "There are no body animations to play." : "None of the actors could be put together.";
-        _notes.Text = string.Join("\n", notes.Take(6)) + (notes.Count > 6 ? $"\n… and {notes.Count - 6} more" : "");
-        if (ThroughCamera) SetTime(_time);
-        _ready.TrySetResult();
-
-        // the colour textures, put on as each is read, in the colours each actor's appearance gives each component
-        for (int part = 0; part < _parts.Count; part++)
-        {
-            var (member, local) = _parts[part];
-            var mesh = member.Parts[local].Mesh;
-            var (colorEntity, colorAppearance) = member.ColoredBy[local];
-            var coloring = LookTextures.Coloring(colorEntity, colorAppearance, member.DrawnBy[local].Name);
-            // a stand-in piece of the player's gear is undyed: its dye's red and blue parts as plain dark leather
-            if (coloring is null && !ReferenceEquals(colorEntity, member.Entity)) coloring = (Undyed, Undyed);
-            for (int m = 0; m < mesh.Materials.Count; m++)
-            {
-                int at = part, material = m;
-                var (picture, leaveOut) = await Task.Run(() => LookTextures.ForMaterial(mesh, material, locator, Texture, coloring), token)
-                    .ContinueWith(t => t.IsCompletedSuccessfully ? t.Result : ((BitmapSource?)null, false), TaskScheduler.Default);
-                if (token.IsCancellationRequested || !ReferenceEquals(c, _cutscene)) return;
-                if (leaveOut) View.LeaveOut(at, material);
-                else if (picture is not null) View.SetTexture(at, material, picture);
-            }
         }
     }
 
@@ -243,12 +262,38 @@ public sealed class CutsceneStage : Grid
             .OrderBy(e => e.Start).LastOrDefault() is { Source: { } clipping } ? CutsceneFile.NearPlane(clipping) : null;
 
     /// <summary>Puts every actor's meshes in their pose at the time shown.</summary>
-    private void PoseCast()
+    private async void PoseCast()
     {
         if (_cast.Count == 0) return;
-        var posers = _cast.ToDictionary(m => m, m => CutsceneCast.Pose(m, _time));
-        View.Pose((part, chunk) => part < _parts.Count && posers[_parts[part].Member] is { } pose ? pose(_parts[part].Part, chunk) : null);
+        // one pose worked out at a time, the latest time asked for next: a heavy cast shows fewer frames, still in
+        // time, rather than keeping the UI thread from answering
+        if (_posing)
+        {
+            _posePending = true;
+            return;
+        }
+        _posing = true;
+        try
+        {
+            do
+            {
+                _posePending = false;
+                var (cast, parts, time) = (_cast, _parts.ToList(), _time);
+                await View.PoseAsync(() =>
+                {
+                    var posers = cast.ToDictionary(m => m, m => CutsceneCast.Pose(m, time));
+                    return (part, chunk) => part < parts.Count && posers.TryGetValue(parts[part].Member, out var pose) ? pose(parts[part].Part, chunk) : null;
+                });
+            }
+            while (_posePending);
+        }
+        finally
+        {
+            _posing = false;
+        }
     }
+
+    private bool _posing, _posePending;
 
     /// <summary>The view fills the stage, or through the camera is the largest picture of the aspect ratio that fits.</summary>
     private void LayoutStage()

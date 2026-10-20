@@ -1,5 +1,6 @@
 using System.IO;
 using System.Numerics;
+using System.Runtime.CompilerServices;
 using System.Text;
 using W3ModWorkbench.Core.Animation;
 using W3ModWorkbench.Core.Cr2w;
@@ -28,6 +29,9 @@ public sealed class StageActor
 
     /// <summary>The animations the scene plays on it that were found, by name.</summary>
     public required Dictionary<string, AnimationClip> Clips { get; init; }
+
+    /// <summary>How those of its animations that walk or turn it move it as a whole, by name.</summary>
+    public Dictionary<string, MotionExtraction> Motions { get; init; } = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Its face, when it has one: its bones are on <see cref="Rig"/> after the body's (<see cref="FaceIndex"/> says
@@ -61,6 +65,27 @@ public readonly record struct FaceLayers(string? Eyes, string? Pose, string? Ani
         if (Animation is { } a) yield return $"{a.ToLowerInvariant()}_anim_face";
     }
 }
+
+/// <summary>
+/// Something a scene puts in the set or in an actor's hand: one of the props it defines (a chess piece, a seal), or an
+/// item an actor takes up (a broom, Geralt's sword), put together from its entity to be drawn rigid.
+/// </summary>
+public sealed class StageProp
+{
+    /// <summary>Its id in the scene's events: the prop's own, or item:name for an item.</summary>
+    public required string Id { get; init; }
+    public required EntityFile Entity { get; init; }
+    public required string? Appearance { get; init; }
+    public required List<(MeshFile Mesh, Matrix4x4 Place)> Parts { get; init; }
+    public required List<EntityComponent> DrawnBy { get; init; }
+}
+
+/// <summary>
+/// Something a section does with a prop at a time: places it in the set, attaches it to an actor's slot (a bone, with
+/// an offset), or shows or hides it. An equipped item is attached to the hand it's taken up in, and an empty hand
+/// leaves (hides) the one it held.
+/// </summary>
+public sealed record PropEvent(float Start, string Prop, Matrix4x4? Place, string? Actor, string? Slot, Matrix4x4 Offset, bool Shown);
 
 /// <summary>How an actor stands in a scene, as the game names its idles: High or Low, Determined or another mood, Standing or another pose.</summary>
 public readonly record struct ActorStance(string Status, string Emotion, string Pose)
@@ -148,6 +173,13 @@ public sealed class ActorTrack
 
 /// <summary>Where a scene camera is and what it sees.</summary>
 public readonly record struct StageCamera(string Name, Vector3 Position, Vector3 Forward, Vector3 Up, float FieldOfView);
+
+/// <summary>
+/// A light a scene sets up (a campfire, a candle, a key or rim spot), as its last light event by a time leaves it:
+/// where it is and, for a spot, which way it shines and how wide; its colour, brightness and how far it reaches.
+/// </summary>
+public readonly record struct StageLight(string Id, bool Spot, Vector3 Position, Vector3 Direction, System.Windows.Media.Color Color,
+    float Brightness, float Radius, float Attenuation, float InnerAngle, float OuterAngle);
 
 /// <summary>
 /// A scene put on a stage: its actors put together and stood where each section's dialog set puts them, standing in the
@@ -336,6 +368,8 @@ public static class SceneStage
             try
             {
                 entity = EntityFile.Read(data);
+                // the colours of an appearance it takes from a template it includes are kept in that template
+                entity.FindOrigins(locator.ReadFile);
             }
             catch (InvalidDataException ex)
             {
@@ -355,6 +389,8 @@ public static class SceneStage
             // its face's bones go on the body's rig, for the head to be skinned to them
             var face = Face(look, CutsceneCast.IsPlayer(template), locator);
             var (rig, faceIndex) = face is null ? (body, []) : Merge(body, face.Skeleton);
+            // and the small rigs hung on it, for what's skinned to them (the player's scabbards)
+            rig = WithCarriedRigs(rig, look, locator);
             var coloredBy = parts.Select(_ => (entity, appearance?.Name)).ToList();
             var attachedTo = CutsceneCast.AttachToRig(look, parts, drawnBy, rig);
             if (CutsceneCast.IsPlayer(template) && CutsceneCast.Dress(entity, look, rig, locator, parts, drawnBy, coloredBy, attachedTo, token))
@@ -369,7 +405,8 @@ public static class SceneStage
             var animationSets = AnimationSets(template, locator);
             var bodyNames = names.Where(n => !n.EndsWith("_face", StringComparison.OrdinalIgnoreCase)).ToHashSet(StringComparer.OrdinalIgnoreCase);
             var faceNames = names.Where(n => n.EndsWith("_face", StringComparison.OrdinalIgnoreCase)).ToHashSet(StringComparer.OrdinalIgnoreCase);
-            var clips = Clips(animationSets.Where(p => !IsFaceSet(p)).ToList(), bodyNames, rig, locator, sets, token);
+            var motions = new Dictionary<string, MotionExtraction>(StringComparer.OrdinalIgnoreCase);
+            var clips = Clips(animationSets.Where(p => !IsFaceSet(p)).ToList(), bodyNames, rig, locator, sets, token, motions);
             var faceClips = face is null ? new Dictionary<string, AnimationClip>(StringComparer.OrdinalIgnoreCase)
                 : Clips(animationSets.Where(IsFaceSet).ToList(), faceNames, null, locator, sets, token);
             var notFound = bodyNames.Where(n => !clips.ContainsKey(n)).ToList();
@@ -387,6 +424,7 @@ public static class SceneStage
                 Rest = rest,
                 Maps = parts.Select(p => Skinning.MapBones(p.Mesh, rig, rest)).ToList(),
                 Clips = clips,
+                Motions = motions,
                 Face = face,
                 FaceIndex = faceIndex,
                 FaceClips = faceClips,
@@ -466,6 +504,61 @@ public static class SceneStage
     /// The body's rig with a face's bones after its own: a bone the body has (the neck, the head) is the body's, and the
     /// rest hang where the face has them. Says where each of the face's bones is on it.
     /// </summary>
+    /// <summary>
+    /// The rig with the small rigs the look hangs on its bones added (the player's scabbards_skeleton on torso3, which his
+    /// scabbards are skinned to): each one's bones carried by the bone it hangs on, where its component puts it there.
+    /// Bones the rig has already are left as they are.
+    /// </summary>
+    public static Skeleton WithCarriedRigs(Skeleton rig, EntityLook look, ResourceLocator locator)
+    {
+        foreach (var link in look.Links.Where(l => l.Kind == "Hard" && l.Slot is not null && l.Child.ClassName == "CAnimatedComponent"))
+        {
+            int carrier = Bone(rig, link.Slot!);
+            string? path = link.Child.Resources.FirstOrDefault(r => r.EndsWith(".w2rig", StringComparison.OrdinalIgnoreCase));
+            if (carrier < 0 || path is null) continue;
+            Skeleton small;
+            try
+            {
+                if (locator.ReadFile(path) is not { } data) continue;
+                small = Skeleton.Read(data);
+            }
+            catch (InvalidDataException)
+            {
+                continue;
+            }
+            if (small.Names.Any(n => Bone(rig, n) >= 0 && !n.Equals("Root", StringComparison.OrdinalIgnoreCase))) continue;
+            var names = rig.Names.ToList();
+            var parents = rig.Parents.ToList();
+            var pose = rig.Pose.ToList();
+            var index = new int[small.Count];
+            // the small rig's root is where the component puts it on the carrier: its children hang from the carrier
+            var onCarrier = link.Relative * link.Child.Local;
+            for (int i = 0; i < small.Count; i++)
+            {
+                if (small.Parents[i] < 0)
+                {
+                    index[i] = carrier;
+                    continue;
+                }
+                var local = small.Pose[i];
+                int parent = small.Parents[i];
+                if (small.Parents[parent] < 0)
+                {
+                    var root = small.Pose[parent];
+                    var m = Matrix4x4.CreateScale(local.Scale) * Matrix4x4.CreateFromQuaternion(local.Rotation) * Matrix4x4.CreateTranslation(local.Position)
+                        * Matrix4x4.CreateScale(root.Scale) * Matrix4x4.CreateFromQuaternion(root.Rotation) * Matrix4x4.CreateTranslation(root.Position) * onCarrier;
+                    if (Matrix4x4.Decompose(m, out var scale, out var rotation, out var position)) local = new BoneTransform(position, rotation, scale);
+                }
+                names.Add(small.Names[i]);
+                parents.Add((short)index[parent]);
+                pose.Add(local);
+                index[i] = names.Count - 1;
+            }
+            rig = new Skeleton { Names = [.. names], Parents = [.. parents], Pose = [.. pose] };
+        }
+        return rig;
+    }
+
     public static (Skeleton Rig, int[] FaceIndex) Merge(Skeleton body, Skeleton face)
     {
         var names = body.Names.ToList();
@@ -533,6 +626,122 @@ public static class SceneStage
     private static float Loop(AnimationClip clip, float time) => clip.Duration > 0 ? time % clip.Duration : 0;
 
     /// <summary>
+    /// Puts together the props a scene defines, and the items its sections have actors take up (<paramref name="items"/>,
+    /// by name), from their entities. One that can't be put together is left out, with why in <paramref name="notes"/>.
+    /// </summary>
+    public static List<StageProp> LoadProps(SceneFile scene, IEnumerable<string> items, ResourceLocator locator, List<string> notes, CancellationToken token)
+    {
+        var wanted = scene.File.Exports.Where(x => x.ClassName == "CStorySceneProp").Select(x => scene.File.Object(x.Index))
+            .Select(o => (Id: o["id"] as string ?? "", Template: o["entityTemplate"] is RedHandle h ? scene.File.Import(h)?.Path : null))
+            .Concat(items.Distinct(StringComparer.OrdinalIgnoreCase).Select(i => (Id: "item:" + i, Template: PlayerGear.Find(locator, i))))
+            .Where(p => p.Id.Length > 0).ToList();
+        var props = new List<StageProp>();
+        foreach (var (id, template) in wanted)
+        {
+            token.ThrowIfCancellationRequested();
+            try
+            {
+                if (template is null || locator.ReadFile(template) is not { } data)
+                {
+                    notes.Add($"The prop {id} isn't drawn: its entity wasn't found.");
+                    continue;
+                }
+                var entity = EntityFile.Read(data);
+                entity.FindOrigins(locator.ReadFile);
+                var appearance = entity.DefaultAppearance;
+                var look = entity.Look(appearance, locator.ReadFile);
+                var (parts, drawnBy, _, _) = EntityWindow.ReadMeshes(look, locator, token);
+                if (parts.Count == 0) notes.Add($"The prop {id} isn't drawn: its entity has no meshes (an effect, a light).");
+                else props.Add(new StageProp { Id = id, Entity = entity, Appearance = appearance?.Name, Parts = parts, DrawnBy = drawnBy });
+            }
+            catch (InvalidDataException ex)
+            {
+                notes.Add($"The prop {id} isn't drawn: {ex.Message}");
+            }
+        }
+        return props;
+    }
+
+    /// <summary>The items a section's actors take up, by name.</summary>
+    public static IEnumerable<string> ItemsTaken(SceneSectionTimeline timeline) =>
+        timeline.Events.Where(e => e.ClassName == "CStorySceneEventEquipItem")
+            .SelectMany(e => new[] { Named(e.Source["rightItem"]), Named(e.Source["leftItem"]) }).OfType<string>();
+
+    /// <summary>What a section does with its props and its actors' items, in time.</summary>
+    public static List<PropEvent> PropEvents(SceneSectionTimeline timeline)
+    {
+        var events = new List<PropEvent>();
+        foreach (var e in timeline.Events.Where(e => e.Source["isMuted"] is not true).OrderBy(e => e.Start))
+        {
+            var o = e.Source;
+            Matrix4x4 TransformOf(object? raw)
+            {
+                var (position, rotation) = SceneStaging.Transform(raw);
+                return Matrix4x4.CreateRotationZ(rotation.Z * MathF.PI / 180) * Matrix4x4.CreateTranslation(position);
+            }
+            switch (e.ClassName)
+            {
+                case "CStorySceneEventScenePropPlacement" when Named(o["propId"]) is { } prop:
+                    events.Add(new PropEvent(e.Start, prop, TransformOf(o["placement"]), null, null, Matrix4x4.Identity, o["showHide"] is not false));
+                    break;
+                case "CStorySceneEventAttachPropToSlot" when Named(o["propId"]) is { } prop:
+                    // let go (activate false) leaves it where it is
+                    events.Add(o["activate"] is false
+                        ? new PropEvent(e.Start, prop, null, null, null, Matrix4x4.Identity, o["showHide"] is not false)
+                        : new PropEvent(e.Start, prop, null, o["actorName"] as string, Named(o["slotName"]), TransformOf(o["offset"]), o["showHide"] is not false));
+                    break;
+                case "CStorySceneEventPropVisibility" when Named(o["propID"]) is { } prop:
+                    events.Add(new PropEvent(e.Start, prop, null, null, null, Matrix4x4.Identity, o["showHide"] is not false && o["visible"] is not false));
+                    break;
+                case "CStorySceneEventEquipItem" when e.Actor is { } actor:
+                    foreach (var (item, hand) in new[] { (Named(o["rightItem"]), "r_weapon"), (Named(o["leftItem"]), "l_weapon") })
+                    {
+                        // the item taken up goes in the hand; what the hand held before is put away
+                        foreach (var held in events.Where(x => x.Actor == actor && x.Slot == hand).Select(x => x.Prop).Distinct().ToList())
+                            if (held != "item:" + item) events.Add(new PropEvent(e.Start, held, null, null, null, Matrix4x4.Identity, false));
+                        if (item is not null) events.Add(new PropEvent(e.Start, "item:" + item, null, actor, hand, Matrix4x4.Identity, true));
+                    }
+                    break;
+            }
+        }
+        return events;
+    }
+
+    /// <summary>
+    /// Where a prop is at a time, or null when it isn't shown: as its last placement put it, or on the actor's slot it
+    /// was last attached to as that actor's bones are then (<paramref name="bonesOf"/>). One the section hasn't shown yet isn't.
+    /// </summary>
+    public static Matrix4x4? PropPlace(StageProp prop, List<PropEvent> events, float time, Func<string, (StageActor Actor, Matrix4x4[] Bones)?> bonesOf)
+    {
+        Matrix4x4? world = null;
+        (string Actor, string? Slot, Matrix4x4 Offset)? held = null;
+        bool shown = false;
+        foreach (var e in events)
+        {
+            if (e.Start > time + 1e-4f) break;
+            if (!e.Prop.Equals(prop.Id, StringComparison.OrdinalIgnoreCase)) continue;
+            shown = e.Shown;
+            if (e.Place is { } place) (world, held) = (place, null);
+            else if (e.Actor is { } actor) held = (actor, e.Slot, e.Offset);
+            else if (held is { } letGo && bonesOf(letGo.Actor) is { } holder && Slot(holder.Actor, letGo.Slot) is int bone) (world, held) = (letGo.Offset * holder.Bones[bone], null);
+        }
+        if (!shown) return null;
+        if (held is { } h)
+            return bonesOf(h.Actor) is { } on && Slot(on.Actor, h.Slot) is int b ? h.Offset * on.Bones[b] : null;
+        return world;
+    }
+
+    /// <summary>The bone a slot is on: the entity's slot of that name, else the rig's bone of that name (r_weapon, head), else its nearest, without _effect.</summary>
+    private static int? Slot(StageActor actor, string? slot)
+    {
+        if (slot is null) return null;
+        var named = actor.Entity.Slots.FirstOrDefault(s => s.Name.Equals(slot, StringComparison.OrdinalIgnoreCase));
+        foreach (var name in new[] { named?.Bone, slot, slot.Replace("_effect", ""), slot.EndsWith("_slot", StringComparison.OrdinalIgnoreCase) ? slot[..^5] : null })
+            if (name is { Length: > 0 } && Bone(actor.Rig, name) is int b and >= 0) return b;
+        return null;
+    }
+
+    /// <summary>
     /// The body's rig: of the rigs the look's components use (not a dangle's, which is a hood's or hair's), the one most
     /// of its skinned meshes' bones are named in.
     /// </summary>
@@ -592,7 +801,7 @@ public static class SceneStage
 
     /// <summary>Reads the animations named from the sets, stopping once all are found. One made for a bigger rig is left out.</summary>
     private static Dictionary<string, AnimationClip> Clips(List<string> setPaths, HashSet<string> names, Skeleton? rig, ResourceLocator locator,
-        Dictionary<string, Cr2wFile?> sets, CancellationToken token)
+        Dictionary<string, Cr2wFile?> sets, CancellationToken token, Dictionary<string, MotionExtraction>? motions = null)
     {
         var clips = new Dictionary<string, AnimationClip>(StringComparer.OrdinalIgnoreCase);
         foreach (var path in setPaths)
@@ -613,7 +822,11 @@ public static class SceneStage
                 if (animation["name"] is not string name || !names.Contains(name) || clips.ContainsKey(name)) continue;
                 try
                 {
-                    if (AnimationClip.Read(set, animation, n => locator.ReadBuffer(path, n, archive)) is { } clip && (rig is null || clip.BoneCount <= rig.Count)) clips[name] = clip;
+                    if (AnimationClip.Read(set, animation, n => locator.ReadBuffer(path, n, archive)) is { } clip && (rig is null || clip.BoneCount <= rig.Count))
+                    {
+                        clips[name] = clip;
+                        if (motions is not null && rig is not null && MotionExtraction.Read(set, animation) is { } motion && StaysInPlace(rig, clip, motion)) motions[name] = motion;
+                    }
                 }
                 catch (Exception ex) when (ex is InvalidDataException or IndexOutOfRangeException or ArgumentException or IOException)
                 {
@@ -633,7 +846,7 @@ public static class SceneStage
     {
         var rig = actor.Rig;
         var pose = rig.Pose.ToArray();
-        var place = track.PlaceAt(time);
+        var place = Walked(actor, track, time) * track.PlaceAt(time);
         // how it stands at the time, and since when
         var stance = track.Stance;
         float since = 0;
@@ -644,9 +857,16 @@ public static class SceneStage
             else if (time >= change.Start) changing = change;
         }
         if (changing is { Transition: { } transition } c && actor.Clips.TryGetValue(transition, out var moving))
+        {
             moving.Sample(Local(moving, time, c.Start, c.Duration, c.ClipFront, c.ClipEnd), pose);
+            Settle(rig, pose, actor.Motions.ContainsKey(transition) ? moving : null);
+        }
         else if (IdleFor(idles, stance) is { } idle && actor.Clips.TryGetValue(idle, out var standing) && standing.Duration > 0)
+        {
             standing.Sample((time - since) % standing.Duration, pose);
+            Settle(rig, pose, actor.Motions.ContainsKey(idle) ? standing : null);
+        }
+        else Settle(rig, pose, null);
 
         var layer = new BoneTransform[pose.Length];
         foreach (var a in track.Animations)
@@ -658,14 +878,7 @@ public static class SceneStage
             if (weight <= 0) continue;
             pose.CopyTo(layer, 0);
             clip.Sample(Local(clip, time, a.Start, a.Duration, a.ClipFront, a.ClipEnd), layer);
-            // a walk goes from where the event puts the actor: its root's way over the ground counts from where the clip starts
-            if (rig.Count > 0 && clip.BoneCount > 0)
-            {
-                var front = rig.Pose.ToArray();
-                clip.Sample(Local(clip, a.Start, a.Start, a.Duration, a.ClipFront, a.ClipEnd), front);
-                var gone = front[0].Position - rig.Pose[0].Position;
-                layer[0] = layer[0] with { Position = layer[0].Position - new Vector3(gone.X, gone.Y, 0) };
-            }
+            Settle(rig, layer, actor.Motions.ContainsKey(a.Animation) ? clip : null);
             for (int b = 0; b < pose.Length; b++)
                 pose[b] = new BoneTransform(Vector3.Lerp(pose[b].Position, layer[b].Position, weight),
                     Quaternion.Slerp(pose[b].Rotation, layer[b].Rotation, weight), Vector3.Lerp(pose[b].Scale, layer[b].Scale, weight));
@@ -678,7 +891,6 @@ public static class SceneStage
             if (a.BlendOut > 0) weight *= Math.Clamp((a.Start + a.Duration - time) / a.BlendOut, 0, 1);
             if (weight > 0) Add(rig, pose, clip, Local(clip, time, a.Start, a.Duration, a.ClipFront, a.ClipEnd), a.ClipFront, weight, a.Bones, a.BoneWeights);
         }
-        KeepInPlace(rig, pose);
         if (face is not null)
         {
             actor.Face?.Apply(face.Weights, pose, actor.FaceIndex);
@@ -690,6 +902,55 @@ public static class SceneStage
         rig.ToModel(pose, model);
         for (int i = 0; i < model.Length; i++) model[i] *= place;
         return model;
+    }
+
+    /// <summary>
+    /// Whether an animation with motion extraction keeps its body in place for the game to move the actor along it:
+    /// its root walks back as far as its body walks on (an exit passing to one side). Some keep the walk in the body
+    /// instead, their root still (an exit that turns and walks away), and moving the actor as well would walk it twice
+    /// as far. Told by where the pelvis gets to by the end, with the root as animated, against how far the extraction goes.
+    /// </summary>
+    private static bool StaysInPlace(Skeleton rig, AnimationClip clip, MotionExtraction motion)
+    {
+        int pelvis = Bone(rig, "pelvis");
+        if (pelvis < 0 || clip.BoneCount <= pelvis) return false;
+        Vector3 Pelvis(float t)
+        {
+            var pose = rig.Pose.ToArray();
+            clip.Sample(t, pose);
+            var model = new Matrix4x4[rig.Count];
+            rig.ToModel(pose, model);
+            return model[pelvis].Translation;
+        }
+        var bodyWent = Pelvis(clip.Duration) - Pelvis(0);
+        var extracted = motion.At(clip.Duration).Position - motion.At(0).Position;
+        float far = new Vector2(extracted.X, extracted.Y).Length();
+        // a turn on the spot moves little either way: the extraction turns the actor, and the body is taken as turning with it
+        if (far < 0.25f) return true;
+        return new Vector2(bodyWent.X, bodyWent.Y).Length() < far * 0.5f;
+    }
+
+    /// <summary>
+    /// How far the actor's walks and turns have taken it from where it was last placed, by the time given: each body
+    /// animation or change of stance since that moves it (by its motion extraction) carries it on from where the one
+    /// before left it, from where the event starts its clip to where it has got to. Put before where it stands.
+    /// </summary>
+    private static Matrix4x4 Walked(StageActor actor, ActorTrack track, float time)
+    {
+        if (actor.Motions.Count == 0) return Matrix4x4.Identity;
+        float since = track.Placements.Where(p => p.Start <= time + 1e-4f).Select(p => p.Start).DefaultIfEmpty(float.MinValue).Max();
+        var moves = track.Animations.Select(a => (a.Start, a.Duration, Name: a.Animation, a.ClipFront, a.ClipEnd))
+            .Concat(track.Changes.Where(c => c.Transition is not null).Select(c => (c.Start, c.Duration, Name: c.Transition!, c.ClipFront, c.ClipEnd)))
+            .Where(m => m.Start >= since - 1e-4f && m.Start <= time && actor.Motions.ContainsKey(m.Name) && actor.Clips.ContainsKey(m.Name))
+            .OrderBy(m => m.Start);
+        var walked = Matrix4x4.Identity;
+        foreach (var m in moves)
+        {
+            var clip = actor.Clips[m.Name];
+            float from = Local(clip, m.Start, m.Start, m.Duration, m.ClipFront, m.ClipEnd), to = Local(clip, Math.Min(time, m.Start + m.Duration), m.Start, m.Duration, m.ClipFront, m.ClipEnd);
+            walked = actor.Motions[m.Name].Between(from, to) * walked;
+        }
+        return walked;
     }
 
     /// <summary>
@@ -735,27 +996,58 @@ public static class SceneStage
     }
 
     /// <summary>
-    /// The game puts an actor where it stands, not where the animation has it: the root is put back, keeping only the turn
-    /// round the upright it makes and how far it goes over the ground (an exit that walks off carries its root away), and the trajectory (the engine's handle for where the actor goes) is left as the rig
-    /// has it. Animations are exported differently: a standing idle has its root lying on its back, which is the export's
-    /// and not a turn, while a kneeling one has its root turned round, its body made facing the other way to match.
+    /// Settles an animation's root as the game has it, before it's blended with the others. The root is put back
+    /// upright, keeping only the turn round the upright it makes: a standing idle has its root lying on its back, which
+    /// is the export's and not a turn, while a kneeling one has its root turned round, its body made facing the other way
+    /// to match. One that walks or turns the actor (<paramref name="walking"/>, with motion extraction) also keeps how
+    /// its root has gone since the clip began, over the ground and round the upright: it walks back as far as the body
+    /// walks on, so the body stays where the actor is, and <see cref="Walked"/> moves the actor instead. The trajectory
+    /// (the engine's handle for where the actor goes) is always as the rig has it.
     /// </summary>
-    private static void KeepInPlace(Skeleton rig, BoneTransform[] pose)
+    private static void Settle(Skeleton rig, BoneTransform[] pose, AnimationClip? walking)
     {
         if (rig.Count == 0 || rig.Parents[0] >= 0) return;
-        var turn = Quaternion.Identity;
-        var walked = Vector3.Zero;
-        var up = Vector3.Transform(Vector3.UnitZ, pose[0].Rotation);
-        var ahead = Vector3.Transform(Vector3.UnitY, pose[0].Rotation);
-        if (up.Z > 0.7f && ahead.X * ahead.X + ahead.Y * ahead.Y > 1e-6f)
+        var root = pose[0];
+        var settled = Upright(rig, walking is null ? root : FirstRoot(rig, walking));
+        if (walking is not null)
         {
-            turn = Quaternion.CreateFromAxisAngle(Vector3.UnitZ, MathF.Atan2(-ahead.X, ahead.Y));
-            walked = new Vector3(pose[0].Position.X - rig.Pose[0].Position.X, pose[0].Position.Y - rig.Pose[0].Position.Y, 0);
+            var first = FirstRoot(rig, walking);
+            // how the root has turned since the clip began, round the upright only, and gone over the ground
+            var turned = root.Rotation * Quaternion.Inverse(first.Rotation);
+            var ahead = Vector3.Transform(Vector3.UnitY, turned);
+            float yaw = ahead.X * ahead.X + ahead.Y * ahead.Y > 1e-6f ? MathF.Atan2(-ahead.X, ahead.Y) : 0;
+            var gone = root.Position - first.Position;
+            settled = settled with
+            {
+                Rotation = Quaternion.Concatenate(settled.Rotation, Quaternion.CreateFromAxisAngle(Vector3.UnitZ, yaw)),
+                Position = settled.Position + new Vector3(gone.X, gone.Y, 0),
+            };
         }
-        pose[0] = rig.Pose[0] with { Rotation = Quaternion.Concatenate(rig.Pose[0].Rotation, turn), Position = rig.Pose[0].Position + walked };
+        pose[0] = settled;
         int trajectory = Array.FindIndex(rig.Names, n => n.Equals("Trajectory", StringComparison.OrdinalIgnoreCase));
         if (trajectory > 0) pose[trajectory] = rig.Pose[trajectory];
     }
+
+    /// <summary>The rig's root, turned round the upright as a root turns it when it stands upright, and not otherwise.</summary>
+    private static BoneTransform Upright(Skeleton rig, BoneTransform root)
+    {
+        var turn = Quaternion.Identity;
+        var up = Vector3.Transform(Vector3.UnitZ, root.Rotation);
+        var ahead = Vector3.Transform(Vector3.UnitY, root.Rotation);
+        if (up.Z > 0.7f && ahead.X * ahead.X + ahead.Y * ahead.Y > 1e-6f)
+            turn = Quaternion.CreateFromAxisAngle(Vector3.UnitZ, MathF.Atan2(-ahead.X, ahead.Y));
+        return rig.Pose[0] with { Rotation = Quaternion.Concatenate(rig.Pose[0].Rotation, turn) };
+    }
+
+    // each walking clip's root where it begins, read once
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<AnimationClip, StrongBox<BoneTransform>> FirstRoots = [];
+
+    private static BoneTransform FirstRoot(Skeleton rig, AnimationClip clip) => FirstRoots.GetValue(clip, c =>
+    {
+        var pose = rig.Pose.ToArray();
+        c.Sample(0, pose);
+        return new StrongBox<BoneTransform>(pose[0]);
+    }).Value;
 
     /// <summary>
     /// Turns an actor to look at what its look-at then says, from what it looked at before: its head and neck, and for
@@ -769,7 +1061,6 @@ public static class SceneStage
         int head = Bone(rig, "head");
         if (now < 0 || head < 0) return;
         var look = track.LookAts[now];
-        if (look.Level == "LL_Eyes") return; // the eyes alone move with the face
         var from = model[head].Translation;
         // which way the head faces now: the way it faces in the rig's pose (as the actor does, along Y), as the animation turns it
         var ahead = Matrix4x4.Invert(actor.Rest[head], out var back)
@@ -781,14 +1072,26 @@ public static class SceneStage
         float eased = look.Instant ? 1 : Math.Clamp((time - look.Start) * Math.Max(look.Speed, 0.1f) * 1.5f, 0, 1);
         eased = eased * eased * (3 - 2 * eased);
         var before = now > 0 ? Toward(track.LookAts[now - 1]) : ahead;
-        var want = Vector3.Lerp(before, Toward(look), eased);
+        // the eyes alone, or the head (and body) first and then the eyes
+        if (look.Level != "LL_Eyes") TurnHead(rig, model, look.Level, ahead, Vector3.Lerp(before, Toward(look), eased));
+        Vector3? Point((float Start, string? Target, Vector3? Point, string Level, float Speed, bool Instant, bool Enabled) l) =>
+            !l.Enabled ? null : l.Point ?? (l.Target is { } t && headOf(t) is { } h ? h + EyesAboveHead : null);
+        TurnEyes(actor, model, now > 0 ? Point(track.LookAts[now - 1]) : null, Point(look), eased);
+    }
+
+    // where the eyes are above the head bone (at the top of the neck), near enough to look into
+    private static readonly Vector3 EyesAboveHead = new(0, 0, 0.08f);
+
+    /// <summary>Turns the head (and for a body look-at the chest) from where it faces toward where it's to look, shared out down the spine.</summary>
+    private static void TurnHead(Skeleton rig, Matrix4x4[] model, string level, Vector3 ahead, Vector3 want)
+    {
         if (want.LengthSquared() < 1e-6f) return;
         want = Vector3.Normalize(want);
         float angle = MathF.Acos(Math.Clamp(Vector3.Dot(ahead, want), -1, 1));
         var axis = Vector3.Cross(ahead, want);
         if (angle < 1e-3f || axis.LengthSquared() < 1e-8f) return;
         var turn = Quaternion.CreateFromAxisAngle(Vector3.Normalize(axis), Math.Min(angle, 80 * MathF.PI / 180));
-        (string Bone, float Share)[] chain = look.Level == "LL_Head"
+        (string Bone, float Share)[] chain = level == "LL_Head"
             ? [("neck", 0.4f), ("head", 0.6f)]
             : [("torso2", 0.15f), ("torso3", 0.2f), ("neck", 0.25f), ("head", 0.4f)];
         foreach (var (name, share) in chain)
@@ -804,6 +1107,33 @@ public static class SceneStage
                 carried[b] = b == bone || (rig.Parents[b] >= 0 && carried[rig.Parents[b]]);
                 if (carried[b]) model[b] *= turning;
             }
+        }
+    }
+
+    /// <summary>
+    /// Turns each eye from where the face has it toward a point (from the one looked at before, as far as
+    /// <paramref name="eased"/>), no further than eyes turn. None to look at leaves the eyes as the face has them.
+    /// </summary>
+    private static void TurnEyes(StageActor actor, Matrix4x4[] model, Vector3? before, Vector3? now, float eased)
+    {
+        foreach (var name in new[] { "left_eye", "right_eye" })
+        {
+            int eye = Bone(actor.Rig, name);
+            if (eye < 0 || !Matrix4x4.Invert(actor.Rest[eye], out var back)) continue;
+            var pivot = model[eye].Translation;
+            // where the eye looks now: where it looks in the rig's pose (as the actor faces, along Y), as the face turns it
+            var ahead = Vector3.TransformNormal(Vector3.TransformNormal(Vector3.UnitY, back), model[eye]);
+            if (ahead.LengthSquared() < 1e-8f) continue;
+            ahead = Vector3.Normalize(ahead);
+            Vector3 Toward(Vector3? at) => at is { } p && Vector3.DistanceSquared(p, pivot) > 1e-4f ? Vector3.Normalize(p - pivot) : ahead;
+            var want = Vector3.Lerp(Toward(before), Toward(now), eased);
+            if (want.LengthSquared() < 1e-6f) continue;
+            want = Vector3.Normalize(want);
+            float angle = MathF.Acos(Math.Clamp(Vector3.Dot(ahead, want), -1, 1));
+            var axis = Vector3.Cross(ahead, want);
+            if (angle < 1e-3f || axis.LengthSquared() < 1e-8f) continue;
+            var turn = Matrix4x4.CreateFromAxisAngle(Vector3.Normalize(axis), Math.Min(angle, 30 * MathF.PI / 180));
+            model[eye] = model[eye] * Matrix4x4.CreateTranslation(-pivot) * turn * Matrix4x4.CreateTranslation(pivot);
         }
     }
 
@@ -832,6 +1162,105 @@ public static class SceneStage
             var positions = new Vector3[chunk.Positions.Length];
             for (int v = 0; v < positions.Length; v++) positions[v] = Vector3.Transform(chunk.Positions[v], placed);
             return positions;
+        };
+    }
+
+    /// <summary>The lights a scene defines, by id, and whether each is a spot (else it shines all round, as a point light).</summary>
+    public static Dictionary<string, bool> LightKinds(Cr2wFile file) =>
+        file.Exports.Where(x => x.ClassName == "CStorySceneLight").Select(x => file.Object(x.Index))
+            .Select(o => (Id: Named(o["id"]), Spot: Named(o["type"]) == "LT_SpotLight")).Where(l => l.Id is not null)
+            .GroupBy(l => l.Id!, StringComparer.OrdinalIgnoreCase).ToDictionary(g => g.Key, g => g.First().Spot, StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// The scene's lights that are on in a section at a time: each as its last light event by then sets it (one turned
+    /// off, or set nowhere yet, isn't). A light's colour is its own, or for one that takes the environment's, a warm white.
+    /// </summary>
+    public static List<StageLight> LightsAt(SceneSectionTimeline timeline, IReadOnlyDictionary<string, bool> kinds, float time)
+    {
+        var last = new Dictionary<string, SceneTimelineEvent>(StringComparer.OrdinalIgnoreCase);
+        foreach (var e in timeline.Events.Where(e => e.ClassName == "CStorySceneEventLightProperties" && e.Source["isMuted"] is not true && e.Start <= time + 1e-4f).OrderBy(e => e.Start))
+            if (Named(e.Source["lightId"]) is { } id) last[id] = e;
+        var lights = new List<StageLight>();
+        foreach (var (id, e) in last)
+        {
+            var o = e.Source;
+            if (o["enabled"] is false) continue;
+            var (position, rotation) = SceneStaging.Transform(o["placement"]);
+            float pitch = rotation.Y * MathF.PI / 180, yaw = rotation.Z * MathF.PI / 180;
+            var direction = new Vector3(-MathF.Sin(yaw) * MathF.Cos(pitch), MathF.Cos(yaw) * MathF.Cos(pitch), MathF.Sin(pitch));
+            var color = System.Windows.Media.Color.FromRgb(255, 236, 210);
+            if (Named(o["lightColorSource"]) is null or "ELCS_CustomLightColor" && o["color"] is RedObject c)
+                color = System.Windows.Media.Color.FromRgb(Convert.ToByte(c["Red"] ?? 0), Convert.ToByte(c["Green"] ?? 0), Convert.ToByte(c["Blue"] ?? 0));
+            var spot = o["spotLightProperties"] as RedObject;
+            lights.Add(new StageLight(id, kinds.GetValueOrDefault(id), position, direction, color,
+                CurveValue(o["brightness"], 10), CurveValue(o["radius"], 5), CurveValue(o["attenuation"], 0.5f),
+                spot?["innerAngle"] is { } inner ? Convert.ToSingle(inner) : 30, spot?["outerAngle"] is { } outer ? Convert.ToSingle(outer) : 45));
+        }
+        return lights;
+    }
+
+    /// <summary>A light's setting kept as a curve (SSimpleCurve): its first key's value, or the default when it has none.</summary>
+    private static float CurveValue(object? curve, float otherwise)
+    {
+        if (curve is not RedObject c || c.Array("dataCurveValues").OfType<RedObject>().FirstOrDefault() is not { } key) return otherwise;
+        // the key's value: named "value" in the source files, cut short in some cooked ones
+        return key.Properties.FirstOrDefault(p => p.Name.EndsWith("lue", StringComparison.Ordinal)) is { Value: { } v } ? Convert.ToSingle(v) : otherwise;
+    }
+
+    /// <summary>
+    /// Reads the camera animations a scene's sections play on top of their cameras (<c>medium_shake</c>, the hand-held
+    /// feel most dialogues have, <c>drunk_shake</c>, a hit's <c>camera_shake_hit_lvl1_1</c>), by name, from the game's
+    /// camera animation sets (<c>animations\camera\*.w2anims</c>, the expansions' too).
+    /// </summary>
+    public static Dictionary<string, AnimationClip> LoadCameraAnimations(IEnumerable<SceneSectionTimeline> timelines, ResourceLocator locator, CancellationToken token)
+    {
+        var names = timelines.SelectMany(t => t.Events).Where(e => e.ClassName == "CStorySceneEventCameraAnim")
+            .Select(e => Named(e.Source["animationName"])).OfType<string>().ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (names.Count == 0) return new(StringComparer.OrdinalIgnoreCase);
+        var sets = locator.AllPaths(".w2anims").Where(p => p.Contains(@"animations\camera\", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(p => p.StartsWith("dlc", StringComparison.OrdinalIgnoreCase)).ToList();
+        return Clips(sets, names, null, locator, [], token);
+    }
+
+    /// <summary>
+    /// A camera with the section's camera animations at a time played on top: each moves and turns the camera a little
+    /// in its own frame (the animation's camera bone, the last; X right, Y ahead, Z up), as far as its weight and its
+    /// blend in and out say. An idle one loops from its start to the section's end; the rest play their clip over their length.
+    /// </summary>
+    public static StageCamera Shaken(StageCamera camera, SceneSectionTimeline timeline, IReadOnlyDictionary<string, AnimationClip> animations, float time)
+    {
+        if (animations.Count == 0) return camera;
+        var right = Vector3.Normalize(Vector3.Cross(camera.Forward, camera.Up));
+        var up = Vector3.Normalize(Vector3.Cross(right, camera.Forward));
+        var frame = new Matrix4x4(right.X, right.Y, right.Z, 0, camera.Forward.X, camera.Forward.Y, camera.Forward.Z, 0, up.X, up.Y, up.Z, 0, 0, 0, 0, 1);
+        var (offset, turned) = (Vector3.Zero, Quaternion.Identity);
+        foreach (var e in timeline.Events.Where(e => e.ClassName == "CStorySceneEventCameraAnim" && e.Source["isMuted"] is not true && e.Start <= time))
+        {
+            if (Named(e.Source["animationName"]) is not { } name || !animations.TryGetValue(name, out var clip) || clip.BoneCount == 0 || clip.Duration <= 0) continue;
+            var o = e.Source;
+            bool idle = o["isIdle"] is true;
+            float length = idle || e.Duration <= 0 ? timeline.Duration - e.Start : e.Duration, into = time - e.Start;
+            if (into > length) continue;
+            float blendIn = o.Float("blendIn"), blendOut = o.Float("blendOut");
+            float weight = (o["weight"] is null ? 1 : o.Float("weight"))
+                * (blendIn > 0 ? Math.Clamp(into / blendIn, 0, 1) : 1) * (blendOut > 0 && !idle ? Math.Clamp((length - into) / blendOut, 0, 1) : 1);
+            if (weight <= 0) continue;
+            float front = o.Float("clipFront");
+            float at = idle ? (front + into * Math.Max(o["stretch"] is null ? 1 : o.Float("stretch"), 0.01f)) % clip.Duration
+                : Local(clip, time, e.Start, e.Duration, front, o.Float("clipEnd"));
+            var pose = new BoneTransform[clip.BoneCount];
+            Array.Fill(pose, BoneTransform.Identity);
+            clip.Sample(at, pose);
+            var shake = pose[^1];
+            offset += shake.Position * weight;
+            turned = Quaternion.Concatenate(turned, Quaternion.Slerp(Quaternion.Identity, Quaternion.Normalize(shake.Rotation), weight));
+        }
+        if (offset == Vector3.Zero && turned == Quaternion.Identity) return camera;
+        return camera with
+        {
+            Position = camera.Position + Vector3.Transform(offset, frame),
+            Forward = Vector3.Normalize(Vector3.Transform(Vector3.Transform(Vector3.UnitY, turned), frame)),
+            Up = Vector3.Normalize(Vector3.Transform(Vector3.Transform(Vector3.UnitZ, turned), frame)),
         };
     }
 
@@ -968,7 +1397,8 @@ public static class SceneStage
         var fade = timeline.Events.LastOrDefault(e => e.ClassName == "CStorySceneEventFade" && e.Start <= time + 1e-4f && e.Source["isMuted"] is not true);
         if (fade is null) return null;
         float t = fade.Duration > 0 ? Math.Clamp((time - fade.Start) / fade.Duration, 0, 1) : 1;
-        double amount = fade.Source["in"] is true ? 1 - t : t;
+        // a fade is a fade in unless it says otherwise: cooking leaves out the default, so only a fade out keeps in=false
+        double amount = fade.Source["in"] is not false ? 1 - t : t;
         var c = fade.Source["color"] as RedObject;
         byte Part(string name) => c?[name] is { } v ? Convert.ToByte(v) : (byte)0;
         return amount <= 0.001 ? null : (System.Windows.Media.Color.FromRgb(Part("Red"), Part("Green"), Part("Blue")), amount);

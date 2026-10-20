@@ -440,7 +440,15 @@ public partial class CutsceneWindow : Window, IMessageHost
         CameraBox.IsEnabled = p.Cameras.Count(c => c.Rig is not null) > 1;
         if (!CameraToggle.IsEnabled) CameraToggle.ToolTip = "The cutscene has no camera animation, or its rig wasn't found";
         SetTime(0);
-        await Stage.LoadCastAsync(_closing.Token);
+        // every actor and texture read before it's shown, so it plays smoothly from the start
+        var prepared = await Loading.RunAsync(this, $"Loading {Path.GetFileNameWithoutExtension(_path)}",
+            (report, token) => CutsceneStage.PrepareAsync(c, p, _locator, Stage.TextureReader, report, token), _closing.Token);
+        if (prepared is null)
+        {
+            Stage.Message = "Loading the actors was stopped. Open the cutscene again to load them.";
+            return;
+        }
+        Stage.Show(prepared, _locator);
         Stage.SetLines(_lines);
     }
 

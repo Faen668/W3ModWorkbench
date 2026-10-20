@@ -56,7 +56,11 @@ public sealed class EntityComponent
 }
 
 /// <summary>A component hung from another: rigidly (a hard attachment, maybe at a bone), or skinned to its skeleton.</summary>
-public sealed record EntityLink(EntityComponent Parent, EntityComponent Child, string Kind, string? Slot);
+public sealed record EntityLink(EntityComponent Parent, EntityComponent Child, string Kind, string? Slot)
+{
+    /// <summary>Where a hard attachment puts the child on its parent (or the parent's slot): its relativeTransform, with scale (a prop shrunk to fit a hand).</summary>
+    public Matrix4x4 Relative { get; init; } = Matrix4x4.Identity;
+}
 
 /// <summary>An entity's components and attachments as they are in one of its appearances, or on their own.</summary>
 public sealed record EntityLook(List<EntityComponent> Components, List<EntityLink> Links);
@@ -163,7 +167,7 @@ public sealed class EntityFile
                 var a = f.Object(export.Index);
                 if (a["parent"] is RedHandle { Export: int p } && a["child"] is RedHandle { Export: int c }
                     && byObject.TryGetValue((f, p), out var parent) && byObject.TryGetValue((f, c), out var child))
-                    links.Add(new EntityLink(parent, child, Kind(export.ClassName), Name(a["parentSlotName"])));
+                    links.Add(new EntityLink(parent, child, Kind(export.ClassName), Name(a["parentSlotName"])) { Relative = Transform(a.Bytes("relativeTransform")) });
             }
         foreach (var s in template.Array("streamedAttachments").OfType<RedObject>())
         {
@@ -172,6 +176,7 @@ public sealed class EntityFile
             if (parent is null || child is null) continue;
             string kind = "Hard";
             string? slot = null;
+            var relative = Matrix4x4.Identity;
             if (s.Bytes("data") is { Length: > 0 } block && Cr2wFile.IsCr2w(block))
                 try
                 {
@@ -180,10 +185,11 @@ public sealed class EntityFile
                     {
                         kind = Kind(e.ClassName);
                         slot = Name(af.Object(e.Index)["parentSlotName"]);
+                        relative = Transform(af.Object(e.Index).Bytes("relativeTransform"));
                     }
                 }
                 catch (InvalidDataException) { }
-            links.Add(new EntityLink(parent, child, kind, slot));
+            links.Add(new EntityLink(parent, child, kind, slot) { Relative = relative });
         }
         foreach (var link in links.Where(l => l.Kind == "Skinned")) link.Child.Skinned = true;
         Place(components, links);
@@ -332,10 +338,14 @@ public sealed class EntityFile
     /// The meshes a look draws, each with where it's placed and the component that draws it: not those only there to
     /// cast a shadow, and a mesh at the same place in two templates once.
     /// </summary>
-    public static List<(string Mesh, Matrix4x4 Placed, EntityComponent Component)> MeshesOf(EntityLook look) =>
-        look.Components.Where(c => c.Mesh is not null && !ShadowOnly(c))
+    public static List<(string Mesh, Matrix4x4 Placed, EntityComponent Component)> MeshesOf(EntityLook look)
+    {
+        // a mesh hung on a slot is placed by its bone, so copies on different slots (a tray's beer mugs) are all drawn
+        var slotOf = look.Links.Where(l => l.Slot is not null).GroupBy(l => l.Child).ToDictionary(g => g.Key, g => g.First().Slot);
+        return look.Components.Where(c => c.Mesh is not null && !ShadowOnly(c))
             .Select(c => (c.Mesh!, c.Skinned ? Matrix4x4.Identity : c.Placed, c))
-            .DistinctBy(m => (m.Item1.ToLowerInvariant(), m.Item2)).ToList();
+            .DistinctBy(m => (m.Item1.ToLowerInvariant(), m.Item2, slotOf.GetValueOrDefault(m.c)?.ToLowerInvariant())).ToList();
+    }
 
     /// <summary>Whether an object is a component: it has a name and a GUID, as every component does.</summary>
     private static bool IsComponent(RedObject o) =>
@@ -351,16 +361,17 @@ public sealed class EntityFile
     /// <summary>Each component's place in the entity: its own transform after those of the components it hangs from.</summary>
     private static void Place(List<EntityComponent> components, List<EntityLink> links)
     {
-        var parentOf = new Dictionary<EntityComponent, EntityComponent>();
-        foreach (var link in links.Where(l => l.Kind == "Hard")) parentOf.TryAdd(link.Child, link.Parent);
+        var parentOf = new Dictionary<EntityComponent, EntityLink>();
+        foreach (var link in links.Where(l => l.Kind == "Hard")) parentOf.TryAdd(link.Child, link);
         foreach (var c in components)
         {
             var placed = c.Local;
             var at = c;
-            for (int depth = 0; depth < 16 && parentOf.TryGetValue(at, out var parent); depth++)
+            // a child is where its attachment puts it on its parent
+            for (int depth = 0; depth < 16 && parentOf.TryGetValue(at, out var link); depth++)
             {
-                placed *= parent.Local;
-                at = parent;
+                placed *= link.Relative * link.Parent.Local;
+                at = link.Parent;
             }
             c.Placed = placed;
         }

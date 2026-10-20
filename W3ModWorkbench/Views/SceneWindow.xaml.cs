@@ -351,23 +351,25 @@ public partial class SceneWindow : Window, IMessageHost
     }
 
     /// <summary>
-    /// Puts the scene's actors together the first time the preview is shown: each stood in its sections' dialog sets,
-    /// with the idles, changes of stance and body animations its sections play read from its animation sets. Then their
-    /// textures go on, as each is read.
+    /// Loads everything the preview plays the first time it's shown, as REDkit loads a scene's entities before it opens
+    /// it, so it plays smoothly from the start: the scene's actors (each stood in its sections' dialog sets, with the
+    /// idles, changes of stance and animations its sections play read from its animation sets) with all their
+    /// textures, and every cutscene the scene plays with its actors and theirs. A dialog shows how it's getting on.
     /// </summary>
     private async Task LoadStageAsync()
     {
         if (_scene is not { } s) return;
-        StageText.Text = "Putting the actors together…";
-        var token = _closing.Token;
+        StageText.Text = "Loading the scene…";
         var locator = _locator;
-        var notes = new List<string>();
         var timelines = _timelines.ToList();
         var sets = _dialogsets;
-        List<StageActor> cast;
-        try
+        var cutscenes = s.Nodes.Where(n => n.Kind == SceneNodeKind.Cutscene && n.Cutscene is not null).Select(n => n.Cutscene!)
+            .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        var loaded = await Loading.RunAsync(this, $"Loading {Path.GetFileNameWithoutExtension(_path)}", async (report, token) =>
         {
-            (cast, _idles, _dialogsetOf) = await Task.Run(() =>
+            report.Step("Putting the actors together");
+            var notes = new List<string>();
+            var (cast, idles, bySection) = await Task.Run(() =>
             {
                 var idles = SceneStage.Idles(locator);
                 var bySection = SceneStage.DialogsetsBySection(s, sets);
@@ -395,52 +397,114 @@ public partial class SceneWindow : Window, IMessageHost
                     }
                 return (SceneStage.Load(s, wanted, locator, notes, token), idles, bySection);
             }, token);
-        }
-        catch (OperationCanceledException)
+            report.Step("Reading the camera animations");
+            var cameraAnimations = await Task.Run(() => SceneStage.LoadCameraAnimations(timelines.Select(t => t.Value), locator, token), token);
+            report.Step("Putting the props together");
+            var props = await Task.Run(() => SceneStage.LoadProps(s, timelines.SelectMany(t => SceneStage.ItemsTaken(t.Value)), locator, notes, token), token);
+            report.Step("Loading the actors' textures", string.Join(", ", cast.Select(a => a.Name)));
+            var parts = cast.SelectMany(a => a.Parts.Select((part, i) =>
+                (part.Mesh, StageTextures.Coloring(a.Entity, a.ColoredBy[i].Entity, a.ColoredBy[i].Appearance, a.DrawnBy[i].Name))))
+                .Concat(props.SelectMany(p => p.Parts.Select((part, i) => (part.Mesh, StageTextures.Coloring(p.Entity, p.Entity, p.Appearance, p.DrawnBy[i].Name)))))
+                .ToList();
+            var textures = await StageTextures.LoadAsync(parts, locator, StageTexture, report.Counter, token);
+            // every cutscene it plays, ready to go on when its section comes
+            for (int i = 0; i < cutscenes.Count; i++)
+            {
+                string path = cutscenes[i], name = Path.GetFileNameWithoutExtension(path);
+                report.Step($"Cutscene {i + 1} of {cutscenes.Count}: reading it", name);
+                try
+                {
+                    var cutscene = await Task.Run(() => locator.ReadFile(path) is { } data ? CutsceneFile.Read(data) : null, token);
+                    if (cutscene is null) continue;
+                    var playback = await Task.Run(() => CutscenePlayback.Load(cutscene, locator, path, locator.Find(path)?.Archive), token);
+                    var prepared = await CutsceneStage.PrepareAsync(cutscene, playback, locator, StageTexture, report, token, $"Cutscene {i + 1} of {cutscenes.Count}: ");
+                    _preparedCutscenes[path] = prepared;
+                }
+                catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or NotSupportedException)
+                {
+                    notes.Add($"The cutscene {name} could not be read: {ex.Message}");
+                }
+            }
+            return new LoadedStage(cast, props, cameraAnimations, idles, bySection, textures, notes);
+        }, _closing.Token);
+        if (loaded is null)
         {
-            _stageReady.TrySetResult();
+            // stopped: the preview loads again the next time it's opened
+            _stageLoad = null;
+            StageText.Text = "Loading the scene was stopped. Open the Preview again to load it.";
+            StageText.Visibility = Visibility.Visible;
             return;
         }
-        _stage = cast;
+        (_idles, _dialogsetOf) = (loaded.Idles, loaded.BySection);
+        var stageCast = loaded.Cast;
+        _stage = stageCast;
         _stageParts.Clear();
-        var parts = new List<(Core.Meshes.MeshFile Mesh, System.Numerics.Matrix4x4 Place)>();
-        foreach (var actor in cast)
+        var shown = new List<(Core.Meshes.MeshFile Mesh, System.Numerics.Matrix4x4 Place)>();
+        foreach (var actor in stageCast)
             for (int i = 0; i < actor.Parts.Count; i++)
             {
-                parts.Add((actor.Parts[i].Mesh, System.Numerics.Matrix4x4.Identity));
+                shown.Add((actor.Parts[i].Mesh, System.Numerics.Matrix4x4.Identity));
                 _stageParts.Add((actor, i));
             }
-        StageView.ShowParts(parts);
-        StageText.Text = cast.Count == 0 ? "None of the scene's actors could be put together." : "Pick a section to see it played.";
-        StageText.Visibility = cast.Count == 0 || _timelineNode is null ? Visibility.Visible : Visibility.Collapsed;
-        StageNotes.Text = string.Join("\n", notes.Take(6)) + (notes.Count > 6 ? $"\n… and {notes.Count - 6} more" : "");
+        _cameraAnimations = loaded.CameraAnimations;
+        // the props after the actors
+        _props = loaded.Props;
+        _propParts.Clear();
+        foreach (var prop in _props)
+            for (int i = 0; i < prop.Parts.Count; i++)
+            {
+                shown.Add((prop.Parts[i].Mesh, System.Numerics.Matrix4x4.Identity));
+                _propParts.Add((prop, i));
+            }
+        StageView.ShowParts(shown, loaded.Textures);
+        StageText.Text = stageCast.Count == 0 ? "None of the scene's actors could be put together." : "Pick a section to see it played.";
+        StageText.Visibility = stageCast.Count == 0 || _timelineNode is null ? Visibility.Visible : Visibility.Collapsed;
+        var stageNotes = loaded.Notes;
+        StageNotes.Text = string.Join("\n", stageNotes.Take(6)) + (stageNotes.Count > 6 ? $"\n… and {stageNotes.Count - 6} more" : "");
         LayoutStage();
         PoseStage(SectionTimeline.Playhead ?? 0, fit: true);
         _stageReady.TrySetResult();
-
-        // the colour textures, in the colours each actor's appearance gives each component
-        for (int part = 0; part < _stageParts.Count; part++)
-        {
-            var (actor, local) = _stageParts[part];
-            var mesh = actor.Parts[local].Mesh;
-            var (colorEntity, colorAppearance) = actor.ColoredBy[local];
-            var coloring = LookTextures.Coloring(colorEntity, colorAppearance, actor.DrawnBy[local].Name);
-            // a stand-in piece of the player's gear is undyed: its dye's red and blue parts as plain dark leather
-            if (coloring is null && !ReferenceEquals(colorEntity, actor.Entity)) coloring = (Undyed, Undyed);
-            for (int m = 0; m < mesh.Materials.Count; m++)
-            {
-                int at = part, material = m;
-                var (picture, leaveOut) = await Task.Run(() => LookTextures.ForMaterial(mesh, material, _locator, StageTexture, coloring), token)
-                    .ContinueWith(t => t.IsCompletedSuccessfully ? t.Result : ((System.Windows.Media.Imaging.BitmapSource?)null, false), TaskScheduler.Default);
-                if (token.IsCancellationRequested) return;
-                if (leaveOut) StageView.LeaveOut(at, material);
-                else if (picture is not null) StageView.SetTexture(at, material, picture);
-            }
-        }
     }
 
-    /// <summary>The colour the parts of an undyed piece of gear that take a dye are shown in: no colour, a little darker.</summary>
-    private static readonly ColorShift Undyed = new(0, -100, -35);
+    /// <summary>What loading the preview read: the actors, how they stand, the dialog sets, their textures, and what went wrong.</summary>
+    private sealed record LoadedStage(List<StageActor> Cast, List<StageProp> Props, Dictionary<string, Core.Animation.AnimationClip> CameraAnimations,
+        Dictionary<ActorStance, string> Idles, Dictionary<SceneNode, SceneDialogset?> BySection,
+        List<(int Part, int Material, System.Windows.Media.Imaging.BitmapSource? Picture, bool LeaveOut)> Textures, List<string> Notes);
+
+    // the lights the scene defines, by id, and whether each is a spot
+    private Dictionary<string, bool>? _lightKinds;
+
+    /// <summary>
+    /// A scene's light as the view draws it: a spot or a point light where it is, as bright as it's set (its colour
+    /// scaled), fading out to its radius, the faster the more its attenuation.
+    /// </summary>
+    private static System.Windows.Media.Media3D.Light StageLightOf(StageLight light)
+    {
+        float strength = Math.Clamp(light.Brightness / 10, 0.15f, 1.6f);
+        byte Scaled(byte channel) => (byte)Math.Min(255, channel * strength);
+        var color = System.Windows.Media.Color.FromRgb(Scaled(light.Color.R), Scaled(light.Color.G), Scaled(light.Color.B));
+        var at = new System.Windows.Media.Media3D.Point3D(light.Position.X, light.Position.Y, light.Position.Z);
+        double radius = Math.Max(light.Radius, 0.5), quadratic = (1 + 4 * Math.Clamp(light.Attenuation, 0, 1)) / (radius * radius);
+        System.Windows.Media.Media3D.PointLightBase made = light.Spot
+            ? new System.Windows.Media.Media3D.SpotLight(color, at, new System.Windows.Media.Media3D.Vector3D(light.Direction.X, light.Direction.Y, light.Direction.Z),
+                Math.Clamp(light.OuterAngle, 1, 179), Math.Clamp(Math.Min(light.InnerAngle, light.OuterAngle), 0, 179))
+            : new System.Windows.Media.Media3D.PointLight(color, at);
+        made.Range = radius;
+        made.ConstantAttenuation = 1;
+        made.QuadraticAttenuation = quadratic;
+        return made;
+    }
+
+    // the camera animations the sections play on top of their cameras (their shakes), by name
+    private Dictionary<string, Core.Animation.AnimationClip> _cameraAnimations = [];
+
+    // the props, drawn after the actors' meshes, and what each section does with them
+    private List<StageProp> _props = [];
+    private readonly List<(StageProp Prop, int Part)> _propParts = [];
+    private readonly Dictionary<SceneNode, List<PropEvent>> _propEvents = [];
+
+    // the scene's cutscenes, loaded with the preview, by path
+    private readonly Dictionary<string, CutsceneStage.PreparedCast> _preparedCutscenes = new(StringComparer.OrdinalIgnoreCase);
 
     private Task<System.Windows.Media.Imaging.BitmapSource?> StageTexture(string path)
     {
@@ -492,34 +556,39 @@ public partial class SceneWindow : Window, IMessageHost
         if (_lipSyncsAsked.Add(node)) _ = LoadLipSyncsAsync(timeline);
         StageText.Visibility = tracks.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         if (tracks.Count == 0) StageText.Text = "No one stands in this section: its dialog set wasn't found.";
-        var bones = new Dictionary<StageActor, System.Numerics.Matrix4x4[]>();
-        var posers = new Dictionary<StageActor, Func<int, Core.Meshes.MeshChunk, System.Numerics.Vector3[]?>>();
-        var trackOf = new Dictionary<StageActor, ActorTrack>();
-        foreach (var actor in stage)
-            if (tracks.FirstOrDefault(t => t.Actor.Equals(actor.Name, StringComparison.OrdinalIgnoreCase)) is { } track && track.ShownAt((float)time))
-            {
-                trackOf[actor] = track;
-                var face = SceneStage.FaceWeights(actor, track, (float)time, id => _lipSyncs.GetValueOrDefault(id));
-                bones[actor] = SceneStage.Bones(actor, track, _idles, (float)time, face);
-            }
-        // each looks at where the others' heads are, as their animations put them
-        var heads = bones.ToDictionary(b => b.Key.Name, b => SceneStage.Bone(b.Key.Rig, "head") is int h and >= 0 ? b.Value[h].Translation : (System.Numerics.Vector3?)null,
-            StringComparer.OrdinalIgnoreCase);
-        foreach (var (actor, model) in bones)
+        // worked out in the background, the latest time next: the UI thread only puts the bent meshes in
+        var (cast, parts, idles, lips, at) = (stage, _stageParts.ToList(), _idles, new Dictionary<uint, Core.Animation.LipSync?>(_lipSyncs), (float)time);
+        if (!_propEvents.TryGetValue(node, out var propEvents)) _propEvents[node] = propEvents = SceneStage.PropEvents(timeline);
+        var propParts = _propParts.ToList();
+        RequestStagePose(() =>
         {
-            SceneStage.LookAt(actor, trackOf[actor], model, (float)time, name => heads.GetValueOrDefault(name));
-            posers[actor] = SceneStage.Pose(actor, model);
-        }
-        // one not in the section is folded into a point, out of sight
-        StageView.Pose((part, chunk) => part >= _stageParts.Count ? null
-            : posers.TryGetValue(_stageParts[part].Actor, out var pose) ? pose(_stageParts[part].Part, chunk) : new System.Numerics.Vector3[chunk.Positions.Length]);
+            var bones = StageBones(cast, tracks, idles, lips, at);
+            var posers = bones.ToDictionary(b => b.Key, b => SceneStage.Pose(b.Key, b.Value));
+            var byName = bones.ToDictionary(b => b.Key.Name, b => (b.Key, b.Value), StringComparer.OrdinalIgnoreCase);
+            var propAt = propParts.Select(p => p.Prop).Distinct().ToDictionary(p => p, p => SceneStage.PropPlace(p, propEvents, at,
+                name => byName.TryGetValue(name, out var found) ? (found.Key, found.Value) : null));
+            // one not in the section, or a prop not out, is folded into a point, out of sight
+            return (part, chunk) =>
+            {
+                if (part < parts.Count)
+                    return posers.TryGetValue(parts[part].Actor, out var pose) ? pose(parts[part].Part, chunk) : new System.Numerics.Vector3[chunk.Positions.Length];
+                int p = part - parts.Count;
+                if (p >= propParts.Count || propAt[propParts[p].Prop] is not { } place) return new System.Numerics.Vector3[chunk.Positions.Length];
+                var placed = propParts[p].Prop.Parts[propParts[p].Part].Place * place;
+                var positions = new System.Numerics.Vector3[chunk.Positions.Length];
+                for (int v = 0; v < positions.Length; v++) positions[v] = System.Numerics.Vector3.Transform(chunk.Positions[v], placed);
+                return positions;
+            };
+        });
 
         ShowOverlays(timeline, time);
-        var camera = SceneStage.CameraAt(timeline, _cameras, (float)time, _scene?.File);
+        var camera = SceneStage.CameraAt(timeline, _cameras, (float)time, _scene?.File) is { } cut ? SceneStage.Shaken(cut, timeline, _cameraAnimations, (float)time) : (StageCamera?)null;
         StageCameraText.Text = camera is { } named ? $"Camera {named.Name}   FOV {named.FieldOfView:0.#}°" : "The section has no camera.";
+        _lightKinds ??= _scene is null ? [] : SceneStage.LightKinds(_scene.File);
+        StageView.SetLights(SceneStage.LightsAt(timeline, _lightKinds, (float)time).Select(StageLightOf).ToList());
         if (StageCameraToggle.IsChecked == true && camera is { } through)
             StageView.LookThrough(through.Position, through.Forward, through.Up, through.FieldOfView);
-        else if (fit) FitStage(bones.Values);
+        else if (fit) FitStage(StageBones(stage, tracks, _idles, _lipSyncs, (float)time).Values);
     }
 
     // the cutscene on the cutscene stage, and the one being read
@@ -546,26 +615,42 @@ public partial class SceneWindow : Window, IMessageHost
 
     private async Task LoadCutsceneAsync(string path)
     {
-        CutsceneView.Clear();
-        CutsceneView.Message = "Reading the cutscene…";
-        CutsceneFile cutscene;
-        try
+        // the preview loads the scene's cutscenes with its actors: wait for that rather than read one twice
+        if (_stageLoad is { IsCompleted: false } loading)
         {
+            CutsceneView.Message = "Loading the scene…";
+            await loading;
+            if (!string.Equals(path, _cutsceneShown, StringComparison.OrdinalIgnoreCase)) return;
+            // loading was stopped: it all loads again when the preview is opened again
+            if (_stageLoad is null)
+            {
+                _cutsceneShown = null;
+                return;
+            }
+        }
+        // loaded with the preview, or now when it wasn't (one the preview couldn't read before)
+        if (!_preparedCutscenes.TryGetValue(path, out var prepared))
+        {
+            CutsceneView.Clear();
             var locator = _locator;
-            cutscene = await Task.Run(() => locator.ReadFile(path) is { } data ? CutsceneFile.Read(data) : throw new FileNotFoundException("The cutscene wasn't found.", path));
-        }
-        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or NotSupportedException)
-        {
-            CutsceneView.Message = "The cutscene could not be read. " + ex.Message;
-            return;
+            prepared = await Loading.RunAsync(this, $"Loading {Path.GetFileNameWithoutExtension(path)}", async (report, token) =>
+            {
+                report.Step("Reading the cutscene");
+                var cutscene = await Task.Run(() => locator.ReadFile(path) is { } data ? CutsceneFile.Read(data) : throw new FileNotFoundException("The cutscene wasn't found.", path), token);
+                var playback = await Task.Run(() => CutscenePlayback.Load(cutscene, locator, path, locator.Find(path)?.Archive), token);
+                return await CutsceneStage.PrepareAsync(cutscene, playback, locator, StageTexture, report, token);
+            }, _closing.Token).ContinueWith(t => t.IsCompletedSuccessfully ? t.Result : null, TaskScheduler.FromCurrentSynchronizationContext());
+            if (prepared is null)
+            {
+                CutsceneView.Message = "The cutscene could not be loaded.";
+                return;
+            }
+            _preparedCutscenes[path] = prepared;
         }
         if (!string.Equals(path, _cutsceneShown, StringComparison.OrdinalIgnoreCase)) return;
-        _ = LoadCutsceneTrackAsync(cutscene, path);
-        if (await CutsceneView.LoadPlaybackAsync(cutscene, path, _locator) is null || !string.Equals(path, _cutsceneShown, StringComparison.OrdinalIgnoreCase)) return;
-        CutsceneView.ThroughCamera = StageCameraToggle.IsChecked == true;
-        CutsceneView.SetTime((float)(SectionTimeline.Playhead ?? 0));
-        await CutsceneView.LoadCastAsync(_closing.Token);
-        if (!string.Equals(path, _cutsceneShown, StringComparison.OrdinalIgnoreCase)) return;
+        _ = LoadCutsceneTrackAsync(prepared.Cutscene, path);
+        CutsceneView.Show(prepared, _locator);
+        if (CutsceneView.ThroughCamera != (StageCameraToggle.IsChecked == true)) CutsceneView.ThroughCamera = StageCameraToggle.IsChecked == true;
         PoseStage(SectionTimeline.Playhead ?? 0);
         // its lines' lip sync, for the faces to say them where the cutscene says them
         if (_timelineNode is { } node && _timelines.TryGetValue(node, out var timeline))
@@ -694,6 +779,52 @@ public partial class SceneWindow : Window, IMessageHost
             FadeCover.Visibility = Visibility.Visible;
         }
         else FadeCover.Visibility = Visibility.Collapsed;
+    }
+
+    /// <summary>
+    /// Where each actor in a section who's shown then has its bones at a time: its body, its face (with its lines' lip
+    /// sync), and turned to look at where the others' heads are. Works on what it's given only, so it runs off the UI thread.
+    /// </summary>
+    private static Dictionary<StageActor, System.Numerics.Matrix4x4[]> StageBones(List<StageActor> cast, List<ActorTrack> tracks,
+        Dictionary<ActorStance, string> idles, IReadOnlyDictionary<uint, Core.Animation.LipSync?> lips, float time)
+    {
+        var bones = new Dictionary<StageActor, System.Numerics.Matrix4x4[]>();
+        var trackOf = new Dictionary<StageActor, ActorTrack>();
+        foreach (var actor in cast)
+            if (tracks.FirstOrDefault(t => t.Actor.Equals(actor.Name, StringComparison.OrdinalIgnoreCase)) is { } track && track.ShownAt(time))
+            {
+                trackOf[actor] = track;
+                var face = SceneStage.FaceWeights(actor, track, time, id => lips.GetValueOrDefault(id));
+                bones[actor] = SceneStage.Bones(actor, track, idles, time, face);
+            }
+        var heads = bones.ToDictionary(b => b.Key.Name, b => SceneStage.Bone(b.Key.Rig, "head") is int h and >= 0 ? b.Value[h].Translation : (System.Numerics.Vector3?)null,
+            StringComparer.OrdinalIgnoreCase);
+        foreach (var (actor, model) in bones) SceneStage.LookAt(actor, trackOf[actor], model, time, name => heads.GetValueOrDefault(name));
+        return bones;
+    }
+
+    // the pose being worked out, and the latest asked for while it was
+    private bool _stagePosing;
+    private Func<Func<int, Core.Meshes.MeshChunk, System.Numerics.Vector3[]?>?>? _stagePending;
+
+    /// <summary>Poses the stage in the background, one pose at a time: a heavy scene shows fewer frames, still in time, and stays answering.</summary>
+    private async void RequestStagePose(Func<Func<int, Core.Meshes.MeshChunk, System.Numerics.Vector3[]?>?> makePose)
+    {
+        _stagePending = makePose;
+        if (_stagePosing) return;
+        _stagePosing = true;
+        try
+        {
+            while (_stagePending is { } next)
+            {
+                _stagePending = null;
+                await StageView.PoseAsync(next);
+            }
+        }
+        finally
+        {
+            _stagePosing = false;
+        }
     }
 
     /// <summary>Turns the free camera to see everyone in the section.</summary>
@@ -947,8 +1078,8 @@ public partial class SceneWindow : Window, IMessageHost
         if (_stageLoad is not null)
         {
             // a load that fails or is overtaken doesn't hold it up for long
-            await Task.WhenAny(_stageReady.Task, Task.Delay(TimeSpan.FromSeconds(60), token));
-            if (node.Kind == SceneNodeKind.Cutscene) await Task.WhenAny(CutsceneView.Ready, Task.Delay(TimeSpan.FromSeconds(60), token));
+            await Task.WhenAny(_stageReady.Task, Task.Delay(TimeSpan.FromSeconds(600), token));
+            if (node.Kind == SceneNodeKind.Cutscene) await Task.WhenAny(CutsceneView.Ready, Task.Delay(TimeSpan.FromSeconds(180), token));
         }
         if (token.IsCancellationRequested) return false;
         var done = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);

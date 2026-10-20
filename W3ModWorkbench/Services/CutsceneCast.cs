@@ -90,6 +90,8 @@ public static class CutsceneCast
             try
             {
                 entity = EntityFile.Read(data);
+                // the colours of an appearance it takes from a template it includes are kept in that template
+                entity.FindOrigins(locator.ReadFile);
             }
             catch (InvalidDataException ex)
             {
@@ -106,6 +108,8 @@ public static class CutsceneCast
             // its face's bones go on the body's rig when the cutscene moves its face, for the head to be skinned to them
             var face = played.Face is not null ? SceneStage.Face(look, IsPlayer(template), locator) : null;
             var (skinned, faceIndex) = face is null ? (rig, []) : SceneStage.Merge(rig, face.Skeleton);
+            // and the small rigs hung on it, for what's skinned to them (the player's scabbards)
+            skinned = SceneStage.WithCarriedRigs(skinned, look, locator);
             var attachedTo = AttachToRig(look, parts, drawnBy, rig);
             if (IsPlayer(template) && Dress(entity, look, rig, locator, parts, drawnBy, coloredBy, attachedTo, token))
                 notes.Add($"{played.Name} is the player, whom the game dresses in what's equipped: shown here with Geralt's default gear (his starting armour, swords and hairstyle).");
@@ -148,9 +152,14 @@ public static class CutsceneCast
         var attachedTo = parts.Select(_ => (-1, Matrix4x4.Identity)).ToList();
         for (int i = 0; i < parts.Count && i < drawnBy.Count; i++)
             if (!parts[i].Mesh.Chunks.Any(c => c.BonesPerVertex > 0)
-                && look.Links.FirstOrDefault(l => l.Child == drawnBy[i] && l.Slot is { Length: > 0 }) is { Slot: { } slot }
+                && look.Links.FirstOrDefault(l => l.Child == drawnBy[i] && l.Slot is { Length: > 0 }) is { Slot: { } slot } link
                 && Array.FindIndex(rig.Names, n => n.Equals(slot, StringComparison.OrdinalIgnoreCase)) is int bone and >= 0)
-                attachedTo[i] = (bone, Matrix4x4.Identity);
+            {
+                // on the bone as the attachment puts it (turned, moved and scaled: the tavern's shield faces the room,
+                // its tray is shrunk to fit), the mesh where its component puts it on that: drawn at Place * offset
+                var onSlot = drawnBy[i].Local * link.Relative;
+                attachedTo[i] = (bone, Matrix4x4.Invert(parts[i].Place, out var back) ? back * onSlot : onSlot);
+            }
         return attachedTo;
     }
 

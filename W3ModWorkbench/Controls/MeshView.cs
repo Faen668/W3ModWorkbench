@@ -20,6 +20,7 @@ public sealed class MeshView : Border
     private readonly Viewport3D _viewport = new() { ClipToBounds = true, IsHitTestVisible = false };
     private readonly PerspectiveCamera _camera = new() { FieldOfView = 45, NearPlaneDistance = 0.01, FarPlaneDistance = 10000 };
     private readonly DirectionalLight _headlight = new(Color.FromRgb(200, 200, 200), new Vector3D(0, 0, -1));
+    private readonly Model3DGroup _lights = new();
     private readonly Model3DGroup _models = new();
     private readonly Model3DGroup _wires = new();
     private readonly Model3DGroup _floor = new();
@@ -57,6 +58,7 @@ public sealed class MeshView : Border
         var scene = new Model3DGroup();
         scene.Children.Add(new AmbientLight(Color.FromRgb(90, 90, 90)));
         scene.Children.Add(_headlight);
+        scene.Children.Add(_lights);
         scene.Children.Add(_floor);
         scene.Children.Add(_models);
         scene.Children.Add(_wires);
@@ -129,6 +131,7 @@ public sealed class MeshView : Border
     /// <summary>Shows meshes together, each moved, turned and scaled by its matrix (in the game's Z-up space).</summary>
     public void ShowParts(IReadOnlyList<(MeshFile Mesh, System.Numerics.Matrix4x4 Place)> parts)
     {
+        _poseVersion++;
         _parts = [.. parts];
         _wireWidth = 0;
         _highlighted = [];
@@ -140,6 +143,34 @@ public sealed class MeshView : Border
         _textures.Clear();
         _materials.Clear();
         _sceneSphere = null;
+        Rebuild();
+        FitToView();
+    }
+
+    /// <summary>
+    /// Shows meshes with their textures already read: each (part, material) drawn with its picture or left out. Built
+    /// once with all of them, rather than again for every texture put on after.
+    /// </summary>
+    public void ShowParts(IReadOnlyList<(MeshFile Mesh, System.Numerics.Matrix4x4 Place)> parts,
+        IEnumerable<(int Part, int Material, BitmapSource? Picture, bool LeaveOut)> textures)
+    {
+        _poseVersion++;
+        _parts = [.. parts];
+        _wireWidth = 0;
+        _highlighted = [];
+        _posed = null;
+        _posedPositions.Clear();
+        _lod = 0;
+        _hidden.Clear();
+        _leftOut.Clear();
+        _textures.Clear();
+        _materials.Clear();
+        _sceneSphere = null;
+        foreach (var (part, material, picture, leaveOut) in textures)
+        {
+            if (leaveOut) _leftOut.Add(Key(part, material));
+            else if (picture is not null) _textures[Key(part, material)] = picture;
+        }
         Rebuild();
         FitToView();
     }
@@ -218,12 +249,84 @@ public sealed class MeshView : Border
     /// </summary>
     public void Pose(Func<int, MeshChunk, System.Numerics.Vector3[]?>? posed)
     {
+        _poseVersion++;
         _posed = posed;
         _posedPositions.Clear();
         _sceneMoved = true;
         foreach (var (key, model) in _chunks)
             model.Geometry = PosedGeometry(key >> 16, _parts[key >> 16].Mesh.Chunks[key & 0xFFFF]);
         if (_wireframe) RebuildWires();
+    }
+
+    // bumped by each pose and each new set of meshes, so a pose worked out in the background for an older one is dropped
+    private int _poseVersion;
+
+    /// <summary>
+    /// Poses the meshes as <see cref="Pose"/> does, but works it out on the thread pool, the chunks in parallel: the
+    /// pose itself (<paramref name="makePose"/> is called there, so the bones are placed off the UI thread too), each
+    /// chunk's bent vertices and their normals, as frozen geometry the UI thread only has to put in. A big cast (a
+    /// battle's dozen actors) would otherwise keep the UI thread so busy it couldn't answer a click.
+    /// </summary>
+    public async Task PoseAsync(Func<Func<int, MeshChunk, System.Numerics.Vector3[]?>?> makePose)
+    {
+        int version = ++_poseVersion;
+        var parts = _parts;
+        var keys = _chunks.Keys.ToList();
+        var made = await Task.Run(() =>
+        {
+            var posed = makePose();
+            var results = new (int Key, MeshGeometry3D Geometry, System.Numerics.Vector3[]? Positions)[keys.Count];
+            Parallel.For(0, keys.Count, i =>
+            {
+                int key = keys[i];
+                var chunk = parts[key >> 16].Mesh.Chunks[key & 0xFFFF];
+                var positions = posed?.Invoke(key >> 16, chunk);
+                results[i] = (key, positions is null ? Geometry(chunk) : Bent(chunk, positions), positions);
+            });
+            return (Posed: posed, Results: results);
+        });
+        if (version != _poseVersion || !ReferenceEquals(parts, _parts)) return;
+        _posed = made.Posed;
+        _posedPositions.Clear();
+        _sceneMoved = true;
+        foreach (var (key, geometry, positions) in made.Results)
+        {
+            if (positions is not null) _posedPositions[(key >> 16, parts[key >> 16].Mesh.Chunks[key & 0xFFFF])] = positions;
+            if (_chunks.TryGetValue(key, out var model)) model.Geometry = geometry;
+        }
+        if (_wireframe) RebuildWires();
+    }
+
+    /// <summary>
+    /// A chunk bent into a pose, with normals worked out from its bent triangles (each vertex's the sum of its faces',
+    /// by their size), frozen so it can be made off the UI thread.
+    /// </summary>
+    private MeshGeometry3D Bent(MeshChunk chunk, System.Numerics.Vector3[] positions)
+    {
+        var made = Geometry(chunk);
+        var points = new Point3DCollection(positions.Length);
+        foreach (var v in positions) points.Add(ToView(v));
+        var sums = new System.Numerics.Vector3[positions.Length];
+        var indices = chunk.Indices;
+        for (int i = 0; i + 2 < indices.Length; i += 3)
+        {
+            // facing out as the mesh's own normals do (checked against them: the same on all but a few vertices)
+            int a = indices[i], b = indices[i + 2], c = indices[i + 1];
+            if (a >= positions.Length || b >= positions.Length || c >= positions.Length) continue;
+            var face = System.Numerics.Vector3.Cross(positions[b] - positions[a], positions[c] - positions[a]);
+            sums[a] += face;
+            sums[b] += face;
+            sums[c] += face;
+        }
+        var normals = new Vector3DCollection(positions.Length);
+        foreach (var n in sums)
+        {
+            var unit = n.LengthSquared() > 1e-20f ? System.Numerics.Vector3.Normalize(n) : System.Numerics.Vector3.UnitZ;
+            normals.Add(new Vector3D(unit.X, unit.Z, -unit.Y));
+        }
+        var geometry = new MeshGeometry3D { Positions = points, Normals = normals, TextureCoordinates = made.TextureCoordinates, TriangleIndices = made.TriangleIndices };
+        geometry.Freeze();
+        return geometry;
     }
 
     /// <summary>A chunk's geometry, in the pose shown. Its normals are left for WPF to work out from the bent triangles.</summary>
@@ -907,6 +1010,19 @@ public sealed class MeshView : Border
             _lightAngle = value;
             UpdateCamera();
         }
+    }
+
+    /// <summary>
+    /// Lights of the scene's own to add to the view (a scene's campfire or key light), in place of the last ones. While
+    /// there are any, the light from behind the camera is dimmed, so they show.
+    /// </summary>
+    public void SetLights(IReadOnlyList<Light> lights)
+    {
+        if (lights.Count == 0 && _lights.Children.Count == 0) return;
+        _lights.Children.Clear();
+        foreach (var light in lights) _lights.Children.Add(light);
+        byte head = (byte)(lights.Count > 0 ? 120 : 200);
+        _headlight.Color = Color.FromRgb(head, head, head);
     }
 
     /// <summary>The light, from behind the camera and a little above and to the side, turned round by <see cref="LightAngle"/>.</summary>
