@@ -275,6 +275,39 @@ public static partial class Cr2wJson
         return root;
     }
 
+    /// <summary>
+    /// Whether a class keeps events after its properties, and how many bytes come before them: a scene section (and
+    /// those derived from it), an animation's entry in its set, an animation events file, a cutscene (four bytes first).
+    /// </summary>
+    private static int? EventsBefore(string className) => className switch
+    {
+        "CSkeletalAnimationSetEntry" or "CExtAnimEventsFile" => 0,
+        "CCutsceneTemplate" => 4,
+        _ => IsA(className, "CStorySceneSection") ? 0 : null,
+    };
+
+    /// <summary>Whether a class is or derives from another, by the engine's classes and the game's script classes.</summary>
+    internal static bool IsA(string className, string ancestor)
+    {
+        for (int depth = 0; depth < 64; depth++)
+        {
+            if (className == ancestor) return true;
+            string? parent = RttiClasses.Value.TryGetValue(className, out var c) ? c.Base
+                : ScriptParents.Value.TryGetValue(className, out var p) ? p : null;
+            if (string.IsNullOrEmpty(parent)) return false;
+            className = parent;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// The class a script's arguments' types are kept under in the file block's types, for the classes that keep
+    /// arguments after their properties (a scene's script, a quest's script block); null for any other.
+    /// </summary>
+    private static string? ArgumentsClass(string className) =>
+        IsA(className, "CStorySceneScript") ? "CStorySceneScript.arguments"
+        : IsA(className, "CQuestScriptBlock") ? "CQuestScriptBlock.arguments" : null;
+
     /// <summary>The size in bytes of each of the ten tables' entries; the strings table's count is its size.</summary>
     private static readonly int[] TableEntrySizes = [1, 8, 8, 16, 24, 24, 0, 0, 0, 0];
 
@@ -545,12 +578,91 @@ public static partial class Cr2wJson
                 }
                 if (export.ClassName == "CMaterialInstance" && pos < end && Parameters(ref pos, end, path) is { } parameters)
                     node["$parameters"] = parameters;
+                if (EventsBefore(export.ClassName) is int before && pos + before + 4 <= end && Events(ref pos, end, before, path) is var (events, head))
+                {
+                    if (head.AsSpan().ContainsAnyExcept((byte)0)) node["$eventsBefore"] = Convert.ToBase64String(head);
+                    node["$events"] = events;
+                }
+                if (ArgumentsClass(export.ClassName) is { } argumentsClass && pos < end && Arguments(ref pos, end, argumentsClass, path) is { } arguments)
+                    node["$arguments"] = arguments;
                 if (pos < end) node["$tail"] = Convert.ToBase64String(_d, pos, end - pos);
                 return node;
             }
             catch (Exception ex) when (ex is InvalidDataException or ArgumentOutOfRangeException or IndexOutOfRangeException or FormatException)
             {
                 return new JsonObject { ["$class"] = export.ClassName, ["$data"] = Convert.ToBase64String(_d, export.Offset, export.Size) };
+            }
+        }
+
+        /// <summary>
+        /// The events a class keeps after its properties (a scene section's, an animation's, a cutscene's), as objects:
+        /// <paramref name="before"/> bytes (a cutscene has four), how many, then each its size (counting itself and the
+        /// class), its class and its properties. Null, and nothing read, when they can't all be read.
+        /// </summary>
+        private (JsonArray Events, byte[] Before)? Events(ref int pos, int end, int before, string path)
+        {
+            int start = pos, rawValues = RawValues, rawPaths = RawPaths.Count;
+            try
+            {
+                byte[] head = _d.AsSpan(pos, before).ToArray();
+                pos += before;
+                Need(pos, 4, end);
+                int count = I32(_d, pos);
+                pos += 4;
+                if (count < 0 || count > 100_000) throw new InvalidDataException();
+                var list = new JsonArray();
+                for (int i = 0; i < count; i++)
+                {
+                    Need(pos, 6, end);
+                    int size = I32(_d, pos), eventEnd = pos + size;
+                    if (size < 6 || eventEnd > end) throw new InvalidDataException();
+                    string className = context.NameAt(U16(_d, pos + 4));
+                    pos += 6;
+                    int eventStart = pos;
+                    var node = new JsonObject { ["$class"] = className };
+                    try { Struct(node, className, ref pos, eventEnd, $"{path}.$events[{i}]"); }
+                    catch (Exception ex) when (context.MarkerVaries && ex is InvalidDataException or ArgumentOutOfRangeException or IndexOutOfRangeException)
+                    {
+                        // one saved the other way about the zero byte
+                        pos = eventStart;
+                        node = new JsonObject { ["$class"] = className, ["$marker"] = !context.Marker };
+                        Struct(node, className, ref pos, eventEnd, $"{path}.$events[{i}]", marker: !context.Marker);
+                    }
+                    if (pos != eventEnd) throw new InvalidDataException();
+                    list.Add(node);
+                }
+                return (list, head);
+            }
+            catch (Exception ex) when (ex is InvalidDataException or ArgumentOutOfRangeException or IndexOutOfRangeException)
+            {
+                pos = start;
+                RawValues = rawValues;
+                RawPaths.RemoveRange(rawPaths, RawPaths.Count - rawPaths);
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// A script's arguments (a scene's script, a quest's script block), which it keeps after its properties as
+        /// properties are kept, (name, type, size, value) until a name of 0, without the zero byte before them in any
+        /// version. Their types are under <see cref="ArgumentsClass"/> in the file block. Null, and nothing read, when
+        /// they can't be read.
+        /// </summary>
+        private JsonObject? Arguments(ref int pos, int end, string argumentsClass, string path)
+        {
+            int start = pos, rawValues = RawValues, rawPaths = RawPaths.Count;
+            try
+            {
+                var node = new JsonObject();
+                Struct(node, argumentsClass, ref pos, end, path + ".$arguments", marker: false);
+                return node;
+            }
+            catch (Exception ex) when (ex is InvalidDataException or ArgumentOutOfRangeException or IndexOutOfRangeException)
+            {
+                pos = start;
+                RawValues = rawValues;
+                RawPaths.RemoveRange(rawPaths, RawPaths.Count - rawPaths);
+                return null;
             }
         }
 
@@ -1065,6 +1177,26 @@ public static partial class Cr2wJson
                     _out.Position = after;
                 }
             }
+            if (node["$arguments"] is JsonObject arguments) Struct(ArgumentsClass(className) ?? throw new InvalidDataException($"A {className} has no arguments."), arguments, marker: false);
+            if (node["$events"] is JsonArray events)
+            {
+                byte[] before = node["$eventsBefore"] is JsonValue b ? Convert.FromBase64String((string)b!) : new byte[EventsBefore(className) ?? 0];
+                _out.Write(before);
+                I32(events.Count);
+                for (int i = 0; i < events.Count; i++)
+                {
+                    var item = events[i] as JsonObject ?? throw new InvalidDataException($"$events[{i}] isn't an object.");
+                    string eventClass = Str(item["$class"]);
+                    long sizeAt = _out.Position;
+                    I32(0);
+                    U16(context.Name(eventClass));
+                    Struct(eventClass, item);
+                    long after = _out.Position;
+                    _out.Position = sizeAt;
+                    I32((int)(after - sizeAt));
+                    _out.Position = after;
+                }
+            }
             if (node["$tail"] is { } tail) _out.Write(Convert.FromBase64String((string)tail!));
             return _out.ToArray();
         }
@@ -1075,9 +1207,9 @@ public static partial class Cr2wJson
             return _out.ToArray();
         }
 
-        private void Struct(string className, JsonObject node)
+        private void Struct(string className, JsonObject node, bool? marker = null)
         {
-            if (node["$marker"] is JsonValue marker && marker.TryGetValue(out bool has) ? has : context.Marker) _out.WriteByte(0);
+            if (marker ?? (node["$marker"] is JsonValue m && m.TryGetValue(out bool has) ? has : context.Marker)) _out.WriteByte(0);
             foreach (var (property, value) in node)
             {
                 if (property.StartsWith('$')) continue;

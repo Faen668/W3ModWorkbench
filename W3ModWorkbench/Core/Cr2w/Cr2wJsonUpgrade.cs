@@ -200,6 +200,11 @@ public static partial class Cr2wJson
             }
             // the 0 an object's properties end with before 139, which later versions have before them instead
             node.Remove("$end");
+            if (node["$arguments"] is JsonObject arguments && ArgumentsClass(className) is { } argumentsClass) Struct(arguments, argumentsClass, path + ".$arguments");
+            if (node["$events"] is JsonArray events)
+                for (int i = 0; i < events.Count; i++)
+                    if (events[i] is JsonObject item && (string?)item["$class"] is { } eventClass)
+                        Struct(item, eventClass, $"{path}.$events[{i}]");
             if (node["$parameters"] is JsonArray parameters)
                 for (int i = 0; i < parameters.Count; i++)
                     if (parameters[i] is JsonObject parameter && (string?)parameter["type"] is { } type)
@@ -299,6 +304,33 @@ public static partial class Cr2wJson
                     for (int m = 0; m < mips && at + 16 <= bytes.Length; m++) at += 16 + (uint)BitConverter.ToInt32(bytes, (int)at + 12);
                     return mips >= 0 && at + 4 == bytes.Length ? bytes : null;
                 }
+                case "CFoliageResource":
+                {
+                    // its trees and its grass: each a compressed count of groups, each group an id and a compressed count
+                    // of instances, 24 bytes each (position, scale, rotation), the same in every version
+                    int at = 0;
+                    for (int list = 0; list < 2; list++)
+                    {
+                        if (!CompressedCount(bytes, ref at, out int groups)) return null;
+                        for (int g = 0; g < groups; g++)
+                        {
+                            if (at + 4 > bytes.Length) return null;
+                            at += 4;
+                            if (!CompressedCount(bytes, ref at, out int instances) || at + 24L * instances > bytes.Length) return null;
+                            at += 24 * instances;
+                        }
+                    }
+                    return at == bytes.Length ? bytes : null;
+                }
+                case "CTerrainTile":
+                    // how many of its data buffers there are, each three u16s and a size, then a u32, the same in every version
+                    return bytes.Length >= 8 && bytes.Length == 8 + 10L * BitConverter.ToInt32(bytes) ? bytes : null;
+                case "CThumbnail":
+                    // the picture: its size, then the PNG
+                    return bytes.Length >= 4 && BitConverter.ToInt32(bytes) == bytes.Length - 4 ? bytes : null;
+                case "CSkeletalAnimation":
+                    // its animation data: its size, then the bytes (the engine's own compressed form, the same in every version)
+                    return bytes.Length >= 4 && BitConverter.ToInt32(bytes) == bytes.Length - 4 ? bytes : null;
                 case "CSourceTexture":
                     // its size, then its bytes
                     return bytes.Length >= 4 && BitConverter.ToInt32(bytes) == bytes.Length - 4 ? bytes : null;
@@ -375,6 +407,27 @@ public static partial class Cr2wJson
                 return false;
             }
             return true;
+        }
+
+        /// <summary>A compressed count: six bits and more-follows in the first byte (an empty one sometimes written as -0), then seven bits a byte.</summary>
+        private static bool CompressedCount(byte[] bytes, ref int at, out int value)
+        {
+            value = 0;
+            if (at >= bytes.Length) return false;
+            int first = bytes[at++];
+            value = first & 0x3F;
+            if ((first & 0x40) != 0)
+            {
+                int shift = 6, next;
+                do
+                {
+                    if (at >= bytes.Length) return false;
+                    next = bytes[at++];
+                    value |= (next & 0x7F) << shift;
+                    shift += 7;
+                } while ((next & 0x80) != 0 && shift < 32);
+            }
+            return (first & 0x80) == 0 || value == 0;
         }
 
         /// <summary>Whether bytes are a CR2W file with no objects in it.</summary>

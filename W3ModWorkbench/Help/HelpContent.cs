@@ -1242,6 +1242,8 @@ A converted file is the CR2W file's objects in order, then a `file` block with w
 - `"$marker"` on an object or struct says it was saved the other way about the zero byte objects start with than its version has them (158 on have it, 155 to 157 mostly don't): `true` or `false`. Leave it as it is.
 - A curve point's properties are saved by the engine under shortened names (`me`, `ntrolPoint`, `lue`, `rveTypeL`, `rveTypeR`). The JSON calls them `time`, `controlPoint`, `value`, `curveTypeL` and `curveTypeR`, and they're saved back under the engine's names.
 - A material instance's parameters (its textures, colours and numbers) are in `$parameters`, each `{ "name", "type", "value" }`, after its properties.
+- The events a scene section, an animation (in its set), an animation events file or a cutscene keeps are in `$events`, each an object with its `$class` and properties, as the objects are. A cutscene's four bytes before them are in `$eventsBefore` when they aren't zeros.
+- A scene script's or a quest script block's arguments are in `$arguments`, by name, as properties are; their types are under `CStorySceneScript.arguments` or `CQuestScriptBlock.arguments` in `file.types`.
 - `"$end": false` on an object of a file before version 139 says its properties don't end with the zero those files have. Leave it as it is.
 - `{"$raw": "base64"}` is a value kept as its bytes, and an object with `$data` is a whole object kept as its bytes. Leave them as they are.
 
