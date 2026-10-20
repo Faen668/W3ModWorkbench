@@ -82,7 +82,7 @@ public partial class OtherCopiesWindow : Window, IMessageHost
 
         int others = rows.Count - 1;
         Summary.Text = others == 0
-            ? "This is the only copy in what's open. Open more mods (Browse installed mods, or Open folder on the mods folder) to look for others."
+            ? "This is the only copy in what's open. The asset browser (Tools > Asset Browser) looks in every installed mod, the DLC and the game."
             : $"{Format.Count(others, "other copy", "other copies")} at the same path. Files at the same path replace each other: the game uses the copy from whatever loads first, and the rest are ignored.";
         OrderNote.Text = (settings.Count > 0 ? "Load order from mods.settings: " : "mods.settings wasn't found, so mods are in folder name order: ")
             + "mod.io mods, then DLC, then mods by priority (unlisted ones after, by name), then the game's own files. The same order the load order analyser uses. Only open archives are listed.";

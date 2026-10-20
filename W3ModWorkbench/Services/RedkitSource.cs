@@ -112,6 +112,14 @@ public static class RedkitSource
 
     /// <summary>The note above the properties: where they came from, and why some may be missing.</summary>
     /// <param name="what">What the file is, in a word or two: "texture", "mesh", "behaviour tree", "entity".</param>
+    /// <summary>
+    /// The note over a scene's or cutscene's panel: where its properties come from, and for REDkit's copy that its
+    /// timeline's events are still the game's, as REDkit keeps them in an order of its own and they can't be matched.
+    /// </summary>
+    public static string TimelineNote(PropertySource source, string? redkitPath, string what) => source == PropertySource.Redkit
+        ? Note(source, redkitPath, what).TrimEnd('.') + ". Timeline events are read from the file the game loads, so what cooking leaves out isn't shown for them."
+        : Note(source, redkitPath, what);
+
     public static string Note(PropertySource source, string? redkitPath, string what) => source switch
     {
         PropertySource.Redkit => $"Properties from REDkit's source file, which keeps what cooking leaves out: {redkitPath}",

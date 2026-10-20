@@ -273,6 +273,7 @@ public partial class SceneWindow : Window, IMessageHost
         var from = await Task.Run(() => RedkitSource.For(path, origin));
         _redkit = from.Redkit;
         _propertySource = from.Source;
+        SourceNoteBar.ShowText(RedkitSource.TimelineNote(from.Source, from.RedkitPath ?? _origin, "scene"));
         _redkitPath = from.RedkitPath ?? origin;
         (_places, _placesFromRedkit) = await Task.Run(() => SceneGraphLayout.Layout(s, _redkit));
         GraphNote.Text = _placesFromRedkit
@@ -353,8 +354,6 @@ public partial class SceneWindow : Window, IMessageHost
         var o = _scene.File.Object(node.Export);
         PartHeading.Text = $"{node.Number}  {SceneNodeItem.KindName(node.Kind)}: {node.Title}";
         PartProperties.Show(Rows(o));
-        SourceNoteBar.Visibility = Visibility.Visible;
-        SourceNoteBar.Show(_propertySource, _redkitPath, "scene");
         ShowTimeline(node);
         if (o.ClassName is "CStorySceneSection" or "CStorySceneCutsceneSection")
         {
@@ -971,8 +970,6 @@ public partial class SceneWindow : Window, IMessageHost
         };
         if (source is null) return;
         PartHeading.Text = heading;
-        // a timeline's events are read from the scene opened: REDkit's copy keeps them in its own order
-        SourceNoteBar.Visibility = Visibility.Collapsed;
         PartProperties.Show(PropertyRow.Of(source, _scene.File));
         SideTabs.SelectedIndex = 0;
     }

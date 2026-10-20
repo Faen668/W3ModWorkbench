@@ -18,7 +18,7 @@ public sealed record CopyChoice(ArchiveEntry Entry, string Rank, string Name, st
 /// </summary>
 public partial class PickCopyWindow : Window
 {
-    private PickCopyWindow(string name, IReadOnlyList<ArchiveEntry> copies)
+    private PickCopyWindow(string name, IReadOnlyList<ArchiveEntry> copies, ArchiveEntry picked)
     {
         InitializeComponent();
         FileTitle.Text = name;
@@ -31,24 +31,33 @@ public partial class PickCopyWindow : Window
             var place = OtherCopiesWindow.PlaceOf(c.Archive.FilePath, settings, modio);
             return new CopyChoice(c, $"#{i + 1}", place.Name, place.Kind, c.Archive.FilePath, i == 0);
         }).ToList();
-        Copies.SelectedIndex = 0;
-        Loaded += (_, _) => (Copies.ItemContainerGenerator.ContainerFromIndex(0) as UIElement)?.Focus();
+        // the copy double-clicked (the game's own, from Game files) is picked to start with
+        int start = Math.Max(0, copies.ToList().FindIndex(c => ReferenceEquals(c, picked)));
+        _picked = start;
+        Copies.SelectedIndex = start;
+        Loaded += (_, _) => (Copies.ItemContainerGenerator.ContainerFromIndex(start) as UIElement)?.Focus();
     }
 
-    /// <summary>The copy picked, or null when the dialog was cancelled. <paramref name="alwaysWinner"/> says whether not to ask again.</summary>
-    public static ArchiveEntry? Pick(Window owner, string name, IReadOnlyList<ArchiveEntry> copies, out bool alwaysWinner)
+    // the copy that was double-clicked
+    private readonly int _picked;
+
+    /// <summary>
+    /// The copy picked, or null when the dialog was cancelled. <paramref name="picked"/> is the copy double-clicked,
+    /// picked to start with; <paramref name="alwaysWinner"/> says whether to open that one without asking from now on.
+    /// </summary>
+    public static ArchiveEntry? Pick(Window owner, string name, IReadOnlyList<ArchiveEntry> copies, ArchiveEntry picked, out bool alwaysWinner)
     {
-        var dialog = new PickCopyWindow(name, copies) { Owner = owner };
-        bool picked = dialog.ShowDialog() == true;
-        alwaysWinner = picked && dialog.AlwaysWinner.IsChecked == true;
-        return picked && dialog.Copies.SelectedItem is CopyChoice choice ? choice.Entry : null;
+        var dialog = new PickCopyWindow(name, copies, picked) { Owner = owner };
+        bool opened = dialog.ShowDialog() == true;
+        alwaysWinner = opened && dialog.AlwaysWinner.IsChecked == true;
+        return opened && dialog.Copies.SelectedItem is CopyChoice choice ? choice.Entry : null;
     }
 
     private void Open_Click(object sender, RoutedEventArgs e)
     {
         if (Copies.SelectedItem is null) return;
-        // always opening the game's choice means the first
-        if (AlwaysWinner.IsChecked == true) Copies.SelectedIndex = 0;
+        // not asking again means opening the copy double-clicked
+        if (AlwaysWinner.IsChecked == true) Copies.SelectedIndex = _picked;
         DialogResult = true;
     }
 

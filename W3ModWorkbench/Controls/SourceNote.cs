@@ -26,6 +26,13 @@ public sealed class SourceNote : Border
         Child = panel;
     }
 
+    /// <summary>Says something else about where the properties came from.</summary>
+    public void ShowText(string text)
+    {
+        _text.Text = text;
+        Visibility = Visibility.Visible;
+    }
+
     /// <summary>Says where the properties came from.</summary>
     public void Show(PropertySource source, string? redkitPath, string what)
     {

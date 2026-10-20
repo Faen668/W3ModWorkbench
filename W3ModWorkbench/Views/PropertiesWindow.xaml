@@ -87,17 +87,40 @@
             <!-- every object in the file, under the one it belongs to, as REDkit's object list has them -->
             <Border Style="{StaticResource Card}">
                 <DockPanel>
-                    <TextBlock x:Name="ObjectsTitle" DockPanel.Dock="Top" Margin="14,12,12,6" FontWeight="SemiBold" Text="Objects" />
+                    <DockPanel DockPanel.Dock="Top" Margin="14,10,8,4">
+                        <Button DockPanel.Dock="Right" Padding="6,3" Margin="4,0,0,0" Background="Transparent" BorderThickness="0" Click="CollapseAll_Click"
+                                ToolTip="Collapse everything under the resource">
+                            <TextBlock Style="{StaticResource IconText}" FontSize="12" Text="&#xE70E;" />
+                        </Button>
+                        <Button DockPanel.Dock="Right" Padding="6,3" Background="Transparent" BorderThickness="0" Click="ExpandAll_Click" ToolTip="Expand every object">
+                            <TextBlock Style="{StaticResource IconText}" FontSize="12" Text="&#xE70D;" />
+                        </Button>
+                        <TextBlock x:Name="ObjectsTitle" FontWeight="SemiBold" Text="Objects" VerticalAlignment="Center" />
+                    </DockPanel>
+                    <Grid DockPanel.Dock="Top" Margin="10,2,10,6">
+                        <TextBox x:Name="ObjectSearch" Padding="30,4,8,4" TextChanged="ObjectSearch_TextChanged"
+                                 ToolTip="Show only the objects whose class or name has this, with the objects they're under" />
+                        <TextBlock Style="{StaticResource IconText}" Text="&#xE721;" FontSize="12" Margin="10,0,0,0" Opacity="0.6" HorizontalAlignment="Left" IsHitTestVisible="False" />
+                        <TextBlock x:Name="ObjectSearchPlaceholder" Text="Search objects" Margin="31,0,0,0" Opacity="0.55" VerticalAlignment="Center" IsHitTestVisible="False" />
+                    </Grid>
                     <ListBox x:Name="ObjectList" ItemContainerStyle="{StaticResource CompactItem}" BorderThickness="0" Background="Transparent" Margin="6,0,6,6"
                              HorizontalContentAlignment="Stretch" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                             VirtualizingPanel.IsVirtualizing="True" SelectionChanged="ObjectList_SelectionChanged">
+                             VirtualizingPanel.IsVirtualizing="True" SelectionChanged="ObjectList_SelectionChanged" PreviewKeyDown="ObjectList_PreviewKeyDown">
                         <ListBox.ItemTemplate>
                             <DataTemplate>
-                                <StackPanel Margin="{Binding Indent}">
-                                    <TextBlock Text="{Binding ClassName}" FontWeight="{Binding Weight}" TextTrimming="CharacterEllipsis" ToolTip="{Binding ClassName}" />
-                                    <TextBlock Text="{Binding Detail}" FontSize="11.5" Opacity="0.65" TextTrimming="CharacterEllipsis"
-                                               Visibility="{Binding DetailVisibility}" />
-                                </StackPanel>
+                                <DockPanel Margin="{Binding Indent}">
+                                    <!-- the objects under it open and close here, as a tree's do -->
+                                    <Button DockPanel.Dock="Left" Width="18" Padding="0" Margin="0,0,4,0" VerticalAlignment="Top" Background="Transparent" BorderThickness="0"
+                                            Click="Expander_Click" Visibility="{Binding ExpanderVisibility}" Focusable="False">
+                                        <TextBlock Style="{StaticResource IconText}" FontSize="9" Text="{Binding Glyph}" Margin="0,3,0,0" />
+                                    </Button>
+                                    <Border DockPanel.Dock="Left" Width="22" Visibility="{Binding SpacerVisibility}" />
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding ClassName}" FontWeight="{Binding Weight}" TextTrimming="CharacterEllipsis" ToolTip="{Binding ToolTip}" />
+                                        <TextBlock Text="{Binding Detail}" FontSize="11.5" Opacity="0.65" TextTrimming="CharacterEllipsis"
+                                                   Visibility="{Binding DetailVisibility}" />
+                                    </StackPanel>
+                                </DockPanel>
                             </DataTemplate>
                         </ListBox.ItemTemplate>
                     </ListBox>

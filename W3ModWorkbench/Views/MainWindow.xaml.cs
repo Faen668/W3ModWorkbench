@@ -241,23 +241,7 @@ public partial class MainWindow : Window, IMessageHost
             {
                 try
                 {
-                    var found = Directory.EnumerateFiles(path, "*.*", SearchOption.AllDirectories).ToList();
-                    files.AddRange(found
-                        .Where(f => f.EndsWith(".bundle", StringComparison.OrdinalIgnoreCase) || ScriptBlob.LooksLikeBlob(f) || TextureCacheArchive.LooksLikeCache(f))
-                        .Order(StringComparer.OrdinalIgnoreCase));
-                    // each folder of .w3strings files is listed as one entry, beside the bundles
-                    files.AddRange(found
-                        .Where(f => f.EndsWith(".w3strings", StringComparison.OrdinalIgnoreCase))
-                        .Select(f => Path.GetDirectoryName(f)!)
-                        .Distinct(StringComparer.OrdinalIgnoreCase)
-                        .Order(StringComparer.OrdinalIgnoreCase));
-                    // loose scripts open as script projects, one per scripts folder, which can be edited and compiled
-                    files.AddRange(found
-                        .Where(f => f.EndsWith(".ws", StringComparison.OrdinalIgnoreCase))
-                        .Select(f => ScriptFolder.RootOf(f, path))
-                        .Distinct(StringComparer.OrdinalIgnoreCase)
-                        .Where(root => !ScriptFolder.IsGameScripts(root))
-                        .Order(StringComparer.OrdinalIgnoreCase));
+                    files.AddRange(ArchivesIn(path));
                 }
                 catch (Exception ex)
                 {
@@ -328,7 +312,34 @@ public partial class MainWindow : Window, IMessageHost
     }
 
     /// <summary>A folder is a folder of strings, or else a script project.</summary>
-    private static IArchive OpenArchive(string file) =>
+    /// <summary>
+    /// What a folder holds that opens as an archive, as Open folder finds it: its bundles, compiled scripts and texture
+    /// caches, each folder of .w3strings files, and each scripts folder of loose scripts (as a script project).
+    /// </summary>
+    internal static List<string> ArchivesIn(string folder)
+    {
+        var found = Directory.EnumerateFiles(folder, "*.*", SearchOption.AllDirectories).ToList();
+        var files = new List<string>();
+        files.AddRange(found
+            .Where(f => f.EndsWith(".bundle", StringComparison.OrdinalIgnoreCase) || ScriptBlob.LooksLikeBlob(f) || TextureCacheArchive.LooksLikeCache(f))
+            .Order(StringComparer.OrdinalIgnoreCase));
+        // each folder of .w3strings files is listed as one entry, beside the bundles
+        files.AddRange(found
+            .Where(f => f.EndsWith(".w3strings", StringComparison.OrdinalIgnoreCase))
+            .Select(f => Path.GetDirectoryName(f)!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Order(StringComparer.OrdinalIgnoreCase));
+        // loose scripts open as script projects, one per scripts folder, which can be edited and compiled
+        files.AddRange(found
+            .Where(f => f.EndsWith(".ws", StringComparison.OrdinalIgnoreCase))
+            .Select(f => ScriptFolder.RootOf(f, folder))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Where(root => !ScriptFolder.IsGameScripts(root))
+            .Order(StringComparer.OrdinalIgnoreCase));
+        return files;
+    }
+
+    internal static IArchive OpenArchive(string file) =>
         Directory.Exists(file) ? Directory.EnumerateFiles(file, "*.w3strings").Any() ? StringsFolder.Open(file) : ScriptFolder.Open(file)
         : ScriptBlob.LooksLikeBlob(file) ? ScriptArchive.Open(file)
         : TextureCacheArchive.LooksLikeCache(file) ? TextureCacheArchive.Open(file)
@@ -2009,7 +2020,6 @@ public partial class MainWindow : Window, IMessageHost
         Add("Find in files…", "Ctrl+Shift+F", () => FindInFilesWindow.Open(this));
         Add("Asset Browser", "Ctrl+Shift+A", () => _ = BrowseGameFilesAsync());
         Add("Browse game scripts", "", () => _ = BrowseGameScriptsAsync());
-        Add("Browse installed mods", "", () => _ = BrowseModsAsync());
         menu.Items.Add(new Separator());
         Add("Search game strings…", "Ctrl+Shift+G", OpenGameStrings);
         Add("Stub generator…", "Ctrl+Shift+W", OpenStubGenerator);
@@ -2056,19 +2066,6 @@ public partial class MainWindow : Window, IMessageHost
         return Task.CompletedTask;
     }
 
-    /// <summary>Opens everything in the game's mods folder, as Open folder does: loose scripts, compiled scripts, bundles and strings.</summary>
-    private async Task BrowseModsAsync()
-    {
-        string? game = GameLocator.Resolve(null);
-        string? mods = game is null ? null : Path.Combine(game, "mods");
-        if (mods is null || !Directory.Exists(mods))
-        {
-            ShowError("The mods folder wasn't found.\n\nBrowsing the installed mods needs The Witcher 3's folder, and a mods folder in it. Set the game folder in Settings.");
-            return;
-        }
-        await BrowseAsync([mods], null);
-    }
-
     private async Task BrowseAsync(string[] paths, string? select)
     {
         bool open = select is not null && _roots.Any(r => r.Archive.FilePath.Equals(select, StringComparison.OrdinalIgnoreCase));
@@ -2095,8 +2092,6 @@ public partial class MainWindow : Window, IMessageHost
     private void FindInFiles_Click(object sender, RoutedEventArgs e) => FindInFilesWindow.Open(this);
 
     private void BrowseGame_Click(object sender, RoutedEventArgs e) => _ = BrowseGameScriptsAsync();
-
-    private void BrowseMods_Click(object sender, RoutedEventArgs e) => _ = BrowseModsAsync();
 
     private void OpenXmlFile()
     {

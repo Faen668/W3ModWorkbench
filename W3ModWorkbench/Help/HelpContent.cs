@@ -239,7 +239,7 @@ These search the installed mods' scripts too, loose and compiled, as go to defin
 """),
 
         new(Basics, "Texture caches", "\uEB9F", """
-A `texture.cache` holds textures outside the bundles: the game's own is in `content\content0`, and DLC and mods ship small ones beside their bundles. Open one with **Open files**, drop it on the window, or find it under a mod in **Browse installed mods**. It is listed like a bundle, with each texture under its game path, and the **Format** column says how it's stored (for example `BC1 2048x1024 ×12`: BC1 colour, with 12 mip levels).
+A `texture.cache` holds textures outside the bundles: the game's own is in `content\content0`, and DLC and mods ship small ones beside their bundles. Open one with **Open files**, drop it on the window, or find it under a mod in the asset browser's **Mods**. It is listed like a bundle, with each texture under its game path, and the **Format** column says how it's stored (for example `BC1 2048x1024 ×12`: BC1 colour, with 12 mip levels).
 
 Double-click a texture, or select it and press **Enter**, to open the viewer:
 
@@ -280,6 +280,7 @@ A file opened from REDkit's own `r4data` is REDkit's copy already, and shows all
 Any of the game's resource files can be opened in a **Properties** window, as REDkit opens every resource in a property window even when it has no editor for it: a layer (`.w2l`), a grass mask, a terrain tile, a font, a particle system, a quest, an environment, and the rest. Double-click one that has no viewer of its own (or select it and press **Enter**); for any of them, right-click and choose **Properties**.
 
 - **Objects**, on the left, lists every object in the file, each under the one it belongs to: a layer's entities with their components, a particle system's emitters with their drawers and curves, a font with its texture. The resource itself is at the top and picked first.
+- An object with others under it has an arrow to close or open them (or **Left** and **Right** on the keyboard), and the buttons beside the title open or close them all. **Search objects** shows only the objects whose class or name has what you type, with the ones they're under.
 - The object picked has its **properties** on the right, under each class from CResource down, as REDkit lists them, with those the file doesn't keep dimmed. Structs, arrays and the objects they point to fold open beneath them. The box above them narrows the list.
 - For one of the game's own files, the properties come from REDkit's source file when REDkit has one, and the note above them says so (see **Properties from REDkit**).
 - A file a property names is a link: click it to open the file in its viewer, or in another Properties window.
@@ -950,9 +951,9 @@ Inside a script preview, Ctrl+Shift+F still searches from there, through the scr
 
 ## Browsing instead
 
-**Tools > Asset Browser** (**Ctrl+Shift+A**) opens the asset browser, a tool window of its own as REDkit's is: every file the game has in one tree, content0, the DLC and the installed mods, each game path once, from where the game loads it (mods first, then DLC, then content0). **From** says which bundle each comes from, and textures only in a texture cache are listed too. Search it (words in the path, or wildcards on the name), pick a folder, and right-click to preview, open as JSON, **Copy to project** (with a mesh's buffers), extract, copy paths or show a file in Explorer. It's read in a second or two the first time it opens, and opening it again brings it back.
+**Tools > Asset Browser** (**Ctrl+Shift+A**) opens the asset browser, a tool window of its own as REDkit's is. **Game files** is the game itself: content0 and the official DLC (on the Remastered game these are inside content0, and `dlc-tombstones` names them), each game path once, with nothing any mod adds. **Mod DLC** lists each mod installed into the `dlc` folder, and **Mods** each mod in `mods` (and mod.io's), each with everything it holds. **From** says which bundle each comes from, and textures only in a texture cache are listed too. Search it (words in the path, or wildcards on the name), pick a folder, and right-click to preview, open as JSON, **Copy to project** (with a mesh's buffers), extract, copy paths or show a file in Explorer. It's read in a second or two the first time it opens, and opening it again brings it back.
 
-**Which copy opens**: double-click a file (or press Enter) to open it in its viewer. When more than one archive has it (a mod's copy, a DLC's, the game's own), it asks which copy to open, listed in the order the game looks for them with the one it loads marked; **Open another copy…** on the right-click menu asks even when asking is off, and **Other copies of this file…** compares them. Turn asking off with **Always open the copy the game loads** in the question, or **Ask which copy** in the asset browser's toolbar, which turns it back on too.
+**Which copy opens**: double-click a file (or press Enter) to open it in its viewer, after narrowing the list with the search, **File type** (only `.w2mesh`, only `.w2phase`…) and **Class** if you like. When a mod has its own copy of a file in Game files, it asks which copy to open: every copy, in the load order the load order analyser uses (mod.io mods, then DLC, then mods by their mods.settings priority), the one the game loads marked and the game's own picked to start with; **Open another copy…** on the right-click menu asks even when asking is off, and **Other copies of this file…** compares them. Turn asking off with **Don't ask again** in the question (Game files then opens the game's own copy), or **Ask which copy** in the asset browser's toolbar, which turns it back on too.
 
 **What it loads comes from its mod, then the game**: a file opened anywhere in the tool (a mesh, an entity, a scene, a cutscene) finds what it uses (buffers, materials, textures, animations, other entities) in its own mod first, then the game's DLC and content0. Other installed mods aren't looked in, so the game's copy of a scene shows the game's actors and the mod's copy shows the mod's, never a mix with whatever else is installed.
 
@@ -960,7 +961,9 @@ Inside a script preview, Ctrl+Shift+F still searches from there, through the scr
 
 **Bookmarks**: pick a folder in the asset browser and press the star beside Class to bookmark it (press it again to take it off), or right-click files and choose **Bookmark**. The bookmarks button beside the star lists them; pick one to go straight there, a bookmarked file highlighted in its folder. **Remove a bookmark** at the bottom of the list takes one off. Bookmarks are kept between sessions.
 
-**Tools > Browse game scripts** lists the game's own scripts in the main window, to read, and **Browse installed mods** opens everything in the `mods` folder the way Open folder does. Both need the game folder, which is found for you or set in Settings.
+**Mod DLC** and **Mods**, under Game files in the asset browser, list each mod on its own, with everything it holds: its bundles, texture cache, compiled scripts (`precompiled.rsblob`, decompiled), loose scripts and strings. A file opened from a mod there is that mod's copy, without asking which, and what it loads comes from that mod first, then the game. A mod installed as DLC counts as a mod for this, so it never leaks into what another file loads.
+
+**Tools > Browse game scripts** lists the game's own scripts in the main window, to read. It needs the game folder, which is found for you or set in Settings.
 """),
 
         new(Basics, "Keyboard shortcuts", "", """

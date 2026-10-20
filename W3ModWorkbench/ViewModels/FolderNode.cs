@@ -29,6 +29,9 @@ public sealed class FolderNode : INotifyPropertyChanged
     /// <summary>A mod's entry in the tree, with each of its bundles, compiled scripts and strings under it. It holds no files of its own.</summary>
     public bool IsGroup => Archive is GroupArchive;
 
+    /// <summary>A heading at the top of a tree (the asset browser's Game files and Mods), shown in the accent colour.</summary>
+    public bool IsHeading { get; set; }
+
     /// <summary>Whether this archive is listed under its mod's entry, which already says the mod's name.</summary>
     public bool InGroup { get; private set; }
 
@@ -44,12 +47,15 @@ public sealed class FolderNode : INotifyPropertyChanged
         Raise(nameof(Detail));
     }
 
-    /// <summary>A mod's entry in the tree, made of the archives that belong to it.</summary>
-    public static FolderNode Group(string owner, IReadOnlyList<FolderNode> members)
+    /// <summary>
+    /// A mod's entry in the tree, made of the archives that belong to it. <paramref name="membersInGroup"/> false keeps
+    /// the members' own names, for a group of groups (the asset browser's Mods, each mod's entry under it).
+    /// </summary>
+    public static FolderNode Group(string owner, IReadOnlyList<FolderNode> members, bool membersInGroup = true, bool heading = false)
     {
-        var group = new FolderNode(owner, new GroupArchive(owner), null) { Children = [.. members] };
+        var group = new FolderNode(owner, new GroupArchive(owner), null) { Children = [.. members], IsHeading = heading };
         group.TotalFiles = members.Sum(m => m.TotalFiles);
-        foreach (var member in members) member.SetInGroup(true);
+        if (membersInGroup) foreach (var member in members) member.SetInGroup(true);
         return group;
     }
     public List<FolderNode> Children { get; private set; } = [];

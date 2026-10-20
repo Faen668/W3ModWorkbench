@@ -42,17 +42,26 @@ public sealed class ResourceLocator
         return _near is null || !mod.Equals(ModFolder(Path.Combine(_near, "x")), StringComparison.OrdinalIgnoreCase);
     }
 
-    /// <summary>The installed mod's folder (game\mods\modName) a file is in, or null for one that isn't in one.</summary>
+    /// <summary>
+    /// The installed mod's folder a file is in: game\mods\modName, or game\dlc\dlcName for a mod installed as DLC
+    /// (not one of the official DLC). Null for a file that isn't in one.
+    /// </summary>
     private string? ModFolder(string path)
     {
         if (_game is null) return null;
-        string mods = Path.GetFullPath(Path.Combine(_game, "mods")).TrimEnd('\\') + "\\";
         string full;
         try { full = Path.GetFullPath(path); }
         catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException) { return null; }
-        if (!full.StartsWith(mods, StringComparison.OrdinalIgnoreCase)) return null;
-        int slash = full.IndexOf('\\', mods.Length);
-        return slash < 0 ? null : full[..slash];
+        foreach (string root in new[] { "mods", "dlc" })
+        {
+            string folder = Path.GetFullPath(Path.Combine(_game, root)).TrimEnd('\\') + "\\";
+            if (!full.StartsWith(folder, StringComparison.OrdinalIgnoreCase)) continue;
+            int slash = full.IndexOf('\\', folder.Length);
+            if (slash < 0) return null;
+            if (root == "dlc" && OfficialDlc.Is(_game, full[folder.Length..slash])) return null;
+            return full[..slash];
+        }
+        return null;
     }
 
     // ---------------------------------------------------------------- files in bundles
@@ -139,11 +148,15 @@ public sealed class ResourceLocator
         if (_near is not null) places.Add(Path.Combine(_near, "collision.cache"));
         if (_game is not null)
         {
-            foreach (string folder in _otherMods ? new[] { "mods", "dlc" } : ["dlc"])
+            foreach (string folder in new[] { "mods", "dlc" })
             {
                 string root = Path.Combine(_game, folder);
                 if (!Directory.Exists(root)) continue;
-                try { places.AddRange(Directory.GetDirectories(root).Order(StringComparer.OrdinalIgnoreCase).Select(m => Path.Combine(m, "content", "collision.cache"))); }
+                try
+                {
+                    places.AddRange(Directory.GetDirectories(root).Order(StringComparer.OrdinalIgnoreCase).Select(m => Path.Combine(m, "content", "collision.cache"))
+                        .Where(cache => _otherMods || !IsOtherMod(cache)));
+                }
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
             }
             places.Add(Path.Combine(_game, "content", "content0", "collision.cache"));

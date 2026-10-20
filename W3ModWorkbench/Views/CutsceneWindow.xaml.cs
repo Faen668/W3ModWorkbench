@@ -152,7 +152,7 @@ public partial class CutsceneWindow : Window, IMessageHost
         TemplateProperties.Show(from.Redkit is { } redkit && RedkitSource.Match(redkit, c.Template, c.File) is { } own
             ? PropertyRow.Of(own, redkit)
             : PropertyRow.Of(c.Template, c.File));
-        SourceNoteBar.Show(from.Source, from.RedkitPath ?? origin, "cutscene");
+        SourceNoteBar.ShowText(RedkitSource.TimelineNote(from.Source, from.RedkitPath ?? origin, "cutscene"));
     }
 
     /// <summary>

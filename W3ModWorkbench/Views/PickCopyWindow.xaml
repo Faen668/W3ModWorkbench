@@ -13,7 +13,36 @@
         </Grid.RowDefinitions>
         <TextBlock x:Name="FileTitle" FontSize="16" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
         <TextBlock x:Name="Summary" Grid.Row="1" Margin="0,8,0,10" TextWrapping="Wrap" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
-        <ListBox x:Name="Copies" Grid.Row="2" MaxHeight="380" MouseDoubleClick="Copies_MouseDoubleClick" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+        <ListBox x:Name="Copies" Grid.Row="2" MaxHeight="380" MouseDoubleClick="Copies_MouseDoubleClick" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                 Background="Transparent" BorderThickness="0">
+            <ListBox.ItemContainerStyle>
+                <Style TargetType="ListBoxItem">
+                    <Setter Property="OverridesDefaultStyle" Value="True" />
+                    <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+                    <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                    <Setter Property="Padding" Value="8,4" />
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="ListBoxItem">
+                                <Grid SnapsToDevicePixels="True" Background="Transparent">
+                                    <Rectangle x:Name="Hover" Fill="{DynamicResource SubtleFillColorSecondaryBrush}" Opacity="0" RadiusX="4" RadiusY="4" />
+                                    <Rectangle x:Name="Highlight" Fill="{DynamicResource AccentFillColorDefaultBrush}" Opacity="0" RadiusX="4" RadiusY="4" />
+                                    <ContentPresenter Margin="{TemplateBinding Padding}" />
+                                </Grid>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="Hover" Property="Opacity" Value="1" />
+                                    </Trigger>
+                                    <Trigger Property="IsSelected" Value="True">
+                                        <Setter TargetName="Highlight" Property="Opacity" Value="0.22" />
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                </Style>
+            </ListBox.ItemContainerStyle>
             <ListBox.ItemTemplate>
                 <DataTemplate>
                     <DockPanel Margin="2,4">
@@ -35,7 +64,7 @@
         </ListBox>
         <DockPanel Grid.Row="3" Margin="0,14,0,0" LastChildFill="False">
             <CheckBox x:Name="AlwaysWinner" DockPanel.Dock="Left" VerticalAlignment="Center"
-                      Content="Always open the copy the game loads, without asking"
+                      Content="Don't ask again: open the copy double-clicked"
                       ToolTip="Ask which copy, in the Asset Browser, turns asking back on" />
             <Button DockPanel.Dock="Right" Margin="8,0,0,0" Padding="16,5" Content="Cancel" IsCancel="True" />
             <Button DockPanel.Dock="Right" Padding="16,5" Content="Open" IsDefault="True" Style="{DynamicResource AccentButtonStyle}" Click="Open_Click" />

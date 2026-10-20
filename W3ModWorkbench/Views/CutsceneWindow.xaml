@@ -308,7 +308,10 @@
                 <GridSplitter Grid.Column="1" Width="8" HorizontalAlignment="Stretch" Background="Transparent" />
 
                 <!-- what REDkit's cutscene editor has beside its timeline, and the tool's own lists of events and files -->
-                <Border Grid.Column="2" Style="{StaticResource Card}" Padding="6,6,6,6">
+                <!-- where the file's properties come from, over its panel -->
+                <DockPanel Grid.Column="2">
+                <local:SourceNote x:Name="SourceNoteBar" DockPanel.Dock="Top" Margin="0,0,0,8" />
+                <Border Style="{StaticResource Card}" Padding="6,6,6,6">
                     <TabControl x:Name="Tabs" Style="{StaticResource PanelTabs}" ItemContainerStyle="{StaticResource PanelTab}">
                         <TabItem x:Name="PropertiesTab" Header="Properties">
                             <DockPanel Margin="4,8,4,4">
@@ -364,7 +367,6 @@
                                     <TextBlock Style="{StaticResource IconText}" Text="&#xE721;" FontSize="12" Margin="10,0,0,0" Opacity="0.6" HorizontalAlignment="Left" IsHitTestVisible="False" />
                                     <TextBlock x:Name="TemplateSearchPlaceholder" Text="Search properties" Margin="31,0,0,0" Opacity="0.55" VerticalAlignment="Center" IsHitTestVisible="False" />
                                 </Grid>
-                                <local:SourceNote x:Name="SourceNoteBar" DockPanel.Dock="Top" Margin="0,0,0,6" />
                                 <local:PropertyListView x:Name="TemplateProperties" NameColumnWidth="190" TypeColumnWidth="0" LinkClicked="Properties_LinkClicked" />
                             </DockPanel>
                         </TabItem>
@@ -552,6 +554,7 @@
                         </TabItem>
                     </TabControl>
                 </Border>
+                </DockPanel>
             </Grid>
         </Grid>
 

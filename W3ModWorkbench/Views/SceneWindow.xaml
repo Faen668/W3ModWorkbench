@@ -531,12 +531,14 @@
 
                 <GridSplitter Grid.Column="1" Width="8" HorizontalAlignment="Stretch" Background="Transparent" />
 
-                <Border Grid.Column="2" Style="{StaticResource Card}" Padding="8,8,8,4">
+                <!-- where the file's properties come from, over its panel -->
+                <DockPanel Grid.Column="2">
+                <local:SourceNote x:Name="SourceNoteBar" DockPanel.Dock="Top" Margin="0,0,0,8" />
+                <Border Style="{StaticResource Card}" Padding="8,8,8,4">
                     <TabControl x:Name="SideTabs" Style="{StaticResource PanelTabs}" ItemContainerStyle="{StaticResource PanelTab}">
                         <TabItem Header="Properties">
                             <DockPanel Margin="2,6,2,2">
                                 <TextBlock x:Name="PartHeading" DockPanel.Dock="Top" Style="{StaticResource Heading}" TextTrimming="CharacterEllipsis" Text="Click a part in the graph or the screenplay" />
-                                <local:SourceNote x:Name="SourceNoteBar" DockPanel.Dock="Top" Margin="0,0,0,6" />
                                 <local:PropertyListView x:Name="PartProperties" NameColumnWidth="190" TypeColumnWidth="0" LinkClicked="Properties_LinkClicked" />
                             </DockPanel>
                         </TabItem>
@@ -587,6 +589,7 @@
                         </TabItem>
                     </TabControl>
                 </Border>
+                </DockPanel>
             </Grid>
         </Grid>
 

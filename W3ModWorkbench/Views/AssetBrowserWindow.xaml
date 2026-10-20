@@ -71,6 +71,19 @@
         <!-- search, class filter, bookmarks, and whether to ask which copy to open -->
         <DockPanel Margin="0,0,0,10" LastChildFill="True">
             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                <!-- search, then file type, then class, as in the main window -->
+                <TextBlock Text="File type" VerticalAlignment="Center" Margin="12,0,8,0" Opacity="0.7" />
+                <ComboBox x:Name="FileTypeBox" Width="150" IsTextSearchEnabled="True" TextSearch.TextPath="Name" SelectionChanged="FileTypeBox_SelectionChanged"
+                          ToolTip="Show only files of one type (.w2mesh, .xbm, .w2ent…)">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="{Binding Name}" />
+                                <TextBlock Text="{Binding CountText}" Opacity="0.5" Margin="8,0,0,0" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
                 <TextBlock Text="Class" VerticalAlignment="Center" Margin="12,0,8,0" Opacity="0.7" />
                 <ComboBox x:Name="ClassBox" Width="230" IsTextSearchEnabled="True" TextSearch.TextPath="Name" SelectionChanged="ClassBox_SelectionChanged"
                           ToolTip="Show only files that hold one class of resource, as REDkit's asset browser does (CMesh, CBitmapTexture, CEntityTemplate…)">
@@ -102,9 +115,10 @@
                 </ToggleButton>
             </StackPanel>
             <Grid>
-                <TextBox x:Name="SearchBox" VerticalContentAlignment="Center" Padding="34,6,10,6" TextChanged="SearchBox_TextChanged" />
+                <TextBox x:Name="SearchBox" VerticalContentAlignment="Center" Padding="34,6,10,6" TextChanged="SearchBox_TextChanged"
+                         ToolTip="Words must all appear in the path. Use * and ? to match file names, e.g. *.w2mesh" />
                 <TextBlock Style="{StaticResource IconText}" Text="&#xE721;" Margin="12,0,0,0" Opacity="0.6" IsHitTestVisible="False" HorizontalAlignment="Left" />
-                <TextBlock x:Name="SearchPlaceholder" Text="Search the game's files: words in the path, or wildcards on the name (*.w2mesh)" Margin="36,0,0,0"
+                <TextBlock x:Name="SearchPlaceholder" Text="Search the game's files (Ctrl+F)" Margin="36,0,0,0"
                            VerticalAlignment="Center" Opacity="0.5" IsHitTestVisible="False" />
             </Grid>
         </DockPanel>
@@ -127,10 +141,18 @@
                     <TreeView.ItemTemplate>
                         <HierarchicalDataTemplate DataType="{x:Type vm:FolderNode}" ItemsSource="{Binding Children}">
                             <StackPanel Orientation="Horizontal">
-                                <TextBlock Style="{StaticResource IconText}" Text="{Binding Glyph}" Margin="0,0,8,0" />
-                                <TextBlock Text="{Binding DisplayName}" VerticalAlignment="Center" />
+                                <TextBlock x:Name="Icon" Style="{StaticResource IconText}" Text="{Binding Glyph}" Margin="0,0,8,0" />
+                                <TextBlock x:Name="NameText" Text="{Binding DisplayName}" VerticalAlignment="Center" />
                                 <TextBlock Text="{Binding TotalFiles, StringFormat='  {0:N0}'}" Opacity="0.5" VerticalAlignment="Center" />
                             </StackPanel>
+                            <!-- Game files and Mods stand out from what's under them -->
+                            <HierarchicalDataTemplate.Triggers>
+                                <DataTrigger Binding="{Binding IsHeading}" Value="True">
+                                    <Setter TargetName="Icon" Property="Foreground" Value="{DynamicResource AccentTextFillColorPrimaryBrush}" />
+                                    <Setter TargetName="NameText" Property="Foreground" Value="{DynamicResource AccentTextFillColorPrimaryBrush}" />
+                                    <Setter TargetName="NameText" Property="FontWeight" Value="SemiBold" />
+                                </DataTrigger>
+                            </HierarchicalDataTemplate.Triggers>
                         </HierarchicalDataTemplate>
                     </TreeView.ItemTemplate>
                 </TreeView>

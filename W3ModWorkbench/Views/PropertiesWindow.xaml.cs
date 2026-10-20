@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
@@ -8,12 +9,46 @@ using W3ModWorkbench.ViewModels;
 
 namespace W3ModWorkbench;
 
-/// <summary>One object in a CR2W file, for the list beside its properties: its class, its name when it has one, and how deep it sits.</summary>
-public sealed record PropertiesObjectItem(int Index, string ClassName, string Detail, int Depth)
+/// <summary>
+/// One object in a CR2W file, for the list beside its properties: its class, its name when it has one, how deep it sits,
+/// and the objects under it, which open and close as a tree's do.
+/// </summary>
+public sealed class PropertiesObjectItem(int index, string className, string detail, int depth, PropertiesObjectItem? parent) : INotifyPropertyChanged
 {
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    public int Index => index;
+    public string ClassName => className;
+    public string Detail => detail;
+    public int Depth => depth;
+    public PropertiesObjectItem? Parent => parent;
+    public List<PropertiesObjectItem> Children { get; } = [];
+
     public Thickness Indent => new(Depth * 14, 0, 0, 0);
     public FontWeight Weight => Depth == 0 ? FontWeights.SemiBold : FontWeights.Normal;
     public Visibility DetailVisibility => Detail.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility ExpanderVisibility => Children.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility SpacerVisibility => Children.Count > 0 ? Visibility.Collapsed : Visibility.Visible;
+    public string ToolTip => Children.Count > 0 ? $"{ClassName}: {Format.Count(Children.Count, "object")} under it" : ClassName;
+
+    private bool _isExpanded = true;
+
+    public bool IsExpanded
+    {
+        get => _isExpanded;
+        set
+        {
+            if (_isExpanded == value) return;
+            _isExpanded = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Glyph)));
+        }
+    }
+
+    public string Glyph => IsExpanded ? "\uE70D" : "\uE76C";
+
+    /// <summary>Whether its class or name has the text searched for.</summary>
+    public bool Matches(string text) =>
+        ClassName.Contains(text, StringComparison.OrdinalIgnoreCase) || Detail.Contains(text, StringComparison.OrdinalIgnoreCase);
 }
 
 /// <summary>
@@ -34,6 +69,9 @@ public partial class PropertiesWindow : Window, IMessageHost
     private byte[]? _data;
     private Cr2wFile? _file;
     private Cr2wFile? _redkit;
+    // the file's objects at the top of the tree, and all of them in order
+    private List<PropertiesObjectItem> _roots = [];
+    private List<PropertiesObjectItem> _all = [];
 
     private PropertiesWindow(string path, string source, Func<byte[]> readData, ResourceLocator locator, string? origin, string? diskPath)
     {
@@ -94,30 +132,117 @@ public partial class PropertiesWindow : Window, IMessageHost
         }
         string what = FileKinds.Of(path)?.Name.ToLowerInvariant() ?? "file";
         SourceNoteBar.Show(from.Source, from.RedkitPath ?? origin, what);
-        var items = Objects(file);
-        ObjectList.ItemsSource = items;
-        ObjectsTitle.Text = $"Objects ({items.Count:N0})";
+        (_roots, _all) = Objects(file);
+        ShowObjects();
+        ObjectsTitle.Text = $"Objects ({_all.Count:N0})";
         HeadingText.Text = $"{Path.GetFileName(path)}  ·  {file.Exports[0].ClassName}";
         InfoText.Text = $"{path}   ·   {_source}   ·   CR2W {file.Version}, {Format.Count(file.Exports.Count, "object")}, {Format.Count(file.Imports.Count, "file")} used";
         ObjectList.SelectedIndex = 0;
     }
 
-    /// <summary>The file's objects, each under the one it belongs to, in the order the file keeps them.</summary>
-    private static List<PropertiesObjectItem> Objects(Cr2wFile file)
+    /// <summary>The file's objects, each under the one it belongs to, in the order the file keeps them: those at the top, and all of them.</summary>
+    private static (List<PropertiesObjectItem> Roots, List<PropertiesObjectItem> All) Objects(Cr2wFile file)
     {
         var children = file.Exports.Where(x => x.Parent >= 0 && x.Parent < file.Exports.Count).ToLookup(x => x.Parent);
-        var items = new List<PropertiesObjectItem>(file.Exports.Count);
+        var roots = new List<PropertiesObjectItem>();
+        var all = new List<PropertiesObjectItem>(file.Exports.Count);
         var placed = new HashSet<int>();
-        void Add(Cr2wExport export, int depth)
+        void Add(Cr2wExport export, PropertiesObjectItem? parent)
         {
             if (!placed.Add(export.Index)) return;
-            items.Add(new PropertiesObjectItem(export.Index, export.ClassName, ObjectName(file, export.Index), depth));
-            foreach (var child in children[export.Index]) Add(child, depth + 1);
+            var item = new PropertiesObjectItem(export.Index, export.ClassName, ObjectName(file, export.Index), parent is null ? 0 : parent.Depth + 1, parent);
+            (parent?.Children ?? roots).Add(item);
+            all.Add(item);
+            foreach (var child in children[export.Index]) Add(child, item);
         }
-        foreach (var export in file.Exports.Where(x => x.Parent < 0 || x.Parent >= file.Exports.Count)) Add(export, 0);
+        foreach (var export in file.Exports.Where(x => x.Parent < 0 || x.Parent >= file.Exports.Count)) Add(export, null);
         // any left over (a parent that points round in a circle) at the top
-        foreach (var export in file.Exports) Add(export, 0);
-        return items;
+        foreach (var export in file.Exports) Add(export, null);
+        return (roots, all);
+    }
+
+    /// <summary>
+    /// Lists the objects as the tree stands: those under a closed one left out, or with a search, only those whose
+    /// class or name has it and the objects they're under, all open. The one picked stays picked when it's still shown.
+    /// </summary>
+    private void ShowObjects()
+    {
+        var picked = ObjectList.SelectedItem as PropertiesObjectItem;
+        string text = ObjectSearch.Text.Trim();
+        var shown = new List<PropertiesObjectItem>();
+        if (text.Length == 0)
+        {
+            void Walk(PropertiesObjectItem item)
+            {
+                shown.Add(item);
+                if (item.IsExpanded) foreach (var child in item.Children) Walk(child);
+            }
+            foreach (var root in _roots) Walk(root);
+        }
+        else
+        {
+            // a match, and every object above one
+            var keep = new HashSet<PropertiesObjectItem>();
+            foreach (var item in _all.Where(i => i.Matches(text)))
+                for (var up = item; up is not null && keep.Add(up); up = up.Parent) { }
+            shown.AddRange(_all.Where(keep.Contains));
+        }
+        ObjectList.ItemsSource = shown;
+        ObjectsTitle.Text = text.Length == 0 ? $"Objects ({_all.Count:N0})" : $"Objects ({_all.Count(i => i.Matches(text)):N0} of {_all.Count:N0})";
+        if (picked is not null && shown.Contains(picked)) ObjectList.SelectedItem = picked;
+    }
+
+    private void Expander_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not PropertiesObjectItem item) return;
+        item.IsExpanded = !item.IsExpanded;
+        ShowObjects();
+        e.Handled = true;
+    }
+
+    private void SetExpanded(bool open)
+    {
+        foreach (var item in _all) item.IsExpanded = open;
+        // the resource stays open, so its objects show
+        if (!open) foreach (var root in _roots) root.IsExpanded = true;
+        ShowObjects();
+    }
+
+    private void ExpandAll_Click(object sender, RoutedEventArgs e) => SetExpanded(true);
+
+    private void CollapseAll_Click(object sender, RoutedEventArgs e) => SetExpanded(false);
+
+    private void ObjectSearch_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        ObjectSearchPlaceholder.Visibility = ObjectSearch.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
+        ShowObjects();
+    }
+
+    /// <summary>Right opens the object picked, Left closes it (or goes up to the one it's under), as in a tree.</summary>
+    private void ObjectList_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (ObjectList.SelectedItem is not PropertiesObjectItem item || ObjectSearch.Text.Trim().Length > 0) return;
+        if (e.Key == Key.Right && item.Children.Count > 0 && !item.IsExpanded)
+        {
+            item.IsExpanded = true;
+            ShowObjects();
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Left)
+        {
+            if (item.Children.Count > 0 && item.IsExpanded)
+            {
+                item.IsExpanded = false;
+                ShowObjects();
+            }
+            else if (item.Parent is { } parent)
+            {
+                ObjectList.SelectedItem = parent;
+                ObjectList.ScrollIntoView(parent);
+            }
+            (ObjectList.ItemContainerGenerator.ContainerFromItem(ObjectList.SelectedItem) as UIElement)?.Focus();
+            e.Handled = true;
+        }
     }
 
     /// <summary>What an object is called, when it has a name worth showing.</summary>
