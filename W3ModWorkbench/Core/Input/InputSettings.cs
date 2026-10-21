@@ -95,12 +95,13 @@ public sealed partial class InputSettings
 
     /// <summary>The input.xml entry that puts the action in the game's key bindings menu.</summary>
     public static string MenuEntry(NewBinding b) =>
-        $"<Var builder=\"Input\" id=\"{b.Action}\" displayName=\"{b.DisplayName}\" displayType=\"INPUTPC\" actions=\"{b.Action}\"/>";
+        $"<Var builder=\"Input\" id=\"{b.Action}\" displayName=\"{b.DisplayName}\" displayType=\"INPUTPC\" actions=\"{b.Action}\"/>"; // loc-ignore
 
     /// <summary>The WitcherScript that listens for the action, to put in a class that lives as long as it's needed.</summary>
     public static string Script(NewBinding b)
     {
-        string what = b.Hold ? "// held for half a second: State=Duration makes it fire once the key has been down that long" : "// what the key does";
+        string what = b.Hold ? "// held for half a second: State=Duration makes it fire once the key has been down that long" : "// what the key does"; // loc-ignore
+        // loc-ignore-start: WitcherScript
         return $$"""
             // in the class's set-up, such as OnSpawned or an init function:
             theInput.RegisterListener(this, '{{b.Listener}}', '{{b.Action}}');
@@ -116,6 +117,7 @@ public sealed partial class InputSettings
                 }
             }
             """;
+        // loc-ignore-end
     }
 
     /// <summary>

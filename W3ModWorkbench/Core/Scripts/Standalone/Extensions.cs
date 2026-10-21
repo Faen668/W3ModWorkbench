@@ -40,9 +40,9 @@ public static class Extensions
             foreach (string name in field.Names)
             {
                 if (field.Annotation?.Class is not { } cls)
-                    problems.Add(new(file, At(field.Annotation, field.Line), $"@addField of property '{name}' has no target class."));
+                    problems.Add(new(file, At(field.Annotation, field.Line), $"@addField of property '{name}' has no target class.")); // loc-ignore
                 else if (!symbols.Classes.ContainsKey(cls))
-                    problems.Add(new(file, At(field.Annotation, field.Line), $"@addField cannot add '{cls}::{name}' because the class '{cls}' is not defined."));
+                    problems.Add(new(file, At(field.Annotation, field.Line), $"@addField cannot add '{cls}::{name}' because the class '{cls}' is not defined.")); // loc-ignore
             }
         return problems;
     }
@@ -55,9 +55,9 @@ public static class Extensions
             // a class's function is named Class::name, a global one by its name
             string subject = decl.Annotation!.Class is { } owner ? $"{owner}::{decl.Name}" : decl.Name;
             if (decl.Annotation!.Class is not { } cls)
-                problems.Add(new(file, At(decl.Annotation, decl.Line), $"@addMethod of class function '{subject}' has no target class."));
+                problems.Add(new(file, At(decl.Annotation, decl.Line), $"@addMethod of class function '{subject}' has no target class.")); // loc-ignore
             else if (!symbols.Classes.ContainsKey(cls))
-                problems.Add(new(file, At(decl.Annotation, decl.Line), $"@addMethod cannot add '{subject}' because the class '{cls}' is not defined."));
+                problems.Add(new(file, At(decl.Annotation, decl.Line), $"@addMethod cannot add '{subject}' because the class '{cls}' is not defined.")); // loc-ignore
         }
         return problems;
     }
@@ -69,13 +69,13 @@ public static class Extensions
         foreach (var (file, decl) in functions)
         {
             if (!seen.Add(decl.Name))
-                problems.Add(new(file, At(decl.Annotation, decl.Line), $"@replaceMethod duplicate found for '{decl.Name}'."));
+                problems.Add(new(file, At(decl.Annotation, decl.Line), $"@replaceMethod duplicate found for '{decl.Name}'.")); // loc-ignore
             else if (decl.Specifiers.IsImport || decl.Body is null)
-                problems.Add(new(file, At(decl.Annotation, decl.Line), $"@replaceMethod cannot replace an import ('{decl.Name}')."));
+                problems.Add(new(file, At(decl.Annotation, decl.Line), $"@replaceMethod cannot replace an import ('{decl.Name}').")); // loc-ignore
             else if (!symbols.Functions.TryGetValue(decl.Name, out var target))
-                problems.Add(new(file, At(decl.Annotation, decl.Line), $"@replaceMethod cannot replace '{decl.Name}' because it has no previous definition."));
+                problems.Add(new(file, At(decl.Annotation, decl.Line), $"@replaceMethod cannot replace '{decl.Name}' because it has no previous definition.")); // loc-ignore
             else if (target.IsOpaque || target.Specifiers.IsImport)
-                problems.Add(new(file, At(decl.Annotation, decl.Line), $"@replaceMethod cannot replace '{decl.Name}' because it is a native function."));
+                problems.Add(new(file, At(decl.Annotation, decl.Line), $"@replaceMethod cannot replace '{decl.Name}' because it is a native function.")); // loc-ignore
         }
         return problems;
     }
@@ -90,17 +90,17 @@ public static class Extensions
             string subject = decl.Annotation!.Class is { } owner ? $"{owner}::{decl.Name}" : decl.Name;
             string cls = decl.Annotation!.Class!;
             if (!seen.Add($"{cls}::{decl.Name}"))
-                problems.Add(new(file, At(decl.Annotation, decl.Line), $"@replaceMethod duplicate found for '{subject}'."));
+                problems.Add(new(file, At(decl.Annotation, decl.Line), $"@replaceMethod duplicate found for '{subject}'.")); // loc-ignore
             else if (decl.Specifiers.IsImport || decl.Body is null)
-                problems.Add(new(file, At(decl.Annotation, decl.Line), $"@replaceMethod cannot replace an import ('{subject}')."));
+                problems.Add(new(file, At(decl.Annotation, decl.Line), $"@replaceMethod cannot replace an import ('{subject}').")); // loc-ignore
             else if (!symbols.Classes.TryGetValue(cls, out var info))
-                problems.Add(new(file, At(decl.Annotation, decl.Line), $"@replaceMethod cannot replace '{subject}' because the class '{cls}' is not defined."));
+                problems.Add(new(file, At(decl.Annotation, decl.Line), $"@replaceMethod cannot replace '{subject}' because the class '{cls}' is not defined.")); // loc-ignore
             else if (!info.Methods.TryGetValue(decl.Name, out var target))
                 problems.Add(new(file, At(decl.Annotation, decl.Line), symbols.FindMethod(cls, decl.Name) is { } inherited
-                    ? $"@replaceMethod cannot replace '{subject}' because it is a definition inherited from '{inherited.Owner}'."
-                    : $"@replaceMethod cannot replace '{subject}' because it has no previous definition."));
+                    ? $"@replaceMethod cannot replace '{subject}' because it is a definition inherited from '{inherited.Owner}'." // loc-ignore
+                    : $"@replaceMethod cannot replace '{subject}' because it has no previous definition.")); // loc-ignore
             else if (target.IsOpaque || target.Specifiers.IsImport)
-                problems.Add(new(file, At(decl.Annotation, decl.Line), $"@replaceMethod cannot replace '{subject}' because it is a native class function."));
+                problems.Add(new(file, At(decl.Annotation, decl.Line), $"@replaceMethod cannot replace '{subject}' because it is a native class function.")); // loc-ignore
         }
         return problems;
     }
@@ -117,27 +117,27 @@ public static class Extensions
             {
                 if (!symbols.Classes.TryGetValue(cls, out var info))
                 {
-                    problems.Add(new(file, At(decl.Annotation, decl.Line), $"@wrapMethod cannot wrap '{subject}' because the class '{cls}' is not defined."));
+                    problems.Add(new(file, At(decl.Annotation, decl.Line), $"@wrapMethod cannot wrap '{subject}' because the class '{cls}' is not defined.")); // loc-ignore
                     continue;
                 }
                 if (!info.Methods.TryGetValue(decl.Name, out target))
                 {
                     problems.Add(new(file, At(decl.Annotation, decl.Line), symbols.FindMethod(cls, decl.Name) is { } inherited
-                        ? $"@wrapMethod cannot wrap '{subject}' because it is a definition inherited from '{inherited.Owner}'."
-                        : $"@wrapMethod cannot wrap '{subject}' because it is not defined."));
+                        ? $"@wrapMethod cannot wrap '{subject}' because it is a definition inherited from '{inherited.Owner}'." // loc-ignore
+                        : $"@wrapMethod cannot wrap '{subject}' because it is not defined.")); // loc-ignore
                     continue;
                 }
             }
             else if (!symbols.Functions.TryGetValue(decl.Name, out target))
             {
-                problems.Add(new(file, At(decl.Annotation, decl.Line), $"@wrapMethod cannot wrap '{subject}' because it is not defined."));
+                problems.Add(new(file, At(decl.Annotation, decl.Line), $"@wrapMethod cannot wrap '{subject}' because it is not defined.")); // loc-ignore
                 continue;
             }
             // wcc_lite says only modio mods may wrap a native function, but it wraps an import's all the same
             if (decl.Body is not { Count: > 0 })
-                problems.Add(new(file, At(decl.Annotation, decl.Line), $"@wrapMethod Wrapper code cannot be empty ('{subject}')."));
+                problems.Add(new(file, At(decl.Annotation, decl.Line), $"@wrapMethod Wrapper code cannot be empty ('{subject}').")); // loc-ignore
             else if (!decl.UsesWrappedMethod)
-                problems.Add(new(file, At(decl.Annotation, decl.Line), $"@wrapMethod Wrapper '{subject}' must contain a 'wrappedMethod' token."));
+                problems.Add(new(file, At(decl.Annotation, decl.Line), $"@wrapMethod Wrapper '{subject}' must contain a 'wrappedMethod' token.")); // loc-ignore
         }
         return problems;
     }

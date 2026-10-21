@@ -3,6 +3,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Numerics;
 using W3ModWorkbench.Core.Cr2w;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core.Meshes;
 
@@ -34,11 +35,11 @@ public static class ClothFile
     public static MeshFile Read(byte[] data, Func<byte[]?> cooked)
     {
         var file = Cr2wFile.Read(data);
-        var cloth = file.First("CApexClothResource") ?? throw new InvalidDataException("This isn't a cloth resource.");
+        var cloth = file.First("CApexClothResource") ?? throw new InvalidDataException(L.T("ClothFile.IsntClothResource"));
         var apex = cloth["apexBinaryAsset"] is byte[] { Length: > 0 } own ? own : cooked();
-        if (apex is null) throw new FileNotFoundException("The cloth's shape wasn't found: it's kept in the game's collision.cache, which wasn't found.");
+        if (apex is null) throw new FileNotFoundException(L.T("ClothFile.ClothsShapeWasntFound"));
         int start = apex.AsSpan().IndexOf((ReadOnlySpan<byte>)[0x5A, 0x5B, 0x5C, 0x5D]);
-        if (start < 0) throw new InvalidDataException("The cloth's shape isn't an APEX asset this tool can read.");
+        if (start < 0) throw new InvalidDataException(L.T("ClothFile.ClothsShapeIsntApex"));
         var asset = new ApexAsset(apex.AsSpan(start).ToArray());
 
         var chunks = new List<MeshChunk>();
@@ -46,7 +47,7 @@ public static class ClothFile
         for (int lod = 0; lod < lods.Count && lod < 8; lod++)
             foreach (var submesh in lods[lod])
                 if (asset.Submesh(submesh, chunks.Count, lod) is { } chunk) chunks.Add(chunk);
-        if (chunks.Count == 0) throw new InvalidDataException("The cloth's render mesh wasn't found in its APEX asset.");
+        if (chunks.Count == 0) throw new InvalidDataException(L.T("ClothFile.ClothsRenderMeshWasnt"));
 
         var (names, binds) = asset.Bones();
         var materials = cloth.Array("materials").OfType<RedHandle>().ToList();
@@ -84,7 +85,7 @@ public static class ClothFile
         {
             _data = data;
             uint relocationsAt = BinaryPrimitives.ReadUInt32BigEndian(data.AsSpan(28));
-            if (relocationsAt + 4 > data.Length) throw new InvalidDataException("The APEX asset is cut short.");
+            if (relocationsAt + 4 > data.Length) throw new InvalidDataException(L.T("ClothFile.ApexAssetCutShort"));
             int count = (int)U32(relocationsAt);
             for (int i = 0; i < count && relocationsAt + 12 + i * 8L <= data.Length; i++)
                 _relocations[U32(relocationsAt + 8 + i * 8)] = (int)U32(relocationsAt + 4 + i * 8);
@@ -247,12 +248,12 @@ public sealed class CollisionCache
         using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
         var header = new byte[0x40];
         fs.ReadExactly(header);
-        if (header[0] != 'C' || header[1] != 'C' || header[2] != '3' || header[3] != 'W') throw new InvalidDataException("Not a collision cache.");
+        if (header[0] != 'C' || header[1] != 'C' || header[2] != '3' || header[3] != 'W') throw new InvalidDataException(L.T("ClothFile.NotCollisionCache"));
         long indexAt = BinaryPrimitives.ReadInt64LittleEndian(header.AsSpan(0x10));
         int count = BinaryPrimitives.ReadInt32LittleEndian(header.AsSpan(0x18));
         long namesAt = BinaryPrimitives.ReadInt64LittleEndian(header.AsSpan(0x1C));
         int namesLength = BinaryPrimitives.ReadInt32LittleEndian(header.AsSpan(0x24));
-        if (count < 0 || namesLength < 0 || indexAt + count * 64L > fs.Length || namesAt + namesLength > fs.Length) throw new InvalidDataException("The collision cache's index is out of its file.");
+        if (count < 0 || namesLength < 0 || indexAt + count * 64L > fs.Length || namesAt + namesLength > fs.Length) throw new InvalidDataException(L.T("ClothFile.CollisionCachesIndexOut"));
         var names = new byte[namesLength];
         fs.Position = namesAt;
         fs.ReadExactly(names);

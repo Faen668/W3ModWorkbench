@@ -1,6 +1,7 @@
 using System.Buffers.Binary;
 using System.IO;
 using System.Text;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core.Cr2w;
 
@@ -54,11 +55,11 @@ public sealed class Cr2wFile
 
     public static Cr2wFile Read(byte[] data)
     {
-        if (!IsCr2w(data)) throw new InvalidDataException("This isn't a CR2W resource file.");
+        if (!IsCr2w(data)) throw new InvalidDataException(L.T("Cr2wFile.IsntCR2WResourceFile"));
         int version = I32(data, 4);
-        if (version is < FirstVersion or > 170) throw new InvalidDataException($"CR2W version {version} isn't supported ({FirstVersion} to {LastVersion} are).");
+        if (version is < FirstVersion or > 170) throw new InvalidDataException(L.T("Cr2wFile.CR2WVersionIsntSupported", version, FirstVersion, LastVersion));
         if (version <= Cr2wLegacy.LastVersion) return ReadLegacy(data);
-        if (data.Length < 160) throw new InvalidDataException("The CR2W file is cut short.");
+        if (data.Length < 160) throw new InvalidDataException(L.T("Cr2wFile.CR2WFileCutShort"));
 
         // ten tables after the header, each an offset, a count and a checksum
         (int Offset, int Count) Table(int i) => (I32(data, 40 + i * 12), I32(data, 44 + i * 12));
@@ -232,7 +233,7 @@ public sealed class Cr2wFile
 
     private static void Check(byte[] data, long offset, long size)
     {
-        if (offset < 0 || size < 0 || offset + size > data.Length) throw new InvalidDataException("The CR2W file's tables point outside it; it's damaged or cut short.");
+        if (offset < 0 || size < 0 || offset + size > data.Length) throw new InvalidDataException(L.T("Cr2wFile.CR2WFilesTablesPoint"));
     }
 
     private static int I32(ReadOnlySpan<byte> s, int at) => BinaryPrimitives.ReadInt32LittleEndian(s[at..]);

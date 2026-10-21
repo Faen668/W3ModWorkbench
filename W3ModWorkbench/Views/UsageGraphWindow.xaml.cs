@@ -274,12 +274,15 @@ public partial class UsageGraphWindow : Window
     /// <summary>The mod a box's file belongs to, or "Game Script" for the game's own scripts.</summary>
     private static string OriginOf(ScriptFile file)
     {
-        if (file.Source.Equals("Game scripts", StringComparison.OrdinalIgnoreCase) || W3ModWorkbench.Core.Scripts.ScriptFolder.IsGameScripts(file.SourceKey)) return L.T("UsageGraphWindow.GameScript");
+        if (file.Source.Equals(L.T("Common.GameScripts"), StringComparison.OrdinalIgnoreCase) || W3ModWorkbench.Core.Scripts.ScriptFolder.IsGameScripts(file.SourceKey)) return L.T("UsageGraphWindow.GameScript");
         string name = file.Source;
         int slash = name.IndexOf('\\');
         if (slash > 0) name = name[..slash];
-        const string loose = " (loose scripts)"; // loc-ignore: how the scripts index names a mod's loose scripts, not shown
-        return name.EndsWith(loose, StringComparison.OrdinalIgnoreCase) ? name[..^loose.Length] : name;
+        // the scripts index names a mod's loose scripts with this label: the mod's name is what's around the placeholder
+        string[] around = L.T("ScriptCorpus.LooseScripts", "\u0001").Split('\u0001');
+        return around.Length == 2 && name.Length > around[0].Length + around[1].Length
+            && name.StartsWith(around[0], StringComparison.OrdinalIgnoreCase) && name.EndsWith(around[1], StringComparison.OrdinalIgnoreCase)
+            ? name[around[0].Length..^around[1].Length] : name;
     }
 
     private static ToolTip SitesTip(UsageEdge edge)

@@ -1,3 +1,4 @@
+using W3ModWorkbench.Localisation;
 namespace W3ModWorkbench.Core.Scripts.Navigation;
 
 /// <summary>One box in the usage graph: the declaration being looked at, or a function (or type, or file) that uses what is further right.</summary>
@@ -77,7 +78,7 @@ public static class UsageGraphBuilder
             foreach (var (node, symbols, parsed) in frontier)
             {
                 cancel.ThrowIfCancellationRequested();
-                progress?.Invoke($"Level {depth}: looking for what uses {node.Title}…");
+                progress?.Invoke(L.T("UsageGraph.LevelLookingWhatUses", depth, node.Title));
                 var hits = ScriptSearch.Scan(symbols, parsed, layers, cancel);
                 int listed = 0, skipped = 0;
                 foreach (var (hit, hitParsed) in hits)

@@ -1,6 +1,7 @@
 using System.IO;
 using W3ModWorkbench.Core.Cr2w;
 using W3ModWorkbench.Core.Trees;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core.Animation;
 
@@ -62,7 +63,7 @@ public sealed class AnimEventsFile
     public static AnimEventsFile Read(byte[] data)
     {
         var file = Cr2wFile.Read(data);
-        var resource = file.First("CExtAnimEventsFile") ?? throw new InvalidDataException("This isn't an animation events file.");
+        var resource = file.First("CExtAnimEventsFile") ?? throw new InvalidDataException(L.T("AnimEventsFile.IsntAnimationEventsFile"));
         var events = file.TailObjects(resource).Select(o => new AnimEvent(
             o["animationName"] as string ?? "",
             o["trackName"] as string is { Length: > 0 } t && t != "None" ? t : "__Default",

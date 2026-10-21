@@ -2,6 +2,7 @@ using System.Buffers.Binary;
 using System.IO;
 using System.Numerics;
 using W3ModWorkbench.Core.Cr2w;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core.Entities;
 
@@ -114,7 +115,7 @@ public sealed class EntityFile
     public static EntityFile Read(byte[] data)
     {
         var file = Cr2wFile.Read(data);
-        var template = file.First("CEntityTemplate") ?? throw new InvalidDataException("There's no entity in it: it has no CEntityTemplate.");
+        var template = file.First("CEntityTemplate") ?? throw new InvalidDataException(L.T("EntityFile.TheresNoEntityHas"));
 
         // the components: compiled into a file of their own when cooked, else in the template's file
         var files = new List<(Cr2wFile File, bool Streamed)>();

@@ -20,15 +20,15 @@ public static class ObjExport
         string mtlName = Path.GetFileNameWithoutExtension(objPath) + ".mtl";
         var inv = CultureInfo.InvariantCulture;
         var obj = new StringBuilder();
-        obj.AppendLine($"# {meshName}, exported by W3 Mod Workbench");
-        obj.AppendLine($"mtllib {mtlName}");
+        obj.AppendLine($"# {meshName}, exported by W3 Mod Workbench"); // loc-ignore
+        obj.AppendLine($"mtllib {mtlName}"); // loc-ignore
         int first = 1;
         var used = new SortedSet<int>();
         foreach (var chunk in chunks)
         {
             used.Add(chunk.Material);
             obj.AppendLine($"o chunk_{chunk.Index}");
-            obj.AppendLine($"usemtl material_{chunk.Material}");
+            obj.AppendLine($"usemtl material_{chunk.Material}"); // loc-ignore
             foreach (var p in chunk.Positions) obj.Append(inv, $"v {p.X:R} {p.Z:R} {-p.Y:R}\n");
             foreach (var t in chunk.Uvs) obj.Append(inv, $"vt {t.X:R} {1 - t.Y:R}\n");
             foreach (var n in chunk.Normals) obj.Append(inv, $"vn {n.X:R} {n.Z:R} {-n.Y:R}\n");
@@ -46,7 +46,7 @@ public static class ObjExport
         var mtl = new StringBuilder();
         foreach (int material in used)
         {
-            mtl.AppendLine($"newmtl material_{material}");
+            mtl.AppendLine($"newmtl material_{material}"); // loc-ignore
             mtl.AppendLine("Kd 1 1 1");
             if (textures.TryGetValue(material, out var texture))
             {

@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using System.IO;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core.Strings;
 
@@ -43,20 +44,20 @@ public sealed class W3Speech
         using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
         var head = new byte[16];
         fs.ReadExactly(head, 0, 13);
-        if (BinaryPrimitives.ReadUInt32LittleEndian(head) != Magic) throw new InvalidDataException("This isn't a speech file.");
+        if (BinaryPrimitives.ReadUInt32LittleEndian(head) != Magic) throw new InvalidDataException(L.T("W3Speech.IsntSpeechFile"));
         // after the version and two bytes of the language's key, the count, packed as the strings files pack lengths
         int at = 10, count = head[at] & 0x3F, shift = 6;
         bool more = (head[at++] & 0x40) != 0;
         while (more)
         {
             int b = at < 13 ? head[at] : fs.ReadByte();
-            if (b < 0) throw new InvalidDataException("The speech file is cut short.");
+            if (b < 0) throw new InvalidDataException(L.T("W3Speech.SpeechFileCutShort"));
             at++;
             count |= (b & 0x7F) << shift;
             shift += 7;
             more = (b & 0x80) != 0 && shift < 32;
         }
-        if (count < 0 || count > 10_000_000) throw new InvalidDataException("The speech file's count makes no sense.");
+        if (count < 0 || count > 10_000_000) throw new InvalidDataException(L.T("W3Speech.SpeechFilesCountMakes"));
         fs.Position = at;
         var table = new byte[count * 40L];
         fs.ReadExactly(table);
@@ -145,7 +146,7 @@ public static class WwiseOpus
     /// <summary>The sound's samples at 48 kHz, its channels interleaved.</summary>
     public static (short[] Samples, int Channels) Decode(byte[] riff)
     {
-        if (riff.Length < 12 || BinaryPrimitives.ReadUInt32LittleEndian(riff) != 0x46464952) throw new InvalidDataException("The sound isn't a RIFF file.");
+        if (riff.Length < 12 || BinaryPrimitives.ReadUInt32LittleEndian(riff) != 0x46464952) throw new InvalidDataException(L.T("W3Speech.SoundIsntRiffFile"));
         int fmt = -1, fmtSize = 0, seek = -1, seekSize = 0, data = -1, dataSize = 0;
         for (int at = 12; at + 8 <= riff.Length;)
         {
@@ -160,14 +161,14 @@ public static class WwiseOpus
             }
             at += 8 + size + (size & 1);
         }
-        if (fmt < 0 || data < 0 || seek < 0 || fmtSize < 0x22) throw new InvalidDataException("The sound is missing a part it needs.");
+        if (fmt < 0 || data < 0 || seek < 0 || fmtSize < 0x22) throw new InvalidDataException(L.T("W3Speech.SoundMissingPartNeeds"));
         var f = riff.AsSpan(fmt, fmtSize);
-        if (BinaryPrimitives.ReadUInt16LittleEndian(f) != 0x3041) throw new InvalidDataException($"The sound's codec ({BinaryPrimitives.ReadUInt16LittleEndian(f):X4}) isn't Wwise Opus.");
+        if (BinaryPrimitives.ReadUInt16LittleEndian(f) != 0x3041) throw new InvalidDataException(L.T("W3Speech.SoundsCodecIsntWwise", BinaryPrimitives.ReadUInt16LittleEndian(f)));
         int channels = Math.Clamp((int)BinaryPrimitives.ReadUInt16LittleEndian(f[2..]), 1, 8);
         int total = BinaryPrimitives.ReadInt32LittleEndian(f[0x18..]);
         int packets = BinaryPrimitives.ReadInt32LittleEndian(f[0x1C..]);
         int skip = BinaryPrimitives.ReadUInt16LittleEndian(f[0x20..]);
-        if (packets <= 0 || packets * 2 > seekSize) throw new InvalidDataException("The sound's packet list is cut short.");
+        if (packets <= 0 || packets * 2 > seekSize) throw new InvalidDataException(L.T("W3Speech.SoundsPacketListCut"));
 
         // more than two channels are several Opus streams in each packet, laid out as Opus's channel mapping family 1
         // lays them out (the Vorbis order); they're put back in the usual order after

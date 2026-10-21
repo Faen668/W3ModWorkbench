@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using W3ModWorkbench.Core.Projects;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core.Cr2w;
 
@@ -118,9 +119,9 @@ public static class Cr2wJsonBatch
         string json = Cr2wJson.ToJsonText(file, out var report, source);
         // the whole file must come back as it was, or it isn't given out as if it would
         if (!Cr2wJson.FromJsonText(json).AsSpan().SequenceEqual(data))
-            throw new InvalidDataException("It wouldn't convert back to the same file, so it wasn't converted. Please report it, with the file.");
+            throw new InvalidDataException(L.T("Cr2wJsonBatch.WouldntConvertBackSame"));
         note = report.FullyReadable ? null
-            : $"{report.RawValues + report.RawObjects} value{(report.RawValues + report.RawObjects == 1 ? "" : "s")} kept as bytes ({string.Join(", ", report.RawPaths.Take(3))}{(report.RawPaths.Count > 3 ? ", …" : "")})";
+            : L.T("Cr2wJsonBatch.KeptAsBytes", report.RawValues + report.RawObjects, string.Join(", ", report.RawPaths.Take(3)) + (report.RawPaths.Count > 3 ? ", …" : ""));
         return json;
     }
 
@@ -129,7 +130,7 @@ public static class Cr2wJsonBatch
         Each(inputs, progress, token, (file, root) =>
         {
             string output = OutputPath(file, root, outputFolder, JsonName(file));
-            if (!overwrite && File.Exists(output)) return new Cr2wJsonResult(file, null, "The JSON file is there already (turn on Overwrite to replace it).");
+            if (!overwrite && File.Exists(output)) return new Cr2wJsonResult(file, null, L.T("Cr2wJsonBatch.JsonFileThereAlready"));
             string json = ToJsonText(File.ReadAllBytes(file), FileSafety.GamePathOf(file), out string? note);
             Write(output, Encoding.UTF8.GetBytes(json));
             return new Cr2wJsonResult(file, output, null, note);
@@ -141,7 +142,7 @@ public static class Cr2wJsonBatch
         Each(inputs, progress, token, (file, root) =>
         {
             string output = OutputPath(file, root, outputFolder, Cr2wName(file));
-            if (!overwrite && File.Exists(output)) return new Cr2wJsonResult(file, null, $"{Path.GetFileName(output)} is there already (turn on Overwrite to replace it).");
+            if (!overwrite && File.Exists(output)) return new Cr2wJsonResult(file, null, L.T("Cr2wJsonBatch.ThereAlreadyTurnOverwrite", Path.GetFileName(output)));
             if (!asLatest)
             {
                 Write(output, Cr2wJson.FromJsonText(File.ReadAllText(file, Encoding.UTF8)));
@@ -164,12 +165,12 @@ public static class Cr2wJsonBatch
         Each(inputs, progress, token, (file, root) =>
         {
             var source = Cr2wFile.Read(File.ReadAllBytes(file));
-            if (source.Version >= Cr2wFile.LastVersion) return new Cr2wJsonResult(file, null, null, $"It's version {source.Version} already.");
+            if (source.Version >= Cr2wFile.LastVersion) return new Cr2wJsonResult(file, null, null, L.T("Cr2wJsonBatch.VersionAlready", source.Version));
             string output = OutputPath(file, root, outputFolder);
             if (!overwrite && File.Exists(output))
                 return new Cr2wJsonResult(file, null, output.Equals(file, StringComparison.OrdinalIgnoreCase)
-                    ? "It would be saved over itself: turn on Overwrite to replace it, or save into a folder."
-                    : $"{Path.GetFileName(output)} is there already (turn on Overwrite to replace it).");
+                    ? L.T("Cr2wJsonBatch.WouldSavedOverItself")
+                    : L.T("Cr2wJsonBatch.ThereAlreadyTurnOverwrite", Path.GetFileName(output)));
             byte[] data = Cr2wJson.UpgradeToLatest(source, out var report);
             Cr2wJson.ToJson(Cr2wFile.Read(data), out _); // what was written must read
             Write(output, data);
@@ -180,8 +181,8 @@ public static class Cr2wJsonBatch
     private static string? UpgradeNote(Cr2wUpgradeReport report)
     {
         if (!report.Changed) return null;
-        string note = $"version {report.FromVersion} saved as {report.ToVersion}";
-        if (report.Notes.Count > 0) note += $"; {report.Notes.Count} change{(report.Notes.Count == 1 ? "" : "s")} the engine makes: {string.Join(" ", report.Notes.Take(2))}{(report.Notes.Count > 2 ? " …" : "")}";
+        string note = L.T("Cr2wJsonBatch.VersionSaved", report.FromVersion, report.ToVersion);
+        if (report.Notes.Count > 0) note += L.T("Cr2wJsonBatch.EngineChanges", report.Notes.Count, string.Join(" ", report.Notes.Take(2)) + (report.Notes.Count > 2 ? " …" : ""));
         return note;
     }
 
@@ -216,13 +217,13 @@ public static class Cr2wJsonBatch
                 int changed = edit.Apply(document);
                 if (changed > 0) changes.Add(Done(edit, changed));
             }
-            if (changes.Count == 0) return new Cr2wJsonResult(file, null, null, "Nothing to change: no object has that path.");
+            if (changes.Count == 0) return new Cr2wJsonResult(file, null, null, L.T("Cr2wJsonBatch.NothingChangeNoObject"));
             string output = OutputPath(file, root, outputFolder);
             // built either way, so a value the edit made that can't be saved is said now rather than at the next convert
             byte[] built = Cr2wJson.FromJson(document);
             if (dryRun)
             {
-                if (FileSafety.Protection(output) is { } why) return new Cr2wJsonResult(file, null, $"It can't be saved there. {why}");
+                if (FileSafety.Protection(output) is { } why) return new Cr2wJsonResult(file, null, L.T("Cr2wJsonBatch.CantSavedThere", why));
                 return new Cr2wJsonResult(file, output, null, string.Join("; ", changes));
             }
             Write(output, json ? Encoding.UTF8.GetBytes(Cr2wJson.Format(document)) : built);
@@ -232,13 +233,13 @@ public static class Cr2wJsonBatch
     /// <summary>What an edit did to a file, in a few words.</summary>
     private static string Done(Cr2wBulkEdit edit, int changed)
     {
-        string objects = changed == 1 ? "" : $" in {changed} objects";
+        string objects = changed == 1 ? "" : L.T("Cr2wJsonBatch.Objects", changed);
         return edit.Kind switch
         {
-            BulkEditKind.Copy => $"copied {edit.Path}{objects}",
-            BulkEditKind.Set => $"set {edit.Path}{objects}",
-            BulkEditKind.Remove => $"removed {edit.Path}{objects}",
-            _ => $"{changed} number{(changed == 1 ? "" : "s")} under {edit.Path} {(edit.Kind == BulkEditKind.Scale ? "multiplied" : "added to")}",
+            BulkEditKind.Copy => L.T("Cr2wJsonBatch.Copied", edit.Path, objects),
+            BulkEditKind.Set => L.T("Cr2wJsonBatch.Set", edit.Path, objects),
+            BulkEditKind.Remove => L.T("Cr2wJsonBatch.Removed", edit.Path, objects),
+            _ => L.T(edit.Kind == BulkEditKind.Scale ? "Cr2wJsonBatch.Multiplied" : "Cr2wJsonBatch.AddedTo", changed, edit.Path),
         };
     }
 
@@ -251,9 +252,9 @@ public static class Cr2wJsonBatch
             {
                 return JsonNode.Parse(File.ReadAllText(file, Encoding.UTF8),
                     documentOptions: new JsonDocumentOptions { AllowTrailingCommas = true, CommentHandling = JsonCommentHandling.Skip }) as JsonObject
-                    ?? throw new InvalidDataException("The JSON isn't an object.");
+                    ?? throw new InvalidDataException(L.T("Cr2wJsonBatch.JsonIsntObject"));
             }
-            catch (JsonException ex) { throw new InvalidDataException($"The JSON can't be read: {ex.Message}"); }
+            catch (JsonException ex) { throw new InvalidDataException(L.T("Cr2wJsonBatch.JsonCantRead", ex.Message)); }
         }
         return Cr2wJson.ToJson(Cr2wFile.Read(File.ReadAllBytes(file)), out _);
     }

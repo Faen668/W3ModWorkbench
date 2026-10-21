@@ -1,3 +1,4 @@
+using W3ModWorkbench.Localisation;
 // Part of the built-in compiler: a C# port of the .ws-to-rsblob compiler written by WebSpam for Aelto's tw3-cahirb (MIT).
 // https://github.com/Aelto/tw3-cahirb/pull/1
 
@@ -163,7 +164,7 @@ public sealed class Symbols
                     if (at >= 0)
                     {
                         if (problem is not null && value is { } given && given != values[at].Value)
-                            problem(file, line, $"Enumerator '{name}' in '{decl.Name}' has an explicit value, but it does not match previous definition.");
+                            problem(file, line, $"Enumerator '{name}' in '{decl.Name}' has an explicit value, but it does not match previous definition."); // loc-ignore
                         continue;
                     }
                     int v;
@@ -171,7 +172,7 @@ public sealed class Symbols
                     {
                         if (problem is not null)
                         {
-                            problem(file, line, $"Enumerator '{name}' in '{decl.Name}' has an explicit value, that is forbidden for new enumerators defined in enum extensions (mods) to prevent conflicts.");
+                            problem(file, line, $"Enumerator '{name}' in '{decl.Name}' has an explicit value, that is forbidden for new enumerators defined in enum extensions (mods) to prevent conflicts."); // loc-ignore
                             continue;
                         }
                         v = (int)explicitValue;
@@ -448,7 +449,7 @@ public sealed class Symbols
     {
         if (type.Name == "array")
         {
-            if (type.Args.Count == 0) throw new CompileException("array without an element type");
+            if (type.Args.Count == 0) throw new CompileException(L.T("Symbols.ArrayWithoutElementType"));
             return Ty.ArrayOf(Resolve(type.Args[0]));
         }
         if (type.Name == "map" && type.Args.Count == 2) return Ty.MapOf(Resolve(type.Args[0]), Resolve(type.Args[1]));

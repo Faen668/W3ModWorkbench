@@ -1,6 +1,7 @@
 using System.IO;
 using W3ModWorkbench.Core.Cr2w;
 using W3ModWorkbench.Core.Trees;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core.Communities;
 
@@ -56,7 +57,7 @@ public sealed class CommunityFile
 
     public static CommunityFile Read(Cr2wFile file)
     {
-        var community = file.First("CCommunity") ?? throw new InvalidDataException("This isn't a community.");
+        var community = file.First("CCommunity") ?? throw new InvalidDataException(L.T("CommunityFile.IsntCommunity"));
         string Path(object? value) => value is RedHandle h ? file.PathOf(h) ?? "" : "";
         string Object(object? value) => value is RedHandle { Export: int i } && i < file.Exports.Count ? ObjectTree.Words(file.Exports[i].ClassName, "CCommunity", "CSpawnTree", "C") : "";
         // a tag list is kept as its bytes, or (a story phase's names) as a struct holding one

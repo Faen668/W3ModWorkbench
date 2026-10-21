@@ -2,6 +2,7 @@ using System.Buffers.Binary;
 using System.IO;
 using System.Text;
 using W3ModWorkbench.Core.Strings;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core.Sounds;
 
@@ -38,12 +39,12 @@ public sealed class SoundCache
         using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
         var head = new byte[48];
         fs.ReadExactly(head);
-        if (BinaryPrimitives.ReadUInt32LittleEndian(head) != Magic) throw new InvalidDataException("This isn't a sound cache.");
+        if (BinaryPrimitives.ReadUInt32LittleEndian(head) != Magic) throw new InvalidDataException(L.T("SoundCache.IsntSoundCache"));
         long list = BinaryPrimitives.ReadInt64LittleEndian(head.AsSpan(16)), count = BinaryPrimitives.ReadInt64LittleEndian(head.AsSpan(24));
         long namesAt = BinaryPrimitives.ReadInt64LittleEndian(head.AsSpan(32));
         int namesSize = BinaryPrimitives.ReadInt32LittleEndian(head.AsSpan(40));
         if (count < 0 || count > 1_000_000 || namesSize < 0 || namesAt + namesSize > fs.Length || list + count * 24 > fs.Length)
-            throw new InvalidDataException("The sound cache's list makes no sense.");
+            throw new InvalidDataException(L.T("SoundCache.SoundCachesListMakes"));
         var names = new byte[namesSize];
         fs.Position = namesAt;
         fs.ReadExactly(names);

@@ -2,6 +2,7 @@ using System.Buffers.Binary;
 using System.IO;
 using System.Text;
 using W3ModWorkbench.Core.Strings;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core.Sounds;
 
@@ -42,15 +43,15 @@ public sealed class WemInfo
     public string CodecName => Codec switch
     {
         0x0001 => "PCM",
-        0xFFFE => "PCM (extensible)",
-        0x0002 => "Wwise IMA ADPCM",
-        0x0011 => "IMA ADPCM",
-        0xFFFF => "Wwise Vorbis",
-        0x3040 => "Wwise Opus (Ogg)",
-        0x3041 => "Wwise Opus",
+        0xFFFE => L.T("Wem.PCMExtensible"),
+        0x0002 => L.T("Wem.WwiseIMAAdpcm"),
+        0x0011 => L.T("Wem.IMAAdpcm"),
+        0xFFFF => L.T("Wem.WwiseVorbis"),
+        0x3040 => L.T("Wem.WwiseOpusOgg"),
+        0x3041 => L.T("Wem.WwiseOpus"),
         0x0166 => "XMA2",
         0x8311 => "PTADPCM",
-        _ => $"codec 0x{Codec:X4}",
+        _ => L.T("Wem.Codec", $"0x{Codec:X4}"),
     };
 
     /// <summary>The speakers its channels are for, by its mask, or by how many there are.</summary>
@@ -61,7 +62,7 @@ public sealed class WemInfo
             string[] names = ["FL", "FR", "C", "LFE", "BL", "BR", "FLC", "FRC", "BC", "SL", "SR"];
             if (ChannelMask != 0)
                 return string.Join(" ", names.Where((_, i) => (ChannelMask & (1u << i)) != 0));
-            return Channels switch { 1 => "mono", 2 => "stereo", 6 => "5.1", 8 => "7.1", _ => $"{Channels} channels" };
+            return Channels switch { 1 => L.T("Wem.Mono"), 2 => L.T("Wem.Stereo"), 6 => "5.1", 8 => "7.1", _ => L.T("Wem.Channels", Channels) };
         }
     }
 
@@ -70,7 +71,7 @@ public sealed class WemInfo
     /// <summary>Reads a sound's RIFF parts and its "fmt " (and its loop and markers, when it has them).</summary>
     public static WemInfo Read(byte[] riff)
     {
-        if (!IsRiff(riff)) throw new InvalidDataException("The sound isn't a RIFF file.");
+        if (!IsRiff(riff)) throw new InvalidDataException(L.T("Wem.SoundIsntRiffFile"));
         var chunks = new List<RiffChunk>();
         for (int at = 12; at + 8 <= riff.Length;)
         {
@@ -81,9 +82,9 @@ public sealed class WemInfo
             // a LIST holds parts of its own, after its type
             at += 8 + size + (size & 1);
         }
-        var fmtChunk = chunks.FirstOrDefault(c => c.Id == "fmt ") ?? throw new InvalidDataException("The sound has no \"fmt \".");
+        var fmtChunk = chunks.FirstOrDefault(c => c.Id == "fmt ") ?? throw new InvalidDataException(L.T("Wem.SoundHasNoFmt"));
         var f = riff.AsSpan(fmtChunk.Offset, fmtChunk.Size);
-        if (f.Length < 16) throw new InvalidDataException("The sound's \"fmt \" is cut short.");
+        if (f.Length < 16) throw new InvalidDataException(L.T("Wem.SoundsFmtCutShort"));
         ushort codec = BinaryPrimitives.ReadUInt16LittleEndian(f);
         int channels = BinaryPrimitives.ReadUInt16LittleEndian(f[2..]);
         int rate = BinaryPrimitives.ReadInt32LittleEndian(f[4..]);
@@ -180,11 +181,11 @@ public sealed class SoundBank
 
     private static string KindOf(byte type) => type switch
     {
-        1 => "States", 2 => "Sounds", 3 => "Actions", 4 => "Events", 5 => "Random or sequence containers", 6 => "Switch containers",
-        7 => "Actor-mixers", 8 => "Buses", 9 => "Blend containers", 10 => "Music segments", 11 => "Music tracks", 12 => "Music switches",
-        13 => "Music playlists", 14 => "Attenuations", 15 => "Dialogue events", 16 => "Effect share sets", 17 => "Effects", 18 => "Auxiliary buses",
-        19 => "LFOs", 20 => "Envelopes", 21 => "Audio devices", 22 => "Time modulators",
-        _ => $"Objects of type {type}",
+        1 => L.T("Wem.States"), 2 => L.T("Wem.Sounds"), 3 => L.T("Wem.Actions"), 4 => L.T("Wem.Events"), 5 => L.T("Wem.RandomSequenceContainers"), 6 => L.T("Wem.SwitchContainers"),
+        7 => L.T("Wem.ActorMixers"), 8 => L.T("Wem.Buses"), 9 => L.T("Wem.BlendContainers"), 10 => L.T("Wem.MusicSegments"), 11 => L.T("Wem.MusicTracks"), 12 => L.T("Wem.MusicSwitches"),
+        13 => L.T("Wem.MusicPlaylists"), 14 => L.T("Wem.Attenuations"), 15 => L.T("Wem.DialogueEvents"), 16 => L.T("Wem.EffectShareSets"), 17 => L.T("Wem.Effects"), 18 => L.T("Wem.AuxiliaryBuses"),
+        19 => L.T("Wem.Lfos"), 20 => L.T("Wem.Envelopes"), 21 => L.T("Wem.AudioDevices"), 22 => L.T("Wem.TimeModulators"),
+        _ => L.T("Wem.ObjectsType", type),
     };
 
     public static SoundBank Read(byte[] bank)
@@ -268,7 +269,7 @@ public sealed class SoundBank
                 int source = at + skip + 4 + s * 14;
                 // a source's plugin is a codec: its low bits say so
                 sensible = (BinaryPrimitives.ReadUInt32LittleEndian(bank.AsSpan(source)) & 0xF) == 1 && bank[source + 4] <= 2;
-                if (sensible) found.Add(Source(bank, source, objectId, "Music track"));
+                if (sensible) found.Add(Source(bank, source, objectId, L.T("Wem.MusicTrack")));
             }
             if (sensible) return found;
         }
@@ -310,7 +311,7 @@ public static class SoundDecoder
                 Buffer.BlockCopy(riff, data.Offset, pcm, 0, pcm.Length * 2);
                 return (pcm, Math.Max(1, info.Channels), info.SampleRate);
             default:
-                throw new NotSupportedException($"{info.CodecName} sounds can't be played yet.");
+                throw new NotSupportedException(L.T("Wem.SoundsCantPlayedYet", info.CodecName));
         }
     }
 }

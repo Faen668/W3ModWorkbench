@@ -1,5 +1,6 @@
 using System.Numerics;
 using W3ModWorkbench.Core.Cr2w;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core.Scenes;
 
@@ -109,7 +110,7 @@ public sealed class SceneSectionTimeline
             static string? Set(object? value) => value as string is { Length: > 0 } s && s != "None" ? s : null;
             return (e.ClassName == "CStorySceneEventCustomCameraInstance" ? Set(e["customCameraName"]) : null)
                 ?? Set(e["eventName"]) ?? Set(e["friendlyName"])
-                ?? (Set(e["mimicsLayer_Pose"]) is { } pose ? $"{pose} face" : null)
+                ?? (Set(e["mimicsLayer_Pose"]) is { } pose ? L.T("SceneTimeline.Face", pose) : null)
                 ?? Set(e["animationName"]) ?? Set(e["customCameraName"]) ?? Friendly(e.ClassName);
         }
         return new SceneSectionTimeline { Name = section["sectionName"] as string ?? "", Duration = time, Elements = elements, Events = events };
@@ -168,7 +169,7 @@ public static class SceneStaging
             var position = new Vector3(radius * MathF.Sin(heading), -radius * MathF.Cos(heading), 0);
             return new SceneDialogsetSlot(i + 1, actor, actor, position, new Vector3(0, 0, heading * 180 / MathF.PI), new RedObject("CStorySceneDialogsetSlot"));
         }).ToList();
-        return new SceneDialogset("(standing where they are)", null, [], slots, new RedObject("CStorySceneDialogsetInstance"));
+        return new SceneDialogset(L.T("SceneTimeline.StandingWhereThey"), null, [], slots, new RedObject("CStorySceneDialogsetInstance"));
     }
 
     public static List<SceneDialogset> Dialogsets(Cr2wFile file, RedObject scene)

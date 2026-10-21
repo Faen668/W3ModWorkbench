@@ -1,4 +1,5 @@
 using System.IO;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core.Scripts.Standalone;
 
@@ -51,7 +52,7 @@ public static class InstalledMods
                 }
                 catch (Exception ex) when (ex is ScriptSyntaxException or InvalidDataException or NotSupportedException or IOException)
                 {
-                    note($"[Skipped] {name}\\{Path.GetFileName(blob)}" + (ex is ScriptSyntaxException syntax ? $" (line {syntax.Line} of the decompiled text)" : "") + $": {ex.Message}");
+                    note($"[Skipped] {name}\\{Path.GetFileName(blob)}" + (ex is ScriptSyntaxException syntax ? L.T("InstalledMods.LineDecompiledText", syntax.Line) : "") + $": {ex.Message}");
                 }
             }
             if (blobs.Count > 0) return files;

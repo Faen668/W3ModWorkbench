@@ -2,6 +2,7 @@ using System.Buffers.Binary;
 using System.IO;
 using System.Numerics;
 using W3ModWorkbench.Core.Cr2w;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core.Animation;
 
@@ -29,9 +30,9 @@ public sealed class MimicFace
     public static MimicFace Read(byte[] data)
     {
         var file = Cr2wFile.Read(data);
-        var face = file.First("CMimicFace") ?? throw new InvalidDataException("There's no face in it: it has no CMimicFace.");
+        var face = file.First("CMimicFace") ?? throw new InvalidDataException(L.T("MimicFace.TheresNoFaceHas"));
         var skeleton = face["mimicSkeleton"] is RedHandle s && file.Object(s) is { } bones ? Skeleton.FromObject(bones, file)
-            : throw new InvalidDataException("The face has no skeleton.");
+            : throw new InvalidDataException(L.T("MimicFace.FaceHasNoSkeleton"));
         var controls = face["floatTrackSkeleton"] is RedHandle t && file.Object(t) is { } tracks
             ? tracks.Array("tracks").OfType<RedObject>().Select(c => c["nameAsCName"] as string ?? c["name"] as string ?? "").ToArray()
             : [];
@@ -50,12 +51,12 @@ public sealed class MimicFace
         int Int() { int v = BinaryPrimitives.ReadInt32LittleEndian(raw.AsSpan(at)); at += 4; return v; }
         float Float() { float v = BinaryPrimitives.ReadSingleLittleEndian(raw.AsSpan(at)); at += 4; return v; }
         int count = Int();
-        if (count < 0 || count > 4096) throw new InvalidDataException("The face's poses make no sense.");
+        if (count < 0 || count > 4096) throw new InvalidDataException(L.T("MimicFace.FacesPosesMakeNo"));
         var poses = new BoneTransform[count][];
         for (int p = 0; p < count; p++)
         {
             int bones = Int();
-            if (bones < 0 || bones > 4096) throw new InvalidDataException("A face pose makes no sense.");
+            if (bones < 0 || bones > 4096) throw new InvalidDataException(L.T("MimicFace.FacePoseMakesNo"));
             var pose = new BoneTransform[bones];
             for (int b = 0; b < bones; b++)
             {
@@ -151,10 +152,10 @@ public sealed class LipSync
             return value;
         }
         int bones = Packed();
-        if (bones < 0 || bones > 64) throw new InvalidDataException("A lip sync's bones make no sense.");
+        if (bones < 0 || bones > 64) throw new InvalidDataException(L.T("MimicFace.LipSyncsBonesMake"));
         at += bones * 2 * 16; // the neck and head stay where they are
         int count = Packed();
-        if (count < 0 || count > 1024) throw new InvalidDataException("A lip sync's tracks make no sense.");
+        if (count < 0 || count > 1024) throw new InvalidDataException(L.T("MimicFace.LipSyncsTracksMake"));
         var records = new (float FrameTime, int Compression, int Frames, int Address)[count];
         for (int t = 0; t < count; t++)
         {
@@ -163,14 +164,14 @@ public sealed class LipSync
             at += 16;
         }
         int length = Packed(), data = at;
-        if (data + length > blob.Length) throw new InvalidDataException("A lip sync's keys run past its end.");
+        if (data + length > blob.Length) throw new InvalidDataException(L.T("MimicFace.LipSyncsKeysRun"));
         float frameTime = records.FirstOrDefault(r => r.Frames > 1).FrameTime;
         var tracks = new float[count][];
         for (int t = 0; t < count; t++)
         {
             var (_, compression, frames, address) = records[t];
-            int size = compression switch { 0 => 4, 1 => 3, 2 => 2, _ => throw new InvalidDataException($"A lip sync uses a compression this doesn't read ({compression}).") };
-            if (address < 0 || address + (long)frames * size > length) throw new InvalidDataException("A lip sync's track runs past its keys.");
+            int size = compression switch { 0 => 4, 1 => 3, 2 => 2, _ => throw new InvalidDataException(L.T("MimicFace.LipSyncUsesCompression", compression)) };
+            if (address < 0 || address + (long)frames * size > length) throw new InvalidDataException(L.T("MimicFace.LipSyncsTrackRuns"));
             var keys = new float[frames];
             for (int k = 0; k < frames; k++)
             {

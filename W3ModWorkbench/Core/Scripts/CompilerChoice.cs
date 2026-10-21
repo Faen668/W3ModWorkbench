@@ -1,5 +1,6 @@
 using System.IO;
 using W3ModWorkbench.Core.Scripts.Standalone;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core.Scripts;
 
@@ -11,7 +12,7 @@ public enum CompilerKind { WccLite, BuiltIn }
 /// </summary>
 public sealed record CompilerChoice(CompilerKind Kind, string? WccLite, string GameScripts, string? ModsFolder = null)
 {
-    public string Name => Kind == CompilerKind.WccLite ? "wcc_lite" : "the built-in compiler";
+    public string Name => Kind == CompilerKind.WccLite ? "wcc_lite" : L.T("CompilerChoice.BuiltCompiler");
 
     /// <summary>The compiler to use, or null when neither can run: no REDkit, and no game scripts for the built-in one.</summary>
     public static CompilerChoice? Pick(string? wccLitePath, string? gameFolder, bool preferBuiltIn)
@@ -27,9 +28,7 @@ public sealed record CompilerChoice(CompilerKind Kind, string? WccLite, string G
     }
 
     /// <summary>Why nothing can compile, for a tooltip or a message.</summary>
-    public const string NothingToCompileWith =
-        "Compiling needs either REDkit's wcc_lite.exe or the game's scripts. Set wcc_lite in Settings (Ctrl+, in the main window), "
-        + "or set the game folder there so the built-in compiler can find the game's scripts";
+    public static string NothingToCompileWith => L.T("CompilerChoice.NothingToCompileWith");
 
     /// <summary>Compiles the project's .ws files and, when they compile, saves the blob to <paramref name="output"/>.</summary>
     /// <param name="ownMod">The project's mod's folder name, so the built-in compiler leaves its installed copy out.</param>

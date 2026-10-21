@@ -1,4 +1,5 @@
 using System.IO;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core.Textures;
 
@@ -63,7 +64,7 @@ public static class TextureDecoder
     {
         if (info.Slices <= 1) return pixels;
         int chain = ChainSize(info);
-        if (pixels.Length < chain * info.Slices) throw new InvalidDataException("The texture's data is shorter than its slices need.");
+        if (pixels.Length < chain * info.Slices) throw new InvalidDataException(L.T("TextureDecoder.TexturesDataShorterThan"));
         var result = new byte[chain * info.Slices];
         for (int slice = 0; slice < info.Slices; slice++)
         {

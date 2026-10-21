@@ -96,7 +96,7 @@ public static class Bytecode
         {
             byte raw = code[p++];
             if (!IsKnown(raw))
-                throw new NotSupportedException($"Unknown opcode 0x{raw:X2} at byte {p - 1}.");
+                throw new NotSupportedException($"Unknown opcode 0x{raw:X2} at byte {p - 1}."); // loc-ignore
             var op = (Op)raw;
             string fmt = Operands.GetValueOrDefault(op, "");
             var args = new List<int>(fmt.Length);

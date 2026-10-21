@@ -2,6 +2,7 @@ using System.IO;
 using System.Text;
 using System.Xml;
 using System.Xml.Linq;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core.LoadOrder;
 
@@ -31,7 +32,7 @@ public sealed record XmlOverride(ModEntry Mod, string Tag, string Id, string Mod
     public string RuntimeName => !Mod.IsModio && File.Split('\\', '/') is ["dlc", { Length: > 0 } dlc, ..] ? dlc : Mod.Name;
 
     /// <summary>New Game+ definitions live in folders ending _plus (items_plus, abilities_plus) and are separate from the normal ones.</summary>
-    public string Scope => File.Split('\\', '/').Any(p => p.EndsWith("_plus", StringComparison.OrdinalIgnoreCase)) ? "New Game+" : "Normal";
+    public string Scope => File.Split('\\', '/').Any(p => p.EndsWith("_plus", StringComparison.OrdinalIgnoreCase)) ? L.T("XmlOverrideScanner.NewGame") : L.T("XmlOverrideScanner.Normal");
 
     public string Key => $"{Scope} · {Tag} {Id}";
     public bool Replaces => Mode.Equals("replace", StringComparison.OrdinalIgnoreCase);
@@ -84,7 +85,7 @@ public static class XmlOverrideScanner
                 ReadBundle(mod, bundle, local);
             }
             lock (lockObj) found.AddRange(local);
-            progress?.Report($"Read {mod.Name} ({Interlocked.Increment(ref done)} of {mods.Count})");
+            progress?.Report(L.T("XmlOverrideScanner.Read", mod.Name, Interlocked.Increment(ref done), mods.Count));
         });
 
         // Script Merger's merged mod holds the result of merging several mods' copies of a file: those mods' own copies are covered by it
@@ -142,7 +143,7 @@ public static class XmlOverrideScanner
         if (perMod.Count < 2) return result;
         if (ordered.Any(o => o.Replaces) || ordered[0].Tag.Equals("card", StringComparison.OrdinalIgnoreCase))
         {
-            result.Add(("[whole definition]", perMod[0], perMod.Skip(1).ToList()));
+            result.Add(("[whole definition]", perMod[0], perMod.Skip(1).ToList())); // loc-ignore: a marker the window words itself
             return result;
         }
         foreach (string field in perMod.SelectMany(o => o.Values.Keys).Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase))

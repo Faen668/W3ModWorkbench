@@ -1,6 +1,7 @@
 using System.Buffers.Binary;
 using System.Numerics;
 using System.Text;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core.Meshes;
 
@@ -118,7 +119,7 @@ public static class MeshCollision
                 triangles.Add(d[refsAt + first + k + 1]);
             }
         }
-        return new CollisionShape("Convex", material, points, [.. triangles]);
+        return new CollisionShape(L.T("MeshCollision.Convex"), material, points, [.. triangles]);
     }
 
     private static CollisionShape? TriangleMesh(byte[] d, int at, string material)
@@ -142,6 +143,6 @@ public static class MeshCollision
             };
             if (corners[i] >= vertices) corners[i] = 0;
         }
-        return new CollisionShape("Triangle mesh", material, points, corners);
+        return new CollisionShape(L.T("MeshCollision.TriangleMesh"), material, points, corners);
     }
 }

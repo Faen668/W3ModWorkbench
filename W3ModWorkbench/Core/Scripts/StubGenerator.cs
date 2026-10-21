@@ -1,6 +1,7 @@
 using System.IO;
 using System.Text;
 using W3ModWorkbench.Core.Scripts.Navigation;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core.Scripts;
 
@@ -78,7 +79,7 @@ public sealed class StubGenerator
                 {
                     Key = path,
                     Path = Path.GetRelativePath(folder, path),
-                    Source = "Game scripts",
+                    Source = L.T("Common.GameScripts"),
                     SourceKey = folder,
                     Read = () => File.ReadAllBytes(path),
                 };
@@ -207,17 +208,17 @@ public sealed class StubGenerator
                 sb.Append("@wrapMethod(").Append(f.Owner).Append(")\n").Append(AnnotatedHeader(f)).Append("\n{\n");
                 if (returns)
                 {
-                    sb.Append("\tvar result : ").Append(returnType).Append(";\n\n");
-                    sb.Append("\t// runs before the original\n\n");
+                    sb.Append("\tvar result : ").Append(returnType).Append(";\n\n"); // loc-ignore
+                    sb.Append("\t// runs before the original\n\n"); // loc-ignore
                     sb.Append("\tresult = ").Append(call).Append(";\n\n");
-                    sb.Append("\t// runs after the original; change result to change what is returned\n\n");
-                    sb.Append("\treturn result;\n");
+                    sb.Append("\t// runs after the original; change result to change what is returned\n\n"); // loc-ignore
+                    sb.Append("\treturn result;\n"); // loc-ignore
                 }
                 else
                 {
-                    sb.Append("\t// runs before the original\n\n");
+                    sb.Append("\t// runs before the original\n\n"); // loc-ignore
                     sb.Append('\t').Append(call).Append(";\n\n");
-                    sb.Append("\t// runs after the original\n");
+                    sb.Append("\t// runs after the original\n"); // loc-ignore
                 }
                 sb.Append("}\n");
                 break;
@@ -228,7 +229,7 @@ public sealed class StubGenerator
                 else
                 {
                     sb.Append("{\n");
-                    if (returns) sb.Append("\tvar result : ").Append(returnType).Append(";\n\n\treturn result;\n");
+                    if (returns) sb.Append("\tvar result : ").Append(returnType).Append(";\n\n\treturn result;\n"); // loc-ignore
                     sb.Append("}\n");
                 }
                 break;
@@ -284,9 +285,9 @@ public sealed class StubGenerator
 
     /// <summary>The starting code for adding a method to a class.</summary>
     public static string WriteAddMethod(string owner, string name = "MyMethod") =>
-        $"@addMethod({owner})\nfunction {name}()\n{{\n\t\n}}\n";
+        $"@addMethod({owner})\nfunction {name}()\n{{\n\t\n}}\n"; // loc-ignore
 
     /// <summary>The starting code for adding a field to a class.</summary>
     public static string WriteAddField(string owner, string name = "myField", string type = "bool") =>
-        $"@addField({owner})\nvar {name} : {type};\n";
+        $"@addField({owner})\nvar {name} : {type};\n"; // loc-ignore
 }

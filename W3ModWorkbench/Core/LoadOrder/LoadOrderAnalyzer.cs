@@ -1,6 +1,7 @@
 using System.IO;
 using System.Text;
 using W3ModWorkbench.Core.Scripts;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core.LoadOrder;
 
@@ -88,7 +89,7 @@ public sealed class LoadOrderAnalyzer
 
         var ordered = DiscoverMods(options, settings);
 
-        progress?.Report($"Reading {Format.Count(ordered.Count, "mod")}…");
+        progress?.Report(L.T("LoadOrderAnalyzer.Reading", L.T("Count.Mod", ordered.Count)));
         var scanned = new ScannedMod[ordered.Count];
         int done = 0;
         var gameTask = gameScripts is null ? Task.FromResult(GameIndex.Empty) : GameIndex.LoadAsync(gameScripts);
@@ -97,15 +98,15 @@ public sealed class LoadOrderAnalyzer
             i =>
             {
                 scanned[i] = ModScanner.Scan(ordered[i], token);
-                progress?.Report($"Read {ordered[i].Name} ({Interlocked.Increment(ref done)} of {ordered.Count})");
+                progress?.Report(L.T("LoadOrderAnalyzer.Read", ordered[i].Name, Interlocked.Increment(ref done), ordered.Count));
             }), token);
 
-        progress?.Report("Reading the game's scripts…");
+        progress?.Report(L.T("LoadOrderAnalyzer.ReadingGamesScripts"));
         var game = await gameTask;
         report.VanillaTypes = game.Types.Count;
         token.ThrowIfCancellationRequested();
 
-        progress?.Report("Checking for conflicts…");
+        progress?.Report(L.T("LoadOrderAnalyzer.CheckingConflicts"));
         foreach (var m in scanned) report.Mods.Add(m.Entry);
         var analyzer = new LoadOrderAnalyzer(report, [.. scanned], game);
         await Task.Run(() => analyzer.Analyze(settings, gameScripts is not null), token);
@@ -123,7 +124,7 @@ public sealed class LoadOrderAnalyzer
         if (list.Count > MaxItems)
         {
             int more = list.Count - MaxItems;
-            list = [.. list.Take(MaxItems), $"… and {more:N0} more"];
+            list = [.. list.Take(MaxItems), L.T("LoadOrderAnalyzer.More", more)];
         }
         _report.Findings.Add(new Finding(severity, category, title, summary, ordered, list, advice, winner?.Entry.Name));
     }
@@ -161,7 +162,7 @@ public sealed class LoadOrderAnalyzer
         GlobalFunctions();
         AnnotationConflicts();
         if (haveGame && !_game.IsEmpty) TargetsExist();
-        else _report.Warnings.Add("The game's scripts weren't found, so replaced and wrapped functions couldn't be checked against the game.");
+        else _report.Warnings.Add(L.T("LoadOrderAnalyzer.GamesScriptsWerentFound"));
         LooseReplacements();
         Dependencies();
         BundleFiles();
@@ -193,7 +194,7 @@ public sealed class LoadOrderAnalyzer
         foreach (var mod in _all)
             foreach (var (message, fatal) in mod.Problems)
                 Add(fatal ? Severity.Error : Severity.Warning, "Unreadable", $"{mod.Entry.Name}: {message}", message, [mod], [],
-                    fatal ? "A file the game would load couldn't be read. Reinstall the mod; if it's your own project, recompile it." : "Check the file for damage.");
+                    fatal ? L.T("LoadOrderAnalyzer.FileGameWouldLoad") : L.T("LoadOrderAnalyzer.CheckFileDamage"));
     }
 
     // ---- loose scripts: the same path in two mods, and replacements of the game's files
@@ -212,25 +213,24 @@ public sealed class LoadOrderAnalyzer
             _conflictedFiles.Add(g.Key);
             if (identical)
             {
-                Add(Severity.Info, "Script file", $"Identical copies of scripts\\{g.Key}", $"{Ranked(mods)} ship the same file.", mods, [],
-                    "Harmless while they stay identical. If one of them is updated they will start to conflict.");
+                Add(Severity.Info, L.T("LoadOrderAnalyzer.ScriptFile"), L.T("LoadOrderAnalyzer.IdenticalCopiesScripts", g.Key), L.T("LoadOrderAnalyzer.ShipSameFile", Ranked(mods)), mods, [],
+                    L.T("LoadOrderAnalyzer.HarmlessWhileTheyStay"));
             }
             else if (IsMerged(mods[0]))
             {
-                Add(Severity.Info, "Script file", $"scripts\\{g.Key} is covered by {mods[0].Entry.Name}",
-                    $"{Ranked(mods)} each ship this file. {mods[0].Entry.Name} loads first and is a merge, so it should already contain the others' changes.",
-                    mods, [], "Re-run the merger whenever one of these mods is updated.", mods[0]);
+                Add(Severity.Info, L.T("LoadOrderAnalyzer.ScriptFile"), L.T("LoadOrderAnalyzer.ScriptsCovered", g.Key, mods[0].Entry.Name),
+                    L.T("LoadOrderAnalyzer.EachShipFileLoads", Ranked(mods), mods[0].Entry.Name),
+                    mods, [], L.T("LoadOrderAnalyzer.ReRunMergerWhenever"), mods[0]);
             }
             else
             {
                 string first = mods[0].Entry.Name;
-                Add(Severity.Error, "Script file", $"Two mods replace scripts\\{g.Key}",
-                    $"{Ranked(mods)} each ship a different version of {(replacesGame ? "a game script" : "this file")}. Only one is used: {first}, the highest priority. "
-                    + "The others' changes in that file are lost.",
+                Add(Severity.Error, L.T("LoadOrderAnalyzer.ScriptFile"), L.T("LoadOrderAnalyzer.TwoModsReplaceScripts", g.Key),
+                    L.T(replacesGame ? "LoadOrderAnalyzer.DifferentVersionsGame" : "LoadOrderAnalyzer.DifferentVersionsFile", Ranked(mods), first),
                     mods, g.OrderBy(x => x.Mod.Entry.Order).Select((x, i) => $"{(i == 0 ? "\u2605 " : "   ")}{x.Mod.Entry.Name}: {x.File.FullPath}"),
                     replacesGame
-                        ? "Merge the files with Script Merger Remastered (Open Script Merger, below), or ask the authors for a version that uses @wrapMethod / @replaceMethod annotations, which can coexist."
-                        : "Remove one of the mods, or rename one of the files if they are unrelated.", mods[0]);
+                        ? L.T("LoadOrderAnalyzer.MergeFilesScriptMerger")
+                        : L.T("LoadOrderAnalyzer.RemoveOneModsRename"), mods[0]);
             }
         }
 
@@ -238,10 +238,10 @@ public sealed class LoadOrderAnalyzer
         {
             var over = mod.Loose.Where(l => _game.Files.ContainsKey(l.Relative)).Select(l => l.Relative).ToList();
             if (over.Count == 0) continue;
-            Add(Severity.Info, "Script file", $"{mod.Entry.Name} replaces {Format.Count(over.Count, "game script")} whole",
-                "A whole-file replacement hides every other mod's change to those files, and it is out of date as soon as the game's file changes.",
+            Add(Severity.Info, L.T("LoadOrderAnalyzer.ScriptFile"), L.T("LoadOrderAnalyzer.ReplacesWhole", mod.Entry.Name, L.T("Count.GameScript", over.Count)),
+                L.T("LoadOrderAnalyzer.WholeFileReplacementHides"),
                 [mod], over.Select(o => "scripts\\" + o),
-                "Prefer annotations (@wrapMethod and friends) where the mod can be rewritten to use them.");
+                L.T("LoadOrderAnalyzer.PreferAnnotationsWrapMethodFriends"));
         }
     }
 
@@ -262,17 +262,17 @@ public sealed class LoadOrderAnalyzer
                 // two copies of one file are already reported as a file conflict
                 var files = g.Select(x => x.Mod.Scripts.TypeFiles.GetValueOrDefault(x.Name)).ToList();
                 if (!(files.All(f => f is not null) && files.Distinct(StringComparer.OrdinalIgnoreCase).Count() == 1))
-                    Add(Severity.Error, "Type defined twice", $"{g.Key} is defined by {mods.Count} mods",
-                        $"{Ranked(mods)} each declare the {g.First().Kind} {g.Key}. Scripts that use it get whichever the game loads, and the other mod's code expects a different shape.",
-                        mods, [], "Only one of these mods can be installed, unless one is changed to use a different name.");
+                    Add(Severity.Error, L.T("LoadOrderAnalyzer.TypeDefinedTwice"), L.T("LoadOrderAnalyzer.DefinedMods", g.Key, mods.Count),
+                        L.T("LoadOrderAnalyzer.EachDeclareScriptsUse", Ranked(mods), g.First().Kind, g.Key),
+                        mods, [], L.T("LoadOrderAnalyzer.OnlyOneTheseMods"));
             }
 
             // a compiled project that declares a game class replaces it whole, as a loose file does
             if (!isEnum && _game.Types.Contains(g.Key))
                 foreach (var x in g.Where(x => !x.Mod.Scripts.TypeFiles.ContainsKey(x.Name)))
-                    Add(Severity.Info, "Script file", $"{x.Mod.Entry.Name} replaces the game's {g.Key} whole",
-                        $"The mod's compiled scripts declare {x.Kind} {g.Key}, which the game already has, so its version takes the game's place and hides other mods' additions to it.",
-                        [x.Mod], [], "Prefer annotations (@wrapMethod and friends) where the mod can be rewritten to use them.");
+                    Add(Severity.Info, L.T("LoadOrderAnalyzer.ScriptFile"), L.T("LoadOrderAnalyzer.ReplacesGamesWhole", x.Mod.Entry.Name, g.Key),
+                        L.T("LoadOrderAnalyzer.ModsCompiledScriptsDeclare", x.Kind, g.Key),
+                        [x.Mod], [], L.T("LoadOrderAnalyzer.PreferAnnotationsWrapMethodFriends"));
 
             if (isEnum && mods.Count > 1) EnumCollisions(g.Key, g.Where(x => x.Kind == "enum").Select(x => x.Mod).Distinct().ToList());
         }
@@ -286,10 +286,10 @@ public sealed class LoadOrderAnalyzer
         foreach (var g in byName)
         {
             var who = g.Select(x => x.Mod).Distinct().ToList();
-            Add(Severity.Warning, "Enum value", $"{enumName}.{g.Key} is added by {who.Count} mods",
-                $"{Ranked(who)} both add this value to {enumName}.", who,
-                g.Select(x => $"{x.Mod.Entry.Name}: {(x.Value is { } v ? v.ToString() : "value not recorded")}"),
-                "The values may differ, which breaks code compiled against the other mod's number.");
+            Add(Severity.Warning, L.T("LoadOrderAnalyzer.EnumValue"), L.T("LoadOrderAnalyzer.AddedMods", enumName, g.Key, who.Count),
+                L.T("LoadOrderAnalyzer.BothAddValue", Ranked(who), enumName), who,
+                g.Select(x => $"{x.Mod.Entry.Name}: {(x.Value is { } v ? v.ToString() : L.T("LoadOrderAnalyzer.ValueNotRecorded"))}"),
+                L.T("LoadOrderAnalyzer.ValuesMayDifferWhich"));
         }
         var byValue = mods.SelectMany(m => m.Scripts.EnumMembers.GetValueOrDefault(enumName)?.Where(kv => kv.Value is not null).Select(kv => (Mod: m, Name: kv.Key, Value: kv.Value!.Value)) ?? [])
             .GroupBy(x => x.Value).Where(g => g.Select(x => x.Name).Distinct(StringComparer.OrdinalIgnoreCase).Count() > 1
@@ -297,10 +297,10 @@ public sealed class LoadOrderAnalyzer
         foreach (var g in byValue)
         {
             var who = g.Select(x => x.Mod).Distinct().ToList();
-            Add(Severity.Warning, "Enum value", $"{enumName} value {g.Key} means two things",
-                $"{Ranked(who)} give different names the number {g.Key} in {enumName}.", who,
+            Add(Severity.Warning, L.T("LoadOrderAnalyzer.EnumValue"), L.T("LoadOrderAnalyzer.ValueMeansTwoThings", enumName, g.Key),
+                L.T("LoadOrderAnalyzer.GiveDifferentNamesNumber", Ranked(who), g.Key, enumName), who,
                 g.Select(x => $"{x.Mod.Entry.Name}: {x.Name} = {x.Value}"),
-                "Saved games and code comparing the number will read the wrong value.");
+                L.T("LoadOrderAnalyzer.SavedGamesCodeComparing"));
         }
     }
 
@@ -314,8 +314,8 @@ public sealed class LoadOrderAnalyzer
             var mods = g.Select(x => x.Mod).Distinct().ToList();
             var files = g.Select(x => x.Mod.Scripts.GlobalFiles.GetValueOrDefault(x.Name)).ToList();
             if (files.All(f => f is not null) && files.Distinct(StringComparer.OrdinalIgnoreCase).Count() == 1) continue;
-            Add(Severity.Error, "Function defined twice", $"Global function {g.Key}() is defined by {mods.Count} mods",
-                $"{Ranked(mods)} declare it. Only one definition can exist.", mods, [], "Rename one of them or remove one of the mods.");
+            Add(Severity.Error, L.T("LoadOrderAnalyzer.FunctionDefinedTwice"), L.T("LoadOrderAnalyzer.GlobalFunctionDefinedMods", g.Key, mods.Count),
+                L.T("LoadOrderAnalyzer.DeclareOnlyOneDefinition", Ranked(mods)), mods, [], L.T("LoadOrderAnalyzer.RenameOneThemRemove"));
         }
     }
 
@@ -339,29 +339,29 @@ public sealed class LoadOrderAnalyzer
                 .Select(x => $"{(x.Key.Kind == "replace" && x.Key.Mod == replaceWinner ? "\u2605 " : "")}{x.Key.Mod.Entry.Name}: @{x.Key.Kind}  ({string.Join(", ", x.Select(n => n.Note.Source).Distinct())})").ToList();
 
             if (adders.Count > 1)
-                Add(Severity.Error, "Same function", $"{target} is added by {adders.Count} mods",
-                    $"{Ranked(adders)} each add the {kind} {target}. A class can't have it twice, so one of them fails.", adders, lines,
-                    "Rename the member in one of the mods, or remove one.");
+                Add(Severity.Error, L.T("LoadOrderAnalyzer.SameFunction"), L.T("LoadOrderAnalyzer.AddedMods2", target, adders.Count),
+                    L.T("LoadOrderAnalyzer.EachAddClassCant", Ranked(adders), kind, target), adders, lines,
+                    L.T("LoadOrderAnalyzer.RenameMemberOneMods"));
             if (replacers.Count > 1)
-                Add(Severity.Error, "Same function", $"{target} is replaced by {replacers.Count} mods",
-                    $"{Ranked(replacers)} each use @replaceMethod. Only one replacement runs; the other mod's version of {target} is thrown away.", replacers, lines,
-                    "Keep one. If both are wanted, Script Merger Remastered may be able to merge them, or one mod has to be rewritten with @wrapMethod.",
+                Add(Severity.Error, L.T("LoadOrderAnalyzer.SameFunction"), L.T("LoadOrderAnalyzer.ReplacedMods", target, replacers.Count),
+                    L.T("LoadOrderAnalyzer.EachUseReplaceMethodOnly", Ranked(replacers), target), replacers, lines,
+                    L.T("LoadOrderAnalyzer.KeepOneIfBoth"),
                     replacers.OrderBy(m => m.Entry.Order).First());
             else if (replacers.Count == 1 && wrappers.Any(w => w != replacers[0]))
             {
                 var wrappingOthers = wrappers.Where(w => w != replacers[0]).ToList();
                 var later = wrappingOthers.Where(w => w.Entry.Order > replacers[0].Entry.Order).ToList();
-                Add(Severity.Warning, "Same function", $"{target} is replaced by {replacers[0].Entry.Name} and wrapped by {Format.Count(wrappingOthers.Count, "other mod")}",
-                    $"@replaceMethod swaps out the whole body; whether the wraps around it still run depends on the order the mods are applied. "
-                    + $"{replacers[0].Entry.Name} is #{replacers[0].Entry.Order}{(later.Count > 0 ? $", {Ranked(later)} come after it" : "")}.",
+                Add(Severity.Warning, L.T("LoadOrderAnalyzer.SameFunction"), L.T("LoadOrderAnalyzer.ReplacedWrapped", target, replacers[0].Entry.Name, L.T("Count.OtherMod", wrappingOthers.Count)),
+                    later.Count > 0
+                        ? L.T("LoadOrderAnalyzer.ReplaceAndWrapsLater", replacers[0].Entry.Name, replacers[0].Entry.Order, Ranked(later))
+                        : L.T("LoadOrderAnalyzer.ReplaceAndWraps", replacers[0].Entry.Name, replacers[0].Entry.Order),
                     g.Select(x => x.Mod).Distinct(), lines,
-                    "Check in game that both mods still work. A replace that loads after a wrap usually discards it; Script Merger Remastered can combine such changes.");
+                    L.T("LoadOrderAnalyzer.CheckGameBothMods"));
             }
             else if (wrappers.Count > 1 && replacers.Count == 0)
-                Add(Severity.Info, "Same function", $"{target} is wrapped by {wrappers.Count} mods",
-                    $"{Ranked(wrappers)} each wrap it. Wraps stack, each calling the one below, so this normally works. "
-                    + "It breaks only if one of them forgets to call wrappedMethod() or changes the result the other expects.",
-                    wrappers, lines, "No action unless one of the mods misbehaves; then try changing their order.");
+                Add(Severity.Info, L.T("LoadOrderAnalyzer.SameFunction"), L.T("LoadOrderAnalyzer.WrappedMods", target, wrappers.Count),
+                    L.T("LoadOrderAnalyzer.EachWrapWrapsStack", Ranked(wrappers)),
+                    wrappers, lines, L.T("LoadOrderAnalyzer.NoActionUnlessOne"));
         }
     }
 
@@ -395,21 +395,21 @@ public sealed class LoadOrderAnalyzer
             if (missingTypes.Count > 0)
             {
                 var disabledOwner = _all.Where(m => !m.Entry.Enabled && missingTypes.Keys.Any(t => m.Scripts.Types.ContainsKey(t))).ToList();
-                Add(Severity.Error, "Missing target", $"{mod.Entry.Name} changes {Format.Count(missingTypes.Count, "class", "classes")} that {(missingTypes.Count == 1 ? "doesn't" : "don't")} exist",
-                    "Its annotations name classes that neither the game nor any enabled mod declares, so they have nothing to attach to."
-                    + (disabledOwner.Count > 0 ? $" {string.Join(", ", disabledOwner.Select(Who))} declare some, but {(disabledOwner.Count == 1 ? "is" : "are")} disabled." : ""),
-                    [mod, .. disabledOwner], missingTypes.SelectMany(kv => kv.Value.Select(v => $"{v}   (class {kv.Key} not found)")),
-                    "The mod was probably written for another game version, or needs a mod that isn't installed or enabled.");
+                Add(Severity.Error, L.T("LoadOrderAnalyzer.MissingTarget"), L.T("LoadOrderAnalyzer.ChangesMissingClasses", mod.Entry.Name, missingTypes.Count),
+                    disabledOwner.Count > 0
+                        ? L.T("LoadOrderAnalyzer.MissingClassesDisabled", string.Join(", ", disabledOwner.Select(Who)), disabledOwner.Count)
+                        : L.T("LoadOrderAnalyzer.MissingClasses"),
+                    [mod, .. disabledOwner], missingTypes.SelectMany(kv => kv.Value.Select(v => L.T("LoadOrderAnalyzer.ClassNotFound", v, kv.Key))),
+                    L.T("LoadOrderAnalyzer.ModProbablyWrittenAnother"));
             }
             if (missingMembers.Count > 0)
-                Add(Severity.Error, "Missing target", $"{mod.Entry.Name} wraps or replaces {Format.Count(missingMembers.Count, "function")} the game doesn't have",
-                    "The classes exist, but these functions are not declared in them (or their base classes) by the game or any enabled mod. "
-                    + "The mod was most likely written for a different version of the game, and these will fail to compile or never run.",
-                    [mod], missingMembers, "Get a version of the mod made for this game version, or remove it.");
+                Add(Severity.Error, L.T("LoadOrderAnalyzer.MissingTarget"), L.T("LoadOrderAnalyzer.WrapsReplacesGameDoesnt", mod.Entry.Name, L.T("Count.Function", missingMembers.Count)),
+                    L.T("LoadOrderAnalyzer.ClassesExistButThese"),
+                    [mod], missingMembers, L.T("LoadOrderAnalyzer.GetVersionModMade"));
             if (missingGlobals.Count > 0)
-                Add(Severity.Error, "Missing target", $"{mod.Entry.Name} changes {Format.Count(missingGlobals.Count, "global function")} the game doesn't have",
-                    "No global function of these names exists in the game's scripts or an enabled mod.", [mod], missingGlobals,
-                    "Get a version of the mod made for this game version, or remove it.");
+                Add(Severity.Error, L.T("LoadOrderAnalyzer.MissingTarget"), L.T("LoadOrderAnalyzer.ChangesGameDoesntHave", mod.Entry.Name, L.T("Count.GlobalFunction", missingGlobals.Count)),
+                    L.T("LoadOrderAnalyzer.NoGlobalFunctionThese"), [mod], missingGlobals,
+                    L.T("LoadOrderAnalyzer.GetVersionModMade"));
         }
     }
 
@@ -426,9 +426,9 @@ public sealed class LoadOrderAnalyzer
                     .Select(a => $"@{a.Kind} {a.Key}  ({other.Entry.Name})")
                     .ToList();
                 if (lost.Count == 0) continue;
-                Add(Severity.Warning, "Missing target", $"{owner.Entry.Name}'s copy of a game class lacks what {other.Entry.Name} changes",
-                    $"{owner.Entry.Name} replaces the game's class whole, and its version has no such function. {other.Entry.Name}'s annotations have nothing to attach to.",
-                    [owner, other], lost, "Update the replacement from the game's current script, or use annotations instead of replacing the file.");
+                Add(Severity.Warning, L.T("LoadOrderAnalyzer.MissingTarget"), L.T("LoadOrderAnalyzer.CopyGameClassLacks", owner.Entry.Name, other.Entry.Name),
+                    L.T("LoadOrderAnalyzer.ReplacesGamesClassWhole", owner.Entry.Name, other.Entry.Name),
+                    [owner, other], lost, L.T("LoadOrderAnalyzer.UpdateReplacementGamesCurrent"));
             }
     }
 
@@ -471,7 +471,7 @@ public sealed class LoadOrderAnalyzer
             {
                 if (user.Scripts.Globals.Contains(g) || _game.Globals.Contains(g) || user.Scripts.Types.ContainsKey(g) || _game.Types.Contains(g)) continue;
                 if (globalProviders.TryGetValue(g, out var ps))
-                    foreach (var p in ps) Use(p, $"function {g}()");
+                    foreach (var p in ps) Use(p, L.T("LoadOrderAnalyzer.Function", g));
             }
             foreach (string key in user.Scripts.NeedMembers)
             {
@@ -485,7 +485,7 @@ public sealed class LoadOrderAnalyzer
                     if (_game.Members.Contains(k)) break;
                     if (memberProviders.TryGetValue(k, out var ps))
                     {
-                        foreach (var p in ps) Use(p, $"member {k}");
+                        foreach (var p in ps) Use(p, L.T("LoadOrderAnalyzer.Member", k));
                         break;
                     }
                     at = _bases.TryGetValue(at, out var b) ? b : null;
@@ -499,33 +499,30 @@ public sealed class LoadOrderAnalyzer
                 var examples = what.Take(MaxItems).ToList();
                 if (!provider.Entry.Enabled)
                 {
-                    Add(Severity.Error, "Dependency", $"{user.Entry.Name} needs {provider.Entry.Name}, which is disabled",
-                        $"{user.Entry.Name} uses {Format.Count(what.Count, "thing")} that only {provider.Entry.Name} provides, and mods.settings has {provider.Entry.Name} switched off.",
-                        [user, provider], examples, $"Enable {provider.Entry.Name}, or disable {user.Entry.Name} too.");
+                    Add(Severity.Error, L.T("LoadOrderAnalyzer.Category.Dependency"), L.T("LoadOrderAnalyzer.NeedsWhichDisabled", user.Entry.Name, provider.Entry.Name),
+                        L.T("LoadOrderAnalyzer.UsesOnlyProvidesMods", user.Entry.Name, L.T("Count.Thing", what.Count), provider.Entry.Name),
+                        [user, provider], examples, L.T("LoadOrderAnalyzer.EnableDisableToo", provider.Entry.Name, user.Entry.Name));
                 }
                 else if (provider.Entry.Order < user.Entry.Order && !provider.Entry.HasFixedPlace)
                 {
                     // scripts compile in reverse load order, so what a mod builds on has to load after it
-                    Add(Severity.Error, "Load order", $"{provider.Entry.Name} loads before {user.Entry.Name}, which builds on it",
-                        $"{user.Entry.Name} (#{user.Entry.Order}) uses {Format.Count(what.Count, "thing")} from {provider.Entry.Name} (#{provider.Entry.Order}). "
-                        + "The game compiles scripts in reverse load order, so the mod that provides them has to load last. As it is this tends to end in "
-                        + "\"Unknown base class\" or \"different number of parameters\" errors when the game starts.",
+                    Add(Severity.Error, L.T("LoadOrderAnalyzer.LoadOrder"), L.T("LoadOrderAnalyzer.LoadsBeforeWhichBuilds", provider.Entry.Name, user.Entry.Name),
+                        L.T("LoadOrderAnalyzer.UsesGameCompilesScripts", user.Entry.Name, user.Entry.Order, L.T("Count.Thing", what.Count), provider.Entry.Name, provider.Entry.Order),
                         [user, provider], examples, FixOrder(provider, user));
                 }
                 else if (provider.Entry.Priority is null != user.Entry.Priority is null && !provider.Entry.HasFixedPlace)
                 {
                     var set = provider.Entry.Priority is null ? user : provider;
-                    Add(Severity.Warning, "Load order", $"Only one of {user.Entry.Name} and {provider.Entry.Name} has a priority",
-                        $"{set.Entry.Name} has priority {set.Entry.Priority} in mods.settings and the other has none. Mixing the two makes the compile order depend on how the tool treats unlisted mods, "
-                        + $"and {user.Entry.Name} uses {Format.Count(what.Count, "thing")} from {provider.Entry.Name}.",
+                    Add(Severity.Warning, L.T("LoadOrderAnalyzer.LoadOrder"), L.T("LoadOrderAnalyzer.OnlyOneHasPriority", user.Entry.Name, provider.Entry.Name),
+                        L.T("LoadOrderAnalyzer.HasPriorityModsSettings", set.Entry.Name, set.Entry.Priority, user.Entry.Name, L.T("Count.Thing", what.Count), provider.Entry.Name),
                         [user, provider], examples,
-                        "Give both a priority, with the mod that provides the scripts the higher number (200 or 1000 is fine), or remove priorities from both and let the folder names decide.");
+                        L.T("LoadOrderAnalyzer.GiveBothPriorityMod"));
                 }
                 else
                 {
-                    Add(Severity.Info, "Dependency", $"{user.Entry.Name} needs {provider.Entry.Name}",
-                        $"{user.Entry.Name} uses {Format.Count(what.Count, "thing")} from {provider.Entry.Name}, which is installed, enabled and in the right place in the order (it loads after, so it compiles first).",
-                        [user, provider], examples, "Nothing to do. Keep both installed.");
+                    Add(Severity.Info, L.T("LoadOrderAnalyzer.Category.Dependency"), L.T("LoadOrderAnalyzer.Needs", user.Entry.Name, provider.Entry.Name),
+                        L.T("LoadOrderAnalyzer.UsesWhichInstalledEnabled", user.Entry.Name, L.T("Count.Thing", what.Count), provider.Entry.Name),
+                        [user, provider], examples, L.T("LoadOrderAnalyzer.NothingDoKeepBoth"));
                 }
             }
         }
@@ -551,11 +548,10 @@ public sealed class LoadOrderAnalyzer
                 .Where(g => !user.Scripts.Globals.Contains(g) && !_game.Globals.Contains(g) && !_active.Any(m => m.Scripts.Globals.Contains(g)))
                 .Order(StringComparer.OrdinalIgnoreCase).ToList();
             if (unknown.Count == 0 && unknownGlobals.Count == 0) continue;
-            Add(Severity.Error, "Missing dependency", $"{user.Entry.Name} uses {Format.Count(unknown.Count + unknownGlobals.Count, "thing")} that nothing installed provides",
-                "Its compiled scripts link to these classes or functions, but neither the game nor any enabled mod declares them. A mod it depends on is probably not installed, "
-                + "or it was written for a different game version.",
-                [user], unknown.Select(t => $"type {t}").Concat(unknownGlobals.Select(g => $"function {g}()")),
-                "Install the mod it needs (the mod's page lists its requirements), or remove this one.");
+            Add(Severity.Error, L.T("LoadOrderAnalyzer.MissingDependency"), L.T("LoadOrderAnalyzer.UsesNothingInstalledProvides", user.Entry.Name, L.T("Count.Thing", unknown.Count + unknownGlobals.Count)),
+                L.T("LoadOrderAnalyzer.CompiledScriptsLinkThese"),
+                [user], unknown.Select(t => L.T("LoadOrderAnalyzer.Type", t)).Concat(unknownGlobals.Select(g => L.T("LoadOrderAnalyzer.Function", g))),
+                L.T("LoadOrderAnalyzer.InstallModNeedsMods"));
         }
     }
 
@@ -568,7 +564,7 @@ public sealed class LoadOrderAnalyzer
     private static bool IsBuiltIn(string type) => BuiltIns.Contains(type);
 
     private static string FixOrder(ScannedMod provider, ScannedMod user) =>
-        $"Give {provider.Entry.Name} a higher priority number than {user.Entry.Name} (200 or 1000 is fine; both need one), or remove priorities from both and let folder names decide: a prefix such as modzzz sorts last, so it compiles first.";
+        L.T("LoadOrderAnalyzer.GiveHigherPriorityNumber", provider.Entry.Name, user.Entry.Name);
 
     private Dictionary<string, List<ScannedMod>> Providers(Func<ScannedMod, IEnumerable<string>> names)
     {
@@ -593,15 +589,15 @@ public sealed class LoadOrderAnalyzer
                                                                   || m.Entry.Title.Equals(declared, StringComparison.OrdinalIgnoreCase)))
                     ?? _all.FirstOrDefault(m => m != mod && m.Entry.Name.Contains(declared, StringComparison.OrdinalIgnoreCase));
                 if (found is null)
-                    Add(Severity.Error, "Dependency", $"{mod.Entry.Name} needs {declared}, which isn't installed",
-                        $"The mod's info.json lists {declared} as a dependency, but no installed mod or DLC matches it.", [mod], [],
-                        $"Install {declared}.");
+                    Add(Severity.Error, L.T("LoadOrderAnalyzer.Category.Dependency"), L.T("LoadOrderAnalyzer.NeedsWhichIsntInstalled", mod.Entry.Name, declared),
+                        L.T("LoadOrderAnalyzer.ModsInfoJsonLists", declared), [mod], [],
+                        L.T("LoadOrderAnalyzer.Install", declared));
                 else if (!found.Entry.Enabled)
-                    Add(Severity.Error, "Dependency", $"{mod.Entry.Name} needs {found.Entry.Name}, which is disabled",
-                        "The mod's info.json lists it as a dependency.", [mod, found], [], $"Enable {found.Entry.Name} in the mod manager.");
+                    Add(Severity.Error, L.T("LoadOrderAnalyzer.Category.Dependency"), L.T("LoadOrderAnalyzer.NeedsWhichDisabled", mod.Entry.Name, found.Entry.Name),
+                        L.T("LoadOrderAnalyzer.ModsInfoJsonLists2"), [mod, found], [], L.T("LoadOrderAnalyzer.EnableModManager", found.Entry.Name));
                 else if (found.Entry.Order < mod.Entry.Order && !found.Entry.HasFixedPlace)
-                    Add(Severity.Error, "Load order", $"{found.Entry.Name} loads before {mod.Entry.Name}, which declares it as a dependency",
-                        $"{mod.Entry.Name} is #{mod.Entry.Order} and {found.Entry.Name} #{found.Entry.Order}. Scripts compile in reverse load order, so a dependency has to load after the mods that use it.",
+                    Add(Severity.Error, L.T("LoadOrderAnalyzer.LoadOrder"), L.T("LoadOrderAnalyzer.LoadsBeforeWhichDeclares", found.Entry.Name, mod.Entry.Name),
+                        L.T("LoadOrderAnalyzer.ScriptsCompileReverseLoad", mod.Entry.Name, mod.Entry.Order, found.Entry.Name, found.Entry.Order),
                         [mod, found], [], FixOrder(found, mod));
             }
     }
@@ -635,20 +631,20 @@ public sealed class LoadOrderAnalyzer
         foreach (var (mods, different, same) in sets.Values)
         {
             if (different.Count > 0 && IsMerged(mods[0]))
-                Add(Severity.Info, "Bundle file", $"{Format.Count(different.Count, "file")} also in the bundles of {Format.Count(mods.Count - 1, "other mod")}, covered by {mods[0].Entry.Name}",
-                    $"{Ranked(mods)} each contain these files with different content. {mods[0].Entry.Name} loads first and is a merge, so it should already combine them.",
-                    mods, different.Order(StringComparer.OrdinalIgnoreCase), "Re-run the merger whenever one of these mods is updated.", mods[0]);
+                Add(Severity.Info, L.T("LoadOrderAnalyzer.BundleFile"), L.T("LoadOrderAnalyzer.AlsoBundlesCovered", L.T("Count.File", different.Count), L.T("Count.OtherMod", mods.Count - 1), mods[0].Entry.Name),
+                    L.T("LoadOrderAnalyzer.EachContainTheseFiles", Ranked(mods), mods[0].Entry.Name),
+                    mods, different.Order(StringComparer.OrdinalIgnoreCase), L.T("LoadOrderAnalyzer.ReRunMergerWhenever"), mods[0]);
             else if (different.Count > 0)
             {
                 string first = mods[0].Entry.Name;
-                Add(Severity.Warning, "Bundle file", $"{Format.Count(different.Count, "file")} in {mods.Count} mods' bundles differ",
-                    $"{Ranked(mods)} each contain these files with different content. The game uses one copy per file: {first}'s, the highest priority, in each case. The others' changes to them are lost.",
-                    mods, different.Order(StringComparer.OrdinalIgnoreCase), "Decide which mod's version you want, or let Script Merger Remastered combine them where it can (Open Script Merger, below).", mods[0]);
+                Add(Severity.Warning, L.T("LoadOrderAnalyzer.BundleFile"), L.T("LoadOrderAnalyzer.ModsBundlesDiffer", L.T("Count.File", different.Count), mods.Count),
+                    L.T("LoadOrderAnalyzer.EachContainTheseFiles2", Ranked(mods), first),
+                    mods, different.Order(StringComparer.OrdinalIgnoreCase), L.T("LoadOrderAnalyzer.DecideWhichModsVersion"), mods[0]);
             }
             if (same.Count > 0)
-                Add(Severity.Info, "Bundle file", $"{Format.Count(same.Count, "identical file")} shared by {mods.Count} mods' bundles",
-                    $"{Ranked(mods)} ship byte-identical copies of these files, so it doesn't matter which one is used.", mods, same.Order(StringComparer.OrdinalIgnoreCase),
-                    "No action needed.");
+                Add(Severity.Info, L.T("LoadOrderAnalyzer.BundleFile"), L.T("LoadOrderAnalyzer.SharedModsBundles", L.T("Count.IdenticalFile", same.Count), mods.Count),
+                    L.T("LoadOrderAnalyzer.ShipByteIdenticalCopies", Ranked(mods)), mods, same.Order(StringComparer.OrdinalIgnoreCase),
+                    L.T("LoadOrderAnalyzer.NoActionNeeded"));
         }
     }
 
@@ -674,9 +670,9 @@ public sealed class LoadOrderAnalyzer
             set.Lines.Add($"{id}   " + string.Join("  vs  ", list.OrderBy(x => x.Mod.Entry.Order).Select((x, i) => $"{(i == 0 ? "\u2605 " : "")}{x.Mod.Entry.Name}: \"{Cut(x.Text)}\"")));
         }
         foreach (var (mods, lines) in sets.Values)
-            Add(Severity.Warning, "Strings", $"{Format.Count(lines.Count, "string ID")} used by {mods.Count} mods with different text",
-                $"{Ranked(mods)} each define strings with the same IDs. The game shows one text for an ID, so one mod's text appears where the other's belongs.",
-                mods, lines, "Move one mod's strings to a free ID block (the strings editor's Check IDs suggests one).", mods[0]);
+            Add(Severity.Warning, L.T("LoadOrderAnalyzer.Category.Strings"), L.T("LoadOrderAnalyzer.UsedModsDifferentText", L.T("Count.StringID", lines.Count), mods.Count),
+                L.T("LoadOrderAnalyzer.EachDefineStringsSame", Ranked(mods)),
+                mods, lines, L.T("LoadOrderAnalyzer.MoveOneModsStrings"), mods[0]);
     }
 
     // ---- compiled for another platform
@@ -688,9 +684,9 @@ public sealed class LoadOrderAnalyzer
         if (groups.Count < 2) return;
         var common = groups.OrderByDescending(g => g.Count()).First();
         foreach (var g in groups.Where(g => g != common))
-            Add(Severity.Warning, "Build", $"{Format.Count(g.Count(), "mod")} compiled for {g.Key}, the rest for {common.Key}",
-                $"Most compiled scripts say they were built for {common.Key}.", g, g.Select(m => $"{m.Entry.Name}: {m.Platform}, build {m.Build}"),
-                "Scripts built for another platform may not load. Get the version made for this game.");
+            Add(Severity.Warning, L.T("LoadOrderAnalyzer.Category.Build"), L.T("LoadOrderAnalyzer.CompiledRest", L.T("Count.Mod", g.Count()), g.Key, common.Key),
+                L.T("LoadOrderAnalyzer.MostCompiledScriptsSay", common.Key), g, g.Select(m => L.T("LoadOrderAnalyzer.Build", m.Entry.Name, m.Platform, m.Build)),
+                L.T("LoadOrderAnalyzer.ScriptsBuiltAnotherPlatform"));
     }
 
     // ---- mods.settings
@@ -698,32 +694,32 @@ public sealed class LoadOrderAnalyzer
     private void SettingsNotes(Dictionary<string, (bool Enabled, int? Priority)> settings)
     {
         if (_report.SettingsFile is null)
-            _report.Warnings.Add("mods.settings wasn't found (Documents\\The Witcher 3), so priorities are mod folder order. Run the game once, or set the file in the box above.");
+            _report.Warnings.Add(L.T("LoadOrderAnalyzer.ModsSettingsWasntFound"));
         else
         {
             var unlisted = _all.Where(m => !m.Entry.HasFixedPlace && m.Entry.Priority is null).ToList();
             if (unlisted.Count > 0)
-                Add(Severity.Info, "Priority", $"{Format.Count(unlisted.Count, "mod")} not listed in mods.settings",
-                    "mods.settings gives each mod a priority. These have none, so they load after the listed mods, in folder name order. For script mods leaving priorities out is the recommended way.",
-                    unlisted, unlisted.Select(m => m.Entry.Name), "Nothing, unless one of them also needs a priority: a mod with a priority and a dependency without one is flagged separately.");
+                Add(Severity.Info, L.T("LoadOrderAnalyzer.Category.Priority"), L.T("LoadOrderAnalyzer.NotListedModsSettings", L.T("Count.Mod", unlisted.Count)),
+                    L.T("LoadOrderAnalyzer.ModsSettingsGivesEach"),
+                    unlisted, unlisted.Select(m => m.Entry.Name), L.T("LoadOrderAnalyzer.NothingUnlessOneThem"));
 
             var ties = _all.Where(m => m.Entry.Priority is not null && !m.Entry.HasFixedPlace).GroupBy(m => m.Entry.Priority!.Value).Where(g => g.Count() > 1);
             foreach (var g in ties)
-                Add(Severity.Info, "Priority", $"{g.Count()} mods share priority {g.Key}",
-                    "Equal priorities fall back to folder name order.", g, g.Select(m => m.Entry.Name), "Give each a different number if it matters which one wins.");
+                Add(Severity.Info, L.T("LoadOrderAnalyzer.Category.Priority"), L.T("LoadOrderAnalyzer.ModsSharePriority", g.Count(), g.Key),
+                    L.T("LoadOrderAnalyzer.EqualPrioritiesFallBack"), g, g.Select(m => m.Entry.Name), L.T("LoadOrderAnalyzer.GiveEachDifferentNumber"));
 
             string modsRoot = _report.ModsFolder;
             var stale = settings.Keys.Where(k => !Directory.Exists(Path.Combine(modsRoot, k)) && !k.StartsWith("dlc", StringComparison.OrdinalIgnoreCase)).ToList();
             if (stale.Count > 0)
-                Add(Severity.Warning, "Priority", $"{Format.Count(stale.Count, "entry", "entries")} in mods.settings for mods that aren't installed",
-                    "Priorities of mods you removed stay behind and still shape the compile order, which has caused \"Unknown base class\" errors for other players.",
-                    [], stale, "Delete these sections from mods.settings (the mod manager's Mod Settings tab shows the same file).");
+                Add(Severity.Warning, L.T("LoadOrderAnalyzer.Category.Priority"), L.T("LoadOrderAnalyzer.ModsSettingsModsArent", L.T("Count.Entry", stale.Count)),
+                    L.T("LoadOrderAnalyzer.PrioritiesModsYouRemoved"),
+                    [], stale, L.T("LoadOrderAnalyzer.DeleteTheseSectionsMods"));
         }
 
         var disabled = _all.Where(m => !m.Entry.Enabled).ToList();
         if (disabled.Count > 0)
-            Add(Severity.Info, "Priority", $"{Format.Count(disabled.Count, "mod")} disabled in mods.settings",
-                "These aren't loaded, so they are left out of every check here except dependencies.", disabled, disabled.Select(m => m.Entry.Name), "None needed.");
+            Add(Severity.Info, L.T("LoadOrderAnalyzer.Category.Priority"), L.T("LoadOrderAnalyzer.DisabledModsSettings", L.T("Count.Mod", disabled.Count)),
+                L.T("LoadOrderAnalyzer.TheseArentLoadedSo"), disabled, disabled.Select(m => m.Entry.Name), L.T("LoadOrderAnalyzer.NoneNeeded"));
     }
 
     // ---------------------------------------------------------------- export
@@ -731,25 +727,25 @@ public sealed class LoadOrderAnalyzer
     public static string ToMarkdown(LoadOrderReport r)
     {
         var sb = new StringBuilder();
-        sb.Append("# Load order report\n\n");
-        sb.Append($"Mods folder: `{r.ModsFolder}`  \n");
-        sb.Append($"{Format.Count(r.Mods.Count, "mod")}: {r.Count(Severity.Error)} problems, {r.Count(Severity.Warning)} warnings, {r.Count(Severity.Info)} notes.\n\n");
-        sb.Append("## Load order\n\n| # | Mod | Priority | State | Contents |\n|---|---|---|---|---|\n");
+        sb.Append($"# {L.T("LoadOrderAnalyzer.Report.Title")}\n\n");
+        sb.Append($"{L.T("LoadOrderAnalyzer.Report.ModsFolder", $"`{r.ModsFolder}`")}  \n");
+        sb.Append($"{L.T("LoadOrderAnalyzer.Report.Counts", L.T("Count.Mod", r.Mods.Count), r.Count(Severity.Error), r.Count(Severity.Warning), r.Count(Severity.Info))}\n\n");
+        sb.Append($"## {L.T("LoadOrderAnalyzer.Report.LoadOrder")}\n\n| # | {L.T("LoadOrderAnalyzer.Report.Mod")} | {L.T("LoadOrderAnalyzer.Report.Priority")} | {L.T("LoadOrderAnalyzer.Report.State")} | {L.T("LoadOrderAnalyzer.Report.Contents")} |\n|---|---|---|---|---|\n");
         foreach (var m in r.Mods)
-            sb.Append($"| {m.Order} | {m.Name}{(m.IsDlc ? " (DLC)" : m.IsModio ? " (mod.io)" : "")} | {(m.Priority?.ToString() ?? "–")} | {(m.Enabled ? "on" : "off")} | {m.Contents} |\n");
+            sb.Append($"| {m.Order} | {m.Name}{(m.IsDlc ? " (DLC)" : m.IsModio ? " (mod.io)" : "")} | {(m.Priority?.ToString() ?? "–")} | {(m.Enabled ? L.T("LoadOrderAnalyzer.Report.On") : L.T("LoadOrderAnalyzer.Report.Off"))} | {m.Contents} |\n");
         foreach (var sev in new[] { Severity.Error, Severity.Warning, Severity.Info })
         {
             var list = r.Findings.Where(f => f.Severity == sev).ToList();
             if (list.Count == 0) continue;
-            sb.Append($"\n## {(sev == Severity.Error ? "Problems" : sev == Severity.Warning ? "Warnings" : "Notes")} ({list.Count})\n");
+            sb.Append($"\n## {L.T(sev == Severity.Error ? "LoadOrderAnalyzer.Report.Problems" : sev == Severity.Warning ? "LoadOrderAnalyzer.Report.Warnings" : "LoadOrderAnalyzer.Report.Notes")} ({list.Count})\n");
             foreach (var f in list)
             {
                 sb.Append($"\n### {f.Title}\n\n{f.Summary}\n\n");
-                if (f.Mods.Count > 0) sb.Append($"Mods: {string.Join(", ", f.Mods)}\n\n");
-                if (f.Winner is not null) sb.Append($"**Winner: {f.Winner}**\n\n");
+                if (f.Mods.Count > 0) sb.Append($"{L.T("LoadOrderAnalyzer.Report.Mods", string.Join(", ", f.Mods))}\n\n");
+                if (f.Winner is not null) sb.Append($"**{L.T("LoadOrderAnalyzer.Report.Winner", f.Winner)}**\n\n");
                 foreach (string item in f.Items.Take(60)) sb.Append($"- `{item}`\n");
-                if (f.Items.Count > 60) sb.Append($"- … and {f.Items.Count - 60} more\n");
-                sb.Append($"\n**What to do:** {f.Advice}\n");
+                if (f.Items.Count > 60) sb.Append($"- {L.T("LoadOrderAnalyzer.Report.More", f.Items.Count - 60)}\n");
+                sb.Append($"\n**{L.T("LoadOrderAnalyzer.Report.WhatToDo")}** {f.Advice}\n");
             }
         }
         return sb.ToString();

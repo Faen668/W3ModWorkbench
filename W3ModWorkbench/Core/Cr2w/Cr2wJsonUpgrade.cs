@@ -1,6 +1,7 @@
 using System.IO;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core.Cr2w;
 
@@ -34,8 +35,8 @@ public static partial class Cr2wJson
     public static JsonObject UpgradeToLatest(JsonObject source, out Cr2wUpgradeReport report)
     {
         var root = (JsonObject)source.DeepClone();
-        var file = root["file"] as JsonObject ?? throw new InvalidDataException("The JSON has no \"file\" block.");
-        var objects = root["objects"] as JsonArray ?? throw new InvalidDataException("The JSON has no \"objects\" list.");
+        var file = root["file"] as JsonObject ?? throw new InvalidDataException(L.T("Cr2wJsonUpgrade.JsonHasNoFile"));
+        var objects = root["objects"] as JsonArray ?? throw new InvalidDataException(L.T("Cr2wJsonUpgrade.JsonHasNoObjects"));
         int from = (int?)file["version"] ?? Cr2wFile.LastVersion;
         if (from >= Cr2wFile.LastVersion)
         {
@@ -108,7 +109,7 @@ public static partial class Cr2wJson
     /// </summary>
     private static byte[] NamedVariables(byte[] bytes, JsonArray objects, JsonObject file, string path)
     {
-        var names = file["names"] as JsonArray ?? throw new InvalidDataException("The JSON has no names.");
+        var names = file["names"] as JsonArray ?? throw new InvalidDataException(L.T("Cr2wJsonUpgrade.JsonHasNoNames"));
         var lists = new List<List<int>>();
         int at = 0;
         bool ok = bytes.Length >= 4 && BitConverter.ToInt32(bytes) == 2;
@@ -126,7 +127,7 @@ public static partial class Cr2wJson
             at += 4 * count;
         }
         if (!ok || lists.Count is not (3 or 5))
-            throw new NotSupportedException($"{path} is a behaviour graph whose lists of variables aren't in a form this can read, so the file can't be saved as {Cr2wFile.LastVersion}.");
+            throw new NotSupportedException(L.T("Cr2wJsonUpgrade.BehaviourGraphWhoseLists", path, Cr2wFile.LastVersion));
         while (lists.Count < 5) lists.Add([]);
 
         var result = new List<byte>(bytes.Length * 2);
@@ -148,12 +149,12 @@ public static partial class Cr2wJson
             {
                 int number = lists[list][i];
                 if (number < 1 || number > objects.Count || objects[number - 1] is not JsonObject variable)
-                    throw new NotSupportedException($"{path} is a behaviour graph with a variable that isn't one of its objects, so the file can't be saved as {Cr2wFile.LastVersion}.");
+                    throw new NotSupportedException(L.T("Cr2wJsonUpgrade.BehaviourGraphVariableIsnt", path, Cr2wFile.LastVersion));
                 // one without a name is kept under the empty name, as the engine keeps it
                 string name = (string?)variable["name"] ?? "";
                 int index = names.Select(n => (string?)n).ToList().IndexOf(name);
                 if (index < 0) { index = names.Count; names.Add(name); }
-                if (index > ushort.MaxValue) throw new NotSupportedException($"{path}: too many names to keep a variable's name in a behaviour graph.");
+                if (index > ushort.MaxValue) throw new NotSupportedException(L.T("Cr2wJsonUpgrade.TooManyNamesKeep", path));
                 result.AddRange(BitConverter.GetBytes((ushort)index));
                 U32(number);
                 variable["varIndex"] = i;
@@ -266,16 +267,16 @@ public static partial class Cr2wJson
 
         public void Object(JsonObject node, string path)
         {
-            string className = (string?)node["$class"] ?? throw new InvalidDataException($"{path} has no \"$class\".");
+            string className = (string?)node["$class"] ?? throw new InvalidDataException(L.T("Cr2wJsonUpgrade.HasNoClass", path));
             if (RenamedClasses.TryGetValue(className, out string? renamedClass) && node["$data"] is null)
             {
                 node["$class"] = className = renamedClass;
-                Note($"class {className}", $"{path}: the class is {renamedClass} now.");
+                Note(L.T("Cr2wJsonUpgrade.Class", className), L.T("Cr2wJsonUpgrade.ClassNow", path, renamedClass));
             }
             if (node["$data"] is not null)
             {
                 if (dependencies is not null)
-                    throw new InvalidDataException($"{path} ({className}) couldn't be read, so it can't be saved as version {Cr2wFile.LastVersion}.");
+                    throw new InvalidDataException(L.T("Cr2wJsonUpgrade.CouldntReadSoCant", path, className, Cr2wFile.LastVersion));
                 return; // a newer layout's object, the same bytes in 164
             }
             node.Remove("$name");
@@ -312,9 +313,9 @@ public static partial class Cr2wJson
                 byte[] bytes = Convert.FromBase64String((string)tail!);
                 byte[]? converted = Tail(className, bytes, out string? why);
                 if (converted is null)
-                    throw new NotSupportedException($"{path} is a {className}, which keeps data of its own after its properties"
-                        + (why is null ? $", and that hasn't been checked against version {Cr2wFile.LastVersion} files yet" : $": {why}")
-                        + $", so the file can't be saved as {Cr2wFile.LastVersion}.");
+                    throw new NotSupportedException(why is null
+                        ? L.T("Cr2wJsonUpgrade.TailNotChecked", path, className, Cr2wFile.LastVersion)
+                        : L.T("Cr2wJsonUpgrade.TailUnreadable", path, className, why, Cr2wFile.LastVersion));
                 if (converted.Length == 0) node.Remove("$tail");
                 else if (!converted.AsSpan().SequenceEqual(bytes)) node["$tail"] = Convert.ToBase64String(converted);
             }
@@ -388,7 +389,7 @@ public static partial class Cr2wJson
                 }
                 if (at != bytes.Length) return null;
                 if (components)
-                    Note($"template parts {className}", $"A {className} kept components of the older streaming in files of its own after its properties, which the engine no longer reads: the game's cooked copies of all of REDkit's 27 such templates have none of them but those its compiled data (flatCompiledData) has too. They're left out, as the engine leaves them out.");
+                    Note(L.T("Cr2wJsonUpgrade.TemplateParts", className), L.T("Cr2wJsonUpgrade.KeptComponentsOlderStreaming", className));
                 return [0, 0, 0, 0];
             }
             switch (className)
@@ -407,7 +408,7 @@ public static partial class Cr2wJson
                     if (mips >= 0 && at + 8 <= bytes.Length && BitConverter.ToInt32(bytes, (int)at + 4) == 16
                         && at + 8 + (uint)BitConverter.ToInt32(bytes, (int)at) == bytes.Length)
                     {
-                        Note($"low mips {className}", $"A {className} kept a low-resolution copy of its smallest mips after them, which version {Cr2wFile.LastVersion} textures don't have; it's left out (the mips themselves are kept).");
+                        Note(L.T("Cr2wJsonUpgrade.LowMips", className), L.T("Cr2wJsonUpgrade.KeptLowResolutionCopy", className, Cr2wFile.LastVersion));
                         return [.. bytes.AsSpan(0, (int)at), 0, 0, 0, 0];
                     }
                     return null;
@@ -566,10 +567,10 @@ public static partial class Cr2wJson
                     // data being made from the textures it lists (bitmaps), so it's made that
                     if (bytes.Length >= 8 && BitConverter.ToUInt32(bytes, 4) == 0x98ABC777 && BitConverter.ToUInt32(bytes) == bytes.Length - 8)
                     {
-                        Note($"array data {className}", $"A {className} kept its own copy of its textures' data, which newer arrays don't (the game makes it from the textures the array lists); it's left out.");
+                        Note(L.T("Cr2wJsonUpgrade.ArrayData", className), L.T("Cr2wJsonUpgrade.KeptOwnCopyTextures", className));
                         return new byte[20];
                     }
-                    why = "its older form keeps the textures' data in it, in a form this doesn't know";
+                    why = L.T("Cr2wJsonUpgrade.OlderFormKeepsTextures");
                     return null;
                 case "CCubeTexture":
                     return CubeTexture(bytes);
@@ -738,7 +739,7 @@ public static partial class Cr2wJson
             // an area's own shape is at the start of its data: one left as it was couldn't be read
             if (isArea && data.Length >= 7 && data[4] == 3 && data[6] == 3 && BitConverter.ToInt32(data) <= data.Length)
             {
-                why = "its area shape isn't one this can read (not a closed hull)";
+                why = L.T("Cr2wJsonUpgrade.AreaShapeIsntOne");
                 return false;
             }
             return true;
@@ -803,7 +804,7 @@ public static partial class Cr2wJson
                 string stored = Stored(className, key);
                 string oldType = local?[key] is JsonValue own && (string?)own is { } ownType ? ownType
                     : oldTypes.TryGetValue(oldClass + "." + stored, out var fileType) ? fileType
-                    : EngineType(oldClass, stored) ?? EngineType(className, stored) ?? throw new InvalidDataException($"The type of {oldClass}.{stored} isn't known.");
+                    : EngineType(oldClass, stored) ?? EngineType(className, stored) ?? throw new InvalidDataException(L.T("Cr2wJsonUpgrade.TypeIsntKnown", oldClass, stored));
                 string name = key;
                 bool moved = false;
                 if (Renamed.TryGetValue((className, stored), out var renamed) && !node.ContainsKey(renamed.Name))
@@ -813,13 +814,13 @@ public static partial class Cr2wJson
                     name = stored = renamed.Name;
                     moved = true;
                     node[name] = value;
-                    Note($"renamed {className}.{key}", $"{className}.{key} is {className}.{name} now; it's moved there, as the engine does.");
+                    Note(L.T("Cr2wJsonUpgrade.Renamed", className, key), L.T("Cr2wJsonUpgrade.NowMovedThereEngine", className, key, name));
                 }
                 else if (IsGone(className, stored) || IsOtherStruct(oldType, EngineType(className, stored)))
                 {
                     // the engine skips what its class doesn't have when it loads the file, so it's gone when it saves it
                     node.Remove(key);
-                    Note($"gone {className}.{stored}", $"{className}.{stored} isn't in the engine's {className} any more, so it's left out, as the engine leaves it out.");
+                    Note(L.T("Cr2wJsonUpgrade.Gone", className, stored), L.T("Cr2wJsonUpgrade.IsntEnginesAnyMore", className, stored));
                     continue;
                 }
                 string newType = moved ? EngineType(className, stored)! : NewType(className, stored, oldType, $"{path}.{name}");
@@ -865,7 +866,7 @@ public static partial class Cr2wJson
             bool simple = className == "SSimpleCurve";
             string[] old = simple
                 ? ["dataTimes", "dataControlPoints", "dataValues", "dataCurveType0", "dataCurveType1"]
-                : ["times", "control points", "values", "left curve type", "right curve type"];
+                : ["times", L.T("Cr2wJsonUpgrade.ControlPoints"), "values", L.T("Cr2wJsonUpgrade.LeftCurveType"), L.T("Cr2wJsonUpgrade.RightCurveType")];
             string[] point = ["time", "controlPoint", "value", "curveTypeL", "curveTypeR"];
             if (!old.Any(node.ContainsKey)) return;
             var lists = old.Select(k => node[k] as JsonArray).ToArray();
@@ -957,10 +958,10 @@ public static partial class Cr2wJson
             {
                 // the engine converts it when it loads the file and saves it as its own type, as the game's cooked
                 // copies of REDkit's older files show; the JSON holds both the same way, so it's written as that
-                Note($"converted {className}.{property}", $"{className}.{property} is {oldType} in the file but {engine} in the engine; it's saved as {engine}, as the engine saves it.");
+                Note(L.T("Cr2wJsonUpgrade.Converted", className, property), L.T("Cr2wJsonUpgrade.FileButEngineSaved", className, property, oldType, engine));
                 return engine;
             }
-            Note($"retyped {className}.{property}", $"{className}.{property} is {oldType} in the file but {engine} in the engine; it's kept as {translated} (the engine converts it when it loads the file).");
+            Note(L.T("Cr2wJsonUpgrade.Retyped", className, property), L.T("Cr2wJsonUpgrade.FileButEngineKept", className, property, oldType, engine, translated));
             return translated;
         }
 
@@ -968,7 +969,7 @@ public static partial class Cr2wJson
         {
             if (value is JsonObject { } raw && raw["$raw"] is not null)
             {
-                if (dependencies is not null) throw new InvalidDataException($"{path} couldn't be read, so it can't be saved as version {Cr2wFile.LastVersion}.");
+                if (dependencies is not null) throw new InvalidDataException(L.T("Cr2wJsonUpgrade.CouldntReadSoCant2", path, Cr2wFile.LastVersion));
                 return value;
             }
             if (IsSoft(oldType))
@@ -976,7 +977,7 @@ public static partial class Cr2wJson
                 if (dependencies is null || value is null) return value;
                 string text = (string)value!;
                 string file = text.StartsWith("import#", StringComparison.Ordinal) && int.TryParse(text.AsSpan(7), out int n) && n >= 0 && n < dependencies.Count
-                    ? dependencies[n] : text.StartsWith("import:", StringComparison.Ordinal) ? text[7..] : throw new InvalidDataException($"{path} isn't a reference.");
+                    ? dependencies[n] : text.StartsWith("import:", StringComparison.Ordinal) ? text[7..] : throw new InvalidDataException(L.T("Cr2wJsonUpgrade.IsntReference", path));
                 SoftImports.Add((file, Target(newType), IsSoft(newType)));
                 return "import:" + file;
             }

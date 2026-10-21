@@ -1,6 +1,7 @@
 using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core.Projects;
 
@@ -128,11 +129,11 @@ public sealed class WorkbenchProject
         }
         catch (JsonException ex)
         {
-            throw new InvalidDataException($"{Path.GetFileName(path)} isn't a readable project file: {ex.Message}");
+            throw new InvalidDataException(L.T("WorkbenchProject.IsntReadableProjectFile", Path.GetFileName(path), ex.Message));
         }
-        if (project is null) throw new InvalidDataException($"{Path.GetFileName(path)} is empty.");
+        if (project is null) throw new InvalidDataException(L.T("WorkbenchProject.Empty", Path.GetFileName(path)));
         if (project.Format > CurrentFormat)
-            throw new InvalidDataException($"{Path.GetFileName(path)} was made by a newer version of W3 Mod Workbench (project format {project.Format}). Update the tool to open it.");
+            throw new InvalidDataException(L.T("WorkbenchProject.MadeNewerVersionW3", Path.GetFileName(path), project.Format));
         project.FilePath = path;
         if (string.IsNullOrWhiteSpace(project.Name)) project.Name = Path.GetFileNameWithoutExtension(path);
         if (string.IsNullOrWhiteSpace(project.ScriptsFolder)) project.ScriptsFolder = "scripts";
@@ -146,7 +147,7 @@ public sealed class WorkbenchProject
         folder = Path.GetFullPath(folder);
         Directory.CreateDirectory(folder);
         string file = Path.Combine(folder, SafeFileName(name) + Extension);
-        if (File.Exists(file)) throw new IOException($"{Path.GetFileName(file)} already exists in that folder.");
+        if (File.Exists(file)) throw new IOException(L.T("WorkbenchProject.AlreadyExistsFolder", Path.GetFileName(file)));
         var project = new WorkbenchProject { Name = name.Trim(), FilePath = file, ScriptsFolder = Normalize(scriptsFolder) };
         Directory.CreateDirectory(project.ScriptsPath);
         project.Save();

@@ -2,6 +2,7 @@ using System.Buffers.Binary;
 using System.IO;
 using System.Numerics;
 using W3ModWorkbench.Core.Cr2w;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core.Animation;
 
@@ -22,7 +23,7 @@ public sealed class Skeleton
     public static Skeleton Read(byte[] data)
     {
         var file = Cr2wFile.Read(data);
-        return FromObject(file.First("CSkeleton") ?? throw new InvalidDataException("There's no skeleton in it: it has no CSkeleton."), file);
+        return FromObject(file.First("CSkeleton") ?? throw new InvalidDataException(L.T("Skeleton.TheresNoSkeletonHas")), file);
     }
 
     /// <summary>
@@ -35,7 +36,7 @@ public sealed class Skeleton
         // the older layout keeps a bone's name as an 8-bit string, read as its bytes
         var names = bones.OfType<RedObject>().Select(b => b["nameAsCName"] as string ?? AnimEvent.Text(b["name"]) ?? "").ToArray();
         var parents = (file?.Array(skeleton, "parentIndices") ?? skeleton.Array("parentIndices")).Select(p => p is short s ? s : (short)-1).ToArray();
-        if (parents.Length != names.Length) throw new InvalidDataException("The skeleton's bones and parents don't match.");
+        if (parents.Length != names.Length) throw new InvalidDataException(L.T("Skeleton.SkeletonsBonesParentsDont"));
 
         var pose = new BoneTransform[names.Length];
         var tail = skeleton.Tail;

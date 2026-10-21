@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using W3ModWorkbench.Core.Scripts.Standalone;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core.Cr2w;
 
@@ -69,12 +70,12 @@ public static partial class Cr2wJson
         var d = file.Data;
         (int Offset, int Count) Table(int i) => (I32(d, 40 + i * 12), I32(d, 44 + i * 12));
         for (int i = 6; i < 10; i++)
-            if (Table(i).Count > 0) throw new NotSupportedException("This file has embedded files of its own, which can't be converted yet.");
+            if (Table(i).Count > 0) throw new NotSupportedException(L.T("Cr2wJson.FileHasEmbeddedFiles"));
 
         var (fileNames, latin1) = Strings(d);
         var context = new FileContext(file.Version, fileNames, fileNames.Count == file.Names.Count
             ? file.Imports.Select((i, n) => (Text(d, I32(d, Table(2).Offset + n * 8), latin1), i.ClassName, i.Flags)).ToList()
-            : throw new InvalidDataException("The names table can't be read."), adding: false);
+            : throw new InvalidDataException(L.T("Cr2wJson.NamesTableCantRead")), adding: false);
         var decoder = new Decoder(file, context);
         var objects = new JsonArray();
         var (exportsAt, _) = Table(4);
@@ -336,18 +337,18 @@ public static partial class Cr2wJson
     {
         JsonNode? node;
         try { node = JsonNode.Parse(json, documentOptions: new JsonDocumentOptions { AllowTrailingCommas = true, CommentHandling = JsonCommentHandling.Skip }); }
-        catch (JsonException ex) { throw new InvalidDataException($"The JSON can't be read: {ex.Message}"); }
-        return FromJson(node as JsonObject ?? throw new InvalidDataException("The JSON isn't an object."));
+        catch (JsonException ex) { throw new InvalidDataException(L.T("Cr2wJson.JsonCantRead", ex.Message)); }
+        return FromJson(node as JsonObject ?? throw new InvalidDataException(L.T("Cr2wJson.JsonIsntObject")));
     }
 
     public static byte[] FromJson(JsonObject root)
     {
         if ((string?)root["$format"] != FormatName)
-            throw new InvalidDataException($"This JSON wasn't made by W3 Mod Workbench's CR2W converter (\"$format\" isn't \"{FormatName}\").");
+            throw new InvalidDataException(L.T("Cr2wJson.JsonWasntMadeW3", FormatName));
         if ((int?)root["$formatVersion"] is not int formatVersion || formatVersion > FormatVersion)
-            throw new InvalidDataException("This JSON is from a newer version of W3 Mod Workbench; update to convert it.");
-        var fileBlock = root["file"] as JsonObject ?? throw new InvalidDataException("The JSON has no \"file\" block.");
-        var objects = root["objects"] as JsonArray ?? throw new InvalidDataException("The JSON has no \"objects\" list.");
+            throw new InvalidDataException(L.T("Cr2wJson.JsonNewerVersionW3"));
+        var fileBlock = root["file"] as JsonObject ?? throw new InvalidDataException(L.T("Cr2wJson.JsonHasNoFile"));
+        var objects = root["objects"] as JsonArray ?? throw new InvalidDataException(L.T("Cr2wJson.JsonHasNoObjects"));
 
         var names = (fileBlock["names"] as JsonArray ?? []).Select(n => (string?)n ?? "").ToList();
         if (names.Count == 0) names.Add("");
@@ -356,7 +357,7 @@ public static partial class Cr2wJson
             imports.Add(((string?)entry?["path"] ?? "", (string?)entry?["class"] ?? "", (int?)entry?["flags"] ?? 0));
         int version = (int?)fileBlock["version"] ?? 164;
         if (version is < Cr2wFile.FirstVersion or > 170)
-            throw new InvalidDataException($"CR2W version {version} can't be written ({Cr2wFile.FirstVersion} to {Cr2wFile.LastVersion} can).");
+            throw new InvalidDataException(L.T("Cr2wJson.CR2WVersionCantWritten", version, Cr2wFile.FirstVersion, Cr2wFile.LastVersion));
         if (version <= Cr2wLegacy.LastVersion) return FromJsonLegacy(fileBlock, objects, version, names, imports);
         byte[] properties = fileBlock["properties"] is { } p ? Convert.FromBase64String((string)p!) : new byte[16];
         int propertyCount = (int?)fileBlock["propertyCount"] ?? properties.Length / 16;
@@ -378,8 +379,8 @@ public static partial class Cr2wJson
 
         for (int i = 0; i < objects.Count; i++)
         {
-            var node = objects[i] as JsonObject ?? throw new InvalidDataException($"objects[{i}] isn't an object.");
-            string className = (string?)node["$class"] ?? throw new InvalidDataException($"objects[{i}] has no \"$class\".");
+            var node = objects[i] as JsonObject ?? throw new InvalidDataException(L.T("Cr2wJson.ObjectsIsntObject", i));
+            string className = (string?)node["$class"] ?? throw new InvalidDataException(L.T("Cr2wJson.ObjectsHasNoClass", i));
             byte[] data;
             try { data = new Encoder(context).Export(node); }
             catch (InvalidDataException ex) { throw new InvalidDataException($"objects[{i}] ({className}): {ex.Message}"); }
@@ -409,14 +410,14 @@ public static partial class Cr2wJson
         var exports = new List<(Cr2wLegacy.Export, byte[])>();
         for (int i = 0; i < objects.Count; i++)
         {
-            var node = objects[i] as JsonObject ?? throw new InvalidDataException($"objects[{i}] isn't an object.");
-            string className = (string?)node["$class"] ?? throw new InvalidDataException($"objects[{i}] has no \"$class\".");
+            var node = objects[i] as JsonObject ?? throw new InvalidDataException(L.T("Cr2wJson.ObjectsIsntObject", i));
+            string className = (string?)node["$class"] ?? throw new InvalidDataException(L.T("Cr2wJson.ObjectsHasNoClass", i));
             byte[] data;
             try { data = new Encoder(context).Export(node); }
             catch (InvalidDataException ex) { throw new InvalidDataException($"objects[{i}] ({className}): {ex.Message}"); }
             int parent = node["$parent"] is { } at ? (int)at! + 1 : 0;
             byte[] extra = node["$extra"] is { } e ? Convert.FromBase64String((string)e!) : new byte[8];
-            if (extra.Length != 8) throw new InvalidDataException($"objects[{i}] ({className}): \"$extra\" should be 8 bytes.");
+            if (extra.Length != 8) throw new InvalidDataException(L.T("Cr2wJson.ObjectsExtraShouldBytes", i, className));
             exports.Add((new Cr2wLegacy.Export(context.Name(className), parent, 0, data.Length, (int?)node["$flags"] ?? 0,
                 (int?)node["$template"] ?? 0, (string?)node["$name"] ?? "", extra), data));
         }
@@ -458,12 +459,12 @@ public static partial class Cr2wJson
             for (int i = 0; i < Names.Count; i++) _nameIndex.TryAdd(Names[i], i);
         }
 
-        public string NameAt(int index) => index >= 0 && index < Names.Count ? Names[index] : throw new InvalidDataException($"Name {index} isn't in the file.");
+        public string NameAt(int index) => index >= 0 && index < Names.Count ? Names[index] : throw new InvalidDataException(L.T("Cr2wJson.NameIsntFile", index));
 
         public int Name(string text)
         {
             if (_nameIndex.TryGetValue(text, out int index)) return index;
-            if (!_adding) throw new InvalidDataException($"The name \"{text}\" isn't in the file.");
+            if (!_adding) throw new InvalidDataException(L.T("Cr2wJson.NameIsntFile2", text));
             index = Builder?.Name(text) ?? Names.Count;
             Names.Add(text);
             _nameIndex[text] = index;
@@ -475,7 +476,7 @@ public static partial class Cr2wJson
         {
             int index = Dependencies!.FindIndex(d => d.Equals(path, StringComparison.OrdinalIgnoreCase));
             if (index >= 0) return index;
-            if (!_adding) throw new InvalidDataException($"\"{path}\" isn't one of the file's dependencies.");
+            if (!_adding) throw new InvalidDataException(L.T("Cr2wJson.IsntOneFilesDependencies", path));
             Dependencies.Add(path);
             return Dependencies.Count - 1;
         }
@@ -485,7 +486,7 @@ public static partial class Cr2wJson
         {
             int index = Imports.FindIndex(i => i.Path.Equals(path, StringComparison.OrdinalIgnoreCase));
             if (index >= 0) return index;
-            if (!_adding) throw new InvalidDataException($"\"{path}\" isn't one of the file's imports.");
+            if (!_adding) throw new InvalidDataException(L.T("Cr2wJson.IsntOneFilesImports", path));
             if (Builder is null) Name(className);
             index = Builder?.Import(path, className) ?? Imports.Count;
             Imports.Add((path, className, 0));
@@ -514,7 +515,7 @@ public static partial class Cr2wJson
         if (local?["$types"]?[Shown(className, property)] is JsonValue own && (string?)own is { } ownType) return ownType;
         if (context.Types.TryGetValue(className + "." + property, out var type)) return type;
         return EngineType(className, property)
-            ?? throw new InvalidDataException($"The type of {className}.{property} isn't known: add it to \"file\".\"types\" (for example \"{className}.{property}\": \"Float\").");
+            ?? throw new InvalidDataException(L.T("Cr2wJson.TypeIsntKnownAdd", className, property));
     }
 
     private static string ElementType(string type)
@@ -1167,7 +1168,7 @@ public static partial class Cr2wJson
         public byte[] Export(JsonObject node)
         {
             if (node["$data"] is { } data) return Convert.FromBase64String((string)data!);
-            string className = (string?)node["$class"] ?? throw new InvalidDataException("An object has no \"$class\".");
+            string className = (string?)node["$class"] ?? throw new InvalidDataException(L.T("Cr2wJson.ObjectHasNoClass"));
             Struct(className, node);
             if (context.Pad && !(node["$end"] is JsonValue end && end.TryGetValue(out bool has) && !has)) _out.WriteByte(0);
             if (node["$parameters"] is JsonArray parameters)
@@ -1175,7 +1176,7 @@ public static partial class Cr2wJson
                 I32(parameters.Count);
                 for (int i = 0; i < parameters.Count; i++)
                 {
-                    var parameter = parameters[i] as JsonObject ?? throw new InvalidDataException($"$parameters[{i}] isn't an object.");
+                    var parameter = parameters[i] as JsonObject ?? throw new InvalidDataException(L.T("Cr2wJson.ParametersIsntObject", i));
                     string type = Str(parameter["type"]);
                     long sizeAt = _out.Position;
                     I32(0);
@@ -1192,7 +1193,7 @@ public static partial class Cr2wJson
             {
                 bool pad = context.Pad;
                 if (arguments["$pad"] is JsonValue p && p.TryGetValue(out bool hasPad)) context.Pad = hasPad;
-                try { Struct(ArgumentsClass(className) ?? throw new InvalidDataException($"A {className} has no arguments."), arguments, marker: false); }
+                try { Struct(ArgumentsClass(className) ?? throw new InvalidDataException(L.T("Cr2wJson.HasNoArguments", className)), arguments, marker: false); }
                 finally { context.Pad = pad; }
             }
             if (node["$events"] is JsonArray events)
@@ -1202,7 +1203,7 @@ public static partial class Cr2wJson
                 I32(events.Count);
                 for (int i = 0; i < events.Count; i++)
                 {
-                    var item = events[i] as JsonObject ?? throw new InvalidDataException($"$events[{i}] isn't an object.");
+                    var item = events[i] as JsonObject ?? throw new InvalidDataException(L.T("Cr2wJson.EventsIsntObject", i));
                     string eventClass = Str(item["$class"]);
                     long sizeAt = _out.Position;
                     I32(0);
@@ -1256,7 +1257,7 @@ public static partial class Cr2wJson
             try { WriteValue(type, value, tagged, where); }
             catch (Exception ex) when (ex is FormatException or InvalidOperationException or OverflowException or ArgumentException)
             {
-                throw new InvalidDataException($"{where} should be a {Describe(type)}, not {Show(value)}.");
+                throw new InvalidDataException(L.T("Cr2wJson.ShouldNot", where, Describe(type), Show(value)));
             }
         }
 
@@ -1580,17 +1581,17 @@ public static partial class Cr2wJson
 
     private static string Describe(string type) => type switch
     {
-        "Bool" => "true or false",
+        "Bool" => L.T("Cr2wJson.TrueFalse"),
         "Float" or "Double" => "number",
-        "Int8" or "Uint8" or "Int16" or "Uint16" or "Int32" or "Uint32" or "Int64" or "Uint64" => $"whole number ({type})",
+        "Int8" or "Uint8" or "Int16" or "Uint16" or "Int32" or "Uint32" or "Int64" or "Uint64" => L.T("Cr2wJson.WholeNumber", type),
         "CName" or "String" => "string",
-        _ when IsHandle(type) || IsSoft(type) => "reference (null, \"export:N\" or \"import:path\")",
-        _ when IsArray(type) || IsFixed(type, out _, out _) => $"list ({type})",
-        "EngineTransform" => "transform ({ \"position\": {X, Y, Z}, \"rotation\": {Pitch, Yaw, Roll}, \"scale\": {X, Y, Z} }, each optional)",
-        "CVariant" => "variant ({ \"type\": \"Float\", \"value\": 1 })",
+        _ when IsHandle(type) || IsSoft(type) => L.T("Cr2wJson.ReferenceNullExportN"),
+        _ when IsArray(type) || IsFixed(type, out _, out _) => L.T("Cr2wJson.List", type),
+        "EngineTransform" => L.T("Cr2wJson.TransformPositionRotationScale"),
+        "CVariant" => L.T("Cr2wJson.Variant"),
         "SharedDataBuffer" or "DataBuffer" => "base64 string",
-        _ when IsEnum(type) => $"{type} value name",
-        _ => $"{type} object",
+        _ when IsEnum(type) => L.T("Cr2wJson.ValueName", type),
+        _ => L.T("Cr2wJson.Object", type),
     };
 
     private static string Show(JsonNode? value)

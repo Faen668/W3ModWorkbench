@@ -6,6 +6,7 @@ using System.Runtime.CompilerServices;
 using System.Text;
 using System.Xml;
 using System.Xml.Linq;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core.Menu;
 
@@ -118,7 +119,7 @@ public sealed class MenuVar : Observable
     public string Summary => _kind switch
     {
         MenuVarKind.Separator => "— separator —",
-        _ => _id.Length == 0 ? "(new setting)" : _id,
+        _ => _id.Length == 0 ? L.T("MenuModel.NewSetting") : _id,
     };
 
     /// <summary>The displayType as written to the file.</summary>
@@ -210,7 +211,7 @@ public sealed class MenuGroup : Observable
 
     public List<KeyValuePair<string, string>> ExtraAttributes { get; } = [];
 
-    public string Summary => _id.Length == 0 ? "(new page)" : _id;
+    public string Summary => _id.Length == 0 ? L.T("MenuModel.NewPage") : _id;
 }
 
 /// <summary>A mod menu file (the XML in user_config_matrix) as the builder edits it.</summary>
@@ -249,7 +250,7 @@ public sealed class MenuFile : Observable
     {
         var doc = XDocument.Parse(xml);
         if (doc.Root is not { Name.LocalName: "UserConfig" } root)
-            throw new InvalidDataException("This isn't a mod menu: its first element isn't <UserConfig>.");
+            throw new InvalidDataException(L.T("MenuModel.IsntModMenuFirst"));
 
         var file = new MenuFile();
         bool comments = doc.DescendantNodes().OfType<XComment>().Any();
@@ -276,7 +277,7 @@ public sealed class MenuFile : Observable
                         seenVars = true;
                         foreach (var v in part.Elements())
                         {
-                            if (v.Name.LocalName != "Var") { unknown.Add($"<{v.Name.LocalName}> in VisibleVars"); continue; }
+                            if (v.Name.LocalName != "Var") { unknown.Add(L.T("MenuModel.VisibleVars", v.Name.LocalName)); continue; }
                             group.Vars.Add(ReadVar(v, unknown));
                         }
                         break;
@@ -284,7 +285,7 @@ public sealed class MenuFile : Observable
                         group.PresetsFirst = !seenVars;
                         foreach (var p in part.Elements())
                         {
-                            if (p.Name.LocalName != "Preset") { unknown.Add($"<{p.Name.LocalName}> in PresetsArray"); continue; }
+                            if (p.Name.LocalName != "Preset") { unknown.Add(L.T("MenuModel.PresetsArray", p.Name.LocalName)); continue; }
                             var preset = new MenuPreset { Id = Attr(p, "id"), DisplayName = Attr(p, "displayName") };
                             foreach (var e in p.Elements("Entry"))
                                 preset.Entries.Add(new MenuEntry { VarId = Attr(e, "varId"), Value = Attr(e, "value") });
@@ -292,7 +293,7 @@ public sealed class MenuFile : Observable
                         }
                         break;
                     default:
-                        unknown.Add($"<{part.Name.LocalName}> in a Group");
+                        unknown.Add(L.T("MenuModel.Group", part.Name.LocalName));
                         break;
                 }
             }
@@ -304,7 +305,7 @@ public sealed class MenuFile : Observable
                         var.Default = entry.Value;
             file.Groups.Add(group);
         }
-        if (unknown.Count > 0) file.Warnings.Add("elements it doesn't know: " + string.Join(", ", unknown.Take(6)));
+        if (unknown.Count > 0) file.Warnings.Add(L.T("MenuModel.ElementsDoesntKnow", string.Join(", ", unknown.Take(6))));
         return file;
     }
 
@@ -320,7 +321,7 @@ public sealed class MenuFile : Observable
         foreach (var o in v.Elements("OptionsArray").Elements("Option"))
             var.Options.Add(new MenuOption { Id = Attr(o, "id"), DisplayName = Attr(o, "displayName") });
         foreach (var other in v.Elements().Where(e => e.Name.LocalName != "OptionsArray"))
-            unknown.Add($"<{other.Name.LocalName}> in a Var");
+            unknown.Add(L.T("MenuModel.Var", other.Name.LocalName));
         return var;
     }
 
@@ -329,7 +330,7 @@ public sealed class MenuFile : Observable
     // ---------------------------------------------------------------- writing
 
     /// <summary>The XML the file reads as, indented with tabs the way the game's own are.</summary>
-    public string ToXml(string declaration = "<?xml version=\"1.0\" encoding=\"utf-8\"?>")
+    public string ToXml(string declaration = "<?xml version=\"1.0\" encoding=\"utf-8\"?>") // loc-ignore
     {
         var root = new XElement("UserConfig");
         foreach (var g in Groups)
@@ -408,60 +409,60 @@ public sealed class MenuFile : Observable
     public List<Problem> Check()
     {
         var problems = new List<Problem>();
-        if (Groups.Count == 0) problems.Add(new("The menu has no pages yet."));
+        if (Groups.Count == 0) problems.Add(new(L.T("MenuModel.MenuHasNoPages")));
         var groupIds = new HashSet<string>(StringComparer.Ordinal);
         foreach (var g in Groups)
         {
-            if (g.Id.Length == 0) problems.Add(new("A page has no id: scripts need it to read the page's settings.", g));
-            else if (!groupIds.Add(g.Id)) problems.Add(new($"Two pages are called '{g.Id}'.", g));
-            if (g.DisplayName.Length == 0) problems.Add(new($"Page '{g.Id}' has no display name, so it won't show in the menu.", g));
-            if (g.Vars.Count == 0) problems.Add(new($"Page '{g.Id}' has no settings.", g));
+            if (g.Id.Length == 0) problems.Add(new(L.T("MenuModel.PageHasNoId"), g));
+            else if (!groupIds.Add(g.Id)) problems.Add(new(L.T("MenuModel.TwoPagesCalled", g.Id), g));
+            if (g.DisplayName.Length == 0) problems.Add(new(L.T("MenuModel.PageHasNoDisplay", g.Id), g));
+            if (g.Vars.Count == 0) problems.Add(new(L.T("MenuModel.PageHasNoSettings", g.Id), g));
 
             var ids = new HashSet<string>(StringComparer.Ordinal);
             foreach (var v in g.Vars)
             {
                 if (v.IsSeparator) continue;
                 string at = $"'{g.Id}' / '{v.Id}'";
-                if (v.Id.Length == 0) { problems.Add(new($"A setting in '{g.Id}' has no id.", g, v)); continue; }
-                if (!ids.Add(v.Id)) problems.Add(new($"{at}: another setting on this page has the same id.", g, v));
+                if (v.Id.Length == 0) { problems.Add(new(L.T("MenuModel.SettingHasNoId", g.Id), g, v)); continue; }
+                if (!ids.Add(v.Id)) problems.Add(new(L.T("MenuModel.AnotherSettingPageHas", at), g, v));
                 if (v.Id.Any(c => !(char.IsLetterOrDigit(c) || c == '_')))
-                    problems.Add(new($"{at}: ids with spaces or symbols are hard to read from a script. Letters, digits and _ are safest.", g, v));
-                if (v.DisplayName.Length == 0) problems.Add(new($"{at}: no display name, so the menu would show nothing for it.", g, v));
+                    problems.Add(new(L.T("MenuModel.IdsSpacesSymbolsHard", at), g, v));
+                if (v.DisplayName.Length == 0) problems.Add(new(L.T("MenuModel.NoDisplayNameSo", at), g, v));
                 switch (v.Kind)
                 {
                     case MenuVarKind.Toggle:
                         if (v.Default.Length > 0 && v.Default is not ("true" or "false"))
-                            problems.Add(new($"{at}: a toggle's default has to be true or false.", g, v));
+                            problems.Add(new(L.T("MenuModel.TogglesDefaultHasTrue", at), g, v));
                         break;
                     case MenuVarKind.Slider:
                         if (!double.TryParse(v.Min, NumberStyles.Float, CultureInfo.InvariantCulture, out double lo)
                             || !double.TryParse(v.Max, NumberStyles.Float, CultureInfo.InvariantCulture, out double hi))
                         {
-                            problems.Add(new($"{at}: the slider's ends have to be numbers.", g, v));
+                            problems.Add(new(L.T("MenuModel.SlidersEndsHaveNumbers", at), g, v));
                             break;
                         }
-                        if (lo >= hi) problems.Add(new($"{at}: the slider's minimum has to be below its maximum.", g, v));
+                        if (lo >= hi) problems.Add(new(L.T("MenuModel.SlidersMinimumHasBelow", at), g, v));
                         if (!double.TryParse(v.Steps, NumberStyles.Float, CultureInfo.InvariantCulture, out double steps) || steps <= 0)
-                            problems.Add(new($"{at}: the slider's steps have to be a number above 0.", g, v));
+                            problems.Add(new(L.T("MenuModel.SlidersStepsHaveNumber", at), g, v));
                         if (v.Default.Length > 0)
                         {
                             if (!double.TryParse(v.Default, NumberStyles.Float, CultureInfo.InvariantCulture, out double d))
-                                problems.Add(new($"{at}: the default isn't a number.", g, v));
+                                problems.Add(new(L.T("MenuModel.DefaultIsntNumber", at), g, v));
                             else if (d < lo || d > hi)
-                                problems.Add(new($"{at}: the default {v.Default} is outside {v.Min} to {v.Max}.", g, v));
+                                problems.Add(new(L.T("MenuModel.DefaultOutside", at, v.Default, v.Min, v.Max), g, v));
                         }
                         break;
                     case MenuVarKind.Options:
-                        if (v.Options.Count == 0) problems.Add(new($"{at}: an options setting needs at least one option.", g, v));
+                        if (v.Options.Count == 0) problems.Add(new(L.T("MenuModel.OptionsSettingNeedsLeast", at), g, v));
                         var optionIds = new HashSet<string>(StringComparer.Ordinal);
                         foreach (var o in v.Options)
                         {
-                            if (o.Id.Length == 0) problems.Add(new($"{at}: an option has no id.", g, v));
-                            else if (!optionIds.Add(o.Id)) problems.Add(new($"{at}: two options have the id {o.Id}.", g, v));
-                            if (o.DisplayName.Length == 0) problems.Add(new($"{at}: option {o.Id} has no display name.", g, v));
+                            if (o.Id.Length == 0) problems.Add(new(L.T("MenuModel.OptionHasNoId", at), g, v));
+                            else if (!optionIds.Add(o.Id)) problems.Add(new(L.T("MenuModel.TwoOptionsHaveId", at, o.Id), g, v));
+                            if (o.DisplayName.Length == 0) problems.Add(new(L.T("MenuModel.OptionHasNoDisplay", at, o.Id), g, v));
                         }
                         if (v.Default.Length > 0 && v.Options.Count > 0 && !optionIds.Contains(v.Default))
-                            problems.Add(new($"{at}: the default {v.Default} isn't one of the options.", g, v));
+                            problems.Add(new(L.T("MenuModel.DefaultIsntOneOptions", at, v.Default), g, v));
                         break;
                 }
             }
@@ -470,10 +471,10 @@ public sealed class MenuFile : Observable
             var presetIds = new HashSet<string>(StringComparer.Ordinal);
             foreach (var p in g.Presets)
             {
-                if (!presetIds.Add(p.Id)) problems.Add(new($"'{g.Id}': two presets have the id {p.Id}.", g));
-                if (p.DisplayName.Length == 0) problems.Add(new($"'{g.Id}': preset {p.Id} has no display name.", g));
+                if (!presetIds.Add(p.Id)) problems.Add(new(L.T("MenuModel.TwoPresetsHaveId", g.Id, p.Id), g));
+                if (p.DisplayName.Length == 0) problems.Add(new(L.T("MenuModel.PresetHasNoDisplay", g.Id, p.Id), g));
                 foreach (var e in p.Entries.Where(e => !known.Contains(e.VarId)))
-                    problems.Add(new($"'{g.Id}' / preset {p.Id}: sets '{e.VarId}', which isn't a setting on this page.", g));
+                    problems.Add(new(L.T("MenuModel.PresetSetsWhichIsnt", g.Id, p.Id, e.VarId), g));
             }
         }
         return problems;
@@ -502,13 +503,13 @@ public sealed class MenuFile : Observable
             if (g.DisplayName.Length > 0)
             {
                 foreach (string part in g.DisplayName.Split('.', StringSplitOptions.RemoveEmptyEntries))
-                    Add("panel_" + part, "Menu page");
-                Add("preset_" + g.DisplayName.Replace('.', '_'), "Presets of " + g.Id);
+                    Add("panel_" + part, L.T("MenuModel.MenuPage"));
+                Add("preset_" + g.DisplayName.Replace('.', '_'), L.T("MenuModel.Presets", g.Id));
             }
             foreach (var v in g.Vars.Where(v => !v.IsSeparator))
             {
                 Add("option_" + v.DisplayName, "Setting " + v.Id);
-                foreach (var o in v.Options) Add("preset_value_" + o.DisplayName, $"Option {o.Id} of {v.Id}");
+                foreach (var o in v.Options) Add("preset_value_" + o.DisplayName, L.T("MenuModel.Option", o.Id, v.Id));
             }
             foreach (var p in g.Presets) Add("preset_value_" + p.DisplayName, "Preset " + p.Id);
         }
@@ -525,9 +526,9 @@ public sealed class MenuFile : Observable
         {
             var vars = g.Vars.Where(v => !v.IsSeparator && v.Id.Length > 0).ToList();
             string name = "Load" + Identifier(g.Id.Length > 0 ? g.Id : "Menu");
-            sb.Append("// reads the settings of the page '").Append(g.Id).Append("' from the mod menu\n");
+            sb.Append("// reads the settings of the page '").Append(g.Id).Append("' from the mod menu\n"); // loc-ignore
             sb.Append("function ").Append(name).Append("()\n{\n");
-            sb.Append("\tvar config : CInGameConfigWrapper;\n");
+            sb.Append("\tvar config : CInGameConfigWrapper;\n"); // loc-ignore
             foreach (var v in vars) sb.Append("\tvar ").Append(Identifier(v.Id)).Append(" : ").Append(ScriptType(v)).Append(";\n");
             sb.Append("\n\tconfig = theGame.GetInGameConfigWrapper();\n");
             foreach (var v in vars)
@@ -535,9 +536,9 @@ public sealed class MenuFile : Observable
                   .Append("(config.GetVarValue('").Append(g.Id).Append("', '").Append(v.Id).Append("'));\n");
             sb.Append("}\n\n");
         }
-        if (sb.Length == 0) sb.Append("// add a page and some settings to get the script that reads them\n");
+        if (sb.Length == 0) sb.Append("// add a page and some settings to get the script that reads them\n"); // loc-ignore
         else
-            sb.Append("// to change a setting from a script:\n//   theGame.GetInGameConfigWrapper().SetVarValue('Page', 'Setting', \"value\");\n//   theGame.SaveUserSettings();\n");
+            sb.Append("// to change a setting from a script:\n//   theGame.GetInGameConfigWrapper().SetVarValue('Page', 'Setting', \"value\");\n//   theGame.SaveUserSettings();\n"); // loc-ignore
         return sb.ToString();
     }
 

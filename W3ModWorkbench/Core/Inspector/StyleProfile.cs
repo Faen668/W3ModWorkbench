@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core.Inspector;
 
@@ -159,27 +160,27 @@ public sealed partial class StyleProfile
             => features.Add(new StyleFeature(name, habit, show(x), show(y), Math.Clamp(1 - Math.Abs(x - y) / scale, 0, 1)));
 
         static string Pct(double v) => $"{v:P0}";
-        static string Words(double v, string yes, string no) => v >= 0.65 ? yes : v <= 0.35 ? no : "mixed";
+        static string Words(double v, string yes, string no) => v >= 0.65 ? yes : v <= 0.35 ? no : L.T("StyleProfile.Mixed");
 
-        Add("Indentation", "Tabs or spaces", a.TabIndent, b.TabIndent, v => Words(v, "tabs", "spaces"));
+        Add(L.T("StyleProfile.Indentation"), L.T("StyleProfile.TabsSpaces"), a.TabIndent, b.TabIndent, v => Words(v, L.T("StyleProfile.Tabs"), L.T("StyleProfile.Spaces")));
         if (a.TabIndent < 0.5 && b.TabIndent < 0.5)
-            Add("Indent width", "Spaces per level", a.IndentWidth, b.IndentWidth, v => $"{v:0.#}", 4);
-        Add("Braces", "On their own line", a.BraceOwnLine, b.BraceOwnLine, v => Words(v, "own line", "same line"));
-        Add("else", "On its own line", a.ElseOwnLine, b.ElseOwnLine, v => Words(v, "own line", "after }"));
-        Add("Keyword spacing", "if (…) vs if(…)", a.SpaceAfterKeyword, b.SpaceAfterKeyword, v => Words(v, "if (x)", "if(x)"));
-        Add("Operator spacing", "a == b vs a==b", a.SpaceAroundOperators, b.SpaceAroundOperators, v => Words(v, "spaced", "tight"));
-        Add("Comma spacing", "a, b vs a,b", a.SpaceAfterComma, b.SpaceAfterComma, v => Words(v, "spaced", "tight"));
-        Add("Comments", "Comment lines per line of code", a.CommentDensity, b.CommentDensity, Pct, 0.5);
-        Add("Block comments", "/* */ over //", a.BlockComments, b.BlockComments, Pct);
-        Add("Blank lines", "Share of the file", a.BlankLines, b.BlankLines, Pct, 0.3);
-        Add("Line length", "Average characters", a.AverageLineLength, b.AverageLineLength, v => $"{v:0}", 40);
-        Add("camelCase names", "Local variables", a.CamelLocals, b.CamelLocals, Pct);
-        Add("PascalCase names", "Local variables", a.PascalLocals, b.PascalLocals, Pct);
-        Add("snake_case names", "Local variables", a.SnakeLocals, b.SnakeLocals, Pct);
-        Add("Name prefixes", "Like b…, the…, _…", a.PrefixedLocals, b.PrefixedLocals, Pct);
-        Add("Explicit this.", "Used on members", a.ExplicitThis, b.ExplicitThis, Pct);
-        Add("Function length", "Average lines", a.AverageFunctionLength, b.AverageFunctionLength, v => $"{v:0}", 40);
-        Add("Line endings", "CRLF or LF", a.CrlfLines, b.CrlfLines, v => Words(v, "CRLF", "LF"));
+            Add(L.T("StyleProfile.IndentWidth"), L.T("StyleProfile.SpacesPerLevel"), a.IndentWidth, b.IndentWidth, v => $"{v:0.#}", 4);
+        Add(L.T("StyleProfile.Braces"), L.T("StyleProfile.TheirOwnLine"), a.BraceOwnLine, b.BraceOwnLine, v => Words(v, L.T("StyleProfile.OwnLine"), L.T("StyleProfile.SameLine")));
+        Add("else", L.T("StyleProfile.OwnLine2"), a.ElseOwnLine, b.ElseOwnLine, v => Words(v, L.T("StyleProfile.OwnLine"), L.T("StyleProfile.AfterBrace")));
+        Add(L.T("StyleProfile.KeywordSpacing"), L.T("StyleProfile.IfVsIf"), a.SpaceAfterKeyword, b.SpaceAfterKeyword, v => Words(v, L.T("StyleProfile.IfX"), "if(x)")); // loc-ignore: code
+        Add(L.T("StyleProfile.OperatorSpacing"), L.T("StyleProfile.BVsB"), a.SpaceAroundOperators, b.SpaceAroundOperators, v => Words(v, L.T("StyleProfile.Spaced"), L.T("StyleProfile.Tight")));
+        Add(L.T("StyleProfile.CommaSpacing"), L.T("StyleProfile.BVsB2"), a.SpaceAfterComma, b.SpaceAfterComma, v => Words(v, L.T("StyleProfile.Spaced"), L.T("StyleProfile.Tight")));
+        Add(L.T("StyleProfile.Comments"), L.T("StyleProfile.CommentLinesPerLine"), a.CommentDensity, b.CommentDensity, Pct, 0.5);
+        Add(L.T("StyleProfile.BlockComments"), L.T("StyleProfile.BlockOverLine"), a.BlockComments, b.BlockComments, Pct);
+        Add(L.T("StyleProfile.BlankLines"), L.T("StyleProfile.ShareFile"), a.BlankLines, b.BlankLines, Pct, 0.3);
+        Add(L.T("StyleProfile.LineLength"), L.T("StyleProfile.AverageCharacters"), a.AverageLineLength, b.AverageLineLength, v => $"{v:0}", 40);
+        Add(L.T("StyleProfile.CamelCaseNames"), L.T("StyleProfile.LocalVariables"), a.CamelLocals, b.CamelLocals, Pct);
+        Add(L.T("StyleProfile.PascalCaseNames"), L.T("StyleProfile.LocalVariables"), a.PascalLocals, b.PascalLocals, Pct);
+        Add(L.T("StyleProfile.SnakeCaseNames"), L.T("StyleProfile.LocalVariables"), a.SnakeLocals, b.SnakeLocals, Pct);
+        Add(L.T("StyleProfile.NamePrefixes"), L.T("StyleProfile.LikeB"), a.PrefixedLocals, b.PrefixedLocals, Pct);
+        Add(L.T("StyleProfile.Explicit"), L.T("StyleProfile.UsedMembers"), a.ExplicitThis, b.ExplicitThis, Pct);
+        Add(L.T("StyleProfile.FunctionLength"), L.T("StyleProfile.AverageLines"), a.AverageFunctionLength, b.AverageFunctionLength, v => $"{v:0}", 40);
+        Add(L.T("StyleProfile.LineEndings"), L.T("StyleProfile.CrlfLF"), a.CrlfLines, b.CrlfLines, v => Words(v, "CRLF", "LF"));
         return features;
     }
 

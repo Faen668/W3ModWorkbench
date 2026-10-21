@@ -1,6 +1,7 @@
 using System.IO;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core.Packing;
 
@@ -30,7 +31,7 @@ public static class Pictures
         }
         catch (Exception ex) when (ex is NotSupportedException or FileFormatException or ArgumentException or InvalidOperationException)
         {
-            throw new InvalidDataException("the picture couldn't be read: " + ex.Message, ex);
+            throw new InvalidDataException(L.T("Pictures.PictureCouldntRead", ex.Message), ex);
         }
     }
 
@@ -40,20 +41,20 @@ public static class Pictures
     /// </summary>
     private static (byte[], int, int) Tga(byte[] f)
     {
-        if (f.Length < 18) throw new InvalidDataException("the .tga is too short");
+        if (f.Length < 18) throw new InvalidDataException(L.T("Pictures.TgaTooShort"));
         int idLength = f[0], colourMapType = f[1], type = f[2];
         int width = f[12] | f[13] << 8, height = f[14] | f[15] << 8, bits = f[16], descriptor = f[17];
         if (colourMapType != 0 || type is not (2 or 3 or 10 or 11) || width == 0 || height == 0)
-            throw new InvalidDataException("only true-colour and greyscale .tga files can be used");
+            throw new InvalidDataException(L.T("Pictures.OnlyTrueColourGreyscale"));
         int bytes = bits / 8;
         bool grey = type is 3 or 11;
-        if ((grey && bytes != 1) || (!grey && bytes is not (3 or 4))) throw new InvalidDataException($"a {bits}-bit .tga can't be used");
+        if ((grey && bytes != 1) || (!grey && bytes is not (3 or 4))) throw new InvalidDataException(L.T("Pictures.BitTgaCantUsed", bits));
         int at = 18 + idLength;
         var pixels = new byte[width * height * 4];
         int count = width * height, done = 0;
         void Put(int i, int src)
         {
-            if (src + bytes > f.Length) throw new InvalidDataException("the .tga is cut short");
+            if (src + bytes > f.Length) throw new InvalidDataException(L.T("Pictures.TgaCutShort"));
             if (grey) { pixels[i * 4] = pixels[i * 4 + 1] = pixels[i * 4 + 2] = f[src]; pixels[i * 4 + 3] = 255; }
             else
             {
@@ -66,7 +67,7 @@ public static class Pictures
         else
             while (done < count)
             {
-                if (at >= f.Length) throw new InvalidDataException("the .tga is cut short");
+                if (at >= f.Length) throw new InvalidDataException(L.T("Pictures.TgaCutShort"));
                 int header = f[at++], run = (header & 0x7F) + 1;
                 if ((header & 0x80) != 0) { for (int k = 0; k < run && done < count; k++) Put(done++, at); at += bytes; }
                 else for (int k = 0; k < run && done < count; k++, at += bytes) Put(done++, at);

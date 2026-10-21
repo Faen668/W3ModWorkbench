@@ -14,7 +14,8 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 //     --summary      a count per file instead of every line
 //     --file <part>  only files whose path has <part> in it
 //     --unused       also list keys in en.json nothing uses
-//     --strict       count single words in C# as text wherever they are, for a sweep by eye (it lists names and keys too)
+//     --strict       count single words in C# as text wherever they are, for a sweep by eye (it lists names and keys too);
+//                    not in Core, where most single words are the engine's names
 //
 // Text that isn't for people to read (code samples, file names, the licence) is marked so the check passes over it:
 // in C#, a "// loc-ignore" comment on the line, or the lines between "// loc-ignore-start" and "// loc-ignore-end";
@@ -86,8 +87,13 @@ foreach (string file in SourceFiles("*.cs"))
 {
     string rel = Rel(file);
     if (only is not null && !rel.Contains(only, StringComparison.OrdinalIgnoreCase)) continue;
-    // the engine's formats, and the command line (a tool's own English usage), aren't the app's windows
-    if (rel.StartsWith("W3ModWorkbench/Core/", StringComparison.Ordinal) || rel == "W3ModWorkbench/CommandLine.cs") continue;
+    // the command line is a tool's own English usage, not the app's windows
+    if (rel == "W3ModWorkbench/CommandLine.cs") continue;
+    // Core reads and writes the game's formats, and its messages, names and headings are shown in the windows, so it's
+    // checked as the rest is: sentences wherever they are, a single word only where text goes. A single word anywhere
+    // else in Core is nearly always one of the engine's names (a class, a property, an enum value), so --strict leaves
+    // it out. Code and file formats Core writes (WitcherScript, XML, OBJ) are marked loc-ignore.
+    bool core = rel.StartsWith("W3ModWorkbench/Core/", StringComparison.Ordinal);
     string source = File.ReadAllText(file);
     var tree = CSharpSyntaxTree.ParseText(source);
     var lines = tree.GetText().Lines;
@@ -107,7 +113,7 @@ foreach (string file in SourceFiles("*.cs"))
         // a key named anywhere else (a key picked by a test, a section's key in a list) counts as used
         if (english.ContainsKey(text)) { used.Add(text); continue; }
         if (ignoredLines.Contains(line) || Detection.NotShown(node)) continue;
-        if (Detection.IsText(text, strict || Detection.UiContext(node))) problems.Add((rel, line, "cs", text.Replace("\n", "\\n").Replace("\r", "")));
+        if (Detection.IsText(text, strict && !core || Detection.UiContext(node))) problems.Add((rel, line, "cs", text.Replace("\n", "\\n").Replace("\r", "")));
     }
 }
 

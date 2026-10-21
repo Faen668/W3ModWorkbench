@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core.Scripts.Navigation;
 
@@ -330,8 +331,14 @@ public sealed partial class DefinitionFinder(ParsedScript doc, IReadOnlyList<Scr
     /// <summary>The scripts looked in: this file's own declarations first, then the workspace's.</summary>
     public IReadOnlyList<ScriptIndex> Layers => _layers;
 
-    /// <summary>A declaration and why it's listed, e.g. "Wrapped by" or "Subclasses".</summary>
-    public sealed record Related(string Group, ScriptSymbol Symbol, int Depth = 0);
+    /// <summary>Why a declaration is listed: the group it's shown under.</summary>
+    public enum RelatedKind { WrappedBy, ReplacedBy, OverriddenBy, MethodsAddedBy, FieldsAddedBy, DeclaredAgainBy, BaseTypes, Subtypes, States, Overrides }
+
+    /// <summary>A declaration and why it's listed. <see cref="Group"/> is the heading to show, "Wrapped by" or "Subtypes"; compare <see cref="Kind"/>.</summary>
+    public sealed record Related(RelatedKind Kind, ScriptSymbol Symbol, int Depth = 0)
+    {
+        public string Group => L.T("DefinitionFinder." + Kind);
+    }
 
     /// <summary>
     /// Everything that changes a declaration from elsewhere. For a function: the @wrapMethod and @replaceMethod
@@ -348,12 +355,12 @@ public sealed partial class DefinitionFinder(ParsedScript doc, IReadOnlyList<Scr
                 if (s.Annotation is "wrapMethod" or "replaceMethod")
                 {
                     if (Originals(s).Any(o => IsSame(o, target)))
-                        result.Add(new(s.Annotation == "wrapMethod" ? "Wrapped by" : "Replaced by", s));
+                        result.Add(new(s.Annotation == "wrapMethod" ? RelatedKind.WrappedBy : RelatedKind.ReplacedBy, s));
                 }
                 else if (target.Owner is not null && s.Owner is not null && !Same(s.Owner, target.Owner)
                          && Chain(s.Owner).Skip(1).Any(t => Same(t, target.Owner)))
                 {
-                    result.Add(new("Overridden by", s));
+                    result.Add(new(RelatedKind.OverriddenBy, s));
                 }
             }
         }
@@ -361,9 +368,9 @@ public sealed partial class DefinitionFinder(ParsedScript doc, IReadOnlyList<Scr
         {
             var added = _layers.SelectMany(l => l.All).Where(s => s.Annotation is "addMethod" or "addField" && Same(s.Owner, target.TypeKey));
             foreach (var s in Distinct(added))
-                result.Add(new(s.Annotation == "addMethod" ? "Methods added by" : "Fields added by", s));
+                result.Add(new(s.Annotation == "addMethod" ? RelatedKind.MethodsAddedBy : RelatedKind.FieldsAddedBy, s));
             foreach (var s in Everywhere(target.Name).Where(s => s.Kind == target.Kind && s.File.SourceKey != target.File.SourceKey))
-                result.Add(new("Declared again by", s));
+                result.Add(new(RelatedKind.DeclaredAgainBy, s));
         }
         return result;
     }
@@ -381,7 +388,7 @@ public sealed partial class DefinitionFinder(ParsedScript doc, IReadOnlyList<Scr
             string key = target.TypeKey;
             int depth = 0;
             foreach (string b in Chain(key).Skip(1))
-                if (Type(b) is { } t) result.Add(new("Base types", t, ++depth));
+                if (Type(b) is { } t) result.Add(new(RelatedKind.BaseTypes, t, ++depth));
 
             var types = new Dictionary<string, ScriptSymbol>(StringComparer.OrdinalIgnoreCase);
             foreach (var t in _layers.SelectMany(l => l.All).Where(s => s.Kind is SymbolKind.Class or SymbolKind.State))
@@ -390,12 +397,12 @@ public sealed partial class DefinitionFinder(ParsedScript doc, IReadOnlyList<Scr
             foreach (var (typeKey, t) in types)
             {
                 int steps = Chain(typeKey).ToList().FindIndex(c => Same(c, key));
-                if (steps > 0) subtypes.Add(new("Subtypes", t, steps));
+                if (steps > 0) subtypes.Add(new(RelatedKind.Subtypes, t, steps));
             }
             result.AddRange(subtypes.OrderBy(r => r.Depth).ThenBy(r => r.Symbol.TypeKey, StringComparer.OrdinalIgnoreCase));
             if (target.Kind == SymbolKind.Class)
                 result.AddRange(types.Values.Where(t => t.Kind == SymbolKind.State && Same(t.Owner, target.Name))
-                    .OrderBy(t => t.Name, StringComparer.OrdinalIgnoreCase).Select(t => new Related("States", t, 1)));
+                    .OrderBy(t => t.Name, StringComparer.OrdinalIgnoreCase).Select(t => new Related(RelatedKind.States, t, 1)));
         }
         else if (target.Kind is SymbolKind.Function or SymbolKind.Event && target.Owner is not null && target.Annotation is null)
         {
@@ -404,9 +411,9 @@ public sealed partial class DefinitionFinder(ParsedScript doc, IReadOnlyList<Scr
             {
                 depth++;
                 foreach (var s in Distinct(All(target.Name).Where(o => o.IsMember && IsOriginal(o) && Same(o.Owner, type))))
-                    result.Add(new("Overrides", s, depth));
+                    result.Add(new(RelatedKind.Overrides, s, depth));
             }
-            foreach (var change in ChangesTo(target).Where(c => c.Group == "Overridden by"))
+            foreach (var change in ChangesTo(target).Where(c => c.Kind == RelatedKind.OverriddenBy))
             {
                 result.Add(change with { Depth = Chain(change.Symbol.Owner!).ToList().FindIndex(c => Same(c, target.Owner)) });
             }

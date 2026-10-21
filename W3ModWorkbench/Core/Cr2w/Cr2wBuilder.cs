@@ -1,6 +1,7 @@
 using System.Buffers.Binary;
 using System.IO;
 using System.Text;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core.Cr2w;
 
@@ -63,11 +64,11 @@ public sealed class Cr2wBuilder
     public static Cr2wBuilder From(Cr2wFile file)
     {
         if (file.Legacy is not null)
-            throw new NotSupportedException($"This file is in the older CR2W layout (version {file.Version}); save it as version 164 first (CR2W ⇄ JSON can).");
+            throw new NotSupportedException(L.T("Cr2wBuilder.FileOlderCR2WLayout", file.Version));
         var d = file.Data;
         (int Offset, int Count) Table(int i) => (I32(d, 40 + i * 12), I32(d, 44 + i * 12));
         for (int i = 6; i < 10; i++)
-            if (Table(i).Count > 0) throw new NotSupportedException("This file has embedded files of its own, which can't be written back yet.");
+            if (Table(i).Count > 0) throw new NotSupportedException(L.T("Cr2wBuilder.FileHasEmbeddedFiles"));
         var (stringsAt, stringsSize) = Table(0);
         var (namesAt, nameCount) = Table(1);
         var (importsAt, importCount) = Table(2);

@@ -3,6 +3,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core;
 
@@ -175,7 +176,7 @@ public sealed class ReferenceIndex
     /// <summary>What an archive's files refer to: from its cache when it's the same archive, otherwise read and cached.</summary>
     private static List<(string Source, List<string> Targets)> LinksIn(IArchive archive, List<ArchiveEntry> files, Counter counter, CancellationToken token)
     {
-        string name = archive is RedkitDepot ? "REDkit's r4data" : Path.GetFileName(archive.FilePath);
+        string name = archive is RedkitDepot ? L.T("ReferenceIndex.REDkitsR4data") : Path.GetFileName(archive.FilePath);
         string signature = Signature(archive);
         string cache = Path.Combine(CacheFolder, Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(archive.FilePath.ToLowerInvariant())))[..24] + ".refs.gz");
         if (ReadCache(cache, signature) is { } cached)

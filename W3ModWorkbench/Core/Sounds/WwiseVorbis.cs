@@ -1,6 +1,7 @@
 using System.Buffers.Binary;
 using System.IO;
 using System.Text;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core.Sounds;
 
@@ -20,7 +21,7 @@ public static class WwiseVorbis
     private static byte[] ReadLibrary()
     {
         using var stream = typeof(WwiseVorbis).Assembly.GetManifestResourceStream("W3ModWorkbench.Assets.Sounds.packed_codebooks_aoTuV_603.bin")
-            ?? throw new InvalidDataException("The Vorbis codebook library isn't in the tool.");
+            ?? throw new InvalidDataException(L.T("WwiseVorbis.VorbisCodebookLibraryIsnt"));
         var data = new byte[stream.Length];
         stream.ReadExactly(data);
         return data;
@@ -30,14 +31,14 @@ public static class WwiseVorbis
     public static byte[] ToOgg(byte[] riff)
     {
         var info = WemInfo.Read(riff);
-        if (info.Codec != 0xFFFF) throw new InvalidDataException("The sound isn't Wwise Vorbis.");
+        if (info.Codec != 0xFFFF) throw new InvalidDataException(L.T("WwiseVorbis.SoundIsntWwiseVorbis"));
         var fmt = info.Chunks.First(c => c.Id == "fmt ");
-        var data = info.Chunks.FirstOrDefault(c => c.Id == "data") ?? throw new InvalidDataException("The sound has no \"data\".");
+        var data = info.Chunks.FirstOrDefault(c => c.Id == "data") ?? throw new InvalidDataException(L.T("WwiseVorbis.SoundHasNoData"));
         // the "vorb" part: its own, or kept at the end of a 0x42-byte "fmt "
         int vorb, vorbSize;
         if (info.Chunks.FirstOrDefault(c => c.Id == "vorb") is { } own) (vorb, vorbSize) = (own.Offset, own.Size);
         else if (fmt.Size == 0x42) (vorb, vorbSize) = (fmt.Offset + 0x18, -1);
-        else throw new InvalidDataException("The Vorbis sound has no \"vorb\".");
+        else throw new InvalidDataException(L.T("WwiseVorbis.VorbisSoundHasNo"));
 
         uint U32(int at) => BinaryPrimitives.ReadUInt32LittleEndian(riff.AsSpan(at));
         bool noGranule = false, modPackets = false;
@@ -50,7 +51,7 @@ public static class WwiseVorbis
             at = vorb + 0x10;
         }
         else if (vorbSize is 0x28 or 0x2C)
-            throw new NotSupportedException("The sound is an early Wwise Vorbis, kept with its full headers, which isn't read.");
+            throw new NotSupportedException(L.T("WwiseVorbis.SoundEarlyWwiseVorbis"));
         uint setupOffset = U32(at), firstAudioOffset = U32(at + 4);
         int blockPows = vorbSize is -1 or 0x2A ? vorb + 0x24 + 4 : vorb + 0x2C + 4;
         int blocksize0Pow = riff[blockPows], blocksize1Pow = riff[blockPows + 1];
@@ -76,7 +77,7 @@ public static class WwiseVorbis
         // comment header
         var comment = new BitWriter();
         Header(comment, 3);
-        var vendor = Encoding.ASCII.GetBytes("converted from Audiokinetic Wwise by W3 Mod Workbench (ww2ogg)");
+        var vendor = Encoding.ASCII.GetBytes("converted from Audiokinetic Wwise by W3 Mod Workbench (ww2ogg)"); // loc-ignore
         comment.Write((uint)vendor.Length, 32);
         foreach (byte b in vendor) comment.Write(b, 8);
         comment.Write(0, 32);
@@ -88,7 +89,7 @@ public static class WwiseVorbis
         var setup = new BitWriter();
         Header(setup, 5);
         var (modeBlockFlag, modeBits) = RebuildSetup(new BitReader(riff, setupPayload, setupPayload + setupSize), setup, channels, setupSize);
-        if (setupNext != dataStart + firstAudioOffset) throw new InvalidDataException("The first audio packet doesn't follow the setup packet.");
+        if (setupNext != dataStart + firstAudioOffset) throw new InvalidDataException(L.T("WwiseVorbis.FirstAudioPacketDoesnt"));
         ogg.Packet(setup.ToArray(), 0);
 
         // audio packets: the bits Wwise dropped put back, each on a page of its own
@@ -154,7 +155,7 @@ public static class WwiseVorbis
     /// <summary>A packet's payload, size and where the next starts: a two-byte size, and four of granule unless they're left out.</summary>
     private static (int Payload, int Size, int Next) Packet(byte[] riff, int offset, bool noGranule)
     {
-        if (offset + 2 > riff.Length) throw new InvalidDataException("A packet runs past the end of the sound.");
+        if (offset + 2 > riff.Length) throw new InvalidDataException(L.T("WwiseVorbis.PacketRunsPastEnd"));
         int size = BinaryPrimitives.ReadUInt16LittleEndian(riff.AsSpan(offset));
         int header = noGranule ? 2 : 6;
         return (offset + header, size, offset + header + size);
@@ -203,9 +204,9 @@ public static class WwiseVorbis
             {
                 dimensions[j] = ss.Copy(os, 3) + 1;
                 uint subclasses = ss.Copy(os, 2);
-                if (subclasses != 0 && ss.Copy(os, 8) >= codebookCount) throw new InvalidDataException("A floor's master book is out of range.");
+                if (subclasses != 0 && ss.Copy(os, 8) >= codebookCount) throw new InvalidDataException(L.T("WwiseVorbis.FloorsMasterBookOut"));
                 for (int k = 0; k < 1 << (int)subclasses; k++)
-                    if ((int)ss.Copy(os, 8) - 1 is var book && book >= 0 && book >= codebookCount) throw new InvalidDataException("A floor's subclass book is out of range.");
+                    if ((int)ss.Copy(os, 8) - 1 is var book && book >= 0 && book >= codebookCount) throw new InvalidDataException(L.T("WwiseVorbis.FloorsSubclassBookOut"));
             }
             ss.Copy(os, 2);
             int rangeBits = (int)ss.Copy(os, 4);
@@ -218,13 +219,13 @@ public static class WwiseVorbis
         for (int i = 0; i < residueCount; i++)
         {
             uint type = ss.Read(2);
-            if (type > 2) throw new InvalidDataException("A residue's type is out of range.");
+            if (type > 2) throw new InvalidDataException(L.T("WwiseVorbis.ResiduesTypeOutRange"));
             os.Write(type, 16);
             ss.Copy(os, 24);
             ss.Copy(os, 24);
             ss.Copy(os, 24);
             uint classifications = ss.Copy(os, 6) + 1;
-            if (ss.Copy(os, 8) >= codebookCount) throw new InvalidDataException("A residue's class book is out of range.");
+            if (ss.Copy(os, 8) >= codebookCount) throw new InvalidDataException(L.T("WwiseVorbis.ResiduesClassBookOut"));
             var cascade = new uint[classifications];
             for (int j = 0; j < classifications; j++)
             {
@@ -234,7 +235,7 @@ public static class WwiseVorbis
             }
             for (int j = 0; j < classifications; j++)
                 for (int k = 0; k < 8; k++)
-                    if ((cascade[j] & (1 << k)) != 0 && ss.Copy(os, 8) >= codebookCount) throw new InvalidDataException("A residue's book is out of range.");
+                    if ((cascade[j] & (1 << k)) != 0 && ss.Copy(os, 8) >= codebookCount) throw new InvalidDataException(L.T("WwiseVorbis.ResiduesBookOutRange"));
         }
 
         uint mappingCount = ss.Read(6) + 1;
@@ -251,18 +252,18 @@ public static class WwiseVorbis
                 for (int j = 0; j < steps; j++)
                 {
                     uint magnitude = ss.Copy(os, channelBits), angle = ss.Copy(os, channelBits);
-                    if (angle == magnitude || magnitude >= channels || angle >= channels) throw new InvalidDataException("A mapping's coupling is wrong.");
+                    if (angle == magnitude || magnitude >= channels || angle >= channels) throw new InvalidDataException(L.T("WwiseVorbis.MappingsCouplingWrong"));
                 }
             }
-            if (ss.Copy(os, 2) != 0) throw new InvalidDataException("A mapping's reserved bits aren't zero.");
+            if (ss.Copy(os, 2) != 0) throw new InvalidDataException(L.T("WwiseVorbis.MappingsReservedBitsArent"));
             if (submaps > 1)
                 for (int j = 0; j < channels; j++)
-                    if (ss.Copy(os, 4) >= submaps) throw new InvalidDataException("A mapping's channel is in no submap.");
+                    if (ss.Copy(os, 4) >= submaps) throw new InvalidDataException(L.T("WwiseVorbis.MappingsChannelNoSubmap"));
             for (int j = 0; j < submaps; j++)
             {
                 ss.Copy(os, 8);
-                if (ss.Copy(os, 8) >= floorCount) throw new InvalidDataException("A mapping's floor is out of range.");
-                if (ss.Copy(os, 8) >= residueCount) throw new InvalidDataException("A mapping's residue is out of range.");
+                if (ss.Copy(os, 8) >= floorCount) throw new InvalidDataException(L.T("WwiseVorbis.MappingsFloorOutRange"));
+                if (ss.Copy(os, 8) >= residueCount) throw new InvalidDataException(L.T("WwiseVorbis.MappingsResidueOutRange"));
             }
         }
 
@@ -274,10 +275,10 @@ public static class WwiseVorbis
             blockFlags[i] = ss.Copy(os, 1) != 0;
             os.Write(0, 16);
             os.Write(0, 16);
-            if (ss.Copy(os, 8) >= mappingCount) throw new InvalidDataException("A mode's mapping is out of range.");
+            if (ss.Copy(os, 8) >= mappingCount) throw new InvalidDataException(L.T("WwiseVorbis.ModesMappingOutRange"));
         }
         os.Write(1, 1);
-        if ((ss.BitsRead + 7) / 8 != size) throw new InvalidDataException("The setup packet wasn't read exactly.");
+        if ((ss.BitsRead + 7) / 8 != size) throw new InvalidDataException(L.T("WwiseVorbis.SetupPacketWasntRead"));
         return (blockFlags, ILog(modeCount - 1));
     }
 
@@ -301,7 +302,7 @@ public static class WwiseVorbis
 
         public void Rebuild(int id, BitWriter os)
         {
-            if (id < 0 || id >= _offsets.Length - 1) throw new InvalidDataException($"Codebook {id} isn't in the library.");
+            if (id < 0 || id >= _offsets.Length - 1) throw new InvalidDataException(L.T("WwiseVorbis.CodebookIsntLibrary", id));
             int start = _offsets[id], size = _offsets[id + 1] - start;
             var bis = new BitReader(_data, start, start + size);
             uint dimensions = bis.Read(4), entries = bis.Read(14);
@@ -318,7 +319,7 @@ public static class WwiseVorbis
             {
                 uint lengthBits = bis.Read(3);
                 uint sparse = bis.Read(1);
-                if (lengthBits is 0 or > 5) throw new InvalidDataException("A codebook's codeword lengths make no sense.");
+                if (lengthBits is 0 or > 5) throw new InvalidDataException(L.T("WwiseVorbis.CodebooksCodewordLengthsMake"));
                 os.Write(sparse, 1);
                 for (int i = 0; i < entries; i++)
                     if (sparse == 0 || bis.Copy(os, 1) != 0) os.Write(bis.Read((int)lengthBits), 5);
@@ -334,7 +335,7 @@ public static class WwiseVorbis
                 uint values = QuantValues(entries, dimensions);
                 for (int i = 0; i < values; i++) bis.Copy(os, (int)valueBits);
             }
-            if (bis.BitsRead / 8 + 1 != size) throw new InvalidDataException($"Codebook {id} wasn't read exactly: the wrong library?");
+            if (bis.BitsRead / 8 + 1 != size) throw new InvalidDataException(L.T("WwiseVorbis.CodebookWasntReadExactly", id));
         }
 
         private static uint QuantValues(uint entries, uint dimensions)
@@ -368,7 +369,7 @@ public static class WwiseVorbis
             for (int i = 0; i < bits; i++, _bit++)
             {
                 long at = start + (_bit >> 3);
-                if (at >= end) throw new InvalidDataException("A packet is read past its end.");
+                if (at >= end) throw new InvalidDataException(L.T("WwiseVorbis.PacketReadPastEnd"));
                 if ((data[at] >> (int)(_bit & 7) & 1) != 0) value |= 1u << i;
             }
             return value;

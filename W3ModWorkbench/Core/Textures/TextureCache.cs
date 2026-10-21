@@ -1,6 +1,7 @@
 using System.Buffers.Binary;
 using System.IO;
 using System.IO.Compression;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core.Textures;
 
@@ -26,10 +27,10 @@ public sealed record TextureInfo(int Width, int Height, int Mips, int Slices, in
 
     /// <summary>The format, size and mip count in a few words: BC1 2048x1024 ×12.</summary>
     public string Description => $"{FormatName} {Width}x{Height}" + (Mips > 1 ? $" ×{Mips}" : "")
-        + (IsCube ? "  cube" : Slices > 1 ? $"  [{Slices}]" : "");
+        + (IsCube ? "  " + L.T("TextureCache.Cube") : Slices > 1 ? $"  [{Slices}]" : "");
 
     /// <summary>The format as the game writes it, for what's not understood yet.</summary>
-    public string FormatName => Format == TextureFormat.Unknown ? $"format {RawFormat}" : Format switch
+    public string FormatName => Format == TextureFormat.Unknown ? L.T("TextureCache.Format", RawFormat) : Format switch
     {
         TextureFormat.Rgba8 => "RGBA8",
         TextureFormat.R16F => "R16F",
@@ -51,7 +52,7 @@ public sealed class TextureEntry : ArchiveEntry
     /// <summary>The texture as a .dds file: all of its mip levels, of every slice (a cube map's faces, an array's textures).</summary>
     public override byte[] Read(Stream? archiveStream)
     {
-        if (archiveStream is null) throw new InvalidOperationException("A texture is read from its cache file.");
+        if (archiveStream is null) throw new InvalidOperationException(L.T("TextureCache.TextureReadCacheFile"));
         return Dds.Wrap(Info, TextureCacheArchive.ReadPixels(archiveStream, Info));
     }
 }
@@ -108,7 +109,7 @@ public sealed class TextureCacheArchive : IArchive
     {
         using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
         long length = fs.Length;
-        if (length < FooterSize) throw new InvalidDataException("The file is too small to be a texture cache.");
+        if (length < FooterSize) throw new InvalidDataException(L.T("TextureCache.FileTooSmallTexture"));
         var footer = new byte[FooterSize];
         fs.Seek(-FooterSize, SeekOrigin.End);
         fs.ReadExactly(footer);
@@ -118,11 +119,11 @@ public sealed class TextureCacheArchive : IArchive
         int mipTable = (int)BinaryPrimitives.ReadUInt32LittleEndian(footer.AsSpan(20));
         uint magic = BinaryPrimitives.ReadUInt32LittleEndian(footer.AsSpan(24));
         int version = (int)BinaryPrimitives.ReadUInt32LittleEndian(footer.AsSpan(28));
-        if (magic != Magic) throw new InvalidDataException("This isn't a texture cache: its footer has no texture cache mark.");
-        if (version is < 4 or > 9) throw new InvalidDataException($"Texture cache version {version} isn't supported (6 and 7 are).");
+        if (magic != Magic) throw new InvalidDataException(L.T("TextureCache.IsntTextureCacheFooter"));
+        if (version is < 4 or > 9) throw new InvalidDataException(L.T("TextureCache.TextureCacheVersionIsnt", version));
         long entriesAt = length - FooterSize - (long)count * EntrySize;
         long namesAt = entriesAt - namesSize;
-        if (count < 0 || namesSize < 0 || namesAt - (long)mipTable * 4 < 0) throw new InvalidDataException("The texture cache's footer is damaged.");
+        if (count < 0 || namesSize < 0 || namesAt - (long)mipTable * 4 < 0) throw new InvalidDataException(L.T("TextureCache.TextureCachesFooterDamaged"));
 
         var names = new byte[namesSize];
         fs.Seek(namesAt, SeekOrigin.Begin);
@@ -198,7 +199,7 @@ public sealed class TextureCacheArchive : IArchive
             int packed = (int)BinaryPrimitives.ReadUInt32LittleEndian(header);
             int unpacked = (int)BinaryPrimitives.ReadUInt32LittleEndian(header.AsSpan(4));
             if (packed < 0 || unpacked < 0 || at + 9 + packed > end + PageSize || filled + unpacked > result.Length)
-                throw new InvalidDataException("A block of the texture is damaged.");
+                throw new InvalidDataException(L.T("TextureCache.BlockTextureDamaged"));
             var block = new byte[packed];
             cache.ReadExactly(block);
             if (packed == unpacked)
@@ -224,7 +225,7 @@ public sealed class TextureCacheArchive : IArchive
         while (read < length)
         {
             int n = zlib.Read(target, offset + read, length - read);
-            if (n == 0) throw new InvalidDataException("A block of the texture ended early.");
+            if (n == 0) throw new InvalidDataException(L.T("TextureCache.BlockTextureEndedEarly"));
             read += n;
         }
     }

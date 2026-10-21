@@ -1,6 +1,7 @@
 using System.IO;
 using System.Text;
 using System.Text.RegularExpressions;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core.Scripts;
 
@@ -26,9 +27,11 @@ public static partial class Snippets
     /// <summary>%AppData%\W3ModWorkbench\snippets: one .ws file per snippet. A first line starting with // is its title.</summary>
     public static string Folder => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "W3ModWorkbench", "snippets");
 
-    public static readonly IReadOnlyList<Snippet> BuiltIn =
+    // the titles are looked up each time, so they follow the app's language; the bodies are WitcherScript
+    public static IReadOnlyList<Snippet> BuiltIn =>
+    // loc-ignore-start
     [
-        new("wrap", "@wrapMethod: run code around one of the game's functions", """
+        new("wrap", L.T("Snippets.Wrap"), """
             @wrapMethod(${Class}) function ${Name}(${parameters})
             {
                 var result : ${type};
@@ -38,36 +41,36 @@ public static partial class Snippets
                 return result;
             }
             """),
-        new("replace", "@replaceMethod: take the place of one of the game's functions", """
+        new("replace", L.T("Snippets.Replace"), """
             @replaceMethod(${Class}) function ${Name}(${parameters})
             {
                 $0
             }
             """),
-        new("addmethod", "@addMethod: a new function on one of the game's classes", """
+        new("addmethod", L.T("Snippets.Addmethod"), """
             @addMethod(${Class}) function ${Name}()
             {
                 $0
             }
             """),
-        new("addfield", "@addField: a new variable on one of the game's classes", """
+        new("addfield", L.T("Snippets.Addfield"), """
             @addField(${Class})
             var ${name} : ${type};
             """),
-        new("onspawned", "Run code when the player is spawned (a new game or a loaded save)", """
+        new("onspawned", L.T("Snippets.Onspawned"), """
             @wrapMethod(CR4Player) function OnSpawned(spawnData : SEntitySpawnData)
             {
                 wrappedMethod(spawnData);
                 $0
             }
             """),
-        new("class", "A class", """
+        new("class", L.T("Snippets.Class"), """
             class ${Name} extends ${CObject}
             {
                 $0
             }
             """),
-        new("statemachine", "A class with states, and its first state", """
+        new("statemachine", L.T("Snippets.Statemachine"), """
             statemachine class ${Name} extends ${CEntity}
             {
                 public function Start()
@@ -94,7 +97,7 @@ public static partial class Snippets
                 }
             }
             """),
-        new("state", "A state of a class", """
+        new("state", L.T("Snippets.State"), """
             state ${Name} in ${Owner}
             {
                 event OnEnterState(prevStateName : name)
@@ -109,26 +112,26 @@ public static partial class Snippets
                 }
             }
             """),
-        new("struct", "A struct", """
+        new("struct", L.T("Snippets.Struct"), """
             struct ${Name}
             {
                 var ${field} : ${int};
             }
             """),
-        new("enum", "An enum", """
+        new("enum", L.T("Snippets.Enum"), """
             enum ${Name}
             {
                 ${First},
                 ${Second},
             }
             """),
-        new("exec", "A console command", """
+        new("exec", L.T("Snippets.Exec"), """
             exec function ${name}()
             {
                 $0
             }
             """),
-        new("timer", "A timer on an entity: AddTimer and the function it calls", """
+        new("timer", L.T("Snippets.Timer"), """
             AddTimer('${OnTick}', ${1.0}, ${true});
 
             timer function ${OnTick}(dt : float, id : int)
@@ -136,13 +139,13 @@ public static partial class Snippets
                 $0
             }
             """),
-        new("for", "A loop over an array", """
+        new("for", L.T("Snippets.For"), """
             for (${i} = 0; ${i} < ${array}.Size(); ${i} += 1)
             {
                 $0
             }
             """),
-        new("listen", "Listen for a key: register for an action and handle it", """
+        new("listen", L.T("Snippets.Listen"), """
             theInput.RegisterListener(this, '${OnMyAction}', '${MyAction}');
 
             event ${OnMyAction}(action : SInputAction)
@@ -153,25 +156,26 @@ public static partial class Snippets
                 }
             }
             """),
-        new("setting", "Read a setting from the mod's menu", """
+        new("setting", L.T("Snippets.Setting"), """
             theGame.GetInGameConfigWrapper().GetVarValue('${Group}', '${Var}')
             """),
-        new("log", "Write a line to the scripts log", """
+        new("log", L.T("Snippets.Log"), """
             LogChannel('${MyMod}', "${message}");
             """),
-        new("notify", "Show a notification on the screen", """
+        new("notify", L.T("Snippets.Notify"), """
             theGame.GetGuiManager().ShowNotification(${GetLocStringByKeyExt("key")});
             """),
-        new("fact", "Check a quest fact", """
+        new("fact", L.T("Snippets.Fact"), """
             if (FactsQuerySum("${fact}") > 0)
             {
                 $0
             }
             """),
-        new("additem", "Give the player an item", """
+        new("additem", L.T("Snippets.Additem"), """
             thePlayer.GetInventory().AddAnItem('${item}', ${1});
             """),
     ];
+    // loc-ignore-end
 
     /// <summary>The built-in snippets, then the person's own, which replace a built-in one with the same prefix.</summary>
     public static List<Snippet> All()

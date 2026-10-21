@@ -1,5 +1,6 @@
 using W3ModWorkbench.Core.Cr2w;
 using W3ModWorkbench.Core.Trees;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core.Journals;
 
@@ -47,11 +48,11 @@ public static class JournalTree
 {
     public static bool IsJournal(string path) => path.EndsWith(".journal", StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>The categories, by the start of their entries' classes, in the editor's order.</summary>
-    private static readonly (string Prefix, string Name)[] Categories =
+    /// <summary>The categories, by the start of their entries' classes, in the editor's order; their names follow the app's language.</summary>
+    private static (string Prefix, string Name)[] Categories =>
     [
-        ("CJournalQuest", "Quests"), ("CJournalCharacter", "Characters"), ("CJournalCreature", "Bestiary"), ("CJournalGlossary", "Glossary"),
-        ("CJournalItem", "Items"), ("CJournalPlace", "Places"), ("CJournalTutorial", "Tutorial"), ("CJournalStoryBook", "Storybook"),
+        ("CJournalQuest", L.T("JournalTree.Quests")), ("CJournalCharacter", L.T("JournalTree.Characters")), ("CJournalCreature", L.T("JournalTree.Bestiary")), ("CJournalGlossary", L.T("JournalTree.Glossary")),
+        ("CJournalItem", L.T("JournalTree.Items")), ("CJournalPlace", L.T("JournalTree.Places")), ("CJournalTutorial", L.T("JournalTree.Tutorial")), ("CJournalStoryBook", L.T("JournalTree.Storybook")),
     ];
 
     public static List<JournalNode> Build(IEnumerable<(string Path, Cr2wFile File)> files)
@@ -68,7 +69,7 @@ public static class JournalTree
         foreach (var node in tops.SelectMany(t => t.All()))
             if (node.Guid != Guid.Empty) byGuid.TryAdd(node.Guid, node);
         var categories = Categories.Select(c => new JournalNode { Name = c.Name, Kind = "Category" }).ToList();
-        var other = new JournalNode { Name = "Other", Kind = "Category" };
+        var other = new JournalNode { Name = L.T("JournalTree.Other"), Kind = "Category" };
         foreach (var top in tops)
         {
             if (top.ParentGuid != Guid.Empty && byGuid.TryGetValue(top.ParentGuid, out var parent) && !ReferenceEquals(parent, top) && !IsUnder(parent, top))
@@ -109,7 +110,7 @@ public static class JournalTree
         var o = file.Object(export);
         string name = o["baseName"] as string is { Length: > 0 } b ? b : ObjectTree.Words(o.ClassName, "CJournal");
         // an entry from a DLC says so, as the editor says it
-        if (top && o.ClassName.EndsWith("Group", StringComparison.Ordinal) && Dlc(path) is { } dlc) name += $" (dlc: {dlc})";
+        if (top && o.ClassName.EndsWith("Group", StringComparison.Ordinal) && Dlc(path) is { } dlc) name += L.T("JournalTree.Dlc", dlc);
         var node = new JournalNode
         {
             Name = name,

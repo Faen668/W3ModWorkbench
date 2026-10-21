@@ -1,4 +1,5 @@
 using System.IO;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core;
 
@@ -18,7 +19,7 @@ public static class Snappy
                 if (b < 0x80) break;
             }
             if (length != size)
-                throw new InvalidDataException($"Snappy data is {length} bytes, expected {size}.");
+                throw new InvalidDataException(L.T("Snappy.SnappyDataBytesExpected", length, size));
 
             var dst = new byte[size];
             int d = 0;
@@ -60,19 +61,19 @@ public static class Snappy
 
                 int from = d - offset;
                 if (offset <= 0 || from < 0)
-                    throw new InvalidDataException("Corrupt Snappy data.");
+                    throw new InvalidDataException(L.T("Snappy.CorruptSnappyData"));
                 for (int i = 0; i < len; i++)
                     dst[d + i] = dst[from + i];
                 d += len;
             }
 
             if (d != size)
-                throw new InvalidDataException($"Snappy data decoded to {d} bytes, expected {size}.");
+                throw new InvalidDataException(L.T("Snappy.SnappyDataDecodedBytes", d, size));
             return dst;
         }
         catch (Exception ex) when (ex is IndexOutOfRangeException or ArgumentException)
         {
-            throw new InvalidDataException("Corrupt Snappy data.", ex);
+            throw new InvalidDataException(L.T("Snappy.CorruptSnappyData"), ex);
         }
     }
 }

@@ -1,3 +1,4 @@
+using W3ModWorkbench.Localisation;
 // Part of the built-in compiler: a C# port of the .ws-to-rsblob compiler written by WebSpam for Aelto's tw3-cahirb (MIT).
 // https://github.com/Aelto/tw3-cahirb/pull/1
 
@@ -161,7 +162,7 @@ public sealed partial class FunctionCompiler
         "<=" => "LessEqual",
         ">" => "Greater",
         ">=" => "GreaterEqual",
-        _ => throw new CompileException($"unsupported operator {op}"),
+        _ => throw new CompileException(L.T("CodeGen.UnsupportedOperator", op)),
     };
 
     private static Ty Numeric(Ty ty) => ty.Kind == TyKind.Enum ? Ty.Int : ty;
@@ -220,7 +221,7 @@ public sealed partial class FunctionCompiler
 
         foreach (var fixup in _fixups)
         {
-            int targetIndex = _labels[fixup.Label] ?? throw new CompileException("a jump has nowhere to go");
+            int targetIndex = _labels[fixup.Label] ?? throw new CompileException(L.T("CodeGen.JumpHasNowhereGo"));
             int target = offsets[targetIndex];
             var ins = _code[fixup.Instruction];
             int fieldEnd = ins.Op == Op.Switch ? 11 : fixup.Slot == Slot.First ? 3 : 5;
@@ -240,12 +241,12 @@ public sealed partial class FunctionCompiler
                     ins.B = (short)value;
                     break;
                 default:
-                    throw new CompileException("a jump was set on an instruction that can't jump");
+                    throw new CompileException(L.T("CodeGen.JumpSetInstructionCant"));
             }
             if (value is > short.MaxValue or < short.MinValue && ins.Op is not (Op.Context or Op.FinalFunc or Op.VirtualFunc or Op.VirtualParentFunc or Op.EntryFunc))
-                throw new CompileException("the function is too long: a jump doesn't fit in 16 bits");
+                throw new CompileException(L.T("CodeGen.FunctionTooLongJump"));
             if (value is > ushort.MaxValue or < 0 && ins.Op is Op.Context or Op.FinalFunc or Op.VirtualFunc or Op.VirtualParentFunc or Op.EntryFunc)
-                throw new CompileException("the function is too long: a call's size doesn't fit in 16 bits");
+                throw new CompileException(L.T("CodeGen.FunctionTooLongCalls"));
         }
         return _code;
     }

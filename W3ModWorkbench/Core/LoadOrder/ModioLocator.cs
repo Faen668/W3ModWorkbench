@@ -1,5 +1,6 @@
 using System.IO;
 using System.Text.Json;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core.LoadOrder;
 
@@ -50,14 +51,14 @@ public static class ModioLocator
                 if (!mod.TryGetProperty("ID", out var idElement) || !idElement.TryGetInt64(out long id)) continue;
                 if (!mod.TryGetProperty("PathOnDisk", out var pathElement) || pathElement.GetString() is not { Length: > 0 } package || !Directory.Exists(package)) continue;
                 string title = mod.TryGetProperty("Profile", out var profile) && profile.ValueKind == JsonValueKind.Object
-                    && profile.TryGetProperty("name", out var n) && n.GetString() is { Length: > 0 } name ? name : $"mod {id}";
+                    && profile.TryGetProperty("name", out var n) && n.GetString() is { Length: > 0 } name ? name : L.T("ModioLocator.Mod", id);
                 config.TryGetValue(id, out var settings);
                 foreach (var (sub, isDlc) in new[] { ("mods", false), ("dlc", true) })
                 {
                     string dir = Path.Combine(package, sub);
                     if (!Directory.Exists(dir)) continue;
                     foreach (string folder in Directory.GetDirectories(dir).Order(StringComparer.OrdinalIgnoreCase))
-                        found.Add(new ModioFolder(id, $"{title} [Mod.io #{id}]" + (isDlc ? $" dlc {Path.GetFileName(folder)}" : ""), folder, isDlc, settings.Enabled, settings.Priority));
+                        found.Add(new ModioFolder(id, $"{title} [Mod.io #{id}]" + (isDlc ? L.T("ModioLocator.Dlc", Path.GetFileName(folder)) : ""), folder, isDlc, settings.Enabled, settings.Priority));
                 }
             }
         }

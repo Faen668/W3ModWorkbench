@@ -2,6 +2,7 @@ using System.IO;
 using System.Numerics;
 using W3ModWorkbench.Core.Animation;
 using W3ModWorkbench.Core.Cr2w;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core.Cutscenes;
 
@@ -101,7 +102,7 @@ public sealed class CutscenePlayback
             }
             if (clip is null)
             {
-                problems.Add($"{name}: its kind of animation buffer isn't read.");
+                problems.Add(L.T("CutscenePlayback.KindAnimationBufferIsnt", name));
                 continue;
             }
             var actor = cutscene.Actors.FirstOrDefault(a => a.Name == name);
@@ -119,7 +120,7 @@ public sealed class CutscenePlayback
     /// </summary>
     private static (Skeleton? Rig, string Note) FindRig(string? template, int bones, ResourceLocator locator, Dictionary<string, Skeleton?> rigs)
     {
-        if (template is null) return (null, "It has no entity template, so no rig.");
+        if (template is null) return (null, L.T("CutscenePlayback.HasNoEntityTemplate"));
         var candidates = new List<string>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         Collect(template, 0);
@@ -156,7 +157,7 @@ public sealed class CutscenePlayback
                 fallbackPath = path;
             }
         }
-        return fallback is null ? (null, candidates.Count == 0 ? "Its entity has no rig." : $"None of its entity's rigs has {bones} bones.") : (fallback, fallbackPath!);
+        return fallback is null ? (null, candidates.Count == 0 ? L.T("CutscenePlayback.EntityHasNoRig") : L.T("CutscenePlayback.NoneEntitysRigsHas", bones)) : (fallback, fallbackPath!);
     }
 
     private static Cr2wFile? ReadCr2w(ResourceLocator locator, string path)

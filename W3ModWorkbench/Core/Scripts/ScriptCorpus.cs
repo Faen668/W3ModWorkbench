@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.IO;
 using W3ModWorkbench.Core.Scripts.Navigation;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core.Scripts;
 
@@ -65,7 +66,7 @@ public static class ScriptCorpus
         }
 
         if (GameScriptsFolder(options.GameFolder) is { } game)
-            files.AddRange(Loose(game, "Game scripts", CorpusOrigin.Game, editable: false));
+            files.AddRange(Loose(game, L.T("Common.GameScripts"), CorpusOrigin.Game, editable: false));
         return files;
     }
 
@@ -76,7 +77,7 @@ public static class ScriptCorpus
         try { paths = Directory.GetFiles(folder, "*.ws", SearchOption.AllDirectories); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { yield break; }
         Array.Sort(paths, StringComparer.OrdinalIgnoreCase);
-        string source = origin == CorpusOrigin.Mod ? label + " (loose scripts)" : label;
+        string source = origin == CorpusOrigin.Mod ? L.T("ScriptCorpus.LooseScripts", label) : label;
         foreach (string path in paths)
         {
             string full = path;
@@ -118,7 +119,7 @@ public static class ScriptCorpus
                         {
                             Key = file.Key,
                             Path = entry.Path.StartsWith(@"scripts\", StringComparison.OrdinalIgnoreCase) ? entry.Path[8..] : entry.Path,
-                            Source = name + " (compiled scripts)",
+                            Source = L.T("ScriptCorpus.CompiledScripts", name),
                             SourceKey = file.SourceKey,
                             Read = file.Read,
                         };

@@ -1,3 +1,4 @@
+using W3ModWorkbench.Localisation;
 namespace W3ModWorkbench.Core.Inspector;
 
 /// <summary>What a file is, which decides how it's compared.</summary>
@@ -124,17 +125,17 @@ public sealed class SourceScan
         get
         {
             var parts = new List<string>();
-            void Add(int n, string noun, string? plural = null)
+            void Add(int n, string countKey)
             {
-                if (n > 0) parts.Add(plural is null ? Format.Count(n, noun) : Format.Count(n, noun, plural));
+                if (n > 0) parts.Add(L.T(countKey, n));
             }
-            Add(Count(UnitKind.Script), "script");
-            Add(Blobs, "compiled script file");
-            Add(Bundles, "bundle");
-            Add(Count(UnitKind.Xml), "XML file");
-            Add(Count(UnitKind.Text), "text file");
-            Add(Count(UnitKind.Asset), "other file");
-            return parts.Count == 0 ? "Nothing to compare found" : string.Join(" · ", parts) + $" · {Format.Bytes(Bytes)}";
+            Add(Count(UnitKind.Script), "Count.Script");
+            Add(Blobs, "Count.CompiledScriptFile");
+            Add(Bundles, "Count.Bundle");
+            Add(Count(UnitKind.Xml), "Count.XmlFile");
+            Add(Count(UnitKind.Text), "Count.TextFile");
+            Add(Count(UnitKind.Asset), "Count.OtherFile");
+            return parts.Count == 0 ? L.T("InspectorTypes.NothingCompareFound") : string.Join(" · ", parts) + $" · {Format.Bytes(Bytes)}";
         }
     }
 }
@@ -179,19 +180,19 @@ public sealed class MatchRow
 
     public string KindText => Kind switch
     {
-        UnitKind.Script => "Script",
-        UnitKind.Xml => "Menu / XML",
-        UnitKind.Text => "Text",
-        _ => "Asset",
+        UnitKind.Script => L.T("InspectorTypes.Kind.Script"),
+        UnitKind.Xml => L.T("InspectorTypes.Kind.Xml"),
+        UnitKind.Text => L.T("InspectorTypes.Kind.Text"),
+        _ => L.T("InspectorTypes.Kind.Asset"),
     };
 
     public string LevelText => Level switch
     {
-        MatchLevel.Identical => "Identical",
-        MatchLevel.Renamed => "Renamed copy",
-        MatchLevel.NearCopy => "Near copy",
-        MatchLevel.Large => "Large overlap",
-        MatchLevel.Partial => "Partial overlap",
+        MatchLevel.Identical => L.T("InspectorTypes.Identical"),
+        MatchLevel.Renamed => L.T("InspectorTypes.RenamedCopy"),
+        MatchLevel.NearCopy => L.T("InspectorTypes.NearCopy"),
+        MatchLevel.Large => L.T("InspectorTypes.LargeOverlap"),
+        MatchLevel.Partial => L.T("InspectorTypes.PartialOverlap"),
         _ => "",
     };
 
@@ -200,11 +201,18 @@ public sealed class MatchRow
 }
 
 /// <summary>One thing the two sources share that isn't a whole file: a comment, a class, a menu key.</summary>
-public sealed record EvidenceItem(string Category, string Text, string InOriginal, string InSuspect);
+public sealed record EvidenceItem(string Category, string Text, string InOriginal, string InSuspect)
+{
+    /// <summary>What kind of evidence it is, for counting; <see cref="Category"/> is its name to show.</summary>
+    public EvidenceKind Kind { get; init; }
+}
+
+public enum EvidenceKind { Other, SharedComment, CopiedFunction, RenamedFunction }
 
 /// <summary>How the two sources compare in one kind of content.</summary>
 public sealed class CategoryResult
 {
+    public UnitKind Kind { get; init; }
     public required string Name { get; init; }
     public required int OriginalFiles { get; init; }
     public required int SuspectFiles { get; init; }
@@ -262,20 +270,20 @@ public sealed class InspectionReport
 
     public string VerdictTitle => Verdict switch
     {
-        VerdictLevel.Extensive => "Extensive copying",
-        VerdictLevel.Significant => "Significant overlap",
-        VerdictLevel.Some => "Some overlap",
-        VerdictLevel.Minor => "Minor overlap",
-        _ => "No meaningful similarity",
+        VerdictLevel.Extensive => L.T("InspectorTypes.ExtensiveCopying"),
+        VerdictLevel.Significant => L.T("InspectorTypes.SignificantOverlap"),
+        VerdictLevel.Some => L.T("InspectorTypes.SomeOverlap"),
+        VerdictLevel.Minor => L.T("InspectorTypes.MinorOverlap"),
+        _ => L.T("InspectorTypes.NoMeaningfulSimilarity"),
     };
 
     public string VerdictText => Verdict switch
     {
-        VerdictLevel.Extensive => "Most of one source is reproduced in the other, in the same code, menus or files. This is far beyond what shared frameworks or coincidence explain.",
-        VerdictLevel.Significant => "A large share of one source appears in the other. Check the matches and shared items to see what was reused.",
-        VerdictLevel.Some => "Parts are shared. This can be a common framework, the game's own patterns, or reuse. Read the matches before drawing conclusions.",
-        VerdictLevel.Minor => "A little is shared, which is normal for mods of the same game.",
-        _ => "The two sources have almost nothing in common.",
+        VerdictLevel.Extensive => L.T("InspectorTypes.MostOneSourceReproduced"),
+        VerdictLevel.Significant => L.T("InspectorTypes.LargeShareOneSource"),
+        VerdictLevel.Some => L.T("InspectorTypes.PartsSharedCanCommon"),
+        VerdictLevel.Minor => L.T("InspectorTypes.LittleSharedWhichNormal"),
+        _ => L.T("InspectorTypes.TwoSourcesHaveAlmost"),
     };
 }
 

@@ -2,6 +2,7 @@ using System.Buffers.Binary;
 using System.Globalization;
 using System.IO;
 using System.Text;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core.Strings;
 
@@ -97,7 +98,7 @@ public static class W3Strings
     public static W3StringsFile Read(byte[] data, string? path = null, IReadOnlyDictionary<uint, string>? keyNames = null)
     {
         if (data.Length < 14 || data[0] != 'R' || data[1] != 'T' || data[2] != 'S' || data[3] != 'W')
-            throw new InvalidDataException("This isn't a .w3strings file: it doesn't start with RTSW.");
+            throw new InvalidDataException(L.T("W3Strings.IsntW3stringsFileDoesnt"));
         var span = data.AsSpan();
         uint version = BinaryPrimitives.ReadUInt32LittleEndian(span[4..]);
         uint key = (uint)BinaryPrimitives.ReadUInt16LittleEndian(span[8..]) << 16
@@ -105,7 +106,7 @@ public static class W3Strings
         var language = key == 0 && path is not null && LanguageFromName(path) is { Key: 0 } named
             ? named
             : Languages.FirstOrDefault(l => l.Key == key)
-              ?? throw new InvalidDataException($"The file's language key {key:x8} isn't one the game uses.");
+              ?? throw new InvalidDataException(L.T("W3Strings.FilesLanguageKeyIsnt", key));
         uint magic = language.Magic;
 
         int pos = 10;
@@ -127,7 +128,7 @@ public static class W3Strings
         // next-gen files count the text in bytes; the original game's counted UTF-16 characters
         bool utf16 = start + size * 2 + 2 == data.Length;
         if (!utf16 && start + size + 2 != data.Length)
-            throw new InvalidDataException("The file is cut short, or has data after its text that the explorer doesn't know.");
+            throw new InvalidDataException(L.T("W3Strings.FileCutShortHas"));
 
         var strings = new List<W3String>(count);
         ushort init = (ushort)(magic >> 8);
@@ -320,19 +321,19 @@ public static class W3Strings
                 {
                     string handle = line[meta.Length..end];
                     language = Language(handle);
-                    if (language is null) problems.Add(new(number, $"The language '{handle}' isn't one the game uses."));
+                    if (language is null) problems.Add(new(number, L.T("W3Strings.LanguageIsntOneGame", handle)));
                 }
                 continue;
             }
             var parts = line.Split('|', 4);
             if (parts.Length < 4)
             {
-                problems.Add(new(number, "Expected id|key(hex)|key(str)|text."));
+                problems.Add(new(number, L.T("W3Strings.ExpectedIdKeyHex")));
                 continue;
             }
             if (!uint.TryParse(parts[0].Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out uint id))
             {
-                problems.Add(new(number, $"'{parts[0].Trim()}' isn't a string ID."));
+                problems.Add(new(number, L.T("W3Strings.IsntStringID", parts[0].Trim())));
                 continue;
             }
             string hex = parts[1].Trim(), name = parts[2].Trim();
@@ -340,7 +341,7 @@ public static class W3Strings
             if (name.Length > 0) hash = HashKey(name);
             else if (hex.Length > 0 && !uint.TryParse(hex, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out hash))
             {
-                problems.Add(new(number, $"'{hex}' isn't a key hash in hex."));
+                problems.Add(new(number, L.T("W3Strings.IsntKeyHashHex", hex)));
                 continue;
             }
             strings.Add(new W3String(id, hash, name.Length > 0 ? name : null, parts[3]));

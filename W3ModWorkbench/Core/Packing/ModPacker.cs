@@ -1,4 +1,5 @@
 using System.IO;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core.Packing;
 
@@ -56,7 +57,7 @@ public static class ModPacker
                 bool isTexture = TextureOnly.Contains(ext) || byPath.ContainsKey(texture) || gameFile?.Invoke(texture) is not null;
                 if (isTexture)
                 {
-                    if (!pictures.TryAdd(texture, file)) notes.Add($"{file.GamePath} is left out: {pictures[texture].GamePath} makes {texture} already");
+                    if (!pictures.TryAdd(texture, file)) notes.Add(L.T("ModPacker.LeftOutMakesAlready", file.GamePath, pictures[texture].GamePath, texture));
                     continue;
                 }
             }
@@ -79,7 +80,7 @@ public static class ModPacker
             }
 
             // pictures made into textures, the workspace's or game's texture of that name as the pattern
-            if (pictures.Count > 0) progress?.Report($"Making {Format(pictures.Count, "texture")} from pictures…");
+            if (pictures.Count > 0) progress?.Report(L.T("ModPacker.MakingTextures", L.T("Count.Texture", pictures.Count)));
             foreach (var (texture, picture) in pictures)
             {
                 cancel.ThrowIfCancellationRequested();
@@ -96,7 +97,7 @@ public static class ModPacker
                 }
                 catch (InvalidDataException ex)
                 {
-                    notes.Add($"{picture.GamePath} wasn't made into a texture: {ex.Message}");
+                    notes.Add(L.T("ModPacker.WasntMadeIntoTexture", picture.GamePath, ex.Message));
                 }
             }
 
@@ -119,12 +120,12 @@ public static class ModPacker
                     }
                     catch (InvalidDataException ex)
                     {
-                        notes.Add($"{file.GamePath} couldn't be cooked ({ex.Message}); it goes in as it is");
+                        notes.Add(L.T("ModPacker.CouldntCookedGoes", file.GamePath, ex.Message));
                     }
                 }
                 else if ((file.GamePath.EndsWith(".w2cube", StringComparison.OrdinalIgnoreCase) || file.GamePath.EndsWith(".texarray", StringComparison.OrdinalIgnoreCase))
                     && IsSourceTexture(file.FilePath))
-                    notes.Add($"{file.GamePath} is a REDkit source file, and cube maps and texture arrays aren't cooked here yet: it goes in as it is, which the game can't load");
+                    notes.Add(L.T("ModPacker.REDkitSourceFileCube", file.GamePath));
                 bundled.Add(file);
             }
 
@@ -132,31 +133,31 @@ public static class ModPacker
             if (bundled.Count > 0)
             {
                 var bundles = BundleWriter.Pack(BundleWriter.InFolderOrder(bundled), content, progress, cancel);
-                progress?.Report("Writing the bundles' metadata…");
+                progress?.Report(L.T("ModPacker.WritingBundlesMetadata"));
                 MetadataStore.Write(content);
-                made.Add($"{Format(bundled.Count, "file")} in content\\{string.Join(", ", bundles.Select(b => Path.GetFileName(b.FilePath)))}"
-                    + (cooked + imported > 0 ? $" ({string.Join(", ", new[] { cooked > 0 ? $"{Format(cooked, "texture")} cooked" : null, imported > 0 ? $"{Format(imported, "texture")} made from pictures" : null }.OfType<string>())})" : ""));
+                made.Add(L.T("ModPacker.FilesInBundles", L.T("Count.File", bundled.Count), string.Join(", ", bundles.Select(b => Path.GetFileName(b.FilePath))))
+                    + (cooked + imported > 0 ? $" ({string.Join(", ", new[] { cooked > 0 ? L.T("ModPacker.TexturesCooked", L.T("Count.Texture", cooked)) : null, imported > 0 ? L.T("ModPacker.TexturesFromPictures", L.T("Count.Texture", imported)) : null }.OfType<string>())})" : ""));
             }
             if (cache.Count > 0)
             {
-                progress?.Report($"Writing {Format(cache.Count, "texture")} to the texture cache…");
+                progress?.Report(L.T("ModPacker.WritingTextureCache", L.T("Count.Texture", cache.Count)));
                 cache.Sort((a, b) => string.CompareOrdinal(a.Path, b.Path));
                 TextureCacheWriter.Write(Path.Combine(content, TextureCacheWriter.FileName), cache, cancel);
-                made.Add($"the mip levels of {Format(cache.Count, "texture")} in content\\{TextureCacheWriter.FileName}");
+                made.Add(L.T("ModPacker.MipLevelsIn", L.T("Count.Texture", cache.Count), TextureCacheWriter.FileName));
             }
             if (sounds.Count > 0)
             {
-                progress?.Report($"Writing {Format(sounds.Count, "sound")} to the sound cache…");
+                progress?.Report(L.T("ModPacker.WritingSoundCache", L.T("Count.Sound", sounds.Count)));
                 var named = new List<(string, string)>();
                 var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 foreach (var sound in sounds)
                 {
                     string name = Path.GetFileName(sound.GamePath);
                     if (seen.Add(name)) named.Add((name, sound.FilePath));
-                    else notes.Add($"{sound.GamePath} is left out: the sound cache has a {name} already (sounds go by their file name alone)");
+                    else notes.Add(L.T("ModPacker.LeftOutSoundCache", sound.GamePath, name));
                 }
                 SoundCacheWriter.Write(Path.Combine(content, SoundCacheWriter.FileName), named, cancel);
-                made.Add($"{Format(named.Count, "sound")} in content\\{SoundCacheWriter.FileName}");
+                made.Add(L.T("ModPacker.SoundsIn", L.T("Count.Sound", named.Count), SoundCacheWriter.FileName));
             }
 
             // caches made elsewhere (a collision cache, say) at the workspace's top go in as they are, beside the bundles
@@ -165,11 +166,11 @@ public static class ModPacker
                 string to = Path.Combine(content, file.Name);
                 if (File.Exists(to))
                 {
-                    notes.Add($"{file.Name} in the workspace is left out: the build made its own {file.Name} from the workspace's files");
+                    notes.Add(L.T("ModPacker.WorkspaceLeftOutBuild", file.Name));
                     continue;
                 }
                 file.CopyTo(to);
-                made.Add($"content\\{file.Name}, as the workspace has it");
+                made.Add(L.T("ModPacker.ContentWorkspaceHas", file.Name));
             }
             return new PackResult(made, notes);
         }
@@ -194,5 +195,4 @@ public static class ModPacker
         }
     }
 
-    private static string Format(int count, string noun) => $"{count:N0} {noun}{(count == 1 ? "" : "s")}";
 }

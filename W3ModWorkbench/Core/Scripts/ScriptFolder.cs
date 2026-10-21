@@ -1,5 +1,6 @@
 using System.IO;
 using W3ModWorkbench.Core.Projects;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core.Scripts;
 
@@ -8,7 +9,7 @@ public sealed class LooseScriptEntry : ArchiveEntry
 {
     public required string FullPath { get; init; }
     public bool IsScript => System.IO.Path.GetExtension(FullPath).Equals(".ws", StringComparison.OrdinalIgnoreCase);
-    public override string FormatText => IsScript ? "Script" : System.IO.Path.GetExtension(FullPath).TrimStart('.').ToUpperInvariant() is { Length: > 0 } ext ? ext : "File";
+    public override string FormatText => IsScript ? L.T("ScriptFolder.Script") : System.IO.Path.GetExtension(FullPath).TrimStart('.').ToUpperInvariant() is { Length: > 0 } ext ? ext : L.T("Common.File");
     public override byte[] Read(Stream? archiveStream) => File.ReadAllBytes(FullPath);
 }
 

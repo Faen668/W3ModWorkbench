@@ -1,5 +1,6 @@
 using System.IO;
 using System.Text;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core.Scripts;
 
@@ -116,7 +117,7 @@ public sealed class ScriptBlob
         }
         catch (Exception ex) when (ex is IndexOutOfRangeException or ArgumentOutOfRangeException or ArgumentException)
         {
-            throw new InvalidDataException("The script blob is damaged or in an unknown format.", ex);
+            throw new InvalidDataException(L.T("ScriptBlob.ScriptBlobDamagedUnknown"), ex);
         }
         return blob;
     }
@@ -124,12 +125,12 @@ public sealed class ScriptBlob
     private void Read(byte[] data)
     {
         if (data.Length < 16)
-            throw new InvalidDataException("The file is too small to be a script blob.");
+            throw new InvalidDataException(L.T("ScriptBlob.FileTooSmallScript"));
 
         var r = new BlobReader(data, 0);
         int tableAt = BitConverter.ToInt32(data, data.Length - 4);
         if (tableAt <= 0 || tableAt >= data.Length - 4)
-            throw new InvalidDataException("Not a compiled script blob (no name table).");
+            throw new InvalidDataException(L.T("ScriptBlob.NotCompiledScriptBlob"));
         var names = new BlobReader(data, tableAt);
         int count = names.U32();
         Names = new string[count];
@@ -139,7 +140,7 @@ public sealed class ScriptBlob
 
         Version = r.U32();
         if (Version != 1)
-            throw new InvalidDataException($"Unsupported script blob version {Version}.");
+            throw new InvalidDataException(L.T("ScriptBlob.UnsupportedScriptBlobVersion", Version));
         Platform = r.Str();
         Build = r.Str();
         r.Skip(8);
@@ -193,7 +194,7 @@ public sealed class ScriptBlob
             FunctionRefs.Add((r.Name(), r.Vlq()));
 
         if (r.Position != tableAt)
-            throw new InvalidDataException("The script blob did not read through to its name table.");
+            throw new InvalidDataException(L.T("ScriptBlob.ScriptBlobDidNot"));
     }
 
     private static void ReadFunctions(BlobReader r, List<ScriptFunction> into, FunctionKind kind)

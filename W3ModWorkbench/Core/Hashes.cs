@@ -1,4 +1,5 @@
 using System.Text;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core;
 
@@ -11,15 +12,16 @@ public sealed record HashKind(string Name, string UsedFor, int Bits, Func<string
 /// </summary>
 public static class Hashes
 {
-    public static readonly IReadOnlyList<HashKind> Kinds =
+    // looked up each time, so the names and what they're used for follow the app's language
+    public static IReadOnlyList<HashKind> Kinds =>
     [
-        new("CR2W name", "Names in CR2W files (.w2ent, .w2mesh and the rest) are stored with this hash: FNV-1a 32 of the UTF-8 name and the zero after it", 32,
+        new(L.T("Hashes.Cr2wName"), L.T("Hashes.Cr2wName.UsedFor"), 32,
             s => Fnv1a32([.. Encoding.UTF8.GetBytes(s), 0])),
-        new("FNV-1a 32", "Plain 32-bit FNV-1a of the UTF-8 text", 32, s => Fnv1a32(Encoding.UTF8.GetBytes(s))),
-        new("String key", ".w3strings files store each key as this hash: lower case, UTF-16, ×31", 32, s => Strings.W3Strings.HashKey(s)),
-        new("Wwise ID", "Sound events, banks, switches and game parameters: FNV-1 32 of the name in lower case", 32, s => Fnv1_32(Encoding.ASCII.GetBytes(s.ToLowerInvariant()))),
-        new("FNV-1a 64", "64-bit FNV-1a of the UTF-8 text, as other REDengine tools use for paths", 64, s => Fnv1a64(Encoding.UTF8.GetBytes(s))),
-        new("CRC-32", "The common CRC-32 (zip, PNG) of the UTF-8 text", 32, s => Crc32(Encoding.UTF8.GetBytes(s))),
+        new("FNV-1a 32", L.T("Hashes.Fnv1a32.UsedFor"), 32, s => Fnv1a32(Encoding.UTF8.GetBytes(s))),
+        new(L.T("Hashes.StringKey"), L.T("Hashes.StringKey.UsedFor"), 32, s => Strings.W3Strings.HashKey(s)),
+        new(L.T("Hashes.WwiseId"), L.T("Hashes.WwiseId.UsedFor"), 32, s => Fnv1_32(Encoding.ASCII.GetBytes(s.ToLowerInvariant()))),
+        new("FNV-1a 64", L.T("Hashes.Fnv1a64.UsedFor"), 64, s => Fnv1a64(Encoding.UTF8.GetBytes(s))),
+        new("CRC-32", L.T("Hashes.Crc32.UsedFor"), 32, s => Crc32(Encoding.UTF8.GetBytes(s))),
     ];
 
     public static uint Fnv1a32(ReadOnlySpan<byte> data)

@@ -1,6 +1,7 @@
 using System.IO;
 using W3ModWorkbench.Core.Cr2w;
 using W3ModWorkbench.Core.Trees;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core.Animation;
 
@@ -19,8 +20,8 @@ public sealed record AnimSetAnimation(RedObject Entry, RedObject? Animation, Red
     /// <summary>How the bone data is kept: compressed, in parts for a long animation, or not read.</summary>
     public string BufferKind => Buffer?.ClassName switch
     {
-        "CAnimationBufferBitwiseCompressed" => "Compressed",
-        "CAnimationBufferMultipart" => "Compressed, in parts",
+        "CAnimationBufferBitwiseCompressed" => L.T("AnimSetFile.Compressed"),
+        "CAnimationBufferMultipart" => L.T("AnimSetFile.CompressedParts"),
         null => "None",
         var c => ObjectTree.Words(c, "CAnimationBuffer"),
     };
@@ -67,7 +68,7 @@ public sealed class AnimSetFile
     public static AnimSetFile Read(byte[] data)
     {
         var file = Cr2wFile.Read(data);
-        var set = file.First("CSkeletalAnimationSet") ?? throw new InvalidDataException("This isn't an animation set.");
+        var set = file.First("CSkeletalAnimationSet") ?? throw new InvalidDataException(L.T("AnimSetFile.IsntAnimationSet"));
         var animations = new List<AnimSetAnimation>();
         foreach (var handle in set.Array("animations").OfType<RedHandle>())
         {

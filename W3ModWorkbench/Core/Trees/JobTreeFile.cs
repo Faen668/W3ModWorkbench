@@ -1,6 +1,7 @@
 using System.IO;
 using W3ModWorkbench.Core.BehTrees;
 using W3ModWorkbench.Core.Cr2w;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core.Trees;
 
@@ -16,18 +17,18 @@ public static class JobTreeFile
 
     private const uint Node = 0xFF9DA33A, Enter = 0xFF3FAE4F, Leave = 0xFF4F86C6, ForceOut = 0xFFD0614A;
 
-    private static readonly TreeLegend[] Legend = [new("Node (a sequence or a random pick)", Node), new("On entering", Enter), new("On leaving", Leave), new("When made to leave", ForceOut)];
+    private static TreeLegend[] Legend => [new(L.T("JobTreeFile.NodeSequenceRandomPick"), Node), new(L.T("JobTreeFile.Entering"), Enter), new(L.T("JobTreeFile.Leaving"), Leave), new(L.T("JobTreeFile.WhenMadeLeave"), ForceOut)];
 
     /// <summary>The properties that hold a node's actions, and what each is called.</summary>
-    private static readonly Dictionary<string, string> Actions = new(StringComparer.Ordinal)
+    private static Dictionary<string, string> Actions => new(StringComparer.Ordinal)
     {
-        ["onEnterAction"] = "enter", ["onLeaveAction"] = "leave", ["onFastLeaveAction"] = "fast leave",
+        ["onEnterAction"] = L.T("JobTreeFile.Enter"), ["onLeaveAction"] = L.T("JobTreeFile.Leave"), ["onFastLeaveAction"] = L.T("JobTreeFile.FastLeave"),
     };
 
     public static TreeDocument Read(byte[] data)
     {
         var file = Cr2wFile.Read(data);
-        var tree = file.First("CJobTree") ?? throw new InvalidDataException("This isn't a job tree.");
+        var tree = file.First("CJobTree") ?? throw new InvalidDataException(L.T("JobTreeFile.IsntJobTree"));
         BehTreeNode? root = tree["jobTreeRootNode"] is RedHandle { Export: int at }
             ? ObjectTree.Build(file, at, c => c is "CJobTreeNode" || ObjectTree.IsA(c, "CJobActionBase"), (o, link) => Look(o, link))
             : null;
@@ -40,9 +41,9 @@ public static class JobTreeFile
             File = file,
             Root = root,
             Resource = tree,
-            KindName = "Job tree",
+            KindName = L.T("JobTreeFile.JobTree"),
             Legend = Legend,
-            Summary = $"{Format.Count(actions, "action")}" + (categories.Count > 0 ? $", for {string.Join(", ", categories)}" : ""),
+            Summary = $"{L.T("Count.Action", actions)}" + (categories.Count > 0 ? L.T("JobTreeFile.For", string.Join(", ", categories)) : ""),
         };
     }
 
@@ -64,24 +65,24 @@ public static class JobTreeFile
         {
             string mode = (o["selectionMode"] as RedEnum)?.ToString() switch
             {
-                null => "Sequence",
-                var m when m.Contains("Random", StringComparison.OrdinalIgnoreCase) => "Random",
+                null => L.T("JobTreeFile.Sequence"),
+                var m when m.Contains("Random", StringComparison.OrdinalIgnoreCase) => L.T("JobTreeFile.Random"),
                 var m => ObjectTree.Words(m, "EJTNSM_", "JTNSM_"),
             };
             long times = o.Integer("iterations", 1);
-            string title = o["looped"] is true ? $"{mode}, looped" : $"{mode} ×{Math.Max(1, times)}";
+            string title = o["looped"] is true ? L.T("JobTreeFile.Looped", mode) : $"{mode} ×{Math.Max(1, times)}";
             var said = new List<string>();
             if (ObjectTree.Short(o["validCategories"]) is { Length: > 0 } categories) said.Add(categories);
-            if (ObjectTree.Short(o["leftItem"]) is { Length: > 0 } left) said.Add($"left hand {left}");
-            if (ObjectTree.Short(o["rightItem"]) is { Length: > 0 } right) said.Add($"right hand {right}");
-            return new(Node, "Node", title, string.Join("  ·  ", said), Kind: BehTreeNodeKind.Composite);
+            if (ObjectTree.Short(o["leftItem"]) is { Length: > 0 } left) said.Add(L.T("JobTreeFile.LeftHand", left));
+            if (ObjectTree.Short(o["rightItem"]) is { Length: > 0 } right) said.Add(L.T("JobTreeFile.RightHand", right));
+            return new(Node, L.T("JobTreeFile.Node"), title, string.Join("  ·  ", said), Kind: BehTreeNodeKind.Composite);
         }
         uint tint = link switch { "onEnterAction" => Enter, "onLeaveAction" => Leave, _ => ForceOut };
-        string kind = link switch { "onEnterAction" => "On entering", "onLeaveAction" => "On leaving", _ => "When made to leave" };
-        string anim = o["animName"] as string is { Length: > 0 } a && a != "None" ? a : "(no animation)";
+        string kind = link switch { "onEnterAction" => L.T("JobTreeFile.Entering"), "onLeaveAction" => L.T("JobTreeFile.Leaving"), _ => L.T("JobTreeFile.WhenMadeLeave") };
+        string anim = o["animName"] as string is { Length: > 0 } a && a != "None" ? a : L.T("JobTreeFile.NoAnimation");
         var detail = new List<string>();
-        if (ObjectTree.Short(o["place"]) is { Length: > 0 } place) detail.Add($"at {place}");
-        if (ObjectTree.Short(o["itemName"]) is { Length: > 0 } item) detail.Add($"item {item}");
+        if (ObjectTree.Short(o["place"]) is { Length: > 0 } place) detail.Add(L.T("JobTreeFile.At", place));
+        if (ObjectTree.Short(o["itemName"]) is { Length: > 0 } item) detail.Add(L.T("JobTreeFile.Item", item));
         if (o["categoryName"] is string category && category.Length > 0) detail.Add(category);
         return new(tint, kind, anim, string.Join("  ·  ", detail), Kind: BehTreeNodeKind.Action);
     }

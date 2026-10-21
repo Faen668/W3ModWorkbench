@@ -1,6 +1,7 @@
 using System.Buffers.Binary;
 using System.IO;
 using System.Text;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core.Cr2w;
 
@@ -112,7 +113,7 @@ internal sealed class RedReader
         if (_marker)
         {
             Need(1);
-            if (_data[Position] != 0) throw new InvalidDataException($"A {className} doesn't start the way properties do.");
+            if (_data[Position] != 0) throw new InvalidDataException(L.T("RedObject.DoesntStartWayProperties", className));
             Position++;
         }
         while (Position + 2 <= end)
@@ -123,7 +124,7 @@ internal sealed class RedReader
             if (_pad) U16();
             int size = I32();
             int valueEnd = Position - 4 + size;
-            if (size < 4 || valueEnd > end) throw new InvalidDataException($"A property of {className} is longer than the object.");
+            if (size < 4 || valueEnd > end) throw new InvalidDataException(L.T("RedObject.PropertyLongerThanObject", className));
             string typeName = Name(type);
             object? value;
             int start = Position;
@@ -184,13 +185,13 @@ internal sealed class RedReader
     {
         var result = new List<RedObject>();
         int count = I32();
-        if (count < 0 || count > 100_000) throw new InvalidDataException("A list's length makes no sense.");
+        if (count < 0 || count > 100_000) throw new InvalidDataException(L.T("RedObject.ListsLengthMakesNo"));
         for (int i = 0; i < count && Position + 6 <= _end; i++)
         {
             int start = Position;
             int size = I32();
             int objectEnd = start + size;
-            if (size < 6 || objectEnd > _end) throw new InvalidDataException("An object is longer than the list it's in.");
+            if (size < 6 || objectEnd > _end) throw new InvalidDataException(L.T("RedObject.ObjectLongerThanList"));
             string className = Name(U16());
             try { result.Add(ReadObject(className, objectEnd)); }
             catch (InvalidDataException) { result.Add(new RedObject(className)); }
@@ -206,12 +207,12 @@ internal sealed class RedReader
     public List<object?> ReadOldArray(string elementType)
     {
         int count = I32();
-        if (count < 0 || count > 50_000_000) throw new InvalidDataException("An array's length makes no sense.");
+        if (count < 0 || count > 50_000_000) throw new InvalidDataException(L.T("RedObject.ArraysLengthMakesNo"));
         U16();
         U16();
         var list = new List<object?>(Math.Min(count, 4096));
         for (int i = 0; i < count; i++) list.Add(ReadValue(elementType, -1));
-        if (Position != _end) throw new InvalidDataException("The array doesn't fill its property.");
+        if (Position != _end) throw new InvalidDataException(L.T("RedObject.ArrayDoesntFillProperty"));
         return list;
     }
 
@@ -246,7 +247,7 @@ internal sealed class RedReader
             // array:2,0,T and static:N,T; the element type is after the last comma that isn't inside it
             string element = ElementType(type);
             int count = I32();
-            if (count < 0 || count > 50_000_000) throw new InvalidDataException("An array's length makes no sense.");
+            if (count < 0 || count > 50_000_000) throw new InvalidDataException(L.T("RedObject.ArraysLengthMakesNo"));
             // bytes, signed or not, are kept as they are: an animation's data is half a megabyte of Int8
             if (element is "Uint8" or "Int8")
             {
@@ -318,7 +319,7 @@ internal sealed class RedReader
 
     private void Need(int count)
     {
-        if (count < 0 || Position + count > _data.Length) throw new InvalidDataException("A value runs past the end of the file.");
+        if (count < 0 || Position + count > _data.Length) throw new InvalidDataException(L.T("RedObject.ValueRunsPastEnd"));
     }
 
     private int Byte() { Need(1); return _data[Position++]; }

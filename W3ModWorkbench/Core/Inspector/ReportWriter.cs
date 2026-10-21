@@ -1,6 +1,7 @@
 using System.Net;
 using System.Reflection;
 using System.Text;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core.Inspector;
 
@@ -12,17 +13,22 @@ public static class ReportWriter
 
     private static string Version => Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "";
 
-    private const string Caution = "Similarity is evidence, not proof. Mods for the same game share the game's own code, common frameworks (such as a mod menu "
-        + "library) and ordinary patterns. Weigh the matches below, particularly distinctive comments, renamed functions and identical files, and compare dates with the authors.";
+    private static string Caution => L.T("ReportWriter.Caution");
 
-    private static string Date(DateTime? d) => d?.ToString("yyyy-MM-dd") ?? "n/a";
+    private static string Date(DateTime? d) => d?.ToString("yyyy-MM-dd") ?? L.T("ReportWriter.NotAvailable");
 
-    private static string Pct(double? v) => v is null ? "n/a" : $"{v * 100:0}%";
+    private static string Dates(DateTime? from, DateTime? to) => L.T("ReportWriter.DateRange", Date(from), Date(to));
+
+    private static string Pct(double? v) => v is null ? L.T("ReportWriter.NotAvailable") : $"{v * 100:0}%";
+
+    private static string GameCode(InspectionReport r) =>
+        r.GameCodeIgnored ? L.T("ReportWriter.GameSetAside", r.GameScriptsRead) : L.T("ReportWriter.GameNotSetAside");
 
     public static string Html(InspectionReport r)
     {
         var s = new StringBuilder();
         string E(string? t) => WebUtility.HtmlEncode(t ?? "");
+        string T(string key, params object?[] args) => E(L.T(key, args));
         string color = r.Verdict switch
         {
             VerdictLevel.Extensive => "#d13438",
@@ -32,8 +38,9 @@ public static class ReportWriter
             _ => "#2e9e55",
         };
 
+        // loc-ignore-start: the page's markup and style; its words are T(…) and the report's own
         s.Append($$$"""
-<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Source Inspector report</title>
+<!doctype html><html lang="{{{E(Loc.Instance.Language)}}}"><head><meta charset="utf-8"><title>{{{T("ReportWriter.Title")}}}</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
 :root{--bg:#f6f7f9;--card:#fff;--text:#1b1f24;--muted:#5b6570;--line:#e1e5ea;--accent:{{{color}}}}
@@ -50,44 +57,44 @@ th{color:var(--muted);font-weight:600}td.num{white-space:nowrap}.tag{font-weight
 @media (max-width:760px){.grid{grid-template-columns:1fr}}
 </style></head><body><main>
 """);
-        s.Append($"<h1>Source Inspector report</h1><div class=\"sub\">W3 Mod Workbench {E(Version)} · {r.Created:yyyy-MM-dd HH:mm}</div>");
+        s.Append($"<h1>{T("ReportWriter.Title")}</h1><div class=\"sub\">W3 Mod Workbench {E(Version)} · {r.Created:yyyy-MM-dd HH:mm}</div>");
 
         s.Append("<div class=\"grid\">");
-        foreach (var (label, scan) in new[] { ("Original", r.Original), ("Suspect", r.Suspect) })
-            s.Append($"<div class=\"card\"><b>{label}</b><div class=\"mono\">{E(scan.Path)}</div><div class=\"note\">{E(scan.Summary)}<br>Files dated {Date(scan.Oldest)} to {Date(scan.Newest)}</div></div>");
+        foreach (var (label, scan) in new[] { (L.T("ReportWriter.Original"), r.Original), (L.T("ReportWriter.Suspect"), r.Suspect) })
+            s.Append($"<div class=\"card\"><b>{E(label)}</b><div class=\"mono\">{E(scan.Path)}</div><div class=\"note\">{E(scan.Summary)}<br>{T("ReportWriter.FilesDated", Dates(scan.Oldest, scan.Newest))}</div></div>");
         s.Append("</div>");
 
         s.Append($"<div class=\"card verdict\"><div class=\"big\">{r.Headline * 100:0}%</div><div><div class=\"title\">{E(r.VerdictTitle)}</div><div>{E(r.VerdictText)}</div></div></div>");
         s.Append("<div class=\"card\">");
-        s.Append($"<div>Original found in the suspect <b>{r.OriginalInSuspect * 100:0}%</b></div><div class=\"bar\"><i style=\"width:{r.OriginalInSuspect * 100:0}%\"></i></div>");
-        s.Append($"<div>Suspect made of the original <b>{r.SuspectInOriginal * 100:0}%</b></div><div class=\"bar\"><i style=\"width:{r.SuspectInOriginal * 100:0}%\"></i></div>");
+        s.Append($"<div>{T("ReportWriter.OriginalInSuspectLong")} <b>{r.OriginalInSuspect * 100:0}%</b></div><div class=\"bar\"><i style=\"width:{r.OriginalInSuspect * 100:0}%\"></i></div>");
+        s.Append($"<div>{T("ReportWriter.SuspectOfOriginalLong")} <b>{r.SuspectInOriginal * 100:0}%</b></div><div class=\"bar\"><i style=\"width:{r.SuspectInOriginal * 100:0}%\"></i></div>");
         s.Append("</div>");
 
-        s.Append("<h2>Key findings</h2><div class=\"card\"><ul>");
+        s.Append($"<h2>{T("ReportWriter.KeyFindings")}</h2><div class=\"card\"><ul>");
         foreach (string f in r.Findings) s.Append($"<li>{E(f)}</li>");
         s.Append("</ul></div>");
 
-        s.Append("<h2>By kind of content</h2><div class=\"card\"><table><tr><th>Content</th><th>Original files</th><th>Suspect files</th><th>Original in suspect</th><th>Suspect in original</th><th>Detail</th></tr>");
+        s.Append($"<h2>{T("ReportWriter.ByKind")}</h2><div class=\"card\"><table><tr><th>{T("ReportWriter.Content")}</th><th>{T("ReportWriter.OriginalFiles")}</th><th>{T("ReportWriter.SuspectFiles")}</th><th>{T("ReportWriter.OriginalInSuspect")}</th><th>{T("ReportWriter.SuspectInOriginal")}</th><th>{T("ReportWriter.Detail")}</th></tr>");
         foreach (var c in r.Categories)
             s.Append($"<tr><td>{E(c.Name)}</td><td class=\"num\">{c.OriginalFiles:N0}</td><td class=\"num\">{c.SuspectFiles:N0}</td><td class=\"num\">{Pct(c.OriginalInSuspect)}</td><td class=\"num\">{Pct(c.SuspectInOriginal)}</td><td class=\"note\">{E(c.Detail)}</td></tr>");
         s.Append("</table></div>");
 
         if (r.Style.Count > 0)
         {
-            s.Append($"<h2>Coding style: {r.StyleSimilarity * 100:0}% alike</h2><div class=\"card\"><div class=\"note\">{E(r.StyleNote)}</div><table><tr><th>Habit</th><th>Original</th><th>Suspect</th><th>Alike</th></tr>");
+            s.Append($"<h2>{T("ReportWriter.CodingStyle", r.StyleSimilarity * 100)}</h2><div class=\"card\"><div class=\"note\">{E(r.StyleNote)}</div><table><tr><th>{T("ReportWriter.Habit")}</th><th>{T("ReportWriter.Original")}</th><th>{T("ReportWriter.Suspect")}</th><th>{T("ReportWriter.Alike")}</th></tr>");
             foreach (var f in r.Style)
                 s.Append($"<tr><td>{E(f.Name)} <span class=\"note\">{E(f.Habit)}</span></td><td>{E(f.Original)}</td><td>{E(f.Suspect)}</td><td class=\"num\">{f.Similarity * 100:0}%</td></tr>");
             s.Append("</table></div>");
         }
 
-        s.Append($"<h2>Matching files ({Math.Min(r.Matches.Count, MaxMatches):N0} of {r.Matches.Count:N0})</h2><div class=\"card\"><table><tr><th>Match</th><th>Type</th><th>Original</th><th>Suspect</th><th>Original in suspect</th><th>Suspect in original</th><th>Note</th></tr>");
+        s.Append($"<h2>{T("ReportWriter.MatchingFiles", Math.Min(r.Matches.Count, MaxMatches), r.Matches.Count)}</h2><div class=\"card\"><table><tr><th>{T("ReportWriter.Match")}</th><th>{T("ReportWriter.Type")}</th><th>{T("ReportWriter.Original")}</th><th>{T("ReportWriter.Suspect")}</th><th>{T("ReportWriter.OriginalInSuspect")}</th><th>{T("ReportWriter.SuspectInOriginal")}</th><th>{T("ReportWriter.Note")}</th></tr>");
         foreach (var m in r.Matches.Take(MaxMatches))
-            s.Append($"<tr><td class=\"tag\">{E(m.LevelText)}</td><td>{E(m.KindText)}</td><td class=\"mono\">{E(m.Original.Origin)}</td><td class=\"mono\">{E(m.Suspect.Origin)}</td><td class=\"num\">{m.OriginalInSuspect * 100:0}%</td><td class=\"num\">{m.SuspectInOriginal * 100:0}%</td><td class=\"note\">{E(m.Note)}{(m.SamePath ? " · same path" : "")}</td></tr>");
+            s.Append($"<tr><td class=\"tag\">{E(m.LevelText)}</td><td>{E(m.KindText)}</td><td class=\"mono\">{E(m.Original.Origin)}</td><td class=\"mono\">{E(m.Suspect.Origin)}</td><td class=\"num\">{m.OriginalInSuspect * 100:0}%</td><td class=\"num\">{m.SuspectInOriginal * 100:0}%</td><td class=\"note\">{E(m.Note)}{(m.SamePath ? T("ReportWriter.SamePath") : "")}</td></tr>");
         s.Append("</table></div>");
 
         foreach (var group in r.Evidence.GroupBy(e => e.Category))
         {
-            s.Append($"<h2>{E(group.Key)} ({group.Count():N0})</h2><div class=\"card\"><table><tr><th>Item</th><th>In the original</th><th>In the suspect</th></tr>");
+            s.Append($"<h2>{E(group.Key)} ({group.Count():N0})</h2><div class=\"card\"><table><tr><th>{T("ReportWriter.Item")}</th><th>{T("ReportWriter.InOriginal")}</th><th>{T("ReportWriter.InSuspect")}</th></tr>");
             foreach (var e in group.Take(MaxEvidence))
                 s.Append($"<tr><td>{E(e.Text)}</td><td class=\"mono\">{E(e.InOriginal)}</td><td class=\"mono\">{E(e.InSuspect)}</td></tr>");
             s.Append("</table></div>");
@@ -95,13 +102,14 @@ th{color:var(--muted);font-weight:600}td.num{white-space:nowrap}.tag{font-weight
 
         if (r.Original.Warnings.Count + r.Suspect.Warnings.Count > 0)
         {
-            s.Append("<h2>Files that could not be read</h2><div class=\"card\"><ul>");
+            s.Append($"<h2>{T("ReportWriter.Unreadable")}</h2><div class=\"card\"><ul>");
             foreach (string w in r.Original.Warnings.Concat(r.Suspect.Warnings)) s.Append($"<li class=\"mono\">{E(w)}</li>");
             s.Append("</ul></div>");
         }
 
-        s.Append($"<div class=\"note\">{E(Caution)}{(r.GameCodeIgnored ? $" The game's own scripts ({r.GameScriptsRead:N0} files) were set aside." : " The game's own scripts were not set aside, so shared game code counts as a match.")}</div>");
+        s.Append($"<div class=\"note\">{E(Caution)}{E(GameCode(r))}</div>");
         s.Append("</main></body></html>");
+        // loc-ignore-end
         return s.ToString();
     }
 
@@ -109,46 +117,49 @@ th{color:var(--muted);font-weight:600}td.num{white-space:nowrap}.tag{font-weight
     {
         var s = new StringBuilder();
         static string Cell(string? t) => (t ?? "").Replace("|", "\\|").Replace("\r", " ").Replace("\n", " ");
+        static string Row(params string[] cells) => "| " + string.Join(" | ", cells) + " |";
 
-        s.AppendLine("# Source Inspector report").AppendLine();
-        s.AppendLine($"Made with W3 Mod Workbench {Version} on {r.Created:yyyy-MM-dd HH:mm}.").AppendLine();
-        s.AppendLine("| | Path | Contents | File dates |").AppendLine("|---|---|---|---|");
-        s.AppendLine($"| **Original** | `{r.Original.Path}` | {Cell(r.Original.Summary)} | {Date(r.Original.Oldest)} to {Date(r.Original.Newest)} |");
-        s.AppendLine($"| **Suspect** | `{r.Suspect.Path}` | {Cell(r.Suspect.Summary)} | {Date(r.Suspect.Oldest)} to {Date(r.Suspect.Newest)} |").AppendLine();
+        s.AppendLine("# " + L.T("ReportWriter.Title")).AppendLine();
+        s.AppendLine(L.T("ReportWriter.MadeWith", Version, r.Created)).AppendLine();
+        s.AppendLine("| " + Row(L.T("ReportWriter.Path"), L.T("ReportWriter.Contents"), L.T("ReportWriter.FileDates"))).AppendLine("|---|---|---|---|");
+        s.AppendLine(Row($"**{L.T("ReportWriter.Original")}**", $"`{r.Original.Path}`", Cell(r.Original.Summary), Dates(r.Original.Oldest, r.Original.Newest)));
+        s.AppendLine(Row($"**{L.T("ReportWriter.Suspect")}**", $"`{r.Suspect.Path}`", Cell(r.Suspect.Summary), Dates(r.Suspect.Oldest, r.Suspect.Newest))).AppendLine();
 
         s.AppendLine($"## {r.VerdictTitle}: {r.Headline * 100:0}%").AppendLine();
         s.AppendLine(r.VerdictText).AppendLine();
-        s.AppendLine($"- Original found in the suspect: **{r.OriginalInSuspect * 100:0}%**");
-        s.AppendLine($"- Suspect made of the original: **{r.SuspectInOriginal * 100:0}%**").AppendLine();
+        s.AppendLine($"- {L.T("ReportWriter.OriginalInSuspectLong")}: **{r.OriginalInSuspect * 100:0}%**");
+        s.AppendLine($"- {L.T("ReportWriter.SuspectOfOriginalLong")}: **{r.SuspectInOriginal * 100:0}%**").AppendLine();
 
-        s.AppendLine("## Key findings").AppendLine();
+        s.AppendLine("## " + L.T("ReportWriter.KeyFindings")).AppendLine();
         foreach (string f in r.Findings) s.AppendLine($"- {f}");
         s.AppendLine();
 
-        s.AppendLine("## By kind of content").AppendLine();
-        s.AppendLine("| Content | Original files | Suspect files | Original in suspect | Suspect in original | Detail |").AppendLine("|---|---:|---:|---:|---:|---|");
+        s.AppendLine("## " + L.T("ReportWriter.ByKind")).AppendLine();
+        s.AppendLine(Row(L.T("ReportWriter.Content"), L.T("ReportWriter.OriginalFiles"), L.T("ReportWriter.SuspectFiles"), L.T("ReportWriter.OriginalInSuspect"),
+            L.T("ReportWriter.SuspectInOriginal"), L.T("ReportWriter.Detail"))).AppendLine("|---|---:|---:|---:|---:|---|");
         foreach (var c in r.Categories)
             s.AppendLine($"| {c.Name} | {c.OriginalFiles:N0} | {c.SuspectFiles:N0} | {Pct(c.OriginalInSuspect)} | {Pct(c.SuspectInOriginal)} | {Cell(c.Detail)} |");
         s.AppendLine();
 
         if (r.Style.Count > 0)
         {
-            s.AppendLine($"## Coding style: {r.StyleSimilarity * 100:0}% alike").AppendLine().AppendLine(r.StyleNote).AppendLine();
-            s.AppendLine("| Habit | Original | Suspect | Alike |").AppendLine("|---|---|---|---:|");
+            s.AppendLine("## " + L.T("ReportWriter.CodingStyle", r.StyleSimilarity * 100)).AppendLine().AppendLine(r.StyleNote).AppendLine();
+            s.AppendLine(Row(L.T("ReportWriter.Habit"), L.T("ReportWriter.Original"), L.T("ReportWriter.Suspect"), L.T("ReportWriter.Alike"))).AppendLine("|---|---|---|---:|");
             foreach (var f in r.Style) s.AppendLine($"| {f.Name} | {f.Original} | {f.Suspect} | {f.Similarity * 100:0}% |");
             s.AppendLine();
         }
 
-        s.AppendLine($"## Matching files ({Math.Min(r.Matches.Count, MaxMatches):N0} of {r.Matches.Count:N0})").AppendLine();
-        s.AppendLine("| Match | Type | Original | Suspect | Orig. in susp. | Susp. in orig. | Note |").AppendLine("|---|---|---|---|---:|---:|---|");
+        s.AppendLine("## " + L.T("ReportWriter.MatchingFiles", Math.Min(r.Matches.Count, MaxMatches), r.Matches.Count)).AppendLine();
+        s.AppendLine(Row(L.T("ReportWriter.Match"), L.T("ReportWriter.Type"), L.T("ReportWriter.Original"), L.T("ReportWriter.Suspect"), L.T("ReportWriter.OriginalInSuspectShort"),
+            L.T("ReportWriter.SuspectInOriginalShort"), L.T("ReportWriter.Note"))).AppendLine("|---|---|---|---|---:|---:|---|");
         foreach (var m in r.Matches.Take(MaxMatches))
-            s.AppendLine($"| {m.LevelText} | {m.KindText} | `{Cell(m.Original.Origin)}` | `{Cell(m.Suspect.Origin)}` | {m.OriginalInSuspect * 100:0}% | {m.SuspectInOriginal * 100:0}% | {Cell(m.Note)}{(m.SamePath ? " · same path" : "")} |");
+            s.AppendLine($"| {m.LevelText} | {m.KindText} | `{Cell(m.Original.Origin)}` | `{Cell(m.Suspect.Origin)}` | {m.OriginalInSuspect * 100:0}% | {m.SuspectInOriginal * 100:0}% | {Cell(m.Note)}{(m.SamePath ? L.T("ReportWriter.SamePath") : "")} |");
         s.AppendLine();
 
         foreach (var group in r.Evidence.GroupBy(e => e.Category))
         {
             s.AppendLine($"## {group.Key} ({group.Count():N0})").AppendLine();
-            s.AppendLine("| Item | In the original | In the suspect |").AppendLine("|---|---|---|");
+            s.AppendLine(Row(L.T("ReportWriter.Item"), L.T("ReportWriter.InOriginal"), L.T("ReportWriter.InSuspect"))).AppendLine("|---|---|---|");
             foreach (var e in group.Take(MaxEvidence)) s.AppendLine($"| {Cell(e.Text)} | `{Cell(e.InOriginal)}` | `{Cell(e.InSuspect)}` |");
             s.AppendLine();
         }

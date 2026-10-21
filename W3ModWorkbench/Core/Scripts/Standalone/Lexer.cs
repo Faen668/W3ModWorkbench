@@ -3,6 +3,7 @@
 
 using System.Globalization;
 using System.Text;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core.Scripts.Standalone;
 
@@ -78,7 +79,7 @@ public static class Lexer
                         pos++;
                         continue;
                     }
-                    throw new ScriptSyntaxException($"unexpected character '{c}'", line);
+                    throw new ScriptSyntaxException(L.T("Lexer.UnexpectedCharacter", c), line);
                 }
                 pos += punct.Length;
                 tokens.Add(new Token(TokKind.Punct, punct, tokenLine));
@@ -126,11 +127,11 @@ public static class Lexer
         if (isFloat)
         {
             if (!float.TryParse(digits, NumberStyles.Float, CultureInfo.InvariantCulture, out float f))
-                throw new ScriptSyntaxException($"bad float '{digits}'", line);
+                throw new ScriptSyntaxException(L.T("Lexer.BadFloat", digits), line);
             return new Token(TokKind.Float, text, line, 0, f);
         }
         if (!long.TryParse(digits, NumberStyles.None, CultureInfo.InvariantCulture, out long i))
-            throw new ScriptSyntaxException($"bad int '{digits}'", line);
+            throw new ScriptSyntaxException(L.T("Lexer.BadInt", digits), line);
         return new Token(TokKind.Int, text, line, i);
     }
 
@@ -157,7 +158,7 @@ public static class Lexer
             text.Append(c);
             pos++;
         }
-        if (pos >= source.Length) throw new ScriptSyntaxException("unterminated literal", line);
+        if (pos >= source.Length) throw new ScriptSyntaxException(L.T("Lexer.UnterminatedLiteral"), line);
         pos++;
         return text.ToString();
     }

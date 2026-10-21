@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using System.IO;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core.Textures;
 
@@ -17,9 +18,9 @@ public static class Dds
     public static byte[] Wrap(TextureInfo info, byte[] pixels)
     {
         if (info.Format == TextureFormat.Unknown)
-            throw new NotSupportedException($"Texture format {info.RawFormat} isn't understood yet, so it can't be written as a .dds.");
+            throw new NotSupportedException(L.T("Dds.TextureFormatIsntUnderstood", info.RawFormat));
         int chain = TextureDecoder.ChainSize(info);
-        if (pixels.Length < chain * info.Slices) throw new InvalidDataException("The texture's data is shorter than its mip levels need.");
+        if (pixels.Length < chain * info.Slices) throw new InvalidDataException(L.T("Dds.TexturesDataShorterThan"));
         bool array = info.Slices > 1 && !info.IsCube;
         bool dx10 = info.Format is TextureFormat.Bc7 or TextureFormat.R16F || array;
         int body = 128 + (dx10 ? 20 : 0);

@@ -3,6 +3,7 @@ using System.IO;
 using System.Text.RegularExpressions;
 using W3ModWorkbench.Core.Cr2w;
 using W3ModWorkbench.Core.Textures;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core.Packing;
 
@@ -123,7 +124,7 @@ public static class TextureCooker
             at += pad ? 4 : 2;
             int size = BinaryPrimitives.ReadInt32LittleEndian(d.AsSpan(at));
             if (size < 4 || at + size > end || name >= file.Names.Count || type >= file.Names.Count)
-                throw new InvalidDataException("A texture's property runs past its object.");
+                throw new InvalidDataException(L.T("TextureCooker.TexturesPropertyRunsPast"));
             var value = d.AsSpan(at + 4, size - 4).ToArray();
             string typeName = file.Names[type];
             string? text = null;
@@ -267,18 +268,18 @@ public static class TextureCooker
         if (Path.GetExtension(picturePath).Equals(".dds", StringComparison.OrdinalIgnoreCase))
         {
             if (!Dds.TryRead(picture, out var info, out var pixels))
-                throw new InvalidDataException("the .dds is in a format that can't be used (BC1, BC3, BC4, BC5, BC7 and 32-bit RGBA can)");
-            if (info.Slices > 1) throw new InvalidDataException("the .dds is a cube map or an array; only plain 2D textures can be made from a .dds yet");
+                throw new InvalidDataException(L.T("TextureCooker.DdsFormatCantUsed"));
+            if (info.Slices > 1) throw new InvalidDataException(L.T("TextureCooker.DdsCubeMapArray"));
             byte format = info.Format switch
             {
                 TextureFormat.Bc1 => 7, TextureFormat.Bc3 => 8, TextureFormat.Bc7 => 10, TextureFormat.Bc4 => 14, TextureFormat.Bc5 => 15,
                 TextureFormat.Rgba8 => 253,
-                _ => throw new InvalidDataException($"a {info.FormatName} .dds can't be made into a texture"),
+                _ => throw new InvalidDataException(L.T("TextureCooker.DdsCantMadeInto", info.FormatName)),
             };
             group ??= GuessGroup(gamePath, format is 8 or 253);
             if (CacheFormat(compression) != format)
             {
-                if (compression is not null) notes.Add($"the .dds is {info.FormatName}, so the texture is too (the one it replaces was {compression})");
+                if (compression is not null) notes.Add(L.T("TextureCooker.DdsSoTextureToo", info.FormatName, compression));
                 compression = Compression(format);
             }
             int wanted = NoMips.Contains(group) ? 1 : MipCount(info.Width, info.Height);
@@ -293,14 +294,14 @@ public static class TextureCooker
                     levels.Add(Level(format, w, h, pixels.AsSpan(at, size).ToArray()));
                     at += size;
                 }
-                if (info.Mips < wanted) notes.Add("the BC7 .dds has too few mip levels, and BC7 can't be encoded here to make the rest");
+                if (info.Mips < wanted) notes.Add(L.T("TextureCooker.BC7DdsHasToo"));
             }
             else
             {
                 // too few levels: the first decoded, and the chain made again in the same format
-                var decoded = TextureDecoder.Decode(info, pixels) ?? throw new InvalidDataException("the .dds couldn't be decoded to make its mip levels");
+                var decoded = TextureDecoder.Decode(info, pixels) ?? throw new InvalidDataException(L.T("TextureCooker.DdsCouldntDecodedMake"));
                 levels = Chain(ToRgba(decoded.Bgra), info.Width, info.Height, format, wanted);
-                notes.Add($"the .dds had {info.Mips} mip level{(info.Mips == 1 ? "" : "s")}; the rest were made");
+                notes.Add(L.T("TextureCooker.DdsHadMips", info.Mips));
             }
         }
         else
@@ -312,7 +313,7 @@ public static class TextureCooker
             byte format = CacheFormat(compression);
             if (format is 10 or 13)
             {
-                notes.Add($"{compression} can't be encoded here, so the texture is BC3 (TCM_DXTAlpha)");
+                notes.Add(L.T("TextureCooker.CantEncodedHereSo", compression));
                 compression = "TCM_DXTAlpha";
                 format = 8;
             }

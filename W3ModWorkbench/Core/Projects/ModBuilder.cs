@@ -2,6 +2,7 @@ using System.IO;
 using System.Text;
 using System.Text.Json;
 using W3ModWorkbench.Core.Scripts;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core.Projects;
 
@@ -46,14 +47,14 @@ public static class ModBuilder
         BuildResult Failed(string why) => new(false, mod, why, made, log.ToString(), compiled);
 
         if (FileSafety.Protection(project.FilePath) is { } protection)
-            return Failed($"The project is inside the game's folders, where nothing is written. {protection}");
+            return Failed(L.T("ModBuilder.ProjectInsideGamesFolders", protection));
         // the build folder is the project's own and only ever this project's build: it's emptied and made again
         if (!Path.GetFullPath(mod).StartsWith(Path.GetFullPath(project.BuildPath) + "\\", StringComparison.OrdinalIgnoreCase))
-            return Failed("The mod's name doesn't make a folder inside the build folder.");
+            return Failed(L.T("ModBuilder.ModsNameDoesntMake"));
 
         try
         {
-            progress?.Report("Clearing the last build…");
+            progress?.Report(L.T("ModBuilder.ClearingLastBuild"));
             if (Directory.Exists(mod)) Directory.Delete(mod, recursive: true);
             Directory.CreateDirectory(content);
 
@@ -68,7 +69,7 @@ public static class ModBuilder
             {
                 if (compiler is null)
                     return Failed(CompilerChoice.NothingToCompileWith + ".");
-                progress?.Report(compiler.Kind == CompilerKind.WccLite ? "Compiling the scripts with wcc_lite (about a minute)…" : "Compiling the scripts…");
+                progress?.Report(compiler.Kind == CompilerKind.WccLite ? L.T("ModBuilder.CompilingScriptsWccLite") : L.T("ModBuilder.CompilingScripts"));
                 // compiled to a file of its own first: the compilers won't write into a build, which only Build itself fills
                 string temp = Path.Combine(Path.GetTempPath(), "W3ModWorkbench", "build-" + Guid.NewGuid().ToString("N"));
                 Directory.CreateDirectory(temp);
@@ -88,10 +89,10 @@ public static class ModBuilder
                 {
                     int errors = compiled.Messages.Count(m => m.IsError);
                     return Failed(errors > 0
-                        ? $"The scripts didn't compile: {errors} error{(errors == 1 ? "" : "s")}. Nothing was built."
-                        : $"The scripts didn't compile. {compiled.Failure}");
+                        ? L.T("ModBuilder.ScriptErrors", errors)
+                        : L.T("ModBuilder.ScriptsDidntCompile", compiled.Failure));
                 }
-                made.Add($"{scripts.Count:N0} script{(scripts.Count == 1 ? "" : "s")} compiled into content\\precompiled.rsblob, by {compiler.Name}");
+                made.Add(L.T("ModBuilder.ScriptsCompiled", scripts.Count, compiler.Name));
             }
 
             // loose, as they are: beside the blob they're the mod's source, for others to read or merge
@@ -104,7 +105,7 @@ public static class ModBuilder
                     Directory.CreateDirectory(Path.GetDirectoryName(target)!);
                     File.Copy(script, target);
                 }
-                made.Add($"{scripts.Count:N0} script{(scripts.Count == 1 ? "" : "s")} in content\\scripts, as source");
+                made.Add(L.T("ModBuilder.ScriptsAsSource", scripts.Count));
             }
 
             // with both, info.json tells the game to run the blob and leave the loose copies alone, as REDkit's own does
@@ -119,7 +120,7 @@ public static class ModBuilder
                     author = project.Author,
                     useLooseScripts = false,
                 }, new JsonSerializerOptions { WriteIndented = true }));
-                made.Add("content\\info.json, so the game runs the compiled scripts and not the loose ones");
+                made.Add(L.T("ModBuilder.ContentInfoJsonSo"));
             }
 
             // strings, from anywhere in the project
@@ -132,16 +133,16 @@ public static class ModBuilder
             // the workspace's game files, packed into the mod's bundle, its textures cooked and its sounds cached
             if (Directory.Exists(project.WorkspacePath))
             {
-                progress?.Report("Packing the workspace…");
+                progress?.Report(L.T("ModBuilder.PackingWorkspace"));
                 if (Packing.ModPacker.Pack(project.WorkspacePath, content, gameFile, progress, cancel) is { } packed)
                 {
                     made.AddRange(packed.Made);
                     foreach (string note in packed.Notes) log.AppendLine(note);
-                    made.AddRange(packed.Notes.Take(10).Select(note => "Note: " + note));
-                    if (packed.Notes.Count > 10) made.Add($"…and {packed.Notes.Count - 10:N0} more notes");
+                    made.AddRange(packed.Notes.Take(10).Select(note => L.T("ModBuilder.Note", note)));
+                    if (packed.Notes.Count > 10) made.Add(L.T("ModBuilder.MoreNotes", packed.Notes.Count - 10));
                 }
             }
-            if (made.Count == 0) return Failed("There's nothing to build yet: the project has no scripts, no workspace files and no strings.");
+            if (made.Count == 0) return Failed(L.T("ModBuilder.TheresNothingBuildYet"));
             return new BuildResult(true, mod, null, made, log.ToString(), compiled);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -169,7 +170,7 @@ public static class ModBuilder
         foreach (string file in Directory.EnumerateFiles(project.WorkspacePath, "*", SearchOption.AllDirectories))
             if (IsUncooked(file) && !BuildCooks(file))
                 issues.Add(new WorkspaceIssue(Path.GetRelativePath(project.WorkspacePath, file),
-                    "isn't cooked (it's a REDkit source file): the game won't load it until it's cooked, and Build only cooks textures (.xbm) so far."));
+                    L.T("ModBuilder.IsntCookedREDkitSource")));
         return issues;
     }
 
@@ -230,13 +231,13 @@ public static class ModBuilder
     public static Task<string> InstallAsync(WorkbenchProject project, string gameFolder) => Task.Run(() =>
     {
         string source = project.BuiltModPath;
-        if (!Directory.Exists(Path.Combine(source, "content"))) throw new IOException("There's no build to install yet. Build the mod first.");
+        if (!Directory.Exists(Path.Combine(source, "content"))) throw new IOException(L.T("ModBuilder.TheresNoBuildInstall"));
         string mods = Path.Combine(gameFolder, "mods");
         string target = InstallPath(project, gameFolder);
         // only ever a mod's own folder, straight under mods, with the name the game wants
         if (!project.ModFolderName.StartsWith("mod", StringComparison.OrdinalIgnoreCase)
             || !Path.GetDirectoryName(Path.GetFullPath(target))!.Equals(Path.GetFullPath(mods), StringComparison.OrdinalIgnoreCase))
-            throw new IOException($"{project.ModFolderName} isn't a mod folder name the tool installs to.");
+            throw new IOException(L.T("ModBuilder.IsntModFolderName", project.ModFolderName));
         FileSafety.CheckInstallWrite(Path.Combine(target, "content", "_"));
         Directory.CreateDirectory(mods);
         if (Directory.Exists(target)) Directory.Delete(target, recursive: true);

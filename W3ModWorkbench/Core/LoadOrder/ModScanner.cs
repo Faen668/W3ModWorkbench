@@ -6,6 +6,7 @@ using System.Text.RegularExpressions;
 using W3ModWorkbench.Core.Scripts;
 using W3ModWorkbench.Core.Scripts.Navigation;
 using W3ModWorkbench.Core.Strings;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core.LoadOrder;
 
@@ -118,7 +119,7 @@ public sealed class GameIndex
             {
                 var file = new ScriptFile
                 {
-                    Key = path, Path = Path.GetRelativePath(folder, path), Source = "Game scripts", SourceKey = folder,
+                    Key = path, Path = Path.GetRelativePath(folder, path), Source = L.T("Common.GameScripts"), SourceKey = folder,
                     Read = () => File.ReadAllBytes(path),
                 };
                 parsed[i] = ScriptParser.Parse(TextDecoding.Decode(File.ReadAllBytes(path)), file);
@@ -177,7 +178,7 @@ public static partial class ModScanner
         try { files = Directory.GetFiles(content, "*", SearchOption.AllDirectories); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            mod.Problems.Add(($"The folder couldn't be read: {ex.Message}", true));
+            mod.Problems.Add((L.T("ModScanner.FolderCouldntRead", ex.Message), true));
             return mod;
         }
 
@@ -193,7 +194,7 @@ public static partial class ModScanner
             }
             catch (Exception ex) when (ex is InvalidDataException or IOException or UnauthorizedAccessException or NotSupportedException)
             {
-                mod.Problems.Add(($"{rel} couldn't be read: {ex.Message}", true));
+                mod.Problems.Add((L.T("ModScanner.CouldntRead", rel, ex.Message), true));
             }
         }
 
@@ -206,7 +207,7 @@ public static partial class ModScanner
                 try { AddLoose(mod, scripts, file); }
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
                 {
-                    mod.Problems.Add(($"{Path.GetRelativePath(content, file)} couldn't be read: {ex.Message}", false));
+                    mod.Problems.Add((L.T("ModScanner.CouldntRead2", Path.GetRelativePath(content, file), ex.Message), false));
                 }
             }
 
@@ -245,7 +246,7 @@ public static partial class ModScanner
         }
         catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
         {
-            mod.Problems.Add(($"info.json couldn't be read: {ex.Message}", false));
+            mod.Problems.Add((L.T("ModScanner.InfoJsonCouldntRead", ex.Message), false));
         }
     }
 
@@ -371,7 +372,7 @@ public static partial class ModScanner
         }
         catch (Exception ex) when (ex is InvalidDataException or IOException or UnauthorizedAccessException or ArgumentException or IndexOutOfRangeException)
         {
-            mod.Problems.Add(($"{Path.GetFileName(pick)} couldn't be read: {ex.Message}", false));
+            mod.Problems.Add((L.T("ModScanner.CouldntRead3", Path.GetFileName(pick), ex.Message), false));
         }
     }
 

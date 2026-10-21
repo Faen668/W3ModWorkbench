@@ -81,7 +81,7 @@ public static class ScriptWriter
         {
             var sb = new StringBuilder();
             foreach (var field in blob.AddedFields.Where(f => f.Owner == target))
-                sb.Append($"@addField({target})\n{VarModifiers(field.Flags)}var {field.Name} : {FormatType(field.Type)};\n\n");
+                sb.Append($"@addField({target})\n{VarModifiers(field.Flags)}var {field.Name} : {FormatType(field.Type)};\n\n"); // loc-ignore
             var funcs = blob.AddedMethods.Concat(blob.Wrapped).Concat(blob.Replaced).Where(f => f.Owner == target).ToList();
             foreach (var f in funcs)
                 WriteFunction(sb, f, 0, decompiler);
@@ -97,11 +97,11 @@ public static class ScriptWriter
     private static string Header(ScriptBlob blob, string source, EnumResolver enums)
     {
         var sb = new StringBuilder();
-        sb.Append($"// Decompiled from {source} by W3 Mod Workbench\n");
-        sb.Append($"// Compiled with REDkit build {blob.Build} ({blob.Configuration}, {blob.Platform})\n");
-        sb.Append("// Comments, formatting and variable initialisers are not kept in compiled scripts.\n");
+        sb.Append($"// Decompiled from {source} by W3 Mod Workbench\n"); // loc-ignore
+        sb.Append($"// Compiled with REDkit build {blob.Build} ({blob.Configuration}, {blob.Platform})\n"); // loc-ignore
+        sb.Append("// Comments, formatting and variable initialisers are not kept in compiled scripts.\n"); // loc-ignore
         if (!enums.HasGameScripts)
-            sb.Append("// Game scripts were not found next to this file, so some enum values show as numbers.\n");
+            sb.Append("// Game scripts were not found next to this file, so some enum values show as numbers.\n"); // loc-ignore
         sb.Append('\n');
         return sb.ToString();
     }
@@ -109,8 +109,8 @@ public static class ScriptWriter
     private static void WriteEnum(StringBuilder sb, ScriptEnum e, bool extension)
     {
         if (extension)
-            sb.Append("// Adds values to the game's enum of the same name\n");
-        sb.Append($"enum {e.Name}\n{{\n");
+            sb.Append("// Adds values to the game's enum of the same name\n"); // loc-ignore
+        sb.Append($"enum {e.Name}\n{{\n"); // loc-ignore
         foreach (var (name, value) in e.Members)
             sb.Append(value == int.MaxValue ? $"\t{name},\n" : $"\t{name} = {value},\n");
         sb.Append("}\n\n");
@@ -118,9 +118,9 @@ public static class ScriptWriter
 
     private static void WriteStruct(StringBuilder sb, ScriptStruct s)
     {
-        sb.Append($"struct {s.Name}\n{{\n");
+        sb.Append($"struct {s.Name}\n{{\n"); // loc-ignore
         foreach (var p in s.Properties)
-            sb.Append($"\t{VarModifiers(p.Flags)}var {p.Name} : {FormatType(p.Type)};\n");
+            sb.Append($"\t{VarModifiers(p.Flags)}var {p.Name} : {FormatType(p.Type)};\n"); // loc-ignore
         WriteDefaults(sb, s.Defaults, s.Properties);
         sb.Append("}\n\n");
     }
@@ -128,15 +128,15 @@ public static class ScriptWriter
     private static void WriteClass(StringBuilder sb, ScriptClass c, Decompiler decompiler)
     {
         if (c.IsState)
-            sb.Append($"state {c.Name} in {c.StateOf}{(c.Base.Length > 0 ? " extends " + c.Base : "")}\n{{\n");
+            sb.Append($"state {c.Name} in {c.StateOf}{(c.Base.Length > 0 ? " extends " + c.Base : "")}\n{{\n"); // loc-ignore
         else
         {
             string mods = ((c.Flags & ClassImport) != 0 ? "import " : "") + ((c.Flags & ClassStatemachine) != 0 ? "statemachine " : "");
-            sb.Append($"{mods}class {c.Name}{(c.Base.Length > 0 ? " extends " + c.Base : "")}\n{{\n");
+            sb.Append($"{mods}class {c.Name}{(c.Base.Length > 0 ? " extends " + c.Base : "")}\n{{\n"); // loc-ignore
         }
 
         foreach (var p in c.Properties)
-            sb.Append($"\t{VarModifiers(p.Flags)}var {p.Name} : {FormatType(p.Type)};\n");
+            sb.Append($"\t{VarModifiers(p.Flags)}var {p.Name} : {FormatType(p.Type)};\n"); // loc-ignore
         WriteDefaults(sb, c.Defaults, c.Properties);
         if (c.Properties.Count > 0 || c.Defaults.Count > 0)
             sb.Append('\n');
@@ -153,12 +153,12 @@ public static class ScriptWriter
         {
             string type = props.FirstOrDefault(p => p.Name == d.Property)?.Type ?? "";
             if (d.Children.Count == 0)
-                sb.Append($"\tdefault {d.Property} = {DefaultValue(type, d.Value)};\n");
+                sb.Append($"\tdefault {d.Property} = {DefaultValue(type, d.Value)};\n"); // loc-ignore
             else
                 WriteDefaultChildren(sb, d.Property, type, d.Children);
         }
         foreach (var p in props.Where(p => p.Hint.Length > 0))
-            sb.Append($"\thint {p.Name} = {Decompiler.Quote(p.Hint)};\n");
+            sb.Append($"\thint {p.Name} = {Decompiler.Quote(p.Hint)};\n"); // loc-ignore
     }
 
     private static string DefaultValue(string type, string value)
@@ -180,7 +180,7 @@ public static class ScriptWriter
     {
         if (children.All(c => c.Key.Length == 0))
         {
-            sb.Append($"\t// default {path}: {children.Count} array value{(children.Count == 1 ? "" : "s")}\n");
+            sb.Append($"\t// default {path}: {children.Count} array value{(children.Count == 1 ? "" : "s")}\n"); // loc-ignore
             foreach (var c in children)
                 sb.Append($"\t//     {(c.Children.Count == 0 ? DefaultValue(type, c.Value) : "{ ... }")}\n");
             return;
@@ -188,7 +188,7 @@ public static class ScriptWriter
         foreach (var c in children)
         {
             if (c.Children.Count == 0)
-                sb.Append($"\tdefault {path}.{c.Key} = {c.Value};\n");
+                sb.Append($"\tdefault {path}.{c.Key} = {c.Value};\n"); // loc-ignore
             else
                 WriteDefaultChildren(sb, $"{path}.{c.Key}", "", c.Children);
         }
@@ -250,7 +250,7 @@ public static class ScriptWriter
 
         sb.Append(pad).Append("{\n");
         foreach (var local in f.Locals)
-            sb.Append($"{pad}\tvar {local.Name} : {FormatType(local.Type)};\n");
+            sb.Append($"{pad}\tvar {local.Name} : {FormatType(local.Type)};\n"); // loc-ignore
         if (f.Locals.Count > 0)
             sb.Append('\n');
 
@@ -261,7 +261,7 @@ public static class ScriptWriter
         }
         catch (Exception ex) when (ex is NotSupportedException or InvalidOperationException or ArgumentException or IndexOutOfRangeException)
         {
-            body = [$"{pad}\t// This function could not be decompiled: {ex.Message}"];
+            body = [$"{pad}\t// This function could not be decompiled: {ex.Message}"]; // loc-ignore
         }
         foreach (var line in body)
             sb.Append(line).Append('\n');

@@ -49,7 +49,7 @@ public sealed class MeshMaterialItem : INotifyPropertyChanged
     public bool NeedsSave => IsEdited || IsSwapped;
 
     public string Title => L.T("MeshMaterialItem.Title", Index) + (Current.Shader.Length > 0 ? $"  ·  {Current.Shader}" : "") + (NeedsSave ? L.T("MeshMaterialItem.Changed") : "");
-    public string Source => Current.Source == "in the mesh" // the core's word for a material kept in the mesh, not shown loc-ignore
+    public string Source => Current.Source == MeshMaterial.InMesh
         ? Current.Bases.FirstOrDefault() is { } b ? L.T("MeshMaterialItem.InMeshBasedOn", System.IO.Path.GetFileName(b)) : L.T("MeshMaterialItem.InMesh")
         : Current.Source;
     /// <summary>The material file to open in the material viewer: its own .w2mi, or for one kept in the mesh, what it's based on.</summary>
@@ -104,7 +104,7 @@ public sealed class MeshMaterialItem : INotifyPropertyChanged
     {
         var own = Current.Own.ToList();
         int at = own.FindIndex(p => p.Name.Equals(parameter.Name, StringComparison.OrdinalIgnoreCase));
-        var changed = parameter with { Value = value, From = Current.Source == "in the mesh" ? L.T("MeshMaterialItem.Mesh") : System.IO.Path.GetFileName(Current.Source) };
+        var changed = parameter with { Value = value, From = Current.Source == MeshMaterial.InMesh ? L.T("MeshMaterialItem.Mesh") : System.IO.Path.GetFileName(Current.Source) };
         if (at >= 0) own[at] = changed; else own.Add(changed);
         Edit(own);
     }

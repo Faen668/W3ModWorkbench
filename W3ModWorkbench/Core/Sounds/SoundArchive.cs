@@ -1,6 +1,7 @@
 using System.Buffers.Binary;
 using System.IO;
 using W3ModWorkbench.Core.Strings;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core.Sounds;
 
@@ -17,12 +18,12 @@ public sealed class SoundEntry : ArchiveEntry
 
     public override long SortKey => Offset;
 
-    public override string FormatText => System.IO.Path.GetExtension(Path).Equals(".bnk", StringComparison.OrdinalIgnoreCase) ? "Sound bank"
-        : Speech ? "Voice line" : "Streamed sound";
+    public override string FormatText => System.IO.Path.GetExtension(Path).Equals(".bnk", StringComparison.OrdinalIgnoreCase) ? L.T("SoundArchive.SoundBank")
+        : Speech ? L.T("SoundArchive.VoiceLine") : L.T("SoundArchive.StreamedSound");
 
     public override byte[] Read(Stream? archiveStream)
     {
-        if (archiveStream is null) throw new InvalidOperationException("A sound is read from its file.");
+        if (archiveStream is null) throw new InvalidOperationException(L.T("SoundArchive.SoundReadFile"));
         archiveStream.Position = Offset;
         var data = new byte[PackedSize];
         archiveStream.ReadExactly(data);
@@ -102,7 +103,7 @@ public sealed class SpeechArchive : IArchive
 
     public static SpeechArchive Open(string path)
     {
-        var language = LanguageOf(path) ?? throw new InvalidDataException("The speech file's name doesn't say its language.");
+        var language = LanguageOf(path) ?? throw new InvalidDataException(L.T("SoundArchive.SpeechFilesNameDoesnt"));
         var speech = W3Speech.Open(path, language);
         var entries = new List<ArchiveEntry>(speech.Count);
         var archive = new SpeechArchive(path, language, entries);

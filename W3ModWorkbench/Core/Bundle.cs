@@ -1,6 +1,7 @@
 using System.IO;
 using System.IO.Compression;
 using System.Text;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core;
 
@@ -72,7 +73,7 @@ public sealed class Bundle : IArchive
         fs.ReadExactly(header);
 
         if (Encoding.ASCII.GetString(header, 0, 8) != Magic)
-            throw new InvalidDataException("Not a Witcher 3 bundle (no POTATO70 header).");
+            throw new InvalidDataException(L.T("Bundle.NotWitcherBundleNo"));
 
         int tocSize = BitConverter.ToInt32(header, 0x10);
         int version = BitConverter.ToUInt16(header, 0x14);
@@ -80,10 +81,10 @@ public sealed class Bundle : IArchive
         {
             5 => 0x130,
             3 => 0x140,
-            _ => throw new InvalidDataException($"Unknown bundle version {version}."),
+            _ => throw new InvalidDataException(L.T("Bundle.UnknownBundleVersion", version)),
         };
         if (tocSize < 0 || tocSize % entrySize != 0 || HeaderSize + tocSize > fs.Length)
-            throw new InvalidDataException("The bundle's file table is damaged.");
+            throw new InvalidDataException(L.T("Bundle.BundlesFileTableDamaged"));
 
         var toc = new byte[tocSize];
         fs.ReadExactly(toc);
@@ -166,7 +167,7 @@ public sealed class Bundle : IArchive
                 return Snappy.Decode(packed, entry.Size);
 
             default:
-                throw new NotSupportedException($"{entry.Compression} compression is not supported.");
+                throw new NotSupportedException(L.T("Bundle.CompressionNotSupported", entry.Compression));
         }
     }
 }

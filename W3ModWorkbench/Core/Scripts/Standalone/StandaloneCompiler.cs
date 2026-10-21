@@ -1,4 +1,5 @@
 using System.IO;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core.Scripts.Standalone;
 
@@ -43,19 +44,19 @@ public static class StandaloneCompiler
         try
         {
             if (!Directory.Exists(gameScripts))
-                return new CompileResult(false, [], "", "The game's scripts weren't found. Set the game folder in Settings.");
+                return new CompileResult(false, [], "", L.T("StandaloneCompiler.GamesScriptsWerentFound"));
 
-            progress?.Report("Reading the game's scripts…");
+            progress?.Report(L.T("StandaloneCompiler.ReadingGamesScripts"));
             var vanilla = ReadGameScripts(gameScripts, note => { lock (log) log.AppendLine(note); }, cancel);
 
             var installed = new List<SourceFile>();
             if (modsFolder is not null && Directory.Exists(modsFolder))
             {
-                progress?.Report("Reading the installed mods…");
+                progress?.Report(L.T("StandaloneCompiler.ReadingInstalledMods"));
                 installed = InstalledMods.Read(modsFolder, note => { lock (log) log.AppendLine(note); }, cancel, ownMod);
             }
 
-            progress?.Report("Reading your scripts…");
+            progress?.Report(L.T("StandaloneCompiler.ReadingYourScripts"));
             var project = ReadProject(scriptsFolder, null, messages, cancel);
             if (messages.Count > 0) return Failed(messages, log);
 

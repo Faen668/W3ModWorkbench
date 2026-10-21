@@ -1,6 +1,7 @@
 using System.IO;
 using W3ModWorkbench.Core.Cr2w;
 using W3ModWorkbench.Core.Cutscenes;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core.Scenes;
 
@@ -124,7 +125,7 @@ public sealed class SceneFile
     /// <summary>The files it refers to: actors' and props' entities, cutscenes, dialog sets.</summary>
     public IEnumerable<CutsceneLink> Links =>
         File.Imports.Select(i => new CutsceneLink(i.Path, FileKinds.Of(i.Path)?.Name ?? "File"))
-            .Concat(Dialogsets.Select(d => new CutsceneLink(d, "Dialog set")))
+            .Concat(Dialogsets.Select(d => new CutsceneLink(d, L.T("SceneFile.DialogSet"))))
             .DistinctBy(l => l.Path, StringComparer.OrdinalIgnoreCase);
 
     public static bool IsScene(string name) => name.EndsWith(".w2scene", StringComparison.OrdinalIgnoreCase);
@@ -132,7 +133,7 @@ public sealed class SceneFile
     public static SceneFile Read(byte[] data)
     {
         var file = Cr2wFile.Read(data);
-        var scene = file.First("CStoryScene") ?? throw new InvalidDataException("There's no scene in it: it has no CStoryScene.");
+        var scene = file.First("CStoryScene") ?? throw new InvalidDataException(L.T("SceneFile.TheresNoSceneHas"));
         var nodes = new Dictionary<int, SceneNode>();
         var pending = new List<(SceneLink Link, object? Handle)>();
 
@@ -155,37 +156,37 @@ public sealed class SceneFile
             switch (o.ClassName)
             {
                 case "CStorySceneInput":
-                    node = new SceneNode { Kind = SceneNodeKind.Input, Title = Named(o["inputName"] as string, "Start"), Detail = Words(comment), Export = index };
+                    node = new SceneNode { Kind = SceneNodeKind.Input, Title = Named(o["inputName"] as string, L.T("SceneFile.Start")), Detail = Words(comment), Export = index };
                     node.Next.Add(Link("", o["nextLinkElement"]));
                     break;
                 case "CStorySceneOutput":
                     node = new SceneNode
                     {
-                        Kind = SceneNodeKind.Output, Title = Named(o["name"] as string, "End"), Export = index,
-                        Detail = Words(Join(comment, o["endsWithBlackscreen"] is true ? "ends on a black screen" : null, o["questOutput"] is true ? "tells the quest" : null)),
+                        Kind = SceneNodeKind.Output, Title = Named(o["name"] as string, L.T("SceneFile.End")), Export = index,
+                        Detail = Words(Join(comment, o["endsWithBlackscreen"] is true ? L.T("SceneFile.EndsBlackScreen") : null, o["questOutput"] is true ? L.T("SceneFile.TellsQuest") : null)),
                     };
                     break;
                 case "CStorySceneSection" or "CStorySceneCutsceneSection" or "CStorySceneVideoSection":
                     node = Section(file, o, index, Link);
                     break;
                 case "CStorySceneFlowCondition":
-                    node = new SceneNode { Kind = SceneNodeKind.Condition, Title = Named(comment, "Condition"), Detail = Condition(file, o["questCondition"]), Export = index };
-                    node.Next.Add(Link("yes", o["trueLink"]));
-                    node.Next.Add(Link("no", o["falseLink"]));
+                    node = new SceneNode { Kind = SceneNodeKind.Condition, Title = Named(comment, L.T("SceneFile.Condition")), Detail = Condition(file, o["questCondition"]), Export = index };
+                    node.Next.Add(Link(L.T("SceneFile.Yes"), o["trueLink"]));
+                    node.Next.Add(Link(L.T("SceneFile.No"), o["falseLink"]));
                     break;
                 case "CStorySceneFlowSwitch":
-                    node = new SceneNode { Kind = SceneNodeKind.Switch, Title = Named(comment, "Switch"), Export = index };
+                    node = new SceneNode { Kind = SceneNodeKind.Switch, Title = Named(comment, L.T("SceneFile.Switch")), Export = index };
                     foreach (var c in o.Array("cases").OfType<RedHandle>().Select(file.Object).OfType<RedObject>())
-                        node.Next.Add(Link("when " + (Condition(file, c["whenCondition"]) ?? "?"), c["thenLink"]));
-                    node.Next.Add(Link("otherwise", o["defaultLink"]));
+                        node.Next.Add(Link(L.T("SceneFile.When", Condition(file, c["whenCondition"]) ?? "?"), c["thenLink"]));
+                    node.Next.Add(Link(L.T("SceneFile.Otherwise"), o["defaultLink"]));
                     break;
                 case "CStorySceneRandomizer":
-                    node = new SceneNode { Kind = SceneNodeKind.Random, Title = Named(comment, "One at random"), Export = index };
+                    node = new SceneNode { Kind = SceneNodeKind.Random, Title = Named(comment, L.T("SceneFile.OneRandom")), Export = index };
                     int n = 0;
                     foreach (var output in o.Array("outputs")) node.Next.Add(Link($"{++n}", output));
                     break;
                 case "CStorySceneScript":
-                    node = new SceneNode { Kind = SceneNodeKind.Script, Title = Named(comment, "Script"), Detail = o["functionName"] is string fn ? $"runs {fn}" : null, Export = index };
+                    node = new SceneNode { Kind = SceneNodeKind.Script, Title = Named(comment, L.T("SceneFile.Script")), Detail = o["functionName"] is string fn ? L.T("SceneFile.Runs", fn) : null, Export = index };
                     node.Next.Add(Link("", o["nextLinkElement"]));
                     foreach (var extra in o.Array("links")) node.Next.Add(Link("", extra));
                     break;
@@ -229,9 +230,9 @@ public sealed class SceneFile
         var node = new SceneNode
         {
             Kind = kind,
-            Title = Named((o["sectionName"] as string)?.Trim(), kind == SceneNodeKind.Cutscene ? "Cutscene" : "Section"),
-            Detail = Words(Join(o["comment"] as string, o["videoFileName"] is string video && video.Length > 0 ? "plays " + video : null,
-                o["isGameplay"] is true ? "in gameplay" : null, o["dialogsetChangeTo"] is string set && set.Length > 0 && set != "None" ? "dialog set " + set : null)),
+            Title = Named((o["sectionName"] as string)?.Trim(), kind == SceneNodeKind.Cutscene ? L.T("SceneFile.Cutscene") : L.T("SceneFile.Section")),
+            Detail = Words(Join(o["comment"] as string, o["videoFileName"] is string video && video.Length > 0 ? L.T("SceneFile.Plays", video) : null,
+                o["isGameplay"] is true ? L.T("SceneFile.Gameplay") : null, o["dialogsetChangeTo"] is string set && set.Length > 0 && set != "None" ? L.T("SceneFile.DialogSet2", set) : null)),
             Cutscene = cutscene,
             Export = index,
         };
@@ -249,7 +250,7 @@ public sealed class SceneFile
                     {
                         Kind = SceneElementKind.Line, Speaker = NameOrNull(el["voicetag"]), SpeakingTo = NameOrNull(el["speakingTo"]),
                         StringId = el["dialogLine"] as uint?, Duration = el.Float("approvedDuration", el.Float("duration")), Background = el["isBackgroundLine"] is true,
-                        Detail = el["isSilent"] is true ? "silent" : null,
+                        Detail = el["isSilent"] is true ? L.T("SceneFile.Silent") : null,
                     });
                     break;
                 case "CStorySceneComment":
@@ -268,15 +269,15 @@ public sealed class SceneFile
                     var choice = new SceneElement
                     {
                         Kind = SceneElementKind.Choice, Duration = el.Float("timeLimit"),
-                        Detail = Words(Join(el["isLooped"] is true ? "asked again until left" : null, el.Float("timeLimit") > 0 ? $"{el.Float("timeLimit"):0.#} s to choose" : null)),
+                        Detail = Words(Join(el["isLooped"] is true ? L.T("SceneFile.AskedAgainUntilLeft") : null, el.Float("timeLimit") > 0 ? L.T("SceneFile.SecondsToChoose", el.Float("timeLimit")) : null)),
                     };
                     foreach (var line in el.Array("choiceLines").OfType<RedHandle>().Select(file.Object).OfType<RedObject>())
                     {
                         string? needs = line["questCondition"] is RedHandle q ? Condition(file, q) : null;
                         string? does = line["action"] is RedHandle a && file.Object(a) is { } action ? Action(action) : null;
                         var option = link("", line["nextLinkElement"], line["choiceLine"] as uint?,
-                            Words(Join(does, needs is null ? null : "only if " + needs, line["singleUseChoice"] is true ? "once" : null,
-                                line["isDefaultChoice"] is true ? "picked when time runs out" : null, line["hidden"] is true ? "hidden" : null)));
+                            Words(Join(does, needs is null ? null : L.T("SceneFile.OnlyIf", needs), line["singleUseChoice"] is true ? L.T("SceneFile.Once") : null,
+                                line["isDefaultChoice"] is true ? L.T("SceneFile.PickedWhenTimeRuns") : null, line["hidden"] is true ? L.T("SceneFile.Hidden") : null)));
                         option.Emphasis = line["emphasisLine"] is true;
                         option.Action = line["action"] is RedHandle act ? file.Object(act)?.ClassName : null;
                         choice.Options.Add(option);
@@ -285,7 +286,7 @@ public sealed class SceneFile
                     break;
                 case "CStorySceneQuestChoiceLine":
                     // a line the quest adds to a choice from outside the scene
-                    node.Elements.Add(new SceneElement { Kind = SceneElementKind.Comment, StringId = el["commentText"] as uint?, Detail = "an option the quest adds" });
+                    node.Elements.Add(new SceneElement { Kind = SceneElementKind.Comment, StringId = el["commentText"] as uint?, Detail = L.T("SceneFile.OptionQuestAdds") });
                     break;
                 default:
                     node.Elements.Add(new SceneElement { Kind = SceneElementKind.Other, Detail = CutsceneFile.Humanize(el.ClassName, "CStoryScene"), Duration = el.Float("approvedDuration") });
@@ -338,9 +339,9 @@ public sealed class SceneFile
                 string query = (c["queryFact"] as RedEnum)?.ToString() ?? "QF_Sum";
                 string compare = Compare((c["compareFunc"] as RedEnum)?.ToString());
                 string value = $"{c.Integer("value")}";
-                string what = query == "QF_DoesExist" ? $"fact {fact} exists" : $"fact {fact} {compare} {value}";
-                if (query == "QF_DoesExist" && c.Integer("value") == 0 && compare is "=" or "≤") what = $"fact {fact} doesn't exist";
-                return c.ClassName.Contains("Forbidden") ? "not " + what : what;
+                string what = query == "QF_DoesExist" ? L.T("SceneFile.FactExists", fact) : L.T("SceneFile.Fact", fact, compare, value);
+                if (query == "QF_DoesExist" && c.Integer("value") == 0 && compare is "=" or "≤") what = L.T("SceneFile.FactDoesntExist", fact);
+                return c.ClassName.Contains("Forbidden") ? L.T("SceneFile.Not", what) : what;
             case "CQuestLogicOperationCondition":
                 string op = (c["logicOperation"] as RedEnum)?.ToString() switch { "LO_Or" => " or ", "LO_Xor" => " xor ", "LO_Nand" => " nand ", "LO_Nor" => " nor ", _ => " and " };
                 var parts = c.Array("conditions").Select(x => Condition(file, x)).OfType<string>().ToList();
@@ -353,7 +354,7 @@ public sealed class SceneFile
         }
     }
 
-    private static string Value(object? v) => v switch { RedEnum e => e.ToString(), bool b => b ? "yes" : "no", _ => v?.ToString() ?? "" };
+    private static string Value(object? v) => v switch { RedEnum e => e.ToString(), bool b => b ? L.T("SceneFile.Yes") : L.T("SceneFile.No"), _ => v?.ToString() ?? "" };
 
     private static string Compare(string? func) => func switch
     {
@@ -365,7 +366,7 @@ public sealed class SceneFile
     {
         string name = action.ClassName.Replace("StorySceneChoiceAction", "").Replace("SceneChoiceAction", "").Replace("ChoiceAction", "");
         string words = CutsceneFile.Humanize(name, "C").ToLowerInvariant();
-        return action["money"] is int money && money > 0 ? $"{words}, {money} crowns" : words;
+        return action["money"] is int money && money > 0 ? L.T("SceneFile.Crowns", words, money) : words;
     }
 
     private static string? NameOrNull(object? value) => value is string s && s.Length > 0 && s != "None" ? s : null;

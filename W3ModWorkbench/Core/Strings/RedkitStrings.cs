@@ -1,5 +1,6 @@
 using System.IO;
 using W3ModWorkbench.Core.Scripts;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core.Strings;
 
@@ -28,18 +29,19 @@ public static class RedkitStrings
     public static string? Find(string? wccLite) => ForWccLite(wccLite) ?? ForWccLite(ScriptCompiler.Find());
 
     /// <summary>Every string of one language in the database, with what the database knows about it.</summary>
-    public static List<GameString> Read(string path, W3Language language, string source = "REDkit database")
+    public static List<GameString> Read(string path, W3Language language, string? source = null)
     {
+        source ??= L.T("GameStrings.REDkitDatabase");
         using var db = SqliteFile.Open(path);
         if (!db.HasTable("LANGUAGES") || !db.HasTable("STRINGS") || !db.HasTable("STRING_INFO"))
-            throw new InvalidDataException("This isn't a REDkit strings database: it has no LANGUAGES, STRINGS and STRING_INFO tables.");
+            throw new InvalidDataException(L.T("RedkitStrings.IsntREDkitStringsDatabase"));
 
         long lang = -1;
         db.Scan("LANGUAGES", row =>
         {
             if (string.Equals(row.Text(1), language.Handle, StringComparison.OrdinalIgnoreCase)) lang = row.RowId;
         });
-        if (lang < 0) throw new InvalidDataException($"The database has no {language.Handle} strings.");
+        if (lang < 0) throw new InvalidDataException(L.T("RedkitStrings.DatabaseHasNoStrings", language.Handle));
 
         var texts = new Dictionary<long, (long Version, string Text)>();
         db.Scan("STRINGS", row =>

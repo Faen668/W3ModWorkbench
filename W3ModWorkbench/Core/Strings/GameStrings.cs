@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.IO;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core.Strings;
 
@@ -62,11 +63,11 @@ public sealed class GameStringIndex
             }
         }
 
-        Scan(System.IO.Path.Combine(gameFolder, "content"), _ => "Game");
+        Scan(System.IO.Path.Combine(gameFolder, "content"), _ => L.T("GameStrings.Game"));
         if (dlcAndMods)
         {
-            Scan(System.IO.Path.Combine(gameFolder, "dlc"), p => "DLC: " + TopFolder(gameFolder, "dlc", p));
-            Scan(System.IO.Path.Combine(gameFolder, "mods"), p => "Mod: " + TopFolder(gameFolder, "mods", p));
+            Scan(System.IO.Path.Combine(gameFolder, "dlc"), p => L.T("GameStrings.Dlc", TopFolder(gameFolder, "dlc", p)));
+            Scan(System.IO.Path.Combine(gameFolder, "mods"), p => L.T("GameStrings.Mod", TopFolder(gameFolder, "mods", p)));
         }
         return found;
     }
@@ -94,7 +95,7 @@ public sealed class GameStringIndex
         {
             // a database that can't be read is the whole search gone, so it's thrown rather than listed
             all.AddRange(RedkitStrings.Read(database, language));
-            sources.Add(new StringsSource("REDkit database", database));
+            sources.Add(new StringsSource(L.T("GameStrings.REDkitDatabase"), database));
         }
         string? skip = skipFolder is null ? null : System.IO.Path.GetFullPath(skipFolder).TrimEnd('\\', '/');
         var files = gameFolder is null ? []

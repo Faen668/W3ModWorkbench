@@ -2,6 +2,7 @@ using System.Buffers.Binary;
 using System.IO;
 using System.Numerics;
 using W3ModWorkbench.Core.Cr2w;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core.Animation;
 
@@ -158,7 +159,7 @@ public sealed class AnimationClip
         {
             byte[] inline = buffer.Bytes("data");
             if (buffer["deferredData"] is not RedBufferRef { Index: > 0 } deferred) return inline;
-            byte[] streamed = file.Buffer(deferred.Index, external) ?? throw new InvalidDataException("The animation's streamed data wasn't found.");
+            byte[] streamed = file.Buffer(deferred.Index, external) ?? throw new InvalidDataException(L.T("AnimationClip.AnimationsStreamedDataWasnt"));
             string option = EnumName(file, buffer["streamingOption"]) ?? "";
             return option == "ABSO_PartiallyStreamable" ? [.. inline, .. streamed] : streamed;
         }
@@ -169,7 +170,7 @@ public sealed class AnimationClip
             int count = (int)info.Integer("numFrames"), at = (int)info.Integer("dataAddr"), compression = (int)info.Integer("compression");
             int step = size(compression);
             if (count <= 0) return new Keys<T>(0, [otherwise]);
-            if (at < 0 || at + (long)count * step > data.Length) throw new InvalidDataException("An animation's keys run past the end of its data.");
+            if (at < 0 || at + (long)count * step > data.Length) throw new InvalidDataException(L.T("AnimationClip.AnimationsKeysRunPast"));
             var values = new T[count];
             for (int i = 0; i < count; i++) values[i] = read(data, at + i * step, compression);
             return new Keys<T>(info.Float("dt", frameTime), values);
@@ -187,7 +188,7 @@ public sealed class AnimationClip
 
         private static int Bytes3(int compression) => compression switch { 0 => 12, 1 => 9, 2 => 6, _ => throw Unknown(compression) };
 
-        private static Exception Unknown(int compression) => new InvalidDataException($"An animation uses a compression this doesn't read ({compression}).");
+        private static Exception Unknown(int compression) => new InvalidDataException(L.T("AnimationClip.AnimationUsesCompressionDoesnt", compression));
 
         /// <summary>A float as saved: whole, or its top 24 or 16 bits with the rest zero.</summary>
         private static float Float(byte[] d, int at, int compression) => compression switch
@@ -212,7 +213,7 @@ public sealed class AnimationClip
             "ABOCM_PackIn32bits" => 4,
             "ABOCM_AsFloat_XYZW" => 16,
             "ABOCM_AsFloat_XYZSignedWInLastBit" => 12,
-            _ => throw new InvalidDataException($"An animation packs its orientations in a way this doesn't read ({method})."),
+            _ => throw new InvalidDataException(L.T("AnimationClip.AnimationPacksOrientationsWay", method)),
         };
 
         /// <summary>
@@ -247,7 +248,7 @@ public sealed class AnimationClip
                     return Unit(new Quaternion(x, y, z, (zBits & 1) != 0 ? -w : w));
                 }
                 default:
-                    throw new InvalidDataException($"An animation packs its orientations in a way this doesn't read ({method}).");
+                    throw new InvalidDataException(L.T("AnimationClip.AnimationPacksOrientationsWay", method));
             }
         }
 

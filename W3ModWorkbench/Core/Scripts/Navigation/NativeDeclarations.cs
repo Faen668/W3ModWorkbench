@@ -40,9 +40,9 @@ public static class NativeDeclarations
         if (engine.GlobalFunctions.Contains(name)) return FunctionText(name, layers);
         if (engine.SimpleTypes.Contains(name))
         {
-            string text = Header(name) + $"// {name} is one of the engine's simple types: a value the engine stores in a way of its own.\n"
-                + "// Scripts pass it around and the engine's functions read it, but it has no members to call.\n\n"
-                + $"import struct {name} {{}}\n";
+            string text = Header(name) + $"// {name} is one of the engine's simple types: a value the engine stores in a way of its own.\n" // loc-ignore
+                + "// Scripts pass it around and the engine's functions read it, but it has no members to call.\n\n" // loc-ignore
+                + $"import struct {name} {{}}\n"; // loc-ignore
             return new NativeDeclaration(name, Path(name), text, text.LastIndexOf(name, StringComparison.Ordinal));
         }
         return null;
@@ -59,24 +59,24 @@ public static class NativeDeclarations
     private static string Path(string name) => $@"native\{name}.ws";
 
     private static string Header(string name) =>
-        $"// {name}: written out by W3 Mod Workbench from the engine's own class list.\n"
-        + "// It isn't a file in the game: the engine itself declares this in its code, and scripts reach it with 'import'.\n\n";
+        $"// {name}: written out by W3 Mod Workbench from the engine's own class list.\n" // loc-ignore
+        + "// It isn't a file in the game: the engine itself declares this in its code, and scripts reach it with 'import'.\n\n"; // loc-ignore
 
     private static NativeDeclaration ClassText(Rtti engine, RttiClass cls, string? focus, IReadOnlyList<ScriptIndex> layers)
     {
         var text = new StringBuilder(Header(cls.Name));
         var chain = new List<string>();
         for (var at = cls.Base; at is not null && chain.Count < 12; at = engine.Classes.FirstOrDefault(c => c.Name == at)?.Base) chain.Add(at);
-        if (chain.Count > 0) text.Append($"// Its parents: {string.Join(" > ", chain)}\n\n");
+        if (chain.Count > 0) text.Append($"// Its parents: {string.Join(" > ", chain)}\n\n"); // loc-ignore
         string kind = cls.IsStruct ? "struct" : "class";
-        text.Append($"import {kind} {cls.Name}{(cls.Base is not null ? " extends " + cls.Base : "")}\n{{\n");
+        text.Append($"import {kind} {cls.Name}{(cls.Base is not null ? " extends " + cls.Base : "")}\n{{\n"); // loc-ignore
         int focusAt = -1;
         if (cls.Properties.Count > 0)
         {
             foreach (var (name, type) in cls.Properties.OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase))
             {
-                if (name == focus) focusAt = text.Length + "\timport var ".Length;
-                text.Append($"\timport var {name} : {TypeName(type)};\n");
+                if (name == focus) focusAt = text.Length + "\timport var ".Length; // loc-ignore
+                text.Append($"\timport var {name} : {TypeName(type)};\n"); // loc-ignore
             }
         }
         if (cls.Methods.Count > 0)
@@ -94,11 +94,11 @@ public static class NativeDeclarations
             }
             if (unknown.Count > 0)
             {
-                text.Append("\n\t// No script declares these with 'import', so their parameters aren't known:\n");
+                text.Append("\n\t// No script declares these with 'import', so their parameters aren't known:\n"); // loc-ignore
                 foreach (string method in unknown)
                 {
-                    if (method == focus) focusAt = text.Length + "\timport function ".Length;
-                    text.Append($"\timport function {method}(/* ? */);\n");
+                    if (method == focus) focusAt = text.Length + "\timport function ".Length; // loc-ignore
+                    text.Append($"\timport function {method}(/* ? */);\n"); // loc-ignore
                 }
             }
         }
@@ -111,7 +111,7 @@ public static class NativeDeclarations
     private static NativeDeclaration EnumText(RttiEnum en)
     {
         var text = new StringBuilder(Header(en.Name));
-        text.Append($"enum {en.Name}\n{{\n");
+        text.Append($"enum {en.Name}\n{{\n"); // loc-ignore
         foreach (var (name, value) in en.Options) text.Append($"\t{name} = {value},\n");
         text.Append("}\n");
         string result = text.ToString();
@@ -120,9 +120,9 @@ public static class NativeDeclarations
 
     private static NativeDeclaration FunctionText(string name, IReadOnlyList<ScriptIndex> layers)
     {
-        string declared = Signature(layers, null, name) ?? $"import function {name}(/* ? */);";
+        string declared = Signature(layers, null, name) ?? $"import function {name}(/* ? */);"; // loc-ignore
         string text = Header(name) + (declared.Contains("/* ? */", StringComparison.Ordinal)
-            ? "// No script declares it with 'import', so its parameters aren't known.\n\n" : "") + declared + "\n";
+            ? "// No script declares it with 'import', so its parameters aren't known.\n\n" : "") + declared + "\n"; // loc-ignore
         return new NativeDeclaration(name, Path(name), text, text.LastIndexOf(name, StringComparison.Ordinal));
     }
 

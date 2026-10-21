@@ -2,6 +2,7 @@ using System.Buffers.Binary;
 using System.IO;
 using System.Numerics;
 using W3ModWorkbench.Core.Cr2w;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core.Meshes;
 
@@ -95,7 +96,7 @@ public sealed class MeshFile
     {
         var file = Cr2wFile.Read(data);
         var mesh = file.First("CMesh") ?? throw new InvalidDataException(
-            file.Exports.Count > 0 ? $"This is a {file.Exports[0].ClassName}, not a mesh." : "There's no mesh in this file.");
+            file.Exports.Count > 0 ? L.T("MeshFile.NotMesh", file.Exports[0].ClassName) : L.T("MeshFile.TheresNoMeshFile"));
         var cooked = mesh.Struct("cookedData");
         var materials = mesh.Array("materials").OfType<RedHandle>().ToList();
         var box = mesh.Struct("boundingBox");
@@ -107,7 +108,7 @@ public sealed class MeshFile
         {
             int bufferIndex = cooked!["renderBuffer"] is RedBufferRef r && r.Index > 0 ? r.Index : 1;
             var bytes = file.Buffer(bufferIndex, buffer)
-                ?? throw new FileNotFoundException("The mesh's data isn't with it: its .1.buffer file wasn't found. Open the bundle with the game's buffers (buffers.bundle) in the same folder.");
+                ?? throw new FileNotFoundException(L.T("MeshFile.MeshsDataIsntBuffer"));
             lods.AddRange(cooked.Array("renderLODs").OfType<float>());
             chunks = ReadCooked(renderChunks, bytes, cooked, mesh);
         }
@@ -116,7 +117,7 @@ public sealed class MeshFile
             var vertices = mesh["rawVertices"] is RedBufferRef v && v.Index > 0 ? file.Buffer(v.Index, buffer) : null;
             var indices = mesh["rawIndices"] is RedBufferRef i && i.Index > 0 ? file.Buffer(i.Index, buffer) : null;
             if (vertices is null || indices is null)
-                throw new NotSupportedException("This mesh keeps its shape in a way that can't be read yet: it has no cooked data and no raw vertices.");
+                throw new NotSupportedException(L.T("MeshFile.MeshKeepsShapeWay"));
             chunks = ReadUncooked(mesh, vertices, indices, lods);
         }
         if (lods.Count == 0) lods.Add(0);
@@ -203,7 +204,7 @@ public sealed class MeshFile
                 count |= (info[start] & 0x7F) << shift;
                 if ((info[start++] & 0x80) == 0) break;
             }
-        if (start + (long)count * ChunkSize > info.Length) throw new InvalidDataException("The mesh's chunk table is shorter than it says.");
+        if (start + (long)count * ChunkSize > info.Length) throw new InvalidDataException(L.T("MeshFile.MeshsChunkTableShorter"));
         var chunks = new List<MeshChunk>(count);
         for (int c = 0; c < count; c++)
         {
@@ -401,6 +402,6 @@ public sealed class MeshFile
 
     private static void Need(byte[] buffer, long at, long size)
     {
-        if (at < 0 || size < 0 || at + size > buffer.Length) throw new InvalidDataException("The mesh's buffer is shorter than its chunks say.");
+        if (at < 0 || size < 0 || at + size > buffer.Length) throw new InvalidDataException(L.T("MeshFile.MeshsBufferShorterThan"));
     }
 }

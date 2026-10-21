@@ -1,4 +1,5 @@
 using System.IO;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core;
 
@@ -39,7 +40,7 @@ public static class Lz4
 
                 int from = d - offset;
                 if (offset == 0 || from < 0)
-                    throw new InvalidDataException("Corrupt LZ4 data.");
+                    throw new InvalidDataException(L.T("Lz4.CorruptLZ4Data"));
                 if (offset >= match)
                 {
                     dst.AsSpan(from, match).CopyTo(dst.AsSpan(d));
@@ -54,11 +55,11 @@ public static class Lz4
         }
         catch (Exception ex) when (ex is IndexOutOfRangeException or ArgumentException)
         {
-            throw new InvalidDataException("Corrupt LZ4 data.", ex);
+            throw new InvalidDataException(L.T("Lz4.CorruptLZ4Data"), ex);
         }
 
         if (d != size)
-            throw new InvalidDataException($"LZ4 data decoded to {d} bytes, expected {size}.");
+            throw new InvalidDataException(L.T("Lz4.LZ4DataDecodedBytes", d, size));
         return dst;
     }
 }

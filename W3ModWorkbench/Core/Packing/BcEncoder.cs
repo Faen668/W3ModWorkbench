@@ -1,3 +1,4 @@
+using W3ModWorkbench.Localisation;
 namespace W3ModWorkbench.Core.Packing;
 
 /// <summary>
@@ -38,7 +39,7 @@ public static class BcEncoder
                     case 8: Channel(block, 3, dst); Colour(block, dst[8..]); break;
                     case 14: Channel(block, 0, dst); break;
                     case 15: Channel(block, 0, dst); Channel(block, 1, dst[8..]); break;
-                    default: throw new NotSupportedException($"Can't encode texture format {format}.");
+                    default: throw new NotSupportedException(L.T("BcEncoder.CantEncodeTextureFormat", format));
                 }
             }
         });

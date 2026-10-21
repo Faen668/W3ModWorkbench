@@ -1,3 +1,4 @@
+using W3ModWorkbench.Localisation;
 // Part of the built-in compiler: a C# port of the .ws-to-rsblob compiler written by WebSpam for Aelto's tw3-cahirb (MIT).
 // https://github.com/Aelto/tw3-cahirb/pull/1
 
@@ -41,7 +42,7 @@ public sealed class Parser
     }
 
     private ScriptSyntaxException Error(string message) =>
-        new($"{message}, found '{(Cur.Kind == TokKind.Eof ? "end of file" : Cur.Text)}'", Cur.Line);
+        new($"{message}, found '{(Cur.Kind == TokKind.Eof ? L.T("Parser.EndFile") : Cur.Text)}'", Cur.Line);
 
     private bool IsPunct(string p) => Cur.Kind == TokKind.Punct && Cur.Text == p;
     private bool IsKeyword(string k) => Cur.Kind == TokKind.Ident && Cur.Text == k;
@@ -67,7 +68,7 @@ public sealed class Parser
 
     private string Identifier()
     {
-        if (Cur.Kind != TokKind.Ident) throw Error("expected a name");
+        if (Cur.Kind != TokKind.Ident) throw Error(L.T("Parser.ExpectedName"));
         return Advance().Text;
     }
 
@@ -92,7 +93,7 @@ public sealed class Parser
             "addMethod" => AnnotationKind.AddMethod,
             "wrapMethod" => AnnotationKind.WrapMethod,
             "replaceMethod" => AnnotationKind.ReplaceMethod,
-            var other => throw Error($"unknown annotation @{other}"),
+            var other => throw Error(L.T("Parser.UnknownAnnotation", other)),
         };
         string? cls = null;
         if (EatPunct("("))
@@ -111,13 +112,13 @@ public sealed class Parser
         if (!_skipBodies && annotation?.Kind is AnnotationKind.ReplaceMethod or AnnotationKind.WrapMethod
             && !(Cur.Kind == TokKind.Ident && Cur.Text == "function"))
             throw new ScriptSyntaxException(
-                $"syntax error, unexpected {(Cur.Kind == TokKind.Ident ? "TOKEN_" + Cur.Text.ToUpperInvariant() : $"'{Cur.Text}'")}, expecting TOKEN_FUNCTION, near '{Cur.Text}'", Cur.Line);
+                $"syntax error, unexpected {(Cur.Kind == TokKind.Ident ? "TOKEN_" + Cur.Text.ToUpperInvariant() : $"'{Cur.Text}'")}, expecting TOKEN_FUNCTION, near '{Cur.Text}'", Cur.Line); // loc-ignore
         var cls = new ClassDecl();
         var fn = new FunctionSpecifiers();
         var field = new FieldSpecifiers();
         while (true)
         {
-            if (Cur.Kind != TokKind.Ident) throw Error("expected a declaration");
+            if (Cur.Kind != TokKind.Ident) throw Error(L.T("Parser.ExpectedDeclaration"));
             string word = Cur.Text;
             switch (word)
             {
@@ -151,7 +152,7 @@ public sealed class Parser
                         d.Annotation = annotation;
                         return new FunctionItem(d);
                     }
-                    throw Error("expected a declaration");
+                    throw Error(L.T("Parser.ExpectedDeclaration"));
             }
             Advance();
         }
@@ -185,7 +186,7 @@ public sealed class Parser
         var field = new FieldSpecifiers();
         while (true)
         {
-            if (Cur.Kind != TokKind.Ident) throw Error("expected a member");
+            if (Cur.Kind != TokKind.Ident) throw Error(L.T("Parser.ExpectedMember"));
             string word = Cur.Text;
             switch (word)
             {
@@ -241,7 +242,7 @@ public sealed class Parser
                         cls.Methods.Add(ParseFunction(fn));
                         return;
                     }
-                    throw Error("expected a member");
+                    throw Error(L.T("Parser.ExpectedMember"));
             }
             Advance();
         }
@@ -279,7 +280,7 @@ public sealed class Parser
         while (depth > 0)
         {
             var t = Advance();
-            if (t.Kind == TokKind.Eof) throw Error("unbalanced braces");
+            if (t.Kind == TokKind.Eof) throw Error(L.T("Parser.UnbalancedBraces"));
             if (t.Kind == TokKind.Punct)
             {
                 if (t.Text == "{") depth++;
@@ -303,7 +304,7 @@ public sealed class Parser
             {
                 bool negative = EatPunct("-");
                 var t = Advance();
-                if (t.Kind != TokKind.Int) throw Error("expected an enum value");
+                if (t.Kind != TokKind.Int) throw Error(L.T("Parser.ExpectedEnumValue"));
                 value = negative ? -t.Int : t.Int;
             }
             members.Add((member, value));
@@ -707,7 +708,7 @@ public sealed class Parser
                 break;
             default:
                 _pos--;
-                throw Error("expected an expression");
+                throw Error(L.T("Parser.ExpectedExpression"));
         }
         return new Expr(kind, line);
     }

@@ -1,4 +1,5 @@
 using System.Text;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core.Scripts.Formatting;
 
@@ -63,7 +64,7 @@ public static class ScriptFormatter
         if (FirstDifference(before, Tokenize(result)) is { } at)
         {
             int line = source.Take(before[Math.Min(at, before.Count - 1)].Start).Count(c => c == '\n') + 1;
-            return new FormatResult(text, false, $"Formatting would have changed more than the spaces near line {line}, so the file was left as it is.",
+            return new FormatResult(text, false, L.T("ScriptFormatter.FormattingWouldHaveChanged", line),
                 RefusedReason.WouldChangeCode, line);
         }
         result = result.Replace("\n", newline);
@@ -97,7 +98,7 @@ public static class ScriptFormatter
             else if (c == '/' && i + 1 < s.Length && s[i + 1] == '*')
             {
                 int end = s.IndexOf("*/", i + 2, StringComparison.Ordinal);
-                if (end < 0 && !line) throw new FormatException("A /* comment isn't closed.");
+                if (end < 0 && !line) throw new FormatException(L.T("ScriptFormatter.CommentIsntClosed"));
                 i = end < 0 ? s.Length : end + 2;
                 tokens.Add(new Token(Kind.BlockComment, s[start..i], start));
             }
@@ -105,7 +106,7 @@ public static class ScriptFormatter
             {
                 i++;
                 while (i < s.Length && s[i] != c && s[i] != '\n') i += s[i] == '\\' ? 2 : 1;
-                if (i >= s.Length || s[i] != c) throw new FormatException("A string or name isn't closed on its line.");
+                if (i >= s.Length || s[i] != c) throw new FormatException(L.T("ScriptFormatter.StringNameIsntClosed"));
                 i++;
                 tokens.Add(new Token(c == '"' ? Kind.String : Kind.Name, s[start..i], start));
             }

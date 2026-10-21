@@ -188,7 +188,7 @@ public static partial class ScriptRefactors
             int stmtLine = LineStart(statement.Start);
             var edits = new List<TextEdit>
             {
-                new(varAt, 0, $"{varIndent}var {name} : {type};\n"),
+                new(varAt, 0, $"{varIndent}var {name} : {type};\n"), // loc-ignore
                 new(stmtLine, 0, $"{stmtIndent}{name} = {expr};\n"),
                 new(start, length, name),
             };
@@ -326,7 +326,7 @@ public static partial class ScriptRefactors
                 if (!readAfter && !setBefore && local.Kind == SymbolKind.Local)
                 {
                     // used only here: declared in the new function instead
-                    moved.Add($"\tvar {local.Name} : {local.Type};\n");
+                    moved.Add($"\tvar {local.Name} : {local.Type};\n"); // loc-ignore
                     continue;
                 }
                 parameters.Add($"{(assigned && readAfter ? "out " : "")}{local.Name} : {local.Type}");
@@ -342,7 +342,7 @@ public static partial class ScriptRefactors
             // a method goes after the function it came from; a function after the class it was in, at the top level
             var type = method ? null : doc.TypeAt(fn.Symbol.Offset);
             string declIndent = type is null ? IndentAt(fn.Symbol.Offset) : "";
-            string signature = $"{(method ? "private " : "")}function {name}({string.Join(", ", parameters)})";
+            string signature = $"{(method ? "private " : "")}function {name}({string.Join(", ", parameters)})"; // loc-ignore
             string newFunction = $"\n{declIndent}{signature}\n{declIndent}{{\n{Reindent(string.Concat(moved), "\t", declIndent + "\t")}{(moved.Count > 0 ? "\n" : "")}{Reindent(body, "\t", declIndent + "\t")}{declIndent}}}\n";
             int fnEnd = type is null ? LineEnd(fn.BodyEnd) : LineEnd(type.End);
             var edits = new List<TextEdit>

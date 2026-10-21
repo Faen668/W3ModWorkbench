@@ -2,6 +2,7 @@ using System.Buffers.Binary;
 using System.IO;
 using System.Text;
 using Microsoft.Win32.SafeHandles;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core;
 
@@ -30,11 +31,11 @@ public sealed class SqliteFile : IDisposable
         var header = new byte[100];
         if (_length < 512 || RandomAccess.Read(file, header, 0) < 100
             || !header.AsSpan(0, 16).SequenceEqual("SQLite format 3\0"u8))
-            throw new InvalidDataException("This isn't an SQLite database.");
+            throw new InvalidDataException(L.T("Sqlite.IsntSQLiteDatabase"));
         int size = BinaryPrimitives.ReadUInt16BigEndian(header.AsSpan(16));
         _pageSize = size == 1 ? 65536 : size;
         if (_pageSize < 512 || (_pageSize & (_pageSize - 1)) != 0)
-            throw new InvalidDataException("The database's page size makes no sense.");
+            throw new InvalidDataException(L.T("Sqlite.DatabasesPageSizeMakes"));
         _usable = _pageSize - header[20];
         _encoding = BinaryPrimitives.ReadUInt32BigEndian(header.AsSpan(56)) switch
         {
@@ -59,7 +60,7 @@ public sealed class SqliteFile : IDisposable
     public void Scan(string table, Action<SqliteRow> visit)
     {
         if (!_roots.TryGetValue(table, out int root))
-            throw new InvalidDataException($"The database has no {table} table.");
+            throw new InvalidDataException(L.T("Sqlite.DatabaseHasNoTable", table));
         Scan(root, visit);
     }
 
@@ -72,7 +73,7 @@ public sealed class SqliteFile : IDisposable
         while (pending.Count > 0)
         {
             int number = pending.Pop();
-            if (++visited > _length / _pageSize + 1) throw new InvalidDataException("The database's pages loop.");
+            if (++visited > _length / _pageSize + 1) throw new InvalidDataException(L.T("Sqlite.DatabasesPagesLoop"));
             byte[] page = ReadPage(number, ref _treePage);
             int at = number == 1 ? 100 : 0;
             byte type = page[at];
@@ -98,7 +99,7 @@ public sealed class SqliteFile : IDisposable
                     visit(row);
                 }
             }
-            else throw new InvalidDataException($"Page {number} isn't part of a table (type {type}).");
+            else throw new InvalidDataException(L.T("Sqlite.PageIsntPartTable", number, type));
         }
     }
 
@@ -121,7 +122,7 @@ public sealed class SqliteFile : IDisposable
             int done = local;
             while (done < size)
             {
-                if (next == 0) throw new InvalidDataException("A record's overflow pages end early.");
+                if (next == 0) throw new InvalidDataException(L.T("Sqlite.RecordsOverflowPagesEnd"));
                 byte[] overflow = ReadPage(next, ref _overflowPage);
                 int take = Math.Min(size - done, _usable - 4);
                 overflow.AsSpan(4, take).CopyTo(buffer.AsSpan(done));
@@ -139,7 +140,7 @@ public sealed class SqliteFile : IDisposable
     private byte[] ReadPage(int number, ref byte[] buffer)
     {
         long offset = (long)(number - 1) * _pageSize;
-        if (number < 1 || offset + _pageSize > _length) throw new InvalidDataException($"Page {number} is past the end of the database.");
+        if (number < 1 || offset + _pageSize > _length) throw new InvalidDataException(L.T("Sqlite.PagePastEndDatabase", number));
         if (buffer.Length != _pageSize) buffer = new byte[_pageSize];
         RandomAccess.Read(_file, buffer, offset);
         return buffer;

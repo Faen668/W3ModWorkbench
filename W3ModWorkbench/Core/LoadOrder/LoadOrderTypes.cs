@@ -1,3 +1,4 @@
+using W3ModWorkbench.Localisation;
 namespace W3ModWorkbench.Core.LoadOrder;
 
 public enum Severity { Error, Warning, Info }
@@ -12,7 +13,7 @@ public sealed record Finding(
     Severity Severity, string Category, string Title, string Summary,
     IReadOnlyList<string> Mods, IReadOnlyList<string> Items, string Advice, string? Winner = null)
 {
-    public string SeverityText => Severity switch { Severity.Error => "Problem", Severity.Warning => "Warning", _ => "Note" };
+    public string SeverityText => L.T(Severity switch { Severity.Error => "LoadOrderTypes.Problem", Severity.Warning => "LoadOrderTypes.Warning", _ => "LoadOrderTypes.Note" });
 }
 
 /// <summary>An installed mod or DLC folder, in the order the game loads it.</summary>
@@ -59,11 +60,11 @@ public sealed class ModEntry
         get
         {
             var parts = new List<string>();
-            if (CompiledScripts > 0) parts.Add(CompiledScripts == 1 ? "compiled scripts" : $"{CompiledScripts} compiled script blobs");
-            if (LooseScripts > 0) parts.Add(Format.Count(LooseScripts, "loose script"));
-            if (Bundles > 0) parts.Add(Format.Count(BundleFiles, "bundled file"));
-            if (StringsFiles > 0) parts.Add("strings");
-            return parts.Count == 0 ? "no scripts or bundles" : string.Join(", ", parts);
+            if (CompiledScripts > 0) parts.Add(CompiledScripts == 1 ? L.T("LoadOrderTypes.CompiledScripts") : L.T("LoadOrderTypes.CompiledScriptBlobs", CompiledScripts));
+            if (LooseScripts > 0) parts.Add(L.T("Count.LooseScript", LooseScripts));
+            if (Bundles > 0) parts.Add(L.T("Count.BundledFile", BundleFiles));
+            if (StringsFiles > 0) parts.Add(L.T("LoadOrderTypes.Strings"));
+            return parts.Count == 0 ? L.T("LoadOrderTypes.NoScriptsBundles") : string.Join(", ", parts);
         }
     }
 }

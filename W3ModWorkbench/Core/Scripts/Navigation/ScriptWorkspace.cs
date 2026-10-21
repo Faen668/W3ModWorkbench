@@ -1,5 +1,6 @@
 using System.IO;
 using System.Runtime.CompilerServices;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core.Scripts.Navigation;
 
@@ -129,7 +130,7 @@ public sealed class ScriptWorkspace
                 string content = Path.Combine(mod, "content");
                 string path = Path.Combine(content, "scripts", relative);
                 if (File.Exists(path))
-                    result.Add(LooseFile(path, content, Path.GetFileName(mod) + " (loose scripts)", Path.Combine(content, "scripts")));
+                    result.Add(LooseFile(path, content, L.T("ScriptCorpus.LooseScripts", Path.GetFileName(mod)), Path.Combine(content, "scripts")));
             }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -145,7 +146,7 @@ public sealed class ScriptWorkspace
     /// <summary>The game's script at a full path: the indexed one when there is one, so its names lead somewhere.</summary>
     private ScriptFile GameFile(string full) =>
         Result(_game).Files.FirstOrDefault(f => string.Equals(f.Key, full, StringComparison.OrdinalIgnoreCase))
-        ?? LooseFile(full, GameScriptsFolder!, "Game scripts", GameScriptsFolder!);
+        ?? LooseFile(full, GameScriptsFolder!, L.T("Common.GameScripts"), GameScriptsFolder!);
 
     private static ScriptFile LooseFile(string path, string root, string source, string sourceKey) => new()
     {
@@ -217,7 +218,7 @@ public sealed class ScriptWorkspace
         }
     }
 
-    private static ScriptIndex IndexGame(string folder) => IndexFolder(folder, folder, "Game scripts", _ => false);
+    private static ScriptIndex IndexGame(string folder) => IndexFolder(folder, folder, L.T("Common.GameScripts"), _ => false);
 
     private static Task<List<(string Mod, ScriptIndex Index)>> ModsIndex(string gameScripts, string modsFolder)
     {
@@ -253,7 +254,7 @@ public sealed class ScriptWorkspace
             string scripts = Path.Combine(content, "scripts");
             if (!Directory.Exists(scripts)) continue;
             string name = Path.GetFileName(mod);
-            var index = IndexFolder(scripts, content, name + " (loose scripts)",
+            var index = IndexFolder(scripts, content, L.T("ScriptCorpus.LooseScripts", name),
                 path => File.Exists(Path.Combine(gameScripts, Path.GetRelativePath(scripts, path))));
             if (index != ScriptIndex.Empty) result.Add((name, index));
         }

@@ -228,7 +228,7 @@ public sealed class Decompiler(ScriptBlob blob, EnumResolver enums)
                 lines.Add(pad + "{");
                 var loop = new Ctx(_stmts[doCond].Target, [_stmts[doCond].Rt, GroupStart(doCond)]);
                 Emit(lines, i, doCond, depth + 1, loop);
-                lines.Add($"{pad}}} while ({_stmts[doCond].E!.Text});");
+                lines.Add($"{pad}}} while ({_stmts[doCond].E!.Text});"); // loc-ignore
                 count++;
                 i = doBack + 1;
                 continue;
@@ -255,7 +255,7 @@ public sealed class Decompiler(ScriptBlob blob, EnumResolver enums)
                         int step = Prev(back, n + 1);
                         if (step > n && _stmts[step].Kind == Kind.Expr && _stmts[step].Line == st.Line)
                         {
-                            lines.Add($"{pad}for ({st.E!.Text}; {_stmts[n].E!.Text}; {_stmts[step].E!.Text})");
+                            lines.Add($"{pad}for ({st.E!.Text}; {_stmts[n].E!.Text}; {_stmts[step].E!.Text})"); // loc-ignore
                             lines.Add(pad + "{");
                             // continue jumps to the step, or (older compilers) to the loop's closing jump
                             var cont = new HashSet<int> { _stmts[step].Rt, GroupStart(step), _stmts[back].Rt, GroupStart(back) };
@@ -273,7 +273,7 @@ public sealed class Decompiler(ScriptBlob blob, EnumResolver enums)
                 }
 
                 case Kind.Return:
-                    lines.Add(st.E!.IsEmpty ? $"{pad}return;" : $"{pad}return {st.E.Text};");
+                    lines.Add(st.E!.IsEmpty ? $"{pad}return;" : $"{pad}return {st.E.Text};"); // loc-ignore
                     count++;
                     i++;
                     continue;
@@ -284,7 +284,7 @@ public sealed class Decompiler(ScriptBlob blob, EnumResolver enums)
                     else if (ctx.Continue.Contains(st.Target))
                         lines.Add($"{pad}continue;");
                     else
-                        lines.Add($"{pad}// (jump to offset {st.Target} could not be structured)");
+                        lines.Add($"{pad}// (jump to offset {st.Target} could not be structured)"); // loc-ignore
                     count++;
                     i++;
                     continue;
@@ -293,7 +293,7 @@ public sealed class Decompiler(ScriptBlob blob, EnumResolver enums)
                 {
                     if (IsLoop(i, end, out int exit, out int back))
                     {
-                        lines.Add($"{pad}while ({st.E!.Text})");
+                        lines.Add($"{pad}while ({st.E!.Text})"); // loc-ignore
                         lines.Add(pad + "{");
                         Emit(lines, i + 1, back, depth + 1, new Ctx(st.Target, [st.Rt, GroupStart(i), _stmts[back].Rt, GroupStart(back)]));
                         lines.Add(pad + "}");
@@ -305,7 +305,7 @@ public sealed class Decompiler(ScriptBlob blob, EnumResolver enums)
                     int j = IndexAt(st.Target);
                     if (j < 0 || j > end)
                     {
-                        lines.Add($"{pad}if ({st.E!.Text})  // (target offset {st.Target} could not be structured)");
+                        lines.Add($"{pad}if ({st.E!.Text})  // (target offset {st.Target} could not be structured)"); // loc-ignore
                         count++;
                         i++;
                         continue;
@@ -316,7 +316,7 @@ public sealed class Decompiler(ScriptBlob blob, EnumResolver enums)
                         && ctx.Break != _stmts[k].Target && !ctx.Continue.Contains(_stmts[k].Target)
                         && IndexAt(_stmts[k].Target) is int elseEnd && elseEnd >= j && elseEnd <= end)
                     {
-                        lines.Add($"{pad}if ({st.E!.Text})");
+                        lines.Add($"{pad}if ({st.E!.Text})"); // loc-ignore
                         lines.Add(pad + "{");
                         Emit(lines, i + 1, k, depth + 1, ctx);
                         lines.Add(pad + "}");
@@ -327,7 +327,7 @@ public sealed class Decompiler(ScriptBlob blob, EnumResolver enums)
                         if (inner == 1 && elseLines.Count > 0 && elseLines[0].StartsWith(innerPad + "if (", StringComparison.Ordinal))
                         {
                             // else if: lift the nested if chain up one level
-                            lines.Add($"{pad}else {elseLines[0][innerPad.Length..]}");
+                            lines.Add($"{pad}else {elseLines[0][innerPad.Length..]}"); // loc-ignore
                             foreach (var l in elseLines.Skip(1))
                                 lines.Add(l.StartsWith('\t') ? l[1..] : l);
                         }
@@ -343,7 +343,7 @@ public sealed class Decompiler(ScriptBlob blob, EnumResolver enums)
                         continue;
                     }
 
-                    lines.Add($"{pad}if ({st.E!.Text})");
+                    lines.Add($"{pad}if ({st.E!.Text})"); // loc-ignore
                     lines.Add(pad + "{");
                     Emit(lines, i + 1, j, depth + 1, ctx);
                     lines.Add(pad + "}");
@@ -371,7 +371,7 @@ public sealed class Decompiler(ScriptBlob blob, EnumResolver enums)
                     }
                     if (labels.Count == 0)
                     {
-                        lines.Add($"{pad}switch ({st.E!.Text})  // (cases could not be read)");
+                        lines.Add($"{pad}switch ({st.E!.Text})  // (cases could not be read)"); // loc-ignore
                         count++;
                         i++;
                         continue;
@@ -392,7 +392,7 @@ public sealed class Decompiler(ScriptBlob blob, EnumResolver enums)
 
                     int breakRt = switchEnd < _stmts.Count ? _stmts[switchEnd].Rt : _func.RuntimeSize;
                     var inner = ctx with { Break = breakRt };
-                    lines.Add($"{pad}switch ({st.E!.Text})");
+                    lines.Add($"{pad}switch ({st.E!.Text})"); // loc-ignore
                     lines.Add(pad + "{");
                     for (int l = 0; l < physical.Count;)
                     {
@@ -401,7 +401,7 @@ public sealed class Decompiler(ScriptBlob blob, EnumResolver enums)
                         while (run + 1 < physical.Count && Next(physical[run] + 1, physical[run + 1]) == physical[run + 1])
                             run++;
                         foreach (int li in physical.Skip(l).Take(run - l + 1).OrderBy(labels.IndexOf))
-                            lines.Add(_stmts[li].Kind == Kind.Default ? $"{pad}\tdefault:" : $"{pad}\tcase {_stmts[li].E!.Text}:");
+                            lines.Add(_stmts[li].Kind == Kind.Default ? $"{pad}\tdefault:" : $"{pad}\tcase {_stmts[li].E!.Text}:"); // loc-ignore
                         int bodyEnd = run + 1 < physical.Count ? physical[run + 1] : switchEnd;
                         Emit(lines, physical[run] + 1, bodyEnd, depth + 2, inner);
                         l = run + 1;
@@ -413,7 +413,7 @@ public sealed class Decompiler(ScriptBlob blob, EnumResolver enums)
                 }
 
                 default:
-                    lines.Add($"{pad}// (unexpected {st.Kind})");
+                    lines.Add($"{pad}// (unexpected {st.Kind})"); // loc-ignore
                     i++;
                     continue;
             }
@@ -435,7 +435,7 @@ public sealed class Decompiler(ScriptBlob blob, EnumResolver enums)
         while (_pos < _code.Count && _code[_pos].Op is Op.Line or Op.Target)
             _pos++;
         if (_pos >= _code.Count)
-            throw new InvalidOperationException("The code ended in the middle of an expression.");
+            throw new InvalidOperationException("The code ended in the middle of an expression."); // loc-ignore
 
         bool member = _nextIsMember;
         _nextIsMember = false;
@@ -550,11 +550,11 @@ public sealed class Decompiler(ScriptBlob blob, EnumResolver enums)
             {
                 var owner = ParseExpr();
                 string t = TypeName(ins.Arg(0));
-                return new(owner.IsEmpty ? $"new {t}" : $"new {t} in {Wrap(owner, Precedence.Unary)}", Precedence.Unary);
+                return new(owner.IsEmpty ? $"new {t}" : $"new {t} in {Wrap(owner, Precedence.Unary)}", Precedence.Unary); // loc-ignore
             }
 
             case Op.Delete:
-                return new($"delete {Wrap(ParseExpr(), Precedence.Unary)}", Precedence.Unary);
+                return new($"delete {Wrap(ParseExpr(), Precedence.Unary)}", Precedence.Unary); // loc-ignore
 
             case Op.Constructor:
             {
@@ -612,7 +612,7 @@ public sealed class Decompiler(ScriptBlob blob, EnumResolver enums)
                 return ParseExpr();
 
             default:
-                throw new NotSupportedException($"{ins.Op} cannot appear inside an expression.");
+                throw new NotSupportedException($"{ins.Op} cannot appear inside an expression."); // loc-ignore
         }
     }
 

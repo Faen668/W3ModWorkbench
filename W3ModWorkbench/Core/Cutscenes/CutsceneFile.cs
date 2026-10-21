@@ -1,6 +1,7 @@
 using System.IO;
 using System.Text;
 using W3ModWorkbench.Core.Cr2w;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core.Cutscenes;
 
@@ -102,11 +103,11 @@ public sealed class CutsceneFile
     /// <summary>The files it refers to: the actors' entities, effects' particles and materials, the scenes and the world.</summary>
     public IEnumerable<CutsceneLink> Links =>
         File.Imports.Select(i => new CutsceneLink(i.Path, Role(i.Path)))
-            .Concat(UsedIn.Select(p => new CutsceneLink(p, "Scene that plays it")))
+            .Concat(UsedIn.Select(p => new CutsceneLink(p, L.T("CutsceneFile.ScenePlays"))))
             .Concat(Level is null ? [] : [new CutsceneLink(Level, "World it was made in")])
             .DistinctBy(l => l.Path, StringComparer.OrdinalIgnoreCase);
 
-    private static string Role(string path) => FileKinds.Of(path)?.Name ?? "File";
+    private static string Role(string path) => FileKinds.Of(path)?.Name ?? L.T("Common.File");
 
     /// <summary>
     /// Puts words to the dialog events, which are only marks: the cutscene's section in the scene that plays it has its
@@ -151,7 +152,7 @@ public sealed class CutsceneFile
     public static CutsceneFile Read(byte[] data)
     {
         var file = Cr2wFile.Read(data);
-        var template = file.First("CCutsceneTemplate") ?? throw new InvalidDataException("There's no cutscene in it: it has no CCutsceneTemplate.");
+        var template = file.First("CCutsceneTemplate") ?? throw new InvalidDataException(L.T("CutsceneFile.TheresNoCutsceneHas"));
 
         var actors = new List<CutsceneActor>();
         foreach (var def in template.Array("actorsDef").OfType<RedObject>())
@@ -181,7 +182,7 @@ public sealed class CutsceneFile
             var actor = actors.FirstOrDefault(x => x.Name == actorName);
             if (actor is null)
             {
-                actor = new CutsceneActor { Name = actorName.Length > 0 ? actorName : "(unnamed)", Type = "Not listed" };
+                actor = new CutsceneActor { Name = actorName.Length > 0 ? actorName : L.T("CutsceneFile.Unnamed"), Type = L.T("CutsceneFile.NotListed") };
                 actors.Add(actor);
             }
             var events = file.TailObjects(entry).Select(e => Describe(file, e, actor.Name)).OrderBy(e => e.Start).ToList();
@@ -229,9 +230,9 @@ public sealed class CutsceneFile
                     string? part = item.ClassName switch
                     {
                         "CFXTrackItemParticles" => item["particleSystem"] is RedHandle p ? file.Import(p)?.Path : null,
-                        "CFXTrackItemMaterialOverride" => item["material"] is RedHandle m ? file.Import(m)?.Path ?? "material override" : null,
-                        "CFXTrackItemDynamicLight" => "dynamic light",
-                        "CFXTrackItemFlare" => "flare",
+                        "CFXTrackItemMaterialOverride" => item["material"] is RedHandle m ? file.Import(m)?.Path ?? L.T("CutsceneFile.MaterialOverride") : null,
+                        "CFXTrackItemDynamicLight" => L.T("CutsceneFile.DynamicLight"),
+                        "CFXTrackItemFlare" => L.T("CutsceneFile.Flare"),
                         _ => Humanize(item.ClassName, "CFXTrackItem"),
                     };
                     if (part is not null && !parts.Contains(part)) parts.Add(part);
@@ -251,24 +252,24 @@ public sealed class CutsceneFile
         switch (e.ClassName)
         {
             case "CExtAnimCutsceneDialogEvent":
-                (kind, title, detail) = (CutsceneEventKind.Dialog, "Dialog line", eventName);
+                (kind, title, detail) = (CutsceneEventKind.Dialog, L.T("CutsceneFile.DialogLine"), eventName);
                 break;
             case "CExtAnimCutsceneSoundEvent":
                 (kind, title, detail) = (CutsceneEventKind.Sound, e["soundEventName"] as string ?? eventName, Join(eventName, Bone(e)));
                 break;
             case "CExtAnimFootstepEvent":
-                (kind, title, detail) = (CutsceneEventKind.Sound, e["soundEventName"] as string ?? eventName, Join("footstep", Bone(e)));
+                (kind, title, detail) = (CutsceneEventKind.Sound, e["soundEventName"] as string ?? eventName, Join(L.T("CutsceneFile.Footstep"), Bone(e)));
                 break;
             case "CExtAnimCutsceneEffectEvent":
                 link = e["template"] is RedHandle t ? file.Import(t)?.Path : null;
                 (kind, title, detail) = (CutsceneEventKind.Effect, NameOrNull(e["effect"]) ?? eventName,
-                    Join(link is null ? null : "on " + Path.GetFileName(link), e.Struct("spawnPosMS") is { } at ? $"at {at.Float("X"):0.##}, {at.Float("Y"):0.##}, {at.Float("Z"):0.##}" : null));
+                    Join(link is null ? null : L.T("CutsceneFile.On", Path.GetFileName(link)), e.Struct("spawnPosMS") is { } at ? L.T("CutsceneFile.AtPosition", at.Float("X"), at.Float("Y"), at.Float("Z")) : null));
                 break;
             case "CExtAnimCutsceneActorEffect":
-                (kind, title, detail) = (CutsceneEventKind.Effect, NameOrNull(e["effectName"]) ?? eventName, "on the actor");
+                (kind, title, detail) = (CutsceneEventKind.Effect, NameOrNull(e["effectName"]) ?? eventName, L.T("CutsceneFile.Actor"));
                 break;
             case "CExtAnimItemEffectEvent":
-                (kind, title, detail) = (CutsceneEventKind.Effect, NameOrNull(e["effectName"]) ?? eventName, Join("on the item", eventName));
+                (kind, title, detail) = (CutsceneEventKind.Effect, NameOrNull(e["effectName"]) ?? eventName, Join(L.T("CutsceneFile.Item"), eventName));
                 break;
             case "CExtAnimItemEvent":
                 string? item = NameOrNull(e["itemName_optional"]), category = NameOrNull(e["category"]);
@@ -276,53 +277,53 @@ public sealed class CutsceneFile
                     Join(e["action"] is RedEnum action ? Humanize(action.ToString(), "IA_") : null, item is null ? null : category));
                 break;
             case "CExtAnimCutsceneBodyPartEvent":
-                (kind, title, detail) = (CutsceneEventKind.Appearance, NameOrNull(e["appearance"]) ?? eventName, "appearance");
+                (kind, title, detail) = (CutsceneEventKind.Appearance, NameOrNull(e["appearance"]) ?? eventName, L.T("CutsceneFile.Appearance"));
                 break;
             case "CExtAnimCutsceneFadeEvent":
-                (kind, title, detail) = (CutsceneEventKind.Camera, e["in"] is false ? "Fade out" : "Fade in",
-                    Join(duration > 0 ? $"over {duration:0.##} s" : null, e.Struct("color") is { } c ? $"to #{c.Integer("Red"):X2}{c.Integer("Green"):X2}{c.Integer("Blue"):X2}" : null));
+                (kind, title, detail) = (CutsceneEventKind.Camera, e["in"] is false ? L.T("CutsceneFile.FadeOut") : L.T("CutsceneFile.Fade"),
+                    Join(duration > 0 ? L.T("CutsceneFile.Over", duration) : null, e.Struct("color") is { } c ? L.T("CutsceneFile.ToColour", $"#{c.Integer("Red"):X2}{c.Integer("Green"):X2}{c.Integer("Blue"):X2}") : null));
                 break;
             case "CExtAnimCutsceneSetClippingPlanesEvent":
                 // the custom distances count only when a plane is set to its custom value; one left unset is the environment's
                 string nearName = e["nearPlaneDistance"] is RedEnum near ? near.ToString() : "NP_DefaultEnv";
                 string farName = e["farPlaneDistance"] is RedEnum far ? far.ToString() : "FP_DefaultEnv";
                 var custom = e.Struct("customPlaneDistance");
-                string nearText = nearName == "NP_CustomValue" ? $"near {custom?.Float("nearPlaneDistance") ?? 0:0.###} m" : "near: " + Humanize(nearName, "NP_");
-                string farText = farName == "FP_CustomValue" ? $"far {custom?.Float("farPlaneDistance") ?? 0:0.#} m" : "far: " + Humanize(farName, "FP_");
-                (kind, title, detail) = (CutsceneEventKind.Camera, "Clipping planes", $"{nearText}, {farText}");
+                string nearText = nearName == "NP_CustomValue" ? L.T("CutsceneFile.NearAt", custom?.Float("nearPlaneDistance") ?? 0) : L.T("CutsceneFile.Near", Humanize(nearName, "NP_"));
+                string farText = farName == "FP_CustomValue" ? L.T("CutsceneFile.FarAt", custom?.Float("farPlaneDistance") ?? 0) : L.T("CutsceneFile.Far", Humanize(farName, "FP_"));
+                (kind, title, detail) = (CutsceneEventKind.Camera, L.T("CutsceneFile.ClippingPlanes"), $"{nearText}, {farText}");
                 break;
             case "CExtAnimCutsceneBokehDofEvent":
             case "CExtAnimCutsceneBokehDofBlendEvent":
                 var dof = e.Struct("bokehDofParams") ?? e.Struct("bokehDofParamsEnd");
-                (kind, title, detail) = (CutsceneEventKind.Camera, "Depth of field", dof is null ? eventName : $"focus at {dof.Float("planeInFocus"):0.##} m");
+                (kind, title, detail) = (CutsceneEventKind.Camera, L.T("CutsceneFile.DepthField"), dof is null ? eventName : L.T("CutsceneFile.FocusAt", dof.Float("planeInFocus")));
                 break;
             case "CExtAnimCutsceneLightEvent":
                 (kind, title, detail) = (CutsceneEventKind.Light, eventName,
-                    Join(string.Join(", ", file.Tags(e.Bytes("tag"))), $"brightness {e.Float("brightness"):0.##}", e["radius"] is null ? null : $"radius {e.Float("radius"):0.##}"));
+                    Join(string.Join(", ", file.Tags(e.Bytes("tag"))), L.T("CutsceneFile.Brightness", e.Float("brightness")), e["radius"] is null ? null : L.T("CutsceneFile.Radius", e.Float("radius"))));
                 break;
             case "CExtAnimCutsceneResetClothAndDangleEvent":
-                (kind, title, detail) = (CutsceneEventKind.Cloth, "Reset cloth and dangles", e["forceRelaxedState"] is true ? "relaxed" : "");
+                (kind, title, detail) = (CutsceneEventKind.Cloth, L.T("CutsceneFile.ResetClothDangles"), e["forceRelaxedState"] is true ? L.T("CutsceneFile.Relaxed") : "");
                 break;
             case "CExtAnimCutsceneDisableClothEvent":
-                (kind, title, detail) = (CutsceneEventKind.Cloth, "Cloth off", Weight(e));
+                (kind, title, detail) = (CutsceneEventKind.Cloth, L.T("CutsceneFile.ClothOff"), Weight(e));
                 break;
             case "CExtAnimCutsceneDisableDangleEvent":
-                (kind, title, detail) = (CutsceneEventKind.Cloth, "Dangles off", Weight(e));
+                (kind, title, detail) = (CutsceneEventKind.Cloth, L.T("CutsceneFile.DanglesOff"), Weight(e));
                 break;
             case "CExtAnimMorphEvent":
-                (kind, title, detail) = (CutsceneEventKind.Morph, NameOrNull(e["morphComponentId"]) ?? eventName, e["invertWeight"] is true ? "morph, inverted" : "morph");
+                (kind, title, detail) = (CutsceneEventKind.Morph, NameOrNull(e["morphComponentId"]) ?? eventName, e["invertWeight"] is true ? L.T("CutsceneFile.MorphInverted") : L.T("CutsceneFile.Morph"));
                 break;
             case "CExtAnimCutsceneQuestEvent":
-                (kind, title, detail) = (CutsceneEventKind.Quest, eventName, "tells the quest");
+                (kind, title, detail) = (CutsceneEventKind.Quest, eventName, L.T("CutsceneFile.TellsQuest"));
                 break;
             case "CExtAnimCutsceneHideTerrainEvent":
-                (kind, title, detail) = (CutsceneEventKind.World, "Terrain hidden", eventName);
+                (kind, title, detail) = (CutsceneEventKind.World, L.T("CutsceneFile.TerrainHidden"), eventName);
                 break;
             case "CExtAnimCutsceneWindEvent":
-                (kind, title, detail) = (CutsceneEventKind.World, "Wind", $"× {e.Float("factor", 1):0.##}");
+                (kind, title, detail) = (CutsceneEventKind.World, L.T("CutsceneFile.Wind"), $"× {e.Float("factor", 1):0.##}");
                 break;
             case "CExtAnimCutsceneSurfaceEffect":
-                (kind, title, detail) = (CutsceneEventKind.World, eventName, $"surface effect, radius {e.Float("radius"):0.##}");
+                (kind, title, detail) = (CutsceneEventKind.World, eventName, L.T("CutsceneFile.SurfaceEffect", e.Float("radius")));
                 break;
             default:
                 (kind, title, detail) = (CutsceneEventKind.Other, eventName.Length > 0 ? eventName : e.ClassName, Humanize(e.ClassName, "CExtAnim"));
@@ -331,9 +332,9 @@ public sealed class CutsceneFile
         return new CutsceneEvent(start, duration, kind, title, detail, e.ClassName, actor, link) { Source = e };
     }
 
-    private static string? Bone(RedObject e) => NameOrNull(e["bone"]) is { } bone && !bone.StartsWith('(') ? "at " + bone : null;
+    private static string? Bone(RedObject e) => NameOrNull(e["bone"]) is { } bone && !bone.StartsWith('(') ? L.T("CutsceneFile.AtBone", bone) : null;
 
-    private static string Weight(RedObject e) => e["weight"] is null ? "" : $"weight {e.Float("weight"):0.##}";
+    private static string Weight(RedObject e) => e["weight"] is null ? "" : L.T("CutsceneFile.Weight", e.Float("weight"));
 
     /// <summary>A name that isn't empty or None, else null.</summary>
     private static string? NameOrNull(object? value) => value is string s && s.Length > 0 && s != "None" ? s : null;

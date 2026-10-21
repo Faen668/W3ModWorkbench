@@ -126,10 +126,17 @@ It lists, with file and line:
 It exits with 0 when there's nothing to fix. `--summary` gives a count per file, `--file Settings` checks only files
 with that in their path, and `--unused` lists English keys nothing uses. `--strict` also counts single words in C#
 wherever they are (a heading made in code, a menu item), which lists many names and keys too: use it to sweep a new
-window by eye. It skips `Core` (the game's formats) and
-`CommandLine.cs` (the command line's usage, kept in English). Some text the windows show still comes from `Core` in
-English: the file kinds' names and descriptions, the game's own words (class names, event kinds) and messages from
-reading and compiling. Those are next.
+window by eye. It skips
+`CommandLine.cs` (the command line's usage, kept in English).
+
+`Core` (the game's formats) is checked as the rest is: its messages, headings, file kinds and the like are shown in
+the windows, so they go through the tables too. A single word there counts only where text goes (a `Title`, a
+`Label`), and `--strict` leaves `Core` out, as most single words in it are the engine's own names (classes,
+properties, enum values) that stay as they are. What `Core` writes into files is marked `loc-ignore` and stays as it
+is: WitcherScript (stubs, snippets' code, decompiled scripts, native declarations), XML, OBJ and report markup, and
+the built-in compiler's annotation errors and enum checks, which use wcc_lite's exact words. A word `Core` uses as a
+marker or a key (an event's kind, an attachment's kind, the "in the mesh" source) stays English and is compared by
+code; the word shown for it comes from the tables.
 
 The check tells text from code by what it looks like and where
 it goes, so mark a string it gets wrong with `loc-ignore` rather than leaving the check failing.

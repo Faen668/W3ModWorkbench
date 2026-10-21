@@ -2,6 +2,7 @@ using System.Buffers.Binary;
 using System.IO;
 using System.Text;
 using W3ModWorkbench.Core.Cr2w;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core.Packing;
 
@@ -115,7 +116,7 @@ public static class BundleWriter
             for (int i = 0; i < bundles.Count; i++)
             {
                 string path = Path.Combine(outFolder, $"{name}{i}.bundle");
-                progress?.Report($"Packing {Path.GetFileName(path)}…");
+                progress?.Report(L.T("BundleWriter.Packing", Path.GetFileName(path)));
                 written.Add(Write(path, bundles[i], cancel));
             }
         return written;

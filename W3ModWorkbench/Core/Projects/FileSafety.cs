@@ -1,5 +1,6 @@
 using System.IO;
 using W3ModWorkbench.Core.Scripts;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core.Projects;
 
@@ -33,18 +34,18 @@ public static class FileSafety
             if (first.Equals("mods", StringComparison.OrdinalIgnoreCase))
             {
                 string mod = relative.Split('\\', '/').ElementAtOrDefault(1) ?? "";
-                return $"It's in an installed mod ({mod}), which is left as it is. Copy the file into your project to change it; Install puts your mod's build in the mods folder.";
+                return L.T("FileSafety.InstalledModWhichLeft", mod);
             }
             return first.Equals("dlc", StringComparison.OrdinalIgnoreCase)
-                ? "It's one of the game's DLC files, which are never changed. Copy it into your project to change it."
-                : "It's one of the game's own files, which are never changed. Copy it into your project to change it.";
+                ? L.T("FileSafety.OneGamesDLCFiles")
+                : L.T("FileSafety.OneGamesOwnFiles");
         }
         foreach (string redkit in RedkitFolders())
             foreach (string own in new[] { "r4data", "bin" })
                 if (Under(Path.Combine(redkit, own), full))
-                    return "It's one of REDkit's own files, which are never changed. Copy it into your project to change it.";
+                    return L.T("FileSafety.OneREDkitsOwnFiles");
         if (BuildOutputOf(full) is not null)
-            return "It's made by Build, which replaces it every time. Change the project's own files and build again.";
+            return L.T("FileSafety.MadeBuildWhichReplaces");
         return null;
     }
 
@@ -55,7 +56,7 @@ public static class FileSafety
     /// <exception cref="ProtectedFileException">The file is the game's, REDkit's, an installed mod's or a build's.</exception>
     public static void CheckWrite(string path)
     {
-        if (Protection(path) is { } why) throw new ProtectedFileException($"{Path.GetFileName(path)} wasn't saved. {why}");
+        if (Protection(path) is { } why) throw new ProtectedFileException(L.T("FileSafety.WasntSaved", Path.GetFileName(path), why));
     }
 
     /// <summary>
@@ -65,7 +66,7 @@ public static class FileSafety
     public static void CheckFolder(string folder)
     {
         if (Protection(Path.Combine(folder, "_")) is { } why)
-            throw new ProtectedFileException($"Nothing can be written to {folder}. {why}");
+            throw new ProtectedFileException(L.T("FileSafety.NothingCanWritten", folder, why));
     }
 
     /// <summary>

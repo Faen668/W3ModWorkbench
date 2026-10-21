@@ -1,3 +1,4 @@
+using W3ModWorkbench.Localisation;
 // Part of the built-in compiler: a C# port of the .ws-to-rsblob compiler written by WebSpam for Aelto's tw3-cahirb (MIT).
 // https://github.com/Aelto/tw3-cahirb/pull/1
 
@@ -8,7 +9,7 @@ public sealed record CompileProblem(string? File, int Line, string Text);
 
 /// <summary>Raised when the project can't be compiled; <see cref="Problems"/> say why.</summary>
 public sealed class CompileFailedException(List<CompileProblem> problems)
-    : Exception(problems.Count == 1 ? problems[0].Text : $"{problems.Count} problems")
+    : Exception(problems.Count == 1 ? problems[0].Text : L.T("Assembler.Problems", problems.Count))
 {
     public List<CompileProblem> Problems { get; } = problems;
 }
@@ -79,7 +80,7 @@ public sealed class Assembler
             if (item is FunctionItem f)
             {
                 try { PlanFree(file, f.Decl, free); }
-                catch (CompileException ex) { Problem(file, ex.Line, $"function {f.Decl.Name}: {ex.Message}"); }
+                catch (CompileException ex) { Problem(file, ex.Line, L.T("Assembler.Function", f.Decl.Name, ex.Message)); }
             }
 
         var fields = items.Where(i => i.Item is FieldItem).Select(i => (i.File, ((FieldItem)i.Item).Decl)).ToList();
@@ -107,7 +108,7 @@ public sealed class Assembler
         {
             try
             {
-                string cls = field.Annotation?.Class ?? throw new CompileException("a var outside a class needs @addField(Class)");
+                string cls = field.Annotation?.Class ?? throw new CompileException(L.T("Assembler.VarOutsideClassNeeds"));
                 foreach (string name in field.Names) addedFields.Add(ClassProperty(field, name, cls));
             }
             catch (CompileException ex)
@@ -267,7 +268,7 @@ public sealed class Assembler
         FunctionPlan Plan(int flags, string? cls = null, Wrap? wrap = null) => new()
         {
             Decl = decl,
-            Label = $"function {decl.Name}",
+            Label = L.T("Assembler.Function2", decl.Name),
             File = file,
             Flags = flags,
             ThisClass = cls,
@@ -290,14 +291,14 @@ public sealed class Assembler
             case (AnnotationKind.WrapMethod, { } cls):
             {
                 var target = _symbols.FindMethod(cls, decl.Name)
-                    ?? throw new CompileException($"@wrapMethod target {cls}.{decl.Name} not found");
+                    ?? throw new CompileException(L.T("Assembler.WrapMethodTargetNotFound", cls, decl.Name));
                 plans.Wrap.Add(Plan(0x100000 | 0x10000 | EventTimerEntryFlags(target.Specifiers), cls, new Wrap(WrapKind.Class, target)));
                 break;
             }
             case (AnnotationKind.WrapMethod, null):
             {
                 var target = _symbols.Functions.GetValueOrDefault(decl.Name)
-                    ?? throw new CompileException($"@wrapMethod target {decl.Name} not found");
+                    ?? throw new CompileException(L.T("Assembler.WrapMethodTargetNotFound2", decl.Name));
                 plans.Wrap.Add(Plan(0x100000 | 0x2, null, new Wrap(WrapKind.Global, target)));
                 break;
             }
@@ -308,7 +309,7 @@ public sealed class Assembler
                 plans.ReplaceGlobal.Add(Plan(0x40000 | 0x2));
                 break;
             default:
-                throw new CompileException($"unsupported annotation {annotation.Kind}");
+                throw new CompileException(L.T("Assembler.UnsupportedAnnotation", annotation.Kind));
         }
     }
 
@@ -378,7 +379,7 @@ public sealed class Assembler
         Unary { Op: "-", Operand.Kind: FloatLit f } => (-f.Value).ToString("R", System.Globalization.CultureInfo.InvariantCulture),
         Unary { Op: "-" } u => "-" + DefaultText(u.Operand),
         NullLit => "NULL",
-        _ => throw new CompileException("this default value isn't supported", expr.Line),
+        _ => throw new CompileException(L.T("Assembler.DefaultValueIsntSupported"), expr.Line),
     };
 
     private (int, int, List<PropDef>, List<DefaultDef>) StructDefinition(ClassDecl decl)

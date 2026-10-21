@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.IO;
 using System.Text.Json.Nodes;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core.Cr2w;
 
@@ -52,13 +53,13 @@ public sealed class Cr2wBulkEdit
     public int Apply(JsonObject document)
     {
         var steps = ParsePath(Path);
-        var objects = document["objects"] as JsonArray ?? throw new InvalidDataException("This isn't a converted CR2W file (it has no \"objects\").");
+        var objects = document["objects"] as JsonArray ?? throw new InvalidDataException(L.T("Cr2wBulkEdit.IsntConvertedCR2WFile"));
         JsonNode? copied = null;
         if (Kind == BulkEditKind.Copy)
         {
-            if (Source is null) throw new InvalidOperationException("A copy needs a source file.");
-            var from = SourceObject() ?? throw new InvalidDataException($"The source file has no {(ClassName.Length > 0 ? ClassName : "objects")}.");
-            copied = Find(from, steps) ?? throw new InvalidDataException($"The source file has nothing at {Path}.");
+            if (Source is null) throw new InvalidOperationException(L.T("Cr2wBulkEdit.CopyNeedsSourceFile"));
+            var from = SourceObject() ?? throw new InvalidDataException(ClassName.Length > 0 ? L.T("Cr2wBulkEdit.SourceHasNoClass", ClassName) : L.T("Cr2wBulkEdit.SourceHasNoObjects"));
+            copied = Find(from, steps) ?? throw new InvalidDataException(L.T("Cr2wBulkEdit.SourceFileHasNothing", Path));
             MergeFileInfo(document, copied);
         }
 
@@ -101,21 +102,21 @@ public sealed class Cr2wBulkEdit
         var steps = new List<object>();
         foreach (string part in path.Split('.', StringSplitOptions.TrimEntries))
         {
-            if (part.Length == 0) throw new FormatException($"\"{path}\" has an empty step.");
+            if (part.Length == 0) throw new FormatException(L.T("Cr2wBulkEdit.HasEmptyStep", path));
             string name = part;
             var indices = new List<int>();
             while (name.EndsWith(']') && name.LastIndexOf('[') is int open and > 0)
             {
                 if (!int.TryParse(name[(open + 1)..^1], NumberStyles.None, CultureInfo.InvariantCulture, out int index))
-                    throw new FormatException($"\"{part}\" doesn't have a number in its brackets.");
+                    throw new FormatException(L.T("Cr2wBulkEdit.DoesntHaveNumberBrackets", part));
                 indices.Insert(0, index);
                 name = name[..open];
             }
-            if (name.Contains('[') || name.Contains(']')) throw new FormatException($"\"{part}\" isn't a property name with [n] after it.");
+            if (name.Contains('[') || name.Contains(']')) throw new FormatException(L.T("Cr2wBulkEdit.IsntPropertyNameN", part));
             steps.Add(name);
             foreach (int index in indices) steps.Add(index);
         }
-        if (steps.Count == 0) throw new FormatException("The path is empty.");
+        if (steps.Count == 0) throw new FormatException(L.T("Cr2wBulkEdit.PathEmpty"));
         return steps;
     }
 

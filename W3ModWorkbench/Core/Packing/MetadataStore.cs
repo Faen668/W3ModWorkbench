@@ -1,6 +1,7 @@
 using System.Buffers.Binary;
 using System.IO;
 using System.Text;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core.Packing;
 
@@ -55,7 +56,7 @@ public static class MetadataStore
         using var fs = new FileStream(bundlePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
         var header = new byte[0x20];
         fs.ReadExactly(header);
-        if (Encoding.ASCII.GetString(header, 0, 8) != "POTATO70") throw new InvalidDataException($"{Path.GetFileName(bundlePath)} isn't a bundle.");
+        if (Encoding.ASCII.GetString(header, 0, 8) != "POTATO70") throw new InvalidDataException(L.T("MetadataStore.IsntBundle", Path.GetFileName(bundlePath)));
         long aligned = BinaryPrimitives.ReadUInt32LittleEndian(header.AsSpan(0x08));
         int tocSize = BinaryPrimitives.ReadInt32LittleEndian(header.AsSpan(0x10));
         var bundle = Bundle.Open(bundlePath);

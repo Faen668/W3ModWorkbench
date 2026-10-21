@@ -2,6 +2,7 @@ using System.IO;
 using System.Text;
 using W3ModWorkbench.Core.Cr2w;
 using W3ModWorkbench.Core.Scripts.Standalone;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core.BehTrees;
 
@@ -94,7 +95,7 @@ public sealed class BehTreeFile
     public static BehTreeFile Read(byte[] data)
     {
         var file = Cr2wFile.Read(data);
-        var tree = file.First("CBehTree") ?? throw new InvalidDataException("This isn't a behaviour tree.");
+        var tree = file.First("CBehTree") ?? throw new InvalidDataException(L.T("BehTreeFile.IsntBehaviourTree"));
         var made = new Dictionary<int, BehTreeNode>();
         BehTreeNode? root = tree["rootNode"] is RedHandle { Export: int at } ? Node(file, at, made, 0) : null;
         return new BehTreeFile { File = file, Root = root, NodeCount = made.Count };
@@ -174,8 +175,8 @@ public sealed class BehTreeFile
     {
         var parts = new List<string>();
         if (node["val"] is RedObject val && Variable(val) is { } test)
-            parts.Add((node["invert"] is true || node["invertCondition"] is true ? "unless " : "if ") + test);
-        if (node["data"] is RedHandle) parts.Add("AI tree");
+            parts.Add(L.T(node["invert"] is true || node["invertCondition"] is true ? "BehTreeFile.Unless" : "BehTreeFile.If", test));
+        if (node["data"] is RedHandle) parts.Add(L.T("BehTreeFile.AITree"));
         // then what it's set to do: its task's settings, or its own
         parts.AddRange(Settings(task ?? node).Take(Math.Max(0, 2 - parts.Count)));
         if (parts.Count == 0 && task is not null) parts.Add(Words(node.ClassName));
@@ -222,7 +223,7 @@ public sealed class BehTreeFile
             var other => other.ToString() ?? "",
         };
         if (string.IsNullOrEmpty(name) || name == "None") return value.Length > 0 ? value : null;
-        return value.Length > 0 ? $"{name} is {value}" : name;
+        return value.Length > 0 ? L.T("BehTreeFile.Is", name, value) : name;
     }
 
     /// <summary>

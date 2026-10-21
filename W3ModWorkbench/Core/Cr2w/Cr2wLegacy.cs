@@ -1,6 +1,7 @@
 using System.Buffers.Binary;
 using System.IO;
 using System.Text;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core.Cr2w;
 
@@ -74,7 +75,7 @@ public static class Cr2wLegacy
     {
         int version = I32(d, 4);
         int headerSize = HeaderSize(version);
-        if (d.Length < headerSize) throw new InvalidDataException("The CR2W file is cut short.");
+        if (d.Length < headerSize) throw new InvalidDataException(L.T("Cr2wLegacy.CR2WFileCutShort"));
         int flags = I32(d, 8);
         int namesAt = I32(d, 12), nameCount = I32(d, 16);
         int exportsAt = I32(d, 20), exportCount = I32(d, 24);
@@ -250,7 +251,7 @@ public static class Cr2wLegacy
         if (at < 0 || count < 0 || at + (long)count > d.Length) throw Damaged();
     }
 
-    private static InvalidDataException Damaged() => new("The CR2W file's tables point outside it; it's damaged or cut short.");
+    private static InvalidDataException Damaged() => new(L.T("Cr2wLegacy.CR2WFilesTablesPoint"));
 
     private static int I32(byte[] d, int at) => BinaryPrimitives.ReadInt32LittleEndian(d.AsSpan(at));
     private static int U16(byte[] d, int at) => BinaryPrimitives.ReadUInt16LittleEndian(d.AsSpan(at));

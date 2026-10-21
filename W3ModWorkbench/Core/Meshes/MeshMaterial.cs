@@ -1,6 +1,7 @@
 using System.IO;
 using W3ModWorkbench.Core.Cr2w;
 using System.Numerics;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core.Meshes;
 
@@ -54,8 +55,11 @@ public sealed record MaterialParameter(string Name, string Type, object? Value, 
 /// </summary>
 public sealed class MeshMaterial
 {
-    /// <summary>Where the material is: "in the mesh", or the .w2mi or .w2mg path.</summary>
+    /// <summary>Where the material is: <see cref="InMesh"/>, or the .w2mi or .w2mg path.</summary>
     public required string Source { get; init; }
+
+    /// <summary>The <see cref="Source"/> of a material kept in the mesh: a marker, not shown.</summary>
+    public const string InMesh = "in the mesh"; // loc-ignore
 
     /// <summary>The bases in turn, nearest first, ending with the shader graph when it was found.</summary>
     public required List<string> Bases { get; init; }
@@ -147,11 +151,11 @@ public sealed class MeshMaterial
             var (basePath, baseClass) = BaseOf(file, inline);
             var bases = new List<string>();
             var inherited = new List<MaterialParameter>();
-            var own = ParametersOf(file, inline, "the mesh");
+            var own = ParametersOf(file, inline, L.T("MeshMaterial.Mesh"));
             FollowBase(file, inline, own, inherited, bases, readFile, 0);
             return new MeshMaterial
             {
-                Source = "in the mesh", Bases = bases, Own = own, Inherited = inherited,
+                Source = InMesh, Bases = bases, Own = own, Inherited = inherited,
                 InlineExport = inline.Export?.Index, BasePath = basePath, BaseClass = baseClass, ExportFlags = FlagsOf(file, inline),
             };
         }
@@ -218,7 +222,7 @@ public sealed class MeshMaterial
         if (depth > 8 || instance["baseMaterial"] is not RedHandle handle) return;
         if (file.Object(handle) is { ClassName: "CMaterialInstance" } inlineBase && !ReferenceEquals(inlineBase, instance))
         {
-            Merge(inherited, own, ParametersOf(file, inlineBase, "the mesh"));
+            Merge(inherited, own, ParametersOf(file, inlineBase, L.T("MeshMaterial.Mesh")));
             FollowBase(file, inlineBase, own, inherited, bases, readFile, depth + 1);
             return;
         }

@@ -1,3 +1,5 @@
+using W3ModWorkbench.Localisation;
+
 namespace W3ModWorkbench.Core.Inspector;
 
 /// <summary>
@@ -11,12 +13,13 @@ public static class InspectorEngine
     private const int HotShingle = 40;
     private const int MaxEvidencePerKind = 300;
 
-    private static readonly (UnitKind Kind, string Name, double Weight)[] Categories =
+    // each kind's name is under its key in the string tables
+    private static readonly (UnitKind Kind, string Key, double Weight)[] Categories =
     [
-        (UnitKind.Script, "Scripts", 40),
-        (UnitKind.Xml, "Menus and XML", 20),
-        (UnitKind.Text, "Text and strings", 10),
-        (UnitKind.Asset, "Bundle contents and other files", 30),
+        (UnitKind.Script, "InspectorEngine.Category.Scripts", 40),
+        (UnitKind.Xml, "InspectorEngine.Category.Xml", 20),
+        (UnitKind.Text, "InspectorEngine.Category.Text", 10),
+        (UnitKind.Asset, "InspectorEngine.Category.Assets", 30),
     ];
 
     public static InspectionReport Run(string originalPath, string suspectPath, InspectOptions options,
@@ -25,14 +28,14 @@ public static class InspectorEngine
         GameBaseline? baseline = null;
         if (options.IgnoreGameCode && options.GameFolder is { Length: > 0 } game && GameLocator.IsGameFolder(game))
         {
-            progress?.Report(new InspectProgress("Reading the game's own scripts", 0, ""));
+            progress?.Report(new InspectProgress(L.T("InspectorEngine.ReadingGamesOwnScripts"), 0, ""));
             baseline = GameBaseline.Load(game, progress, token);
         }
 
-        var original = SourceScanner.Scan(originalPath, progress, "Reading the original", token);
-        var suspect = SourceScanner.Scan(suspectPath, progress, "Reading the suspect", token);
+        var original = SourceScanner.Scan(originalPath, progress, L.T("InspectorEngine.ReadingOriginal"), token);
+        var suspect = SourceScanner.Scan(suspectPath, progress, L.T("InspectorEngine.ReadingSuspect"), token);
 
-        progress?.Report(new InspectProgress("Comparing", 0.05, "Setting aside the game's own code"));
+        progress?.Report(new InspectProgress(L.T("InspectorEngine.Comparing"), 0.05, L.T("InspectorEngine.SettingAsideGamesOwn")));
         int gameFiles = 0;
         if (baseline is not null)
             foreach (var unit in original.Units.Concat(suspect.Units).Where(u => u.Kind == UnitKind.Script && u.Script is not null))
@@ -44,13 +47,13 @@ public static class InspectorEngine
             }
         token.ThrowIfCancellationRequested();
 
-        progress?.Report(new InspectProgress("Comparing", 0.2, "Matching files"));
+        progress?.Report(new InspectProgress(L.T("InspectorEngine.Comparing"), 0.2, L.T("InspectorEngine.MatchingFiles")));
         var matches = FindMatches(original, suspect, baseline, token);
 
-        progress?.Report(new InspectProgress("Comparing", 0.6, "Scoring"));
+        progress?.Report(new InspectProgress(L.T("InspectorEngine.Comparing"), 0.6, L.T("InspectorEngine.Scoring")));
         var categories = new List<CategoryResult>();
-        foreach (var (kind, name, weight) in Categories)
-            categories.Add(Score(kind, name, weight, original, suspect, matches));
+        foreach (var (kind, key, weight) in Categories)
+            categories.Add(Score(kind, L.T(key), weight, original, suspect, matches));
 
         double? Direction(Func<CategoryResult, double?> pick)
         {
@@ -64,10 +67,10 @@ public static class InspectorEngine
             return total == 0 ? null : sum / total;
         }
 
-        progress?.Report(new InspectProgress("Comparing", 0.75, "Collecting shared comments, names and menu keys"));
+        progress?.Report(new InspectProgress(L.T("InspectorEngine.Comparing"), 0.75, L.T("InspectorEngine.CollectingSharedCommentsNames")));
         var evidence = CollectEvidence(original, suspect, baseline, token);
 
-        progress?.Report(new InspectProgress("Comparing", 0.9, "Comparing coding style"));
+        progress?.Report(new InspectProgress(L.T("InspectorEngine.Comparing"), 0.9, L.T("InspectorEngine.ComparingCodingStyle")));
         var styleA = StyleProfile.Compute(original.Units.Where(u => u.Kind == UnitKind.Script && !u.IsGameCode).Select(u => u.Text!));
         var styleB = StyleProfile.Compute(suspect.Units.Where(u => u.Kind == UnitKind.Script && !u.IsGameCode).Select(u => u.Text!));
         List<StyleFeature> style = [];
@@ -79,15 +82,15 @@ public static class InspectorEngine
             styleSimilarity = StyleProfile.Similarity(style);
             styleNote = styleSimilarity switch
             {
-                >= 0.92 => "The two are written in almost the same hand.",
-                >= 0.85 => "Many habits match. Common for coders who learned from the same code, so weigh it with the rest.",
-                >= 0.7 => "Some habits match and some differ.",
-                _ => "The two are written differently.",
+                >= 0.92 => L.T("InspectorEngine.TwoWrittenAlmostSame"),
+                >= 0.85 => L.T("InspectorEngine.ManyHabitsMatchCommon"),
+                >= 0.7 => L.T("InspectorEngine.SomeHabitsMatchSome"),
+                _ => L.T("InspectorEngine.TwoWrittenDifferently"),
             };
         }
         else
         {
-            styleNote = $"Style needs at least {StyleProfile.MinLines} lines of script in each source; at least one has less.";
+            styleNote = L.T("InspectorEngine.StyleNeedsLeastLines", StyleProfile.MinLines);
         }
 
         var report = new InspectionReport
@@ -107,7 +110,7 @@ public static class InspectorEngine
             SuspectInOriginal = Direction(c => c.SuspectInOriginal) ?? 0,
         };
         report.Findings.AddRange(Summarise(report));
-        progress?.Report(new InspectProgress("Done", 1, ""));
+        progress?.Report(new InspectProgress(L.T("InspectorEngine.Done"), 1, ""));
         return report;
     }
 
@@ -195,9 +198,9 @@ public static class InspectorEngine
         if (level == MatchLevel.None) return null;
         if (!identical && shared < 3) return null;
 
-        string note = identical ? (a.Hash == b.Hash ? "Byte for byte the same" : "Same content, laid out differently") : $"{shared:N0} of {a.Sig1.Length:N0} lines or elements found";
+        string note = identical ? (a.Hash == b.Hash ? L.T("InspectorEngine.ByteByteSame") : L.T("InspectorEngine.SameContentLaidOut")) : L.T("InspectorEngine.LinesElementsFound", shared, a.Sig1.Length);
         int ids = a.Lines!.Ids.Intersect(b.Lines!.Ids, StringComparer.Ordinal).Count();
-        if (ids > 0) note += $" · {Format.Count(ids, "shared menu key")}";
+        if (ids > 0) note += $" · {L.T("Count.SharedMenuKey", ids)}";
         return new MatchRow
         {
             Kind = a.Kind, Original = a, Suspect = b, Level = level, SamePath = samePath,
@@ -218,9 +221,9 @@ public static class InspectorEngine
 
         MatchLevel level;
         string kind;
-        if (a.Hash == b.Hash) { level = MatchLevel.Identical; kind = "Byte for byte the same"; }
-        else if (sa.RawHash == sb.RawHash) { level = MatchLevel.Identical; kind = "Same code, comments or layout changed"; }
-        else if (sa.AbstractHash == sb.AbstractHash) { level = MatchLevel.Renamed; kind = "Same code with names or values changed"; }
+        if (a.Hash == b.Hash) { level = MatchLevel.Identical; kind = L.T("InspectorEngine.ByteByteSame"); }
+        else if (sa.RawHash == sb.RawHash) { level = MatchLevel.Identical; kind = L.T("InspectorEngine.SameCodeCommentsLayout"); }
+        else if (sa.AbstractHash == sb.AbstractHash) { level = MatchLevel.Renamed; kind = L.T("InspectorEngine.SameCodeNamesValues"); }
         else
         {
             level = LevelOf(top);
@@ -228,7 +231,7 @@ public static class InspectorEngine
             if (level >= MatchLevel.Large && Math.Max(s1, s2) - Math.Max(r1, r2) >= 0.25)
             {
                 level = MatchLevel.Renamed;
-                kind = "Same structure with names or values changed";
+                kind = L.T("InspectorEngine.SameStructureNamesValues");
             }
         }
         if (level == MatchLevel.None) return null;
@@ -243,8 +246,8 @@ public static class InspectorEngine
         var parts = new List<string>();
         if (kind.Length > 0) parts.Add(kind);
         if (mine.Count > 0 && verbatim + renamed > 0)
-            parts.Add($"{verbatim + renamed} of {Format.Count(mine.Count, "function")} reused" + (renamed > 0 ? $" ({renamed} renamed)" : ""));
-        if (parts.Count == 0) parts.Add($"{Math.Round(top * 100)}% of the code is shared");
+            parts.Add(L.T("InspectorEngine.Reused", verbatim + renamed, L.T("Count.Function", mine.Count)) + (renamed > 0 ? L.T("InspectorEngine.ReusedRenamed", renamed) : ""));
+        if (parts.Count == 0) parts.Add(L.T("InspectorEngine.CodeShared", Math.Round(top * 100)));
 
         return new MatchRow
         {
@@ -275,7 +278,7 @@ public static class InspectorEngine
             {
                 Kind = UnitKind.Asset, Original = a, Suspect = b, Level = MatchLevel.Identical, SamePath = samePath,
                 OriginalInSuspect = 1, SuspectInOriginal = 1,
-                Note = samePath ? "Byte for byte the same, at the same path" : "Byte for byte the same, under another name or path",
+                Note = samePath ? L.T("InspectorEngine.ByteByteSameSame") : L.T("InspectorEngine.ByteByteSameUnder"),
             });
         }
     }
@@ -298,7 +301,7 @@ public static class InspectorEngine
             var hashB = b.Select(u => u.Hash).ToHashSet();
             ab = a.Count == 0 ? null : (double)a.Count(u => hashB.Contains(u.Hash)) / a.Count;
             ba = b.Count == 0 ? null : (double)b.Count(u => hashA.Contains(u.Hash)) / b.Count;
-            detail = $"{a.Count(u => hashB.Contains(u.Hash)):N0} of {a.Count:N0} files are byte for byte the same";
+            detail = L.T("InspectorEngine.FilesByteByteSame", a.Count(u => hashB.Contains(u.Hash)), a.Count);
             shared = a.Count(u => hashB.Contains(u.Hash));
         }
         else
@@ -308,12 +311,12 @@ public static class InspectorEngine
             ab = a.Count == 0 ? null : kind == UnitKind.Script ? Math.Max(rawAB, shapeAB * ShapeWeight) : rawAB;
             ba = b.Count == 0 ? null : kind == UnitKind.Script ? Math.Max(rawBA, shapeBA * ShapeWeight) : rawBA;
             detail = kind == UnitKind.Script
-                ? $"As written {rawAB:P0}, ignoring names and values {shapeAB:P0}"
-                : $"{rawAB:P0} of the original's lines are in the suspect";
+                ? L.T("InspectorEngine.WrittenIgnoringNamesValues", rawAB, shapeAB)
+                : L.T("InspectorEngine.OriginalsLinesSuspect", rawAB);
         }
         return new CategoryResult
         {
-            Name = name, Weight = weight, OriginalFiles = a.Count, SuspectFiles = b.Count,
+            Kind = kind, Name = name, Weight = weight, OriginalFiles = a.Count, SuspectFiles = b.Count,
             OriginalInSuspect = ab, SuspectInOriginal = ba, SharedFiles = shared, Detail = detail,
         };
     }
@@ -343,21 +346,21 @@ public static class InspectorEngine
     {
         var result = new List<EvidenceItem>();
 
-        void Shared(string category, Func<InspectUnit, IEnumerable<string>> pick, HashSet<string>? ignore, int minLength, string? note = null)
+        void Shared(string category, Func<InspectUnit, IEnumerable<string>> pick, HashSet<string>? ignore, int minLength, EvidenceKind kind = EvidenceKind.Other)
         {
             token.ThrowIfCancellationRequested();
             var a = Index(original, pick);
             var b = Index(suspect, pick);
             foreach (var key in a.Keys.Where(b.ContainsKey).Where(k => k.Length >= minLength && ignore?.Contains(k) != true)
                          .OrderByDescending(k => k.Length).Take(MaxEvidencePerKind))
-                result.Add(new EvidenceItem(category, key, Where(a[key]), Where(b[key])));
+                result.Add(new EvidenceItem(category, key, Where(a[key]), Where(b[key])) { Kind = kind });
         }
 
-        Shared("Shared comment", u => u.Script?.Comments ?? u.Lines?.Comments ?? [], baseline?.Comments, 24);
-        Shared("Shared text in code", u => u.Script?.Strings ?? [], baseline?.Strings, 10);
-        Shared("Shared class", u => u.Script?.Classes ?? [], baseline?.Classes, 3);
-        Shared("Shared function", u => u.Script?.Functions.Select(f => f.Title) ?? [], baseline?.FunctionNames, 6);
-        Shared("Shared menu key", u => u.Lines?.Ids ?? [], null, 6);
+        Shared(L.T("InspectorEngine.SharedComment"), u => u.Script?.Comments ?? u.Lines?.Comments ?? [], baseline?.Comments, 24, EvidenceKind.SharedComment);
+        Shared(L.T("InspectorEngine.SharedTextCode"), u => u.Script?.Strings ?? [], baseline?.Strings, 10);
+        Shared(L.T("InspectorEngine.SharedClass"), u => u.Script?.Classes ?? [], baseline?.Classes, 3);
+        Shared(L.T("InspectorEngine.SharedFunction"), u => u.Script?.Functions.Select(f => f.Title) ?? [], baseline?.FunctionNames, 6);
+        Shared(L.T("InspectorEngine.SharedMenuKey"), u => u.Lines?.Ids ?? [], null, 6);
 
         // functions copied whole, with and without their names changed
         var shapes = new Dictionary<ulong, (FunctionInfo F, InspectUnit U)>();
@@ -378,14 +381,14 @@ public static class InspectorEngine
                 if (raws.TryGetValue(f.RawHash, out var same))
                 {
                     if (copied++ < MaxEvidencePerKind)
-                        result.Add(new EvidenceItem("Copied function", f.Title == same.F.Title ? f.Title : $"{f.Title}  →  {same.F.Title}",
-                            $"{u.Origin} ({f.Tokens} tokens)", same.U.Origin));
+                        result.Add(new EvidenceItem(L.T("InspectorEngine.CopiedFunction"), f.Title == same.F.Title ? f.Title : $"{f.Title}  →  {same.F.Title}",
+                            L.T("InspectorEngine.Tokens", u.Origin, f.Tokens), same.U.Origin) { Kind = EvidenceKind.CopiedFunction });
                 }
                 else if (shapes.TryGetValue(f.AbstractHash, out var like))
                 {
                     if (renamed++ < MaxEvidencePerKind)
-                        result.Add(new EvidenceItem("Renamed function", $"{f.Title}  →  {like.F.Title}",
-                            $"{u.Origin} ({f.Tokens} tokens)", like.U.Origin));
+                        result.Add(new EvidenceItem(L.T("InspectorEngine.RenamedFunction"), $"{f.Title}  →  {like.F.Title}",
+                            L.T("InspectorEngine.Tokens", u.Origin, f.Tokens), like.U.Origin) { Kind = EvidenceKind.RenamedFunction });
                 }
             }
 
@@ -405,7 +408,7 @@ public static class InspectorEngine
     }
 
     private static string Where(List<InspectUnit> units) =>
-        units.Count == 1 ? units[0].Origin : $"{units[0].Origin} and {units.Count - 1:N0} more";
+        units.Count == 1 ? units[0].Origin : L.T("InspectorEngine.More", units[0].Origin, units.Count - 1);
 
     // ---------------------------------------------------------------- findings
 
@@ -415,56 +418,56 @@ public static class InspectorEngine
         foreach (var c in r.Categories.Where(c => c.OriginalFiles > 0 || c.SuspectFiles > 0))
         {
             if (c.OriginalInSuspect is >= 0.1 || c.SuspectInOriginal is >= 0.1)
-                f.Add($"{c.Name}: {Percent(c.OriginalInSuspect)} of the original is in the suspect, and {Percent(c.SuspectInOriginal)} of the suspect is in the original.");
+                f.Add(L.T("InspectorEngine.OriginalSuspectSuspectOriginal", c.Name, Percent(c.OriginalInSuspect), Percent(c.SuspectInOriginal)));
         }
 
         int scripts = r.Matches.Where(m => m.Kind == UnitKind.Script && m.Level >= MatchLevel.Large).Select(m => m.Suspect).Distinct().Count();
-        int scriptTotal = r.Categories.First(c => c.Name == "Scripts").SuspectFiles;
+        int scriptTotal = r.Categories.First(c => c.Kind == UnitKind.Script).SuspectFiles;
         if (scripts > 0)
-            f.Add($"{scripts:N0} of the suspect's {Format.Count(scriptTotal, "script")} {(scripts == 1 ? "is" : "are")} mostly made of the original's code.");
+            f.Add(L.T("InspectorEngine.ScriptsMostlyOriginal", scripts, L.T("Count.Script", scriptTotal)));
 
         int renamedFiles = r.Matches.Count(m => m.Kind == UnitKind.Script && m.Level == MatchLevel.Renamed);
         if (renamedFiles > 0)
-            f.Add($"{Format.Count(renamedFiles, "script")} {(renamedFiles == 1 ? "has" : "have")} the original's structure with names or values changed, the mark of a rewritten copy.");
+            f.Add(L.T("InspectorEngine.ScriptsRewritten", L.T("Count.Script", renamedFiles), renamedFiles));
 
-        int copiedFunctions = r.Evidence.Count(e => e.Category == "Copied function");
-        int renamedFunctions = r.Evidence.Count(e => e.Category == "Renamed function");
-        if (copiedFunctions + renamedFunctions > 0)
-            f.Add(string.Join(" and ", new[]
-            {
-                copiedFunctions > 0 ? $"{Format.Count(copiedFunctions, "function")} copied as written" : null,
-                renamedFunctions > 0 ? $"{Format.Count(renamedFunctions, "function")} copied with other names" : null,
-            }.OfType<string>()) + ", outside the game's own code.");
+        int copiedFunctions = r.Evidence.Count(e => e.Kind == EvidenceKind.CopiedFunction);
+        int renamedFunctions = r.Evidence.Count(e => e.Kind == EvidenceKind.RenamedFunction);
+        string? copiedAsWritten = copiedFunctions > 0 ? L.T("InspectorEngine.CopiedWritten", L.T("Count.Function", copiedFunctions)) : null;
+        string? copiedRenamed = renamedFunctions > 0 ? L.T("InspectorEngine.CopiedOtherNames", L.T("Count.Function", renamedFunctions)) : null;
+        if (copiedAsWritten is not null && copiedRenamed is not null)
+            f.Add(L.T("InspectorEngine.FunctionsCopiedBoth", copiedAsWritten, copiedRenamed));
+        else if ((copiedAsWritten ?? copiedRenamed) is { } copiedOne)
+            f.Add(L.T("InspectorEngine.FunctionsCopied", copiedOne));
 
         int assets = r.Matches.Count(m => m.Kind == UnitKind.Asset);
         if (assets > 0)
-            f.Add($"{Format.Count(assets, "bundle file")} or other file {(assets == 1 ? "is" : "are")} byte for byte the same as the original's.");
+            f.Add(L.T("InspectorEngine.AssetsSame", assets));
 
         int menus = r.Matches.Count(m => m.Kind == UnitKind.Xml && m.Level >= MatchLevel.Large);
         if (menus > 0)
-            f.Add($"{Format.Count(menus, "menu or XML file")} {(menus == 1 ? "is" : "are")} largely the same.");
+            f.Add(L.T("InspectorEngine.MenusSame", menus));
 
-        int comments = r.Evidence.Count(e => e.Category == "Shared comment");
+        int comments = r.Evidence.Count(e => e.Kind == EvidenceKind.SharedComment);
         if (comments > 0)
-            f.Add($"{Format.Count(comments, "distinctive comment")} {(comments == 1 ? "appears" : "appear")} in both. Comments are rarely written twice the same way.");
+            f.Add(L.T("InspectorEngine.CommentsShared", comments));
 
         int samePaths = r.Matches.Count(m => m.SamePath && m.Level >= MatchLevel.Large);
         if (samePaths > 0)
-            f.Add($"{Format.Count(samePaths, "matching file")} sit at the very same path in both.");
+            f.Add(L.T("InspectorEngine.SitVerySamePath", L.T("Count.MatchingFile", samePaths)));
 
         if (r.StyleSimilarity is >= 0.85)
-            f.Add($"Coding style is {r.StyleSimilarity:P0} alike across the scripts. {r.StyleNote}");
+            f.Add(L.T("InspectorEngine.CodingStyleAlikeAcross", r.StyleSimilarity, r.StyleNote));
 
         if (r.GameCodeIgnored && r.GameCodeFiles > 0)
-            f.Add($"{Format.Count(r.GameCodeFiles, "script")} that are only the game's own code were set aside.");
+            f.Add(L.T("InspectorEngine.OnlyGamesOwnCode", L.T("Count.Script", r.GameCodeFiles)));
 
         if ((r.Original.Blobs > 0) != (r.Suspect.Blobs > 0))
-            f.Add("One source is compiled and was decompiled to compare. Decompiled code never matches its source exactly (comments are gone, constants become numbers, some loops and conditions are rebuilt), so even a mod's own compiled version scores below 100%.");
+            f.Add(L.T("InspectorEngine.OneSourceCompiledDecompiled"));
 
         if (f.Count == 0 || r.Headline < 0.08)
-            f.Add("Nothing of note is shared beyond what mods of the same game have in common.");
+            f.Add(L.T("InspectorEngine.NothingNoteSharedBeyond"));
         return f;
     }
 
-    private static string Percent(double? v) => v is null ? "n/a" : $"{v:P0}";
+    private static string Percent(double? v) => v is null ? L.T("ReportWriter.NotAvailable") : $"{v:P0}";
 }

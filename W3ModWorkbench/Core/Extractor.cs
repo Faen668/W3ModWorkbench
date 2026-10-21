@@ -1,4 +1,5 @@
 using System.IO;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core;
 
@@ -108,7 +109,7 @@ public static class Extractor
 
         string full = Path.GetFullPath(Path.Combine(root, relative));
         if (!full.StartsWith(root.TrimEnd('\\') + "\\", StringComparison.OrdinalIgnoreCase))
-            throw new InvalidDataException("The entry's path points outside the output folder.");
+            throw new InvalidDataException(L.T("Extractor.EntrysPathPointsOutside"));
         return full;
     }
 }

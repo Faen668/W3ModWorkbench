@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.IO;
 using System.Security.Cryptography;
 using W3ModWorkbench.Core.Scripts;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core.Inspector;
 
@@ -256,7 +257,7 @@ public sealed class GameBaseline
                 // an unreadable game file just leaves a gap in what's ignored
             }
             int finished = Interlocked.Increment(ref done);
-            if (finished % 40 == 0) progress?.Report(new InspectProgress("Reading the game's own scripts", (double)finished / files.Count, ""));
+            if (finished % 40 == 0) progress?.Report(new InspectProgress(L.T("SourceScanner.ReadingGamesOwnScripts"), (double)finished / files.Count, ""));
         });
 
         var baseline = new GameBaseline

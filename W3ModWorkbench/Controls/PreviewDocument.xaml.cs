@@ -1112,8 +1112,8 @@ public partial class PreviewDocument : UserControl
                 rows.Add(ResultRow.Heading(group.Key, list.Count));
                 rows.AddRange(list.Select(r => ResultRow.FromSymbol(r.Symbol, depth: Math.Min(r.Depth, 12))));
             }
-            int subtypes = related.Count(r => r.Group is "Subtypes" or "Overridden by");
-            return (rows, L.T("PreviewDocument.AboveBelow", related.Count(r => r.Group is "Base types" or "Overrides"), subtypes));
+            int subtypes = related.Count(r => r.Kind is DefinitionFinder.RelatedKind.Subtypes or DefinitionFinder.RelatedKind.OverriddenBy);
+            return (rows, L.T("PreviewDocument.AboveBelow", related.Count(r => r.Kind is DefinitionFinder.RelatedKind.BaseTypes or DefinitionFinder.RelatedKind.Overrides), subtypes));
         }, "");
     }
 

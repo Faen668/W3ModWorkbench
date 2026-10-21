@@ -1,6 +1,7 @@
 using System.Globalization;
 using W3ModWorkbench.Core.BehTrees;
 using W3ModWorkbench.Core.Cr2w;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core.Trees;
 
@@ -102,7 +103,7 @@ public static class ObjectTree
     public static string? Short(object? value) => value switch
     {
         string s when s.Length > 0 && s != "None" => s,
-        bool b => b ? "yes" : "no",
+        bool b => b ? L.T("SceneFile.Yes") : L.T("SceneFile.No"),
         float f => f.ToString("0.###", CultureInfo.InvariantCulture),
         double d => d.ToString("0.###", CultureInfo.InvariantCulture),
         int or uint or short or ushort or byte or sbyte or long or ulong => Convert.ToString(value, CultureInfo.InvariantCulture),

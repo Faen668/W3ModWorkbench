@@ -2,6 +2,7 @@ using System.Buffers.Binary;
 using System.IO;
 using System.Numerics;
 using W3ModWorkbench.Core.Cr2w;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core.Meshes;
 
@@ -58,7 +59,7 @@ public static class MaterialWriter
             case RawValue raw:
                 return raw.Bytes;
             default:
-                throw new InvalidDataException($"The parameter {parameter.Name} has a value that can't be written.");
+                throw new InvalidDataException(L.T("MaterialWriter.ParameterHasValueCant", parameter.Name));
         }
     }
 
@@ -109,7 +110,7 @@ public static class MaterialWriter
     /// <summary>A .w2mi with its instance's parameters changed; its base and everything else stay as they were.</summary>
     public static byte[] EditFile(Cr2wFile file, IEnumerable<MaterialParameter> parameters)
     {
-        var instance = file.First("CMaterialInstance") ?? throw new InvalidDataException("There's no material instance in this file.");
+        var instance = file.First("CMaterialInstance") ?? throw new InvalidDataException(L.T("MaterialWriter.TheresNoMaterialInstance"));
         var builder = Cr2wBuilder.From(file);
         Replace(builder, instance, parameters);
         return builder.Build();
@@ -126,8 +127,8 @@ public static class MaterialWriter
             Replace(builder, mesh.File.Object(export), parameters);
         if (files.Count > 0)
         {
-            var meshExport = mesh.Mesh.Export ?? throw new InvalidDataException("The mesh object wasn't found.");
-            if (!mesh.Mesh.Spans.TryGetValue("materials", out var span)) throw new InvalidDataException("The mesh has no material list to change.");
+            var meshExport = mesh.Mesh.Export ?? throw new InvalidDataException(L.T("MaterialWriter.MeshObjectWasntFound"));
+            if (!mesh.Mesh.Spans.TryGetValue("materials", out var span)) throw new InvalidDataException(L.T("MaterialWriter.MeshHasNoMaterial"));
             var data = builder.ExportData(meshExport.Index).ToArray();
             int at = span.Start - meshExport.Offset;
             int count = BinaryPrimitives.ReadInt32LittleEndian(data.AsSpan(at));
@@ -145,7 +146,7 @@ public static class MaterialWriter
     /// <summary>Puts new parameters after an instance's properties, which are kept as they were.</summary>
     private static void Replace(Cr2wBuilder builder, RedObject instance, IEnumerable<MaterialParameter> parameters)
     {
-        var export = instance.Export ?? throw new InvalidDataException("The material's object wasn't found.");
+        var export = instance.Export ?? throw new InvalidDataException(L.T("MaterialWriter.MaterialsObjectWasntFound"));
         var old = builder.ExportData(export.Index);
         int properties = old.Length - instance.Tail.Length;
         var tail = ParametersData(builder, parameters, sameFile: true);

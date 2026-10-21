@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Text;
 using System.Text.RegularExpressions;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core.Scripts;
 
@@ -63,7 +64,7 @@ public static partial class ScriptCompiler
         IProgress<string>? progress, CancellationToken cancel)
     {
         if (GameScriptsFor(wccLite) is not { } gameScripts)
-            return new CompileResult(false, [], "", "REDkit's game scripts (r4data\\scripts) weren't found next to wcc_lite.");
+            return new CompileResult(false, [], "", L.T("ScriptCompiler.REDkitsGameScriptsR4data"));
 
         // the game's files are never written: a compiled blob goes in a mod's own folder, or anywhere of yours
         try { Projects.FileSafety.CheckInstallWrite(output); }
@@ -101,11 +102,11 @@ public static partial class ScriptCompiler
                     lines.Add(line);
                 }
                 if (Parsing().IsMatch(line))
-                    progress?.Report(++parsing == 1 ? "Compiling the game's scripts…" : "Compiling your scripts…");
+                    progress?.Report(++parsing == 1 ? L.T("ScriptCompiler.CompilingGamesScripts") : L.T("ScriptCompiler.CompilingYourScripts"));
             }
             process.OutputDataReceived += (_, e) => OnLine(e.Data);
             process.ErrorDataReceived += (_, e) => OnLine(e.Data);
-            progress?.Report("Starting wcc_lite…");
+            progress?.Report(L.T("ScriptCompiler.StartingWccLite"));
             process.Start();
             process.BeginOutputReadLine();
             process.BeginErrorReadLine();
@@ -127,7 +128,7 @@ public static partial class ScriptCompiler
             {
                 string? failure = messages.Any(m => m.IsError) ? null
                     : all.LastOrDefault(l => l.Contains("[Error][WCC]")) is { } last ? Message().Match(last).Groups["text"].Value.Trim()
-                    : $"wcc_lite stopped with exit code {process.ExitCode}.";
+                    : L.T("ScriptCompiler.WccLiteStoppedExit", process.ExitCode);
                 return new CompileResult(false, messages, log.ToString(), failure);
             }
             Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(output))!);

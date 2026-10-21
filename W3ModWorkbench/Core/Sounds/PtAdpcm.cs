@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using System.IO;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core.Sounds;
 
@@ -58,7 +59,7 @@ public static class PtAdpcm
         var data = info.Chunks.First(c => c.Id == "data");
         int channels = Math.Max(1, info.Channels);
         int frame = info.BlockAlign / channels;
-        if (frame < 6) throw new InvalidDataException("The sound's blocks are too small for PTADPCM frames.");
+        if (frame < 6) throw new InvalidDataException(L.T("PtAdpcm.SoundsBlocksTooSmall"));
         int perFrame = 2 + (frame - 5) * 2;
         int blocks = data.Size / (frame * channels);
         var output = new short[blocks * perFrame * channels];

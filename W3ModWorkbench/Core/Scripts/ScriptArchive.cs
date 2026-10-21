@@ -1,12 +1,13 @@
 using System.IO;
 using System.Text;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core.Scripts;
 
 public sealed class ScriptEntry : ArchiveEntry
 {
     public required byte[] Data { get; init; }
-    public override string FormatText => "Decompiled";
+    public override string FormatText => L.T("ScriptArchive.Decompiled");
     public override byte[] Read(Stream? archiveStream) => Data;
 }
 

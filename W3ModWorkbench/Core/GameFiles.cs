@@ -1,6 +1,7 @@
 using System.IO;
 using W3ModWorkbench.Core.Sounds;
 using W3ModWorkbench.Core.Textures;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core;
 
@@ -26,7 +27,7 @@ public sealed class GameFilesArchive : IArchive
     /// <summary>What it's made of, such as "content0, 13 DLC, 29 mods".</summary>
     public string Name { get; }
 
-    public string Owner => "Game files";
+    public string Owner => L.T("GameFiles.GameFiles");
 
     public IReadOnlyList<ArchiveEntry> Entries { get; }
 
@@ -103,7 +104,7 @@ public sealed class GameFilesArchive : IArchive
 
         var parts = new List<string>();
         if (used.ContainsKey("content0")) parts.Add("content0");
-        if (used.GetValueOrDefault("DLC") is > 0 and var dlcs) parts.Add($"{dlcs} DLC");
+        if (used.GetValueOrDefault("DLC") is > 0 and var dlcs) parts.Add(L.T("GameFiles.DLC", dlcs));
         return new GameFilesArchive(game, entries, [.. bundles, .. caches, .. sounds], string.Join(", ", parts));
     }
 }

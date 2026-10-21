@@ -1,6 +1,7 @@
 using System.IO;
 using System.Net.Http;
 using System.Text.Json;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core;
 
@@ -69,16 +70,16 @@ public sealed class EasyAssetBrowser
         string config = Path.Combine(CacheFolder, ConfigFile);
         bool fresh = File.Exists(config) && DateTime.UtcNow - File.GetLastWriteTimeUtc(config) < MaxAge;
         string note;
-        if (fresh && !refresh) note = "from the cache";
+        if (fresh && !refresh) note = L.T("EasyAssetBrowser.Cache");
         else
             try
             {
                 await DownloadAsync(token);
-                note = "read from GitHub";
+                note = L.T("EasyAssetBrowser.ReadGitHub");
             }
             catch (Exception ex) when (ex is HttpRequestException or IOException or JsonException or InvalidDataException or TaskCanceledException && !token.IsCancellationRequested)
             {
-                note = $"from the cache: GitHub couldn't be reached ({ex.Message})";
+                note = L.T("EasyAssetBrowser.CacheGitHubCouldntReached", ex.Message);
             }
         try
         {
@@ -132,7 +133,7 @@ public sealed class EasyAssetBrowser
             string file = c.GetProperty("file").GetString() ?? "";
             if (name.Length == 0 || !file.EndsWith(".json", StringComparison.OrdinalIgnoreCase) || Path.GetFileName(file) != file
                 || file.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 || file.Equals(ConfigFile, StringComparison.OrdinalIgnoreCase))
-                throw new InvalidDataException($"EasyAssetBrowser's category list names a file that isn't a list: \"{file}\".");
+                throw new InvalidDataException(L.T("EasyAssetBrowser.EasyAssetBrowsersCategoryListNames", file));
             var tags = c.TryGetProperty("tags", out var t) && t.ValueKind == JsonValueKind.Array
                 ? t.EnumerateArray().Select(x => x.GetString()).OfType<string>().Select(x => x.Trim()).Where(x => x.Length > 0).ToList() : [];
             categories.Add(new EabCategory(name, file, tags));
@@ -181,7 +182,7 @@ public sealed class EasyAssetBrowser
         ".xbm" when path.Contains("decal", StringComparison.OrdinalIgnoreCase) => "Decals",
         ".w2p" => "Particles",
         ".w2comm" => "Communities",
-        ".srt" => "SRT Trees",
+        ".srt" => L.T("EasyAssetBrowser.SRTTrees"),
         _ => null,
     };
 }
