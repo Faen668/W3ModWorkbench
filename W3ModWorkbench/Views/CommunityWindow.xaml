@@ -81,7 +81,7 @@
                     </DockPanel>
                     <TabControl x:Name="Tabs">
                         <TabItem x:Name="SpawnsetTab" Header="Spawnset">
-                            <DataGrid x:Name="SpawnsetGrid" AutoGenerateColumns="False" IsReadOnly="True" HeadersVisibility="Column" FrozenColumnCount="2"
+                            <DataGrid x:Name="SpawnsetGrid" CellStyle="{StaticResource ViewerGridCell}" AutoGenerateColumns="False" IsReadOnly="True" HeadersVisibility="Column" FrozenColumnCount="2"
                                       GridLinesVisibility="Vertical" RowStyle="{StaticResource GroupRow}" SelectionMode="Single" CanUserSortColumns="False"
                                       SelectionChanged="SpawnsetGrid_SelectionChanged" MouseDoubleClick="SpawnsetGrid_MouseDoubleClick"
                                       ToolTip="Click a row to see its entry, entity and story phase; double-click to open the entity template">
@@ -136,7 +136,7 @@
                             </DataGrid>
                         </TabItem>
                         <TabItem x:Name="TimetablesTab" Header="Timetables">
-                            <DataGrid x:Name="TimetableGrid" AutoGenerateColumns="False" IsReadOnly="True" HeadersVisibility="Column"
+                            <DataGrid x:Name="TimetableGrid" CellStyle="{StaticResource ViewerGridCell}" AutoGenerateColumns="False" IsReadOnly="True" HeadersVisibility="Column"
                                       GridLinesVisibility="Vertical" RowStyle="{StaticResource GroupRow}" SelectionMode="Single" CanUserSortColumns="False"
                                       SelectionChanged="TimetableGrid_SelectionChanged">
                                 <DataGrid.Columns>

@@ -136,7 +136,7 @@
                                                Text="Show only the animations with these letters  (Ctrl+F)" />
                                 </Grid>
                                 <TextBlock x:Name="SetNote" DockPanel.Dock="Top" Style="{StaticResource Small}" TextWrapping="Wrap" Margin="2,0,0,6" />
-                                <DataGrid x:Name="AnimationGrid" AutoGenerateColumns="False" ContextMenuOpening="AnimationGrid_ContextMenuOpening" IsReadOnly="True" HeadersVisibility="Column" SelectionMode="Single"
+                                <DataGrid x:Name="AnimationGrid" Style="{StaticResource ViewerGrid}" AutoGenerateColumns="False" ContextMenuOpening="AnimationGrid_ContextMenuOpening" IsReadOnly="True" HeadersVisibility="Column" SelectionMode="Single"
                                           GridLinesVisibility="None" CanUserSortColumns="True" SelectionChanged="AnimationGrid_SelectionChanged"
                                           ToolTip="Click an animation to play it; click a heading to sort by it">
                                     <DataGrid.ContextMenu>

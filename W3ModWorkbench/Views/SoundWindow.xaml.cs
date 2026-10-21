@@ -36,9 +36,10 @@ public partial class SoundWindow : Window, IMessageHost
 
     private sealed record DetailRow(string Name, string Value);
 
-    private sealed record SoundRow(uint Id, BankSound? Sound, bool InBank, string Kind, WemInfo? Info)
+    /// <summary>A sound a bank plays or keeps: kept in it, in another bank (named), or streamed.</summary>
+    private sealed record SoundRow(uint Id, BankSound? Sound, bool InBank, string? OtherBank, string Kind, WemInfo? Info)
     {
-        public string Kept => InBank ? "In the bank" : "Streamed";
+        public string Kept => InBank ? "In the bank" : OtherBank is { } other ? $"In {Path.GetFileNameWithoutExtension(other)}" : Info is null ? "Not found" : "Streamed";
         public string Codec => Info?.CodecName ?? "";
         public int Channels => Info?.Channels ?? 0;
         public double Length => Info?.Duration ?? 0;
@@ -268,7 +269,7 @@ public partial class SoundWindow : Window, IMessageHost
         }
         BanksNote.Text = "Looking through every sound bank…";
         var index = await SoundBankIndex.ForGame(game);
-        var playing = index.GetValueOrDefault(id) ?? [];
+        var playing = index.PlayedBy.GetValueOrDefault(id) ?? [];
         BanksTab.Header = $"Played by ({playing.Count:N0})";
         BankGrid.ItemsSource = playing.Select(p => new BankRow(p.Bank, p.Sound.ObjectId.ToString(), p.Sound.Kind)).ToList();
         BanksNote.Text = playing.Count == 0 ? "No bank plays it." : $"The banks that play it, each through one of its objects. Double-click a bank to open it.";
@@ -310,20 +311,40 @@ public partial class SoundWindow : Window, IMessageHost
 
         string? game = GameLocator.Resolve(null);
         var caches = game is null ? [] : await SoundCache.ForGame(game);
+        // a sound neither kept in it nor streamed is kept in another bank (a media bank): the index says which
+        SoundBankIndex? index = null;
+        if (game is not null && bank.Sounds.Any(s => !bank.Embedded.ContainsKey(s.SourceId) && !caches.Any(c => c.Has($"{s.SourceId}.wem"))))
+        {
+            SoundsNote.Text = "Finding the banks that keep its sounds…";
+            index = await SoundBankIndex.ForGame(game);
+        }
         var rows = await Task.Run(() =>
         {
             var list = new List<SoundRow>();
             var seen = new HashSet<uint>();
+            var others = new Dictionary<string, SoundBank?>(StringComparer.OrdinalIgnoreCase);
             foreach (var sound in bank.Sounds)
             {
                 if (!seen.Add(sound.SourceId)) continue;
-                bool inBank = bank.Embedded.ContainsKey(sound.SourceId);
-                var head = inBank ? bank.EmbeddedSound(sound.SourceId) : caches.FirstOrDefault(c => c.Has($"{sound.SourceId}.wem"))?.ReadHead($"{sound.SourceId}.wem");
-                list.Add(new SoundRow(sound.SourceId, sound, inBank, sound.Kind, Info(head)));
+                if (bank.Embedded.ContainsKey(sound.SourceId))
+                {
+                    list.Add(new SoundRow(sound.SourceId, sound, true, null, sound.Kind, Info(bank.EmbeddedSound(sound.SourceId))));
+                    continue;
+                }
+                string streamed = $"{sound.SourceId}.wem";
+                if (caches.FirstOrDefault(c => c.Has(streamed)) is { } cache)
+                {
+                    list.Add(new SoundRow(sound.SourceId, sound, false, null, sound.Kind, Info(cache.ReadHead(streamed))));
+                    continue;
+                }
+                string? other = index?.KeptIn.GetValueOrDefault(sound.SourceId);
+                if (other is not null && !others.ContainsKey(other))
+                    others[other] = caches.FirstOrDefault(c => c.Has(other))?.Read(other) is { } data ? SoundBank.Read(data) : null;
+                list.Add(new SoundRow(sound.SourceId, sound, false, other, sound.Kind, Info(other is null ? null : others[other]?.EmbeddedSound(sound.SourceId))));
             }
             // those it keeps that no object of its own plays (another bank's)
             foreach (var id in bank.Embedded.Keys.Where(seen.Add))
-                list.Add(new SoundRow(id, null, true, "another bank's object", Info(bank.EmbeddedSound(id))));
+                list.Add(new SoundRow(id, null, true, null, "another bank's object", Info(bank.EmbeddedSound(id))));
             return list;
         });
         SoundGrid.ItemsSource = rows;
@@ -345,11 +366,12 @@ public partial class SoundWindow : Window, IMessageHost
     {
         if (SoundGrid.SelectedItem is not SoundRow row || _bank is not { } bank) return;
         byte[]? riff = row.InBank ? bank.EmbeddedSound(row.Id) : null;
-        string where = row.InBank ? $"In {Path.GetFileName(_path)}" : $"Streamed: {SoundCacheArchive.Streamed}{row.Id}.wem";
+        string where = row.InBank ? $"In {Path.GetFileName(_path)}" : row.OtherBank is { } other ? $"In {SoundCacheArchive.Banks}{other}" : $"Streamed: {SoundCacheArchive.Streamed}{row.Id}.wem";
         if (riff is null && GameLocator.Resolve(null) is { } game)
         {
             var caches = await SoundCache.ForGame(game);
-            riff = await Task.Run(() => caches.FirstOrDefault(c => c.Has($"{row.Id}.wem"))?.Read($"{row.Id}.wem"));
+            var index = row.OtherBank is null ? null : await SoundBankIndex.ForGame(game);
+            riff = await Task.Run(() => index is not null ? index.Sound(caches, row.Id) : caches.FirstOrDefault(c => c.Has($"{row.Id}.wem"))?.Read($"{row.Id}.wem"));
         }
         if (riff is null)
         {
@@ -370,8 +392,20 @@ public partial class SoundWindow : Window, IMessageHost
         if (SoundGrid.SelectedItem is not SoundRow row || _bank is not { } bank) return;
         if (row.InBank && bank.EmbeddedSound(row.Id) is { } riff)
             new SoundWindow($"{row.Id}.wem", $"in {Path.GetFileName(_path)}", () => riff, _locator).Standalone(this).Show();
+        else if (row.OtherBank is { } other)
+            _ = OpenFromOtherBankAsync(row.Id, other);
         else
             _ = DataViewers.OpenLinkAsync($"{SoundCacheArchive.Streamed}{row.Id}.wem", _locator, this, this);
+    }
+
+    /// <summary>Opens a sound another bank keeps in a window of its own.</summary>
+    private async Task OpenFromOtherBankAsync(uint id, string bankName)
+    {
+        if (GameLocator.Resolve(null) is not { } game) return;
+        var caches = await SoundCache.ForGame(game);
+        var index = await SoundBankIndex.ForGame(game);
+        if (await Task.Run(() => index.Sound(caches, id)) is { } riff)
+            new SoundWindow($"{id}.wem", $"in {bankName}", () => riff, _locator).Standalone(this).Show();
     }
 
     // ---------------------------------------------------------------- playing

@@ -47,6 +47,49 @@
                     </Setter.Value>
                 </Setter>
             </Style>
+
+            <!-- A viewer's table, as the scene viewer's are: no grid lines, rows on the card's own background, the row
+                 picked in a soft wash of the accent behind ordinary text (not the plain DataGrid's solid highlight and
+                 cell borders). Every viewer's DataGrid takes Style="{StaticResource ViewerGrid}". -->
+            <Style x:Key="ViewerGridCell" TargetType="DataGridCell">
+                <Setter Property="OverridesDefaultStyle" Value="True" />
+                <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+                <Setter Property="MinHeight" Value="28" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="DataGridCell">
+                            <Grid SnapsToDevicePixels="True" Background="Transparent">
+                                <Rectangle x:Name="Highlight" Fill="{DynamicResource AccentFillColorDefaultBrush}" Opacity="0" />
+                                <ContentPresenter VerticalAlignment="Center" Margin="4,0,4,0" />
+                            </Grid>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsSelected" Value="True">
+                                    <Setter TargetName="Highlight" Property="Opacity" Value="0.22" />
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+            <Style x:Key="ViewerGrid" TargetType="DataGrid" BasedOn="{StaticResource {x:Type DataGrid}}">
+                <Setter Property="AutoGenerateColumns" Value="False" />
+                <Setter Property="IsReadOnly" Value="True" />
+                <Setter Property="CanUserAddRows" Value="False" />
+                <Setter Property="HeadersVisibility" Value="Column" />
+                <Setter Property="GridLinesVisibility" Value="None" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="RowBackground" Value="Transparent" />
+                <Setter Property="AlternatingRowBackground" Value="Transparent" />
+                <Setter Property="SelectionMode" Value="Single" />
+                <Setter Property="SelectionUnit" Value="FullRow" />
+                <Setter Property="CanUserResizeRows" Value="False" />
+                <Setter Property="CellStyle" Value="{StaticResource ViewerGridCell}" />
+                <Setter Property="VirtualizingPanel.IsVirtualizing" Value="True" />
+                <Setter Property="VirtualizingPanel.VirtualizationMode" Value="Recycling" />
+            </Style>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

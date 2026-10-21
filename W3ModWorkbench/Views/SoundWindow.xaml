@@ -129,7 +129,7 @@
                     <TabItem x:Name="SoundsTab" Header="Sounds">
                         <DockPanel Margin="0,6,0,0">
                             <TextBlock x:Name="SoundsNote" DockPanel.Dock="Top" Style="{StaticResource Small}" TextWrapping="Wrap" Margin="2,0,0,6" />
-                            <DataGrid x:Name="SoundGrid" AutoGenerateColumns="False" IsReadOnly="True" HeadersVisibility="Column" SelectionMode="Single"
+                            <DataGrid x:Name="SoundGrid" Style="{StaticResource ViewerGrid}" AutoGenerateColumns="False" IsReadOnly="True" HeadersVisibility="Column" SelectionMode="Single"
                                       GridLinesVisibility="None" CanUserSortColumns="True" SelectionChanged="SoundGrid_SelectionChanged"
                                       ToolTip="Click a sound to play it; click a heading to sort by it">
                                 <DataGrid.ContextMenu>
@@ -171,7 +171,7 @@
                     <TabItem x:Name="BanksTab" Header="Played by">
                         <DockPanel Margin="0,6,0,0">
                             <TextBlock x:Name="BanksNote" DockPanel.Dock="Top" Style="{StaticResource Small}" TextWrapping="Wrap" Margin="2,0,0,6" />
-                            <DataGrid x:Name="BankGrid" AutoGenerateColumns="False" IsReadOnly="True" HeadersVisibility="Column" SelectionMode="Single"
+                            <DataGrid x:Name="BankGrid" Style="{StaticResource ViewerGrid}" AutoGenerateColumns="False" IsReadOnly="True" HeadersVisibility="Column" SelectionMode="Single"
                                       GridLinesVisibility="None" MouseDoubleClick="BankGrid_MouseDoubleClick" ToolTip="Double-click a bank to open it">
                                 <DataGrid.Columns>
                                     <DataGridTextColumn Header="Bank" Binding="{Binding Bank}" Width="*" />
