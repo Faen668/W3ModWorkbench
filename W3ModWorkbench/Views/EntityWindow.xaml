@@ -210,6 +210,8 @@
                             Background="#88000000" IsHitTestVisible="False">
                         <TextBlock x:Name="InfoOverlay" FontFamily="Cascadia Mono, Consolas" FontSize="11.5" Foreground="#E6E6EC" LineHeight="17" />
                     </Border>
+                    <!-- a look the app puts together, which isn't in the game's files -->
+                    <local:SourceNote x:Name="GeneratedNote" Grid.Row="1" Margin="10,8" MaxWidth="380" HorizontalAlignment="Right" VerticalAlignment="Top" />
                     <TextBlock x:Name="SelectedText" Grid.Row="1" Margin="12,8" VerticalAlignment="Bottom" HorizontalAlignment="Left" FontSize="12"
                                Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}" IsHitTestVisible="False" Visibility="Collapsed" />
                     <StackPanel Grid.Row="2">

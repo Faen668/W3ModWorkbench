@@ -31,6 +31,11 @@ public partial class EntityWindow : Window, IMessageHost
     private EntityFile? _entity;
     private EntityLook? _look;
     private EntityAppearance? _lookWanted;
+
+    /// <summary>Whether it's one of the player's entities, which get a look of Geralt dressed.</summary>
+    private bool _player;
+
+    private const string DressedLook = "Geralt, dressed (Workbench)";
     private List<EntityComponent> _partComponents = [];
     private CancellationTokenSource? _meshLoad;
     private readonly Dictionary<string, Task<BitmapSource?>> _textures = new(StringComparer.OrdinalIgnoreCase);
@@ -124,8 +129,12 @@ public partial class EntityWindow : Window, IMessageHost
 
         var looks = new List<object> { "The entity alone" };
         looks.AddRange(e.Appearances.Select(a => a.Name));
+        // the player's entities are only a neck seam: the game dresses him in what's equipped, so offer him dressed, and start so
+        _player = CutsceneCast.IsPlayer(_path);
+        if (_player) looks.Add(DressedLook);
         AppearanceBox.ItemsSource = looks;
-        AppearanceBox.SelectedIndex = (_lookWanted ?? e.DefaultAppearance) is { } shown ? e.Appearances.IndexOf(shown) + 1 : 0;
+        AppearanceBox.SelectedIndex = _player && _lookWanted is null ? looks.Count - 1
+            : (_lookWanted ?? e.DefaultAppearance) is { } shown ? e.Appearances.IndexOf(shown) + 1 : 0;
         InfoText.Text = $"{_path}   ·   {_source}   ·   CR2W {e.File.Version}, {Format.Count(e.Components.Count, "component")}, "
                       + $"{Format.Count(e.Appearances.Count, "appearance")}, {Format.Count(e.Includes.Count, "include")}"
                       + (_lookWanted is { } asked && _lookAs is { } from ? $"   ·   shown as {from.From} shows it: {asked.Name}" : "");
@@ -400,18 +409,29 @@ public partial class EntityWindow : Window, IMessageHost
     private void AppearanceBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_entity is null || AppearanceBox.SelectedIndex < 0) return;
+        if (_player && AppearanceBox.SelectedIndex == _entity.Appearances.Count + 1)
+        {
+            _ = ShowMeshesAsync(_entity.DefaultAppearance, dressed: true);
+            return;
+        }
         var appearance = AppearanceBox.SelectedIndex == 0 ? null : _entity.Appearances[AppearanceBox.SelectedIndex - 1];
         _ = ShowMeshesAsync(appearance);
     }
 
     /// <summary>
     /// Reads the meshes of an appearance (or the entity alone) and their textures, several at once, and shows them
-    /// together.
+    /// together. <paramref name="dressed"/> puts Geralt's default gear on the player's entity, as the scene and cutscene
+    /// previews dress him: his head, armour, hair and swords, each coloured from its own item's entity.
     /// </summary>
-    private async Task ShowMeshesAsync(EntityAppearance? appearance)
+    private async Task ShowMeshesAsync(EntityAppearance? appearance, bool dressed = false)
     {
         _meshLoad?.Cancel();
         var cts = _meshLoad = new CancellationTokenSource();
+        if (dressed)
+            GeneratedNote.ShowText($"{DressedLook} is put together by the app, not an appearance in the game's files: the player's entity is only "
+                + "a neck seam, and the game dresses him in what's equipped. This is his default gear (his head, starting armour, hair and both swords), "
+                + "as the scene and cutscene previews dress him. It isn't saved anywhere and changes nothing.");
+        else GeneratedNote.Visibility = Visibility.Collapsed;
         var token = cts.Token;
         var e = _entity!;
         ViewText.Text = "Reading the meshes…";
@@ -428,8 +448,17 @@ public partial class EntityWindow : Window, IMessageHost
             ShowLook(look);
             (parts, drawnBy, wanted, missing) = await Task.Run(() => ReadMeshes(look, _locator, token), token);
             if (token.IsCancellationRequested) return;
+            var coloredBy = parts.Select(_ => (e, appearance?.Name)).ToList();
+            if (dressed)
+            {
+                ViewText.Text = "Dressing Geralt…";
+                (parts, drawnBy, coloredBy) = await Task.Run(() => Dress(e, look, parts, drawnBy, coloredBy, token), token);
+                if (token.IsCancellationRequested) return;
+            }
             // every material's texture read several at once, then put on with the meshes, rather than popping in one by one
-            var coloured = parts.Select((part, p) => (part.Mesh, LookTextures.Coloring(e, appearance?.Name, drawnBy[p].Name))).ToList();
+            var coloured = parts.Select((part, p) => (part.Mesh, dressed
+                ? StageTextures.Coloring(e, coloredBy[p].Item1, coloredBy[p].Item2, drawnBy[p].Name)
+                : LookTextures.Coloring(e, appearance?.Name, drawnBy[p].Name))).ToList();
             var progress = new Progress<(int Done, int Total)>(n =>
             {
                 if (!token.IsCancellationRequested && n.Total > 0) ViewText.Text = $"Loading textures, {n.Done} of {n.Total}…";
@@ -457,6 +486,26 @@ public partial class EntityWindow : Window, IMessageHost
         ViewText.Text = parts.Count == 0 ? (wanted == 0 ? "It has no meshes to show." : "None of its meshes could be read.") : "";
         ViewText.Visibility = parts.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         _ = FindRigAsync(look, parts, token);
+    }
+
+    /// <summary>
+    /// The player's look with Geralt's default gear added: what he wears is skinned to his body's rig, and what hangs
+    /// on a slot (his swords and their scabbards) is placed where its bone stands at rest.
+    /// </summary>
+    private (List<(MeshFile Mesh, Matrix4x4 Place)>, List<EntityComponent>, List<(EntityFile, string?)>) Dress(EntityFile entity, EntityLook look,
+        List<(MeshFile Mesh, Matrix4x4 Place)> parts, List<EntityComponent> drawnBy, List<(EntityFile, string?)> coloredBy, CancellationToken token)
+    {
+        parts = [.. parts];
+        drawnBy = [.. drawnBy];
+        coloredBy = [.. coloredBy];
+        if (SceneStage.BodyRig(look, parts, _locator) is not { } rig) return (parts, drawnBy, coloredBy);
+        var attachedTo = parts.Select(_ => (-1, Matrix4x4.Identity)).ToList();
+        CutsceneCast.Dress(entity, look, rig, _locator, parts, drawnBy, coloredBy, attachedTo, token);
+        var rest = new Matrix4x4[rig.Count];
+        rig.ToModel(rig.Pose, rest);
+        for (int i = 0; i < parts.Count; i++)
+            if (attachedTo[i] is { Item1: >= 0 } hung) parts[i] = (parts[i].Mesh, hung.Item2 * rest[hung.Item1]);
+        return (parts, drawnBy, coloredBy);
     }
 
     /// <summary>

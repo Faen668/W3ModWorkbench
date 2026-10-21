@@ -749,7 +749,7 @@ public static class SceneStage
     /// The body's rig: of the rigs the look's components use (not a dangle's, which is a hood's or hair's), the one most
     /// of its skinned meshes' bones are named in.
     /// </summary>
-    private static Skeleton? BodyRig(EntityLook look, List<(MeshFile Mesh, Matrix4x4 Place)> parts, ResourceLocator locator)
+    public static Skeleton? BodyRig(EntityLook look, List<(MeshFile Mesh, Matrix4x4 Place)> parts, ResourceLocator locator)
     {
         static bool IsRig(string r) => r.EndsWith(".w2rig", StringComparison.OrdinalIgnoreCase);
         var rigs = look.Components.Where(c => !c.ClassName.Contains("Dangle", StringComparison.Ordinal)).SelectMany(c => c.Resources).Where(IsRig)
