@@ -30,6 +30,9 @@ public partial class PreviewWindow
     /// <summary>The scripts in the tree by the key their tab has, to find the file in front.</summary>
     private readonly Dictionary<string, BenchNode> _benchKeys = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>The scripts in the tree by their file on disk, for a tab opened some other way (go to definition names the game's files by their path).</summary>
+    private readonly Dictionary<string, BenchNode> _benchPaths = new(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>The game's scripts by their path under the scripts folder, to tell what the project's override.</summary>
     private readonly Dictionary<string, BenchNode> _gameByPath = new(StringComparer.OrdinalIgnoreCase);
 
@@ -134,8 +137,8 @@ public partial class PreviewWindow
         _game = game;
         _mods = mods;
         _benchKeys.Clear();
-        foreach (var node in mine.Files().Concat(game.Files()))
-            if (node.Key is { } key) _benchKeys.TryAdd(key, node);
+        _benchPaths.Clear();
+        foreach (var node in mine.Files().Concat(game.Files())) Remember(node);
 
         _benchRoots.Clear();
         _benchRoots.Add(mine);
@@ -145,6 +148,12 @@ public partial class PreviewWindow
         foreach (var root in _benchRoots) Restore(root, expanded, selected);
         ApplyBenchFilter();
         UpdateBenchStatus();
+    }
+
+    private void Remember(BenchNode node)
+    {
+        if (node.Key is { } key) _benchKeys.TryAdd(key, node);
+        if ((node.DiskPath ?? (node.Entry as LooseScriptEntry)?.FullPath) is { } path) _benchPaths.TryAdd(Path.GetFullPath(path), node);
     }
 
     private static string PathOf(BenchNode node) => $"{node.Group}|{node.RelativePath}|{node.Name}";
@@ -310,8 +319,7 @@ public partial class PreviewWindow
         holder.Children.Clear();
         Dispatcher.InvokeAsync(() =>
         {
-            foreach (var node in children.SelectMany(c => c.IsFile ? [c] : c.Files()))
-                if (node.Key is { } key) _benchKeys.TryAdd(key, node);
+            foreach (var node in children.SelectMany(c => c.IsFile ? [c] : c.Files())) Remember(node);
         });
         return children.Count > 0 ? children : [BenchNode.Note(BenchGroup.Mods, "No scripts")];
     }
@@ -482,10 +490,19 @@ public partial class PreviewWindow
     {
         if (doc is null) return;
         if (BenchFilter.Text.Length > 0) BenchFilter.Clear();
-        if (!_benchKeys.TryGetValue(doc.Item.Key, out var node)) return;
+        if (FindNode(doc) is not { } node) return;
         for (var parent = node.Parent; parent is not null; parent = parent.Parent) parent.IsExpanded = true;
         node.IsSelected = true;
         Dispatcher.InvokeAsync(() => ContainerOf(node)?.BringIntoView(), System.Windows.Threading.DispatcherPriority.Loaded);
+    }
+
+    /// <summary>A tab's file in the tree: by its key, or by its file on disk.</summary>
+    private BenchNode? FindNode(PreviewDocument doc)
+    {
+        if (_benchKeys.TryGetValue(doc.Item.Key, out var node)) return node;
+        foreach (string? path in new[] { doc.Item.DiskPath, doc.Item.Script?.Key })
+            if (path is not null && Path.IsPathFullyQualified(path) && _benchPaths.TryGetValue(Path.GetFullPath(path), out node)) return node;
+        return null;
     }
 
     private TreeViewItem? ContainerOf(BenchNode node)
@@ -506,8 +523,7 @@ public partial class PreviewWindow
 
     private void BenchCollapse_Click(object sender, RoutedEventArgs e)
     {
-        foreach (var root in (IEnumerable<BenchNode>)BenchTree.ItemsSource)
-            foreach (var child in root.Children) Collapse(child);
+        foreach (var root in (IEnumerable<BenchNode>)BenchTree.ItemsSource) Collapse(root);
     }
 
     private static void Collapse(BenchNode node)
@@ -554,16 +570,17 @@ public partial class PreviewWindow
             if (node.Group == BenchGroup.Mine && node.Badge is not null)
                 Add("Compare with the game's", "", () => _ = CompareWithGameAsync(node),
                     tip: "Opens the game's file beside yours with the lines that differ marked");
-            if (node.Group == BenchGroup.Game)
+            if (node.Group is BenchGroup.Game or BenchGroup.Mods)
             {
                 Separate();
                 string target = project is null ? "" : Path.Combine(project.ScriptsPath, node.RelativePath);
                 if (project is not null && File.Exists(target))
-                    Add($"Open your override", "", () => _ = OpenMineAsync(target));
+                    Add("Open your copy", "", () => _ = OpenMineAsync(target), tip: $"Your mod has {project.ScriptsFolder}\\{node.RelativePath} already");
                 else
-                    Add(project is null ? "Override in your mod" : $"Override in {project.Name.Replace("_", "__")}", "", () => _ = OverrideAsync(node),
-                        project is not null, tip: project is null ? "Open a project first: the copy goes in its scripts folder"
-                            : $"Copies the file to {project.ScriptsFolder}\\{node.RelativePath}, where it's yours to change. It's compiled in place of the game's");
+                    Add("Copy to project", "", () => _ = CopyNodeToProjectAsync(node), project is not null,
+                        tip: project is null ? "Open a project first: the copy goes in its scripts folder"
+                            : $"Copies the file to {project.ScriptsFolder}\\{node.RelativePath} in {project.Name}, where it's yours to change, and opens it"
+                            + (node.Group == BenchGroup.Game || _gameByPath.ContainsKey(node.RelativePath) ? ". It's compiled in place of the game's file of the same path" : ""));
             }
         }
         if (node.Group == BenchGroup.Mine && node.DiskPath is not null && !node.IsFile)
@@ -598,22 +615,32 @@ public partial class PreviewWindow
             await host.CompareWithFileAsync(doc, ScriptWorkspace.FileFor(game.Entry));
     }
 
-    /// <summary>Copies one of the game's scripts into the project at the same path, and opens the copy.</summary>
-    private async Task OverrideAsync(BenchNode game)
+    /// <summary>
+    /// Copies one of the game's scripts, or a mod's, into the project at the same path, and opens the copy. A game
+    /// script's copy overrides it; a decompiled one is copied as it reads.
+    /// </summary>
+    private async Task CopyNodeToProjectAsync(BenchNode source)
     {
-        if (ProjectWorkspace.Current is not { } project || _benchMain is not { } main || game.Entry is not LooseScriptEntry entry) return;
-        string target = Path.Combine(project.ScriptsPath, game.RelativePath);
+        if (ProjectWorkspace.Current is not { } project || _benchMain is not { } main || source.Entry is not { } entry) return;
+        string target = Path.Combine(project.ScriptsPath, source.RelativePath);
         try
         {
             if (!File.Exists(target))
             {
+                byte[] data = await Task.Run(() =>
+                {
+                    if (!entry.Archive.ReadsFromDisk) return entry.Read(null);
+                    using var fs = new FileStream(entry.Archive.FilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                    return entry.Read(fs);
+                });
                 Directory.CreateDirectory(Path.GetDirectoryName(target)!);
-                File.Copy(entry.FullPath, target);
+                Core.Projects.FileSafety.CheckWrite(target);
+                File.WriteAllBytes(target, data);
             }
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or Core.Projects.ProtectedFileException)
         {
-            await BenchMessage.Show($"{game.Name} could not be copied into the project", ex.Message, MessageKind.Warning, primary: "OK");
+            await BenchMessage.Show($"{source.Name} could not be copied into the project", ex.Message, MessageKind.Warning, primary: "OK");
             return;
         }
         await main.ReloadProjectAsync();
@@ -719,7 +746,28 @@ public partial class PreviewWindow
             await BenchMessage.Show($"{node.Name} could not be deleted", ex.Message, MessageKind.Warning, primary: "OK");
             return;
         }
+        RemoveEmptyFolders(Path.GetDirectoryName(path));
         await main.ReloadProjectAsync();
+    }
+
+    /// <summary>Removes the folders a delete left empty, up to (not including) the project's scripts folder.</summary>
+    private static void RemoveEmptyFolders(string? folder)
+    {
+        if (ProjectWorkspace.Current is not { } project) return;
+        string scripts = Path.GetFullPath(project.ScriptsPath).TrimEnd('\\');
+        try
+        {
+            while (folder is not null && Path.GetFullPath(folder).StartsWith(scripts + "\\", StringComparison.OrdinalIgnoreCase)
+                   && Directory.Exists(folder) && !Directory.EnumerateFileSystemEntries(folder).Any())
+            {
+                Directory.Delete(folder);
+                folder = Path.GetDirectoryName(folder);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // a folder that can't go stays in the tree
+        }
     }
 
     /// <summary>Closes the tabs of files at or under a path before it's renamed or deleted; false when one has changes and the answer was to keep them.</summary>

@@ -59,7 +59,7 @@
         </Border>
         <TreeView x:Name="BenchTree" MouseDoubleClick="BenchTree_MouseDoubleClick" PreviewKeyDown="BenchTree_PreviewKeyDown"
                   ContextMenuOpening="BenchTree_ContextMenuOpening" PreviewMouseRightButtonDown="BenchTree_PreviewMouseRightButtonDown"
-                  VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling">
+                  VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Standard">
             <TreeView.ItemContainerStyle>
                 <Style TargetType="TreeViewItem" BasedOn="{StaticResource {x:Type TreeViewItem}}">
                     <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />

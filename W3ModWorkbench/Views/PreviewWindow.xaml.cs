@@ -48,6 +48,7 @@ public partial class PreviewWindow : Window, IMessageHost
         UpdateHistoryButtons();
         OpenWindows.Add(this);
         ProjectWorkspace.Changed += UpdateHeader;
+        ProjectWorkspace.Changed += RefreshTabs;
         Results.Open += OpenResult;
         Results.Closed += CloseResultsPanel;
         Results.FindRequested += Results_FindRequested;
@@ -78,6 +79,7 @@ public partial class PreviewWindow : Window, IMessageHost
         {
             OpenWindows.Remove(this);
             ProjectWorkspace.Changed -= UpdateHeader;
+            ProjectWorkspace.Changed -= RefreshTabs;
             _search?.Cancel();
             _compile?.Cancel();
             foreach (var doc in AllDocuments)
@@ -205,6 +207,11 @@ public partial class PreviewWindow : Window, IMessageHost
 
     private static PreviewDocument? FindOpen(string key) =>
         OpenWindows.SelectMany(w => w.AllDocuments).FirstOrDefault(d => d.Item.Key == key);
+
+    private void RefreshTabs()
+    {
+        foreach (var pane in _panes) pane.RefreshTabs();
+    }
 
     private IEnumerable<PreviewDocument> AllDocuments => _panes.SelectMany(p => p.Documents);
 

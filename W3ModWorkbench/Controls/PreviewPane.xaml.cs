@@ -47,6 +47,12 @@ public partial class PreviewPane : UserControl
     public int Count => TabStrip.Children.Count;
 
     /// <summary>The group the keyboard is in: its selected tab is marked with the accent colour.</summary>
+    /// <summary>Draws the tabs again, after the open project changed which files are in it.</summary>
+    public void RefreshTabs()
+    {
+        foreach (var tab in Tabs) tab.UpdateLook();
+    }
+
     public bool IsActive
     {
         get => _active;
@@ -288,6 +294,7 @@ public sealed class PreviewTab : Border
 {
     private readonly TextBlock _name;
     private readonly TextBlock _pin;
+    private readonly TextBlock _icon;
     private readonly Button _close;
     private readonly TextBlock _cross;
     private readonly Border _dot;
@@ -313,7 +320,7 @@ public sealed class PreviewTab : Border
         ContextMenu = new ContextMenu(); // filled when it opens
         ContextMenuOpening += (_, _) => Pane.Host.FillTabMenu(ContextMenu, doc);
 
-        var icon = new TextBlock
+        var icon = _icon = new TextBlock
         {
             Text = doc.Item.IsScript ? "" : "", // code, document
             FontSize = 12,
@@ -418,6 +425,14 @@ public sealed class PreviewTab : Border
         _cross.Visibility = _dot.Visibility == Visibility.Visible ? Visibility.Hidden : Visibility.Visible;
         _close.ToolTip = dirty ? "Close (Ctrl+W). It has changes that aren't saved" : "Close (Ctrl+W)";
         _mark.Visibility = selected ? Visibility.Visible : Visibility.Hidden;
+        // the open project's own files carry a star in the accent colour, so they stand apart from everything read-only
+        bool mine = Document.InProject;
+        _icon.Text = mine ? "" : Document.Item.IsScript ? "" : ""; // star, code, document
+        _icon.Opacity = mine ? 1 : 0.75;
+        if (mine) _icon.SetResourceReference(TextBlock.ForegroundProperty, "AccentTextFillColorPrimaryBrush");
+        else _icon.ClearValue(TextBlock.ForegroundProperty);
+        ToolTip = $"{Document.Item.Path}\n{Document.Item.Source}\n"
+            + (mine ? "In the project: yours to change" : Document.IsEditable ? "Not in the project" : "Read-only");
         _mark.SetResourceReference(BackgroundProperty, Pane.IsActive ? "AccentFillColorDefaultBrush" : "TextFillColorDisabledBrush");
     }
 
