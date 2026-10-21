@@ -6,6 +6,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using W3ModWorkbench.Core;
 using W3ModWorkbench.ViewModels;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -65,10 +66,10 @@ public sealed class EabRow : INotifyPropertyChanged
     {
         get
         {
-            if (!CanSuggest) return "a mod's file: can't be suggested";
+            if (!CanSuggest) return L.T("EabWindow.ModsFileCantSuggested");
             if (!Changed) return "";
             var parts = new List<string>();
-            if (Asset is null) parts.Add((Category is null ? "new, no category" : "new") + (Tags.Count == 0 ? "" : ":"));
+            if (Asset is null) parts.Add((Category is null ? L.T("EabWindow.NewNoCategory") : "new") + (Tags.Count == 0 ? "" : ":"));
             if (CategoryChanged) parts.Add($"{Asset!.Category} → {Category}");
             parts.AddRange(Added.Order(StringComparer.OrdinalIgnoreCase).Select(t => "+" + t));
             parts.AddRange(Removed.Order(StringComparer.OrdinalIgnoreCase).Select(t => "−" + t));
@@ -149,8 +150,8 @@ public partial class EabWindow : Window
         _eab = eab;
         _rows = rows;
         int listed = rows.Count(r => r.Asset is not null);
-        SourceText.Text = $"Categories and tags by Vincent.02's EasyAssetBrowser, from its GitHub repository (Apache License 2.0): {eab.Count:N0} assets, {eab.Note}, {eab.Read:g}. "
-            + $"{listed:N0} of the {rows.Count:N0} files here are in its lists" + (left > 0 ? $"; the first {MostFiles} of the files highlighted are shown." : ".");
+        SourceText.Text = L.T("EabWindow.Source", eab.Count, eab.Note, eab.Read)
+            + L.T("EabWindow.ListedOf", listed, rows.Count) + (left > 0 ? L.T("EabWindow.FirstShown", MostFiles) : ".");
         CategoryBox.ItemsSource = eab.Categories.Select(c => c.Name).ToList();
         Files.ItemsSource = rows;
         foreach (var row in rows) row.PropertyChanged += (_, _) => UpdateChanges();
@@ -189,21 +190,20 @@ public partial class EabWindow : Window
                 var row = picked[0];
                 DetailTitle.Text = row.Name;
                 ListedText.Text = row.Blocked is { } why ? why
-                    : row.Asset is not null ? $"Listed on EasyAssetBrowser · {row.Item.Path}"
-                    : row.Category is null ? $"Not listed on EasyAssetBrowser yet, and it has no category for {System.IO.Path.GetExtension(row.Item.Name)} files. "
-                        + "Pick one of its categories, or type a new one, or suggest it without and leave that to its author."
-                    : "Not listed on EasyAssetBrowser yet.";
+                    : row.Asset is not null ? L.T("EabWindow.ListedEasyAssetBrowser", row.Item.Path)
+                    : row.Category is null ? L.T("EabWindow.NotListedEasyAssetBrowserYet", System.IO.Path.GetExtension(row.Item.Name))
+                    : L.T("EabWindow.NotListedEasyAssetBrowserYet2");
                 PathText.Text = row.EabPath;
                 OriginText.Text = row.Origin;
             }
             else
             {
-                DetailTitle.Text = picked.Count == 0 ? "Highlight a file" : $"{picked.Count:N0} files";
+                DetailTitle.Text = picked.Count == 0 ? L.T("EabWindow.HighlightFile") : L.T("EabWindow.Files", picked.Count);
                 int listed = picked.Count(r => r.Asset is not null);
                 int mods = picked.Count(r => !r.CanSuggest);
-                ListedText.Text = picked.Count == 0 ? "" : $"{listed:N0} listed on EasyAssetBrowser, {picked.Count - listed - mods:N0} not yet"
-                    + (mods > 0 ? $", and {mods:N0} only a mod has, which can't be suggested: EasyAssetBrowser lists only the game's own files" : "");
-                PathText.Text = string.Join(Environment.NewLine, picked.Take(20).Select(r => r.EabPath)) + (picked.Count > 20 ? $"{Environment.NewLine}… and {picked.Count - 20:N0} more" : "");
+                ListedText.Text = picked.Count == 0 ? "" : L.T("EabWindow.ListedNotYet", listed, picked.Count - listed - mods)
+                    + (mods > 0 ? L.T("EabWindow.OnlyModHas", mods) : "");
+                PathText.Text = string.Join(Environment.NewLine, picked.Take(20).Select(r => r.EabPath)) + (picked.Count > 20 ? L.T("EabWindow.More", Environment.NewLine, picked.Count - 20) : "");
                 OriginText.Text = string.Join(", ", picked.Select(r => r.Origin).Distinct());
             }
             var categories = picked.Select(r => r.Category).Distinct().ToList();
@@ -233,9 +233,9 @@ public partial class EabWindow : Window
             AddCheck.Visibility = unlisted.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
             AddCheck.Content = unlisted.Count switch
             {
-                1 when picked.Count == 1 => "Suggest adding it to EasyAssetBrowser",
-                1 => "Suggest adding the 1 file it doesn't list to EasyAssetBrowser",
-                var n => $"Suggest adding the {n:N0} files it doesn't list to EasyAssetBrowser",
+                1 when picked.Count == 1 => L.T("EabWindow.SuggestAddingEasyAssetBrowser"),
+                1 => L.T("EabWindow.SuggestAddingFileDoesnt"),
+                var n => L.T("EabWindow.SuggestAddingFilesDoesnt", n),
             };
             int adding = unlisted.Count(r => r.Adding);
             AddCheck.IsChecked = _addWas = adding == 0 ? false : adding == unlisted.Count ? true : null;
@@ -399,8 +399,8 @@ public partial class EabWindow : Window
     {
         var changed = ChangedRows;
         ChangesText.Text = changed.Count == 0
-            ? "Change a file's tags or category to suggest it to EasyAssetBrowser. Suggestions go to its GitHub repository as an issue, for its author to review."
-            : $"{changed.Count:N0} file{(changed.Count == 1 ? "" : "s")} changed. Suggest on GitHub opens a new issue on EasyAssetBrowser's repository with them, for you to post (you need a GitHub account).";
+            ? L.T("EabWindow.ChangeFilesTagsCategory")
+            : L.T("EabWindow.FilesChanged", changed.Count);
         SuggestButton.IsEnabled = CopyButton.IsEnabled = changed.Count > 0;
     }
 
@@ -427,17 +427,20 @@ public partial class EabWindow : Window
         var rows = ChangedRows;
         if (rows.Count == 0) return;
         bool allNew = rows.All(r => r.Asset is null);
+        // the issue is for EasyAssetBrowser's repository, read in English, so it stays in English whatever the app's language
+        // loc-ignore-start
         string kind = allNew ? "Assets to add" : rows.Any(r => r.Asset is null) ? "Asset and tag suggestions" : "Tag suggestions";
         string title = rows.Count == 1 ? $"{(allNew ? "Asset to add" : "Tag suggestion")}: {rows[0].Name}" : $"{kind}: {rows[0].Name} and {rows.Count - 1} more";
         string intro = $"Suggested from W3 Mod Workbench's asset browser ({rows.Count} file{(rows.Count == 1 ? "" : "s")}).";
+        // loc-ignore-end
 
         string text = Full();
         if (text.Length > MostIssueText) text = Compact();
         if (text.Length > MostIssueText)
         {
             int fit = rows.Count * MostIssueText / text.Length;
-            MessageBox.Show(this, $"{rows.Count:N0} files are more than one GitHub issue can hold (about {fit:N0} fit). Highlight fewer and suggest them in parts, or use Copy as JSON and send the file another way.",
-                "Suggest on GitHub", MessageBoxButton.OK, MessageBoxImage.Information);
+            MessageBox.Show(this, L.T("EabWindow.FilesMoreThanOne", rows.Count, fit),
+                L.T("EabWindow.SuggestGitHub2"), MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
 
@@ -447,9 +450,9 @@ public partial class EabWindow : Window
         if (link.Length > 7500)
         {
             Clipboard.SetText(text);
-            link = Link("The suggestion is on the clipboard: paste it here (Ctrl+V), replacing this line.");
-            MessageBox.Show(this, "The suggestion is too long to put in the link, so it's on the clipboard. Paste it into the issue that opens (Ctrl+V).",
-                "Suggest on GitHub", MessageBoxButton.OK, MessageBoxImage.Information);
+            link = Link("The suggestion is on the clipboard: paste it here (Ctrl+V), replacing this line."); // loc-ignore: the issue's text
+            MessageBox.Show(this, L.T("EabWindow.SuggestionTooLongPut"),
+                L.T("EabWindow.SuggestGitHub2"), MessageBoxButton.OK, MessageBoxImage.Information);
         }
         AssetBrowserWindow.OpenLink(link);
 
@@ -464,7 +467,7 @@ public partial class EabWindow : Window
             foreach (var row in rows)
                 body.AppendLine($"| `{row.EabPath}` | {row.Category} | {row.ChangeText.Replace("|", @"\|")} |");
             body.AppendLine();
-            body.AppendLine("As the lists hold them:");
+            body.AppendLine("As the lists hold them:"); // loc-ignore: the issue's text
             body.AppendLine();
             body.AppendLine("```json");
             body.AppendLine(Json(rows));
@@ -478,7 +481,7 @@ public partial class EabWindow : Window
             var body = new StringBuilder();
             body.AppendLine(intro);
             body.AppendLine();
-            body.AppendLine("As the lists hold them, a file to a line:");
+            body.AppendLine("As the lists hold them, a file to a line:"); // loc-ignore: the issue's text
             body.AppendLine();
             body.AppendLine("```json");
             body.AppendLine("[");

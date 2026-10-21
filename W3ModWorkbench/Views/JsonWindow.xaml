@@ -1,10 +1,11 @@
 <Window x:Class="W3ModWorkbench.JsonWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:l="clr-namespace:W3ModWorkbench.Localisation"
         xmlns:local="clr-namespace:W3ModWorkbench"
         xmlns:avalonEdit="http://icsharpcode.net/sharpdevelop/avalonedit"
         xmlns:search="clr-namespace:ICSharpCode.AvalonEdit.Search;assembly=ICSharpCode.AvalonEdit"
-        Title="JSON" Icon="pack://application:,,,/W3ModWorkbench;component/Assets/app.ico"
+        Title="{l:T JsonWindow.Json}" Icon="pack://application:,,,/W3ModWorkbench;component/Assets/app.ico"
         Width="1400" Height="820" MinWidth="760" MinHeight="460"
         WindowStartupLocation="CenterOwner" PreviewKeyDown="Window_PreviewKeyDown" Closing="Window_Closing">
     <Window.Resources>
@@ -51,19 +52,19 @@
                             <StackPanel Orientation="Horizontal">
                                 <TextBox Name="PART_searchTextBox" Width="230" VerticalContentAlignment="Center"
                                          Text="{Binding SearchPattern, RelativeSource={RelativeSource TemplatedParent}, UpdateSourceTrigger=PropertyChanged}" />
-                                <ToggleButton Style="{StaticResource SearchToggle}" Content="Aa" ToolTip="Match case"
+                                <ToggleButton Style="{StaticResource SearchToggle}" Content="{l:T Common.Aa}" ToolTip="{l:T Common.MatchCase}"
                                               IsChecked="{Binding MatchCase, RelativeSource={RelativeSource TemplatedParent}}" Margin="6,0,0,0" />
-                                <ToggleButton Style="{StaticResource SearchToggle}" Content="ab" ToolTip="Whole words only"
+                                <ToggleButton Style="{StaticResource SearchToggle}" Content="{l:T Common.Ab}" ToolTip="{l:T Common.WholeWordsOnly}"
                                               IsChecked="{Binding WholeWords, RelativeSource={RelativeSource TemplatedParent}}" />
-                                <ToggleButton Style="{StaticResource SearchToggle}" Content=".*" ToolTip="Regular expression"
+                                <ToggleButton Style="{StaticResource SearchToggle}" Content=".*" ToolTip="{l:T Common.RegularExpression}"
                                               IsChecked="{Binding UseRegex, RelativeSource={RelativeSource TemplatedParent}}" />
-                                <Button Style="{StaticResource SearchIconButton}" Command="search:SearchCommands.FindPrevious" ToolTip="Previous match (Shift+F3)" Margin="8,0,0,0">
+                                <Button Style="{StaticResource SearchIconButton}" Command="search:SearchCommands.FindPrevious" ToolTip="{l:T Common.PreviousMatchShiftF3}" Margin="8,0,0,0">
                                     <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE70E;" FontSize="12" />
                                 </Button>
-                                <Button Style="{StaticResource SearchIconButton}" Command="search:SearchCommands.FindNext" ToolTip="Next match (F3)">
+                                <Button Style="{StaticResource SearchIconButton}" Command="search:SearchCommands.FindNext" ToolTip="{l:T Common.NextMatchF3}">
                                     <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE70D;" FontSize="12" />
                                 </Button>
-                                <Button Style="{StaticResource SearchIconButton}" Command="search:SearchCommands.CloseSearchPanel" ToolTip="Close (Esc)">
+                                <Button Style="{StaticResource SearchIconButton}" Command="search:SearchCommands.CloseSearchPanel" ToolTip="{l:T Common.CloseEsc}">
                                     <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE711;" FontSize="11" />
                                 </Button>
                                 <!-- AvalonEdit looks this part up; the options live in the toggles instead -->
@@ -87,42 +88,42 @@
             <!-- the file, and what can be done with it -->
             <DockPanel Margin="0,0,0,10" LastChildFill="True">
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
-                    <ToggleButton x:Name="OutlineToggle" Margin="0,0,6,0" Click="OutlineToggle_Click" ToolTip="Show or hide the outline of the file's objects and lists (Ctrl+Shift+O)">
+                    <ToggleButton x:Name="OutlineToggle" Margin="0,0,6,0" Click="OutlineToggle_Click" ToolTip="{l:T JsonWindow.ShowHideOutlineFiles}">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Style="{StaticResource IconText}" Text="&#xE8FD;" />
-                            <TextBlock Margin="8,0,0,0" Text="Outline" />
+                            <TextBlock Margin="8,0,0,0" Text="{l:T Common.Outline}" />
                         </StackPanel>
                     </ToggleButton>
                     <Button x:Name="EmbeddedButton" Margin="0,0,6,0" Click="Embedded_Click" IsEnabled="False"
-                            ToolTip="Put the cursor on a buffer that holds a whole CR2W file (one starting &quot;Q1IyV…&quot;) to open it in a window of its own; saving there writes it back here (Ctrl+E)">
+                            ToolTip="{l:T JsonWindow.PutCursorBufferHolds}">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Style="{StaticResource IconText}" Text="&#xE8E5;" />
-                            <TextBlock Margin="8,0,0,0" Text="Open embedded file" />
+                            <TextBlock Margin="8,0,0,0" Text="{l:T JsonWindow.OpenEmbeddedFile}" />
                         </StackPanel>
                     </Button>
-                    <Button x:Name="FormatButton" Margin="0,0,6,0" Click="Format_Click" ToolTip="Indent the JSON, with small objects and lists kept on one line (Ctrl+Shift+F)">
+                    <Button x:Name="FormatButton" Margin="0,0,6,0" Click="Format_Click" ToolTip="{l:T JsonWindow.IndentJsonSmallObjects}">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Style="{StaticResource IconText}" Text="&#xE8E3;" />
-                            <TextBlock Margin="8,0,0,0" Text="Format" />
+                            <TextBlock Margin="8,0,0,0" Text="{l:T Common.Format}" />
                         </StackPanel>
                     </Button>
                     <Button x:Name="SaveCr2wButton" Margin="0,0,6,0" Click="SaveCr2w_Click" Visibility="Collapsed"
-                            ToolTip="Write the game file this JSON was converted from, such as name.env from name.env.json">
+                            ToolTip="{l:T JsonWindow.WriteGameFileJson}">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Style="{StaticResource IconText}" Text="&#xE8AB;" />
-                            <TextBlock x:Name="SaveCr2wText" Margin="8,0,0,0" Text="Save as CR2W" />
+                            <TextBlock x:Name="SaveCr2wText" Margin="8,0,0,0" Text="{l:T JsonWindow.SaveCR2W}" />
                         </StackPanel>
                     </Button>
-                    <Button Click="SaveAs_Click" ToolTip="Save as a file somewhere else (Ctrl+Shift+S)">
+                    <Button Click="SaveAs_Click" ToolTip="{l:T JsonWindow.SaveFileSomewhereElse}">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Style="{StaticResource IconText}" Text="&#xE792;" />
-                            <TextBlock Margin="8,0,0,0" Text="Save as" />
+                            <TextBlock Margin="8,0,0,0" Text="{l:T Common.Save2}" />
                         </StackPanel>
                     </Button>
                     <Button x:Name="SaveButton" Margin="6,0,0,0" Click="Save_Click" Style="{DynamicResource AccentButtonStyle}">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Style="{StaticResource IconText}" Text="&#xE74E;" />
-                            <TextBlock Margin="8,0,0,0" Text="Save" />
+                            <TextBlock Margin="8,0,0,0" Text="{l:T Common.Save}" />
                         </StackPanel>
                     </Button>
                 </StackPanel>

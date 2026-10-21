@@ -10,6 +10,7 @@ using Microsoft.Win32;
 using W3ModWorkbench.Core;
 using W3ModWorkbench.Core.Projects;
 using W3ModWorkbench.Core.Strings;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -106,9 +107,9 @@ public sealed class StringRow : INotifyPropertyChanged
 
     public string? StateTip => _state switch
     {
-        TranslationState.Kept => "Taken from the old translation",
-        TranslationState.New => "Not in the old translation: new in this version, and still needs translating",
-        TranslationState.Translated => "New in this version, and translated since",
+        TranslationState.Kept => L.T("StringsWindow.TakenOldTranslation"),
+        TranslationState.New => L.T("StringsWindow.NotOldTranslationNew"),
+        TranslationState.Translated => L.T("StringsWindow.NewVersionTranslatedSince"),
         _ => null,
     };
 
@@ -198,7 +199,7 @@ public partial class StringsWindow : Window, IMessageHost
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or ArgumentException)
         {
             window.Close();
-            if (owner is IMessageHost host) _ = host.ShowMessage($"{Path.GetFileName(path)} could not be opened", ex.Message, MessageKind.Error);
+            if (owner is IMessageHost host) _ = host.ShowMessage(L.T("StringsWindow.CouldNotOpened", Path.GetFileName(path)), ex.Message, MessageKind.Error);
             return;
         }
         window.Show();
@@ -235,14 +236,14 @@ public partial class StringsWindow : Window, IMessageHost
             (language, strings, _version, _path) = (file.Language, file.Strings, file.Version, path);
             int unnamed = strings.Count(s => s.KeyHash != 0 && s.KeyName is null);
             if (unnamed > 0)
-                notes.Add($"{Format.Count(unnamed, "key")} shown by hash: a .w3strings file keeps only that. A strings CSV in the same folder gives the names back.");
+                notes.Add(L.T("StringsWindow.ShownHashW3stringsFile", L.T("Count.Key", unnamed)));
         }
         else
         {
             var csv = W3Strings.FromCsv(File.ReadAllText(path, Encoding.UTF8));
             (language, strings) = (csv.Language ?? W3Strings.LanguageFromName(path), csv.Strings);
-            notes.AddRange(csv.Problems.Take(3).Select(p => $"Line {p.Line} was skipped: {p.Message}"));
-            if (csv.Problems.Count > 3) notes.Add($"…and {csv.Problems.Count - 3} more lines.");
+            notes.AddRange(csv.Problems.Take(3).Select(p => L.T("StringsWindow.LineSkipped", p.Line, p.Message)));
+            if (csv.Problems.Count > 3) notes.Add(L.T("StringsWindow.MoreLines", csv.Problems.Count - 3));
         }
 
         foreach (var s in strings) Add(StringRow.From(s));
@@ -251,7 +252,7 @@ public partial class StringsWindow : Window, IMessageHost
         Validate();
         _edited = false;
         UpdateHeader();
-        if (notes.Count > 0) Loaded += (_, _) => _ = ShowMessage("Opened with notes", string.Join("\n\n", notes), MessageKind.Info);
+        if (notes.Count > 0) Loaded += (_, _) => _ = ShowMessage(L.T("StringsWindow.OpenedNotes"), string.Join("\n\n", notes), MessageKind.Info);
     }
 
     /// <summary>
@@ -286,8 +287,8 @@ public partial class StringsWindow : Window, IMessageHost
     {
         var dialog = new OpenFileDialog
         {
-            Title = "Load an old translation over these strings",
-            Filter = "Strings (*.csv;*.w3strings)|*.csv;*.w3strings|Strings CSV (*.csv)|*.csv|Witcher 3 strings (*.w3strings)|*.w3strings",
+            Title = L.T("StringsWindow.LoadOldTranslationOver"),
+            Filter = L.T("StringsWindow.StringsCsvW3stringsCsv"),
             InitialDirectory = Path.GetDirectoryName(_path ?? _sourcePath) ?? "",
         };
         if (dialog.ShowDialog(this) == true) LoadTranslation(dialog.FileName);
@@ -320,7 +321,7 @@ public partial class StringsWindow : Window, IMessageHost
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
         {
-            _ = ShowMessage($"{Path.GetFileName(path)} could not be read", ex.Message, MessageKind.Error);
+            _ = ShowMessage(L.T("StringsWindow.CouldNotRead", Path.GetFileName(path)), ex.Message, MessageKind.Error);
             return;
         }
 
@@ -377,14 +378,13 @@ public partial class StringsWindow : Window, IMessageHost
         int unused = old.Count - used.Count;
         var lines = new List<string>
         {
-            $"{Format.Count(kept, "string")} took {(kept == 1 ? "its" : "their")} text from {Path.GetFileName(path)}.",
-            fresh == 0 ? "Every string was found, so there's nothing new to translate."
-                : $"{Format.Count(fresh, "string")} {(fresh == 1 ? "isn't" : "aren't")} in it: new in this version, marked and shown first, with the original text to translate from.",
+            L.T("StringsWindow.TookText", kept, Path.GetFileName(path)),
+            fresh == 0 ? L.T("StringsWindow.EveryStringFoundSo") : L.T("StringsWindow.NewStrings", fresh),
         };
-        if (unused > 0) lines.Add($"{Format.Count(unused, "string")} in the old translation {(unused == 1 ? "isn't" : "aren't")} in these strings any more, and {(unused == 1 ? "was" : "were")} left out.");
-        if (skipped > 0) lines.Add($"{Format.Count(skipped, "line")} of the CSV couldn't be read and {(skipped == 1 ? "was" : "were")} skipped.");
-        if (language is not null) lines.Add($"The language is set to {language.Handle}, the translation's.");
-        _ = ShowMessage("Translation loaded", string.Join("\n\n", lines), MessageKind.Info);
+        if (unused > 0) lines.Add(L.T("StringsWindow.UnusedStrings", unused));
+        if (skipped > 0) lines.Add(L.T("StringsWindow.SkippedLines", skipped));
+        if (language is not null) lines.Add(L.T("StringsWindow.LanguageSetTranslations", language.Handle));
+        _ = ShowMessage(L.T("StringsWindow.TranslationLoaded"), string.Join("\n\n", lines), MessageKind.Info);
     }
 
     // ---------------------------------------------------------------- the game's strings
@@ -407,10 +407,10 @@ public partial class StringsWindow : Window, IMessageHost
         Grid.CommitEdit(DataGridEditingUnit.Row, true);
         if (GameFolder() is not { } folder)
         {
-            _ = ShowMessage("The game folder isn't set", "Checking IDs needs The Witcher 3's folder to compare with. Set it in Settings.", MessageKind.Info);
+            _ = ShowMessage(L.T("Common.GameFolderIsntSet"), L.T("StringsWindow.CheckingIDsNeedsWitcher"), MessageKind.Info);
             return;
         }
-        _ = Message.Show(null, "Reading the game's strings…", MessageKind.Busy);
+        _ = Message.Show(null, L.T("StringsWindow.ReadingGamesStrings"), MessageKind.Busy);
         GameStringIndex index;
         try
         {
@@ -418,7 +418,7 @@ public partial class StringsWindow : Window, IMessageHost
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
         {
-            await ShowMessage("The game's strings could not be read", ex.Message, MessageKind.Error);
+            await ShowMessage(L.T("StringsWindow.GamesStringsCouldNot"), ex.Message, MessageKind.Error);
             return;
         }
 
@@ -435,20 +435,20 @@ public partial class StringsWindow : Window, IMessageHost
             var first = others[0];
             string shown = first.Text.ReplaceLineEndings(" ");
             if (shown.Length > 60) shown = shown[..60] + "…";
-            _clashes[id] = $"Also used by {first.Source} ({first.File}): \"{shown}\"" + (others.Count > 1 ? $" and {others.Count - 1} more" : "");
+            _clashes[id] = L.T("StringsWindow.AlsoUsedBy", first.Source, first.File, shown) + (others.Count > 1 ? L.T("StringsWindow.AndMore", others.Count - 1) : "");
             if (examples.Count < 5) examples.Add($"{id}  →  {first.Source}");
         }
         Validate();
         Message.Close(false);
 
         string free = $"{index.FreeBlock():0}";
-        string range = $"{free} to {uint.Parse(free) + 999}";
+        string range = L.T("StringsWindow.Range", free, uint.Parse(free) + 999);
         string text = _clashes.Count == 0
-            ? $"None of these IDs is used by the game, its DLC or the other installed mods.\n\nIf you need a fresh block of IDs, {range} is free."
-            : $"{Format.Count(_clashes.Count, "ID")} {(_clashes.Count == 1 ? "is" : "are")} also used elsewhere, and marked with a warning sign:\n\n{string.Join("\n", examples)}"
-              + (_clashes.Count > examples.Count ? $"\n…and {_clashes.Count - examples.Count} more." : "")
-              + $"\n\nA block nothing uses: {range}.";
-        await ShowMessage(_clashes.Count == 0 ? "No clashes" : "IDs in use elsewhere", text,
+            ? L.T("StringsWindow.NoneTheseIDsUsed", range)
+            : L.T("StringsWindow.ClashingIds", _clashes.Count, string.Join("\n", examples))
+              + (_clashes.Count > examples.Count ? L.T("StringsWindow.AndMoreLines", _clashes.Count - examples.Count) : "")
+              + L.T("StringsWindow.FreeBlock", range);
+        await ShowMessage(_clashes.Count == 0 ? L.T("StringsWindow.NoClashes") : L.T("StringsWindow.IDsUseElsewhere"), text,
             _clashes.Count == 0 ? MessageKind.Info : MessageKind.Warning);
     }
 
@@ -479,11 +479,11 @@ public partial class StringsWindow : Window, IMessageHost
     private void UpdateHeader()
     {
         string name = Path.GetFileName(_path ?? _sourcePath ?? "Strings");
-        Title = $"{(_edited ? "• " : "")}{name} - Strings";
+        Title = L.T("StringsWindow.Strings2", (_edited ? "• " : ""), name);
         FileNameText.Text = (_edited ? "• " : "") + name;
         var language = LanguageBox.SelectedItem as W3Language;
         DetailText.Text = $"{language?.Handle ?? "?"}  ·  {Path.GetDirectoryName(_sourcePath) ?? ""}";
-        SaveButton.ToolTip = _path is null ? "Save as a .w3strings file (Ctrl+S)" : $"Save to {Path.GetFileName(_path)} (Ctrl+S)";
+        SaveButton.ToolTip = _path is null ? L.T("StringsWindow.SaveW3stringsFileCtrl") : L.T("StringsWindow.SaveCtrl", Path.GetFileName(_path));
     }
 
     // ---------------------------------------------------------------- checking
@@ -504,9 +504,9 @@ public partial class StringsWindow : Window, IMessageHost
         foreach (var row in _rows)
         {
             string? problem = null;
-            if (!row.TryId(out uint id)) problem = "The ID has to be a whole number.";
-            else if (seen[id] > 1) problem = "Another string has this ID.";
-            else if (!row.TryHash(out _)) problem = "The key hash has to be eight hex digits.";
+            if (!row.TryId(out uint id)) problem = L.T("StringsWindow.IDHasWholeNumber");
+            else if (seen[id] > 1) problem = L.T("StringsWindow.AnotherStringHasID");
+            else if (!row.TryHash(out _)) problem = L.T("StringsWindow.KeyHashHasEight");
             if (problem is not null) errors++;
             else if (_clashes.TryGetValue(id, out var clash))
             {
@@ -516,25 +516,25 @@ public partial class StringsWindow : Window, IMessageHost
             else if (!W3Strings.InModIdSpace(id))
             {
                 outside++;
-                problem = "Outside the IDs mods use (211nnnn000 to 211nnnn999), so it may clash with the game's strings or another mod's.";
+                problem = L.T("StringsWindow.OutsideIDsModsUse");
             }
             if (problem is null && row.HashText.Length > 0 && keys[row.HashText] > 1)
             {
                 sharedKeys++;
-                problem = "Another string has this key, so scripts will only find one of them.";
+                problem = L.T("StringsWindow.AnotherStringHasKey");
             }
             row.Problem = problem;
         }
 
         int untranslated = _rows.Count(r => r.State == TranslationState.New);
-        StatusText.Text = $"{Format.Count(_rows.Count, "string")}  ·  {Format.Count(_rows.Count(r => r.HashText.Length > 0), "key")}"
-                          + (_translationLoaded ? $"  ·  {untranslated:N0} to translate" : "")
-                          + (SearchBox.Text.Length > 0 || _translationLoaded && ShowBox.SelectedIndex > 0 ? $"  ·  {_view.Cast<object>().Count()} shown" : "");
+        StatusText.Text = $"{L.T("Count.String", _rows.Count)}  ·  {L.T("Count.Key", _rows.Count(r => r.HashText.Length > 0))}"
+                          + (_translationLoaded ? L.T("StringsWindow.Translate", untranslated) : "")
+                          + (SearchBox.Text.Length > 0 || _translationLoaded && ShowBox.SelectedIndex > 0 ? L.T("StringsWindow.Shown", _view.Cast<object>().Count()) : "");
         var parts = new List<string>();
-        if (errors > 0) parts.Add($"{Format.Count(errors, "string")} can't be saved until fixed");
-        if (clashing > 0) parts.Add($"{clashing} with an ID the game or another mod uses");
-        if (outside > 0) parts.Add($"{outside} outside the mod ID range");
-        if (sharedKeys > 0) parts.Add($"{sharedKeys} with a key another string has");
+        if (errors > 0) parts.Add(L.T("StringsWindow.CantSavedUntilFixed", L.T("Count.String", errors)));
+        if (clashing > 0) parts.Add(L.T("StringsWindow.IDGameAnotherMod", clashing));
+        if (outside > 0) parts.Add(L.T("StringsWindow.OutsideModIDRange", outside));
+        if (sharedKeys > 0) parts.Add(L.T("StringsWindow.KeyAnotherStringHas", sharedKeys));
         ProblemText.Text = string.Join("  ·  ", parts);
         return errors;
     }
@@ -625,8 +625,7 @@ public partial class StringsWindow : Window, IMessageHost
         Grid.CommitEdit(DataGridEditingUnit.Row, true);
         if (Validate() > 0)
         {
-            _ = ShowMessage("Some strings can't be saved yet", "The rows with a warning sign have an ID that isn't a number, an ID another string has, "
-                + "or a key hash that isn't hex. Rest the mouse on the sign to see which.", MessageKind.Warning);
+            _ = ShowMessage(L.T("StringsWindow.SomeStringsCantSaved"), L.T("StringsWindow.RowsWarningSignHave"), MessageKind.Warning);
             return null;
         }
         return [.. _rows.Select(r =>
@@ -650,8 +649,8 @@ public partial class StringsWindow : Window, IMessageHost
         // the game's own strings, and an installed mod's, are never saved over: they're saved somewhere of your own
         if (path is not null && FileSafety.Protection(path) is { } protection)
         {
-            await ShowMessage($"{Path.GetFileName(path)} is read-only",
-                protection + " Save it into your project, or anywhere of your own, from the next window.", MessageKind.Info);
+            await ShowMessage(L.T("StringsWindow.ReadOnly", Path.GetFileName(path)),
+                L.T("StringsWindow.SaveIntoYourProject", protection), MessageKind.Info);
             path = null;
         }
         if (path is null)
@@ -659,8 +658,8 @@ public partial class StringsWindow : Window, IMessageHost
             string near = Path.GetDirectoryName(_path ?? _sourcePath) ?? "";
             var dialog = new SaveFileDialog
             {
-                Title = "Save strings",
-                Filter = "Witcher 3 strings (*.w3strings)|*.w3strings",
+                Title = L.T("StringsWindow.SaveStrings"),
+                Filter = L.T("StringsWindow.WitcherStringsW3stringsW3strings"),
                 FileName = $"{StringsLanguage.Handle}.w3strings",
                 InitialDirectory = FileSafety.CanEdit(Path.Combine(near, "_")) ? near : ProjectWorkspace.Current?.Root ?? "",
             };
@@ -673,9 +672,9 @@ public partial class StringsWindow : Window, IMessageHost
             ? CopyLanguages.Select(l => Path.Combine(folder, l + ".w3strings")).Where(p => !p.Equals(path, StringComparison.OrdinalIgnoreCase)).ToList()
             : [];
         int replacing = copies.Count(File.Exists);
-        if (replacing > 0 && !await Message.Show("Replace the other languages' files?",
-                $"{Format.Count(replacing, "file")} in {folder} will be replaced with a copy of these strings.",
-                MessageKind.Question, primary: "Replace", secondary: "Cancel"))
+        if (replacing > 0 && !await Message.Show(L.T("StringsWindow.ReplaceOtherLanguagesFiles"),
+                L.T("StringsWindow.WillReplacedCopyThese", L.T("Count.File", replacing), folder),
+                MessageKind.Question, primary: L.T("Common.Replace"), secondary: L.T("Common.Cancel")))
             return false;
 
         try
@@ -688,15 +687,15 @@ public partial class StringsWindow : Window, IMessageHost
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            await ShowMessage("The strings could not be saved", ex.Message, MessageKind.Error);
+            await ShowMessage(L.T("StringsWindow.StringsCouldNotSaved"), ex.Message, MessageKind.Error);
             return false;
         }
         _path = path;
         _edited = false;
         UpdateHeader();
         string savedText = copies.Count > 0
-            ? $"Saved {Path.GetFileName(path)} and {copies.Count} {(copies.Count == 1 ? "copy" : "copies")} for the other languages."
-            : $"Saved {Path.GetFileName(path)}.";
+            ? L.T("StringsWindow.SavedCopies", Path.GetFileName(path), copies.Count)
+            : L.T("StringsWindow.Saved", Path.GetFileName(path));
         if (ProjectPrompts.ShouldOffer(path)) _ = ProjectPrompts.OfferAsync(path, Message, savedText);
         else _ = Message.Show(null, savedText, MessageKind.Info, autoClose: true);
         return true;
@@ -707,8 +706,8 @@ public partial class StringsWindow : Window, IMessageHost
         if (Strings() is not { } strings) return;
         var dialog = new SaveFileDialog
         {
-            Title = "Export strings as CSV",
-            Filter = "Strings CSV (*.csv)|*.csv",
+            Title = L.T("StringsWindow.ExportStringsCSV"),
+            Filter = L.T("StringsWindow.StringsCSVCsvCsv"),
             FileName = $"{StringsLanguage.Handle}.csv",
             InitialDirectory = Path.GetDirectoryName(_path ?? _sourcePath) ?? "",
         };
@@ -720,10 +719,10 @@ public partial class StringsWindow : Window, IMessageHost
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            _ = ShowMessage("The CSV could not be saved", ex.Message, MessageKind.Error);
+            _ = ShowMessage(L.T("StringsWindow.CSVCouldNotSaved"), ex.Message, MessageKind.Error);
             return;
         }
-        _ = Message.Show(null, $"Exported {Path.GetFileName(dialog.FileName)}.", MessageKind.Info, autoClose: true);
+        _ = Message.Show(null, L.T("StringsWindow.Exported", Path.GetFileName(dialog.FileName)), MessageKind.Info, autoClose: true);
     }
 
     // ---------------------------------------------------------------- window
@@ -732,8 +731,8 @@ public partial class StringsWindow : Window, IMessageHost
     {
         if (!_edited || _closeConfirmed) return;
         e.Cancel = true;
-        if (await Message.Show("Close without saving?", "Your changes to these strings haven't been saved.",
-                MessageKind.Question, primary: "Close without saving", secondary: "Keep editing"))
+        if (await Message.Show(L.T("StringsWindow.CloseWithoutSaving"), L.T("StringsWindow.YourChangesTheseStrings"),
+                MessageKind.Question, primary: L.T("StringsWindow.CloseWithoutSaving2"), secondary: L.T("StringsWindow.KeepEditing")))
         {
             _closeConfirmed = true;
             Close();
@@ -759,5 +758,5 @@ public partial class StringsWindow : Window, IMessageHost
         e.Handled = true;
     }
 
-    public Task ShowMessage(string? title, string message, MessageKind kind) => Message.Show(title, message, kind, primary: "OK");
+    public Task ShowMessage(string? title, string message, MessageKind kind) => Message.Show(title, message, kind, primary: L.T("Common.OK"));
 }

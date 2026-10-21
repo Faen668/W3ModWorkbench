@@ -10,6 +10,7 @@ using W3ModWorkbench.Core.Strings;
 using W3ModWorkbench.Core.Textures;
 using W3ModWorkbench.ViewModels;
 using W3ModWorkbench.Core.Projects;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -43,11 +44,11 @@ public partial class MainWindow
         try
         {
             Clipboard.SetText(string.Join(Environment.NewLine, list));
-            SetStatus(list.Count == 1 ? $"Copied {list[0]}" : $"Copied {list.Count:N0} {what}");
+            SetStatus(list.Count == 1 ? L.T("MainWindow.Copied", list[0]) : L.T("MainWindow.Copied2", list.Count, what));
         }
         catch (System.Runtime.InteropServices.COMException)
         {
-            SetStatus("The clipboard is in use by another program. Try again.");
+            SetStatus(L.T("MainWindow.ClipboardUseAnotherProgram"));
         }
     }
 
@@ -66,14 +67,14 @@ public partial class MainWindow
         var items = Highlighted();
         if (items.Count == 0) return;
         if (!ShellReveal.Show(items.Select(i => DiskLocation(i.Entry))))
-            ShowError("It isn't on disk any more.\n\nThe file or the archive it's in was moved or deleted after it was opened.");
+            ShowError(L.T("MainWindow.IsntDiskAnyMore"));
     }
 
     private void GridRevealExtracted_Click(object sender, RoutedEventArgs e)
     {
         var paths = Highlighted().Select(i => _extracted.GetValueOrDefault(i.Entry)).OfType<string>().ToList();
         if (paths.Count > 0 && !ShellReveal.Show(paths))
-            ShowError("The extracted copy isn't there any more.\n\nIt was moved or deleted after it was extracted. Extract it again to get a new one.");
+            ShowError(L.T("MainWindow.ExtractedCopyIsntThere"));
     }
 
     private void TreeReveal_Click(object sender, RoutedEventArgs e)
@@ -82,7 +83,7 @@ public partial class MainWindow
         while (node.Parent is not null) node = node.Parent;
         var archives = node.IsGroup ? node.Children.Select(c => c.Archive) : [node.Archive];
         if (!ShellReveal.Show(archives.Select(a => a.FilePath)))
-            ShowError("It isn't on disk any more.\n\nIt was moved or deleted after it was opened.");
+            ShowError(L.T("MainWindow.IsntDiskAnyMore2"));
     }
 
     // ---------------------------------------------------------------- comparing
@@ -112,7 +113,7 @@ public partial class MainWindow
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
         {
-            ShowError($"The files could not be read.\n\n{ex.Message}");
+            ShowError(L.T("MainWindow.FilesCouldNotRead", ex.Message));
             return;
         }
 
@@ -123,12 +124,12 @@ public partial class MainWindow
         }
 
         int first = a.AsSpan().CommonPrefixLength(b);
-        string sizes = a.Length == b.Length ? $"Both are {Format.Bytes(a.Length)}." : $"{older.BundleName} has {Format.Bytes(a.Length)} and {newer.BundleName} {Format.Bytes(b.Length)}.";
+        string sizes = a.Length == b.Length ? L.T("MainWindow.Both", Format.Bytes(a.Length)) : L.T("MainWindow.Has2", older.BundleName, Format.Bytes(a.Length), newer.BundleName, Format.Bytes(b.Length));
         if (first == a.Length && a.Length == b.Length)
-            await ShowMessage($"{older.Name} and {newer.Name} are the same", $"{sizes} Every byte matches.", MessageKind.Info);
+            await ShowMessage(L.T("MainWindow.Same", older.Name, newer.Name), L.T("MainWindow.EveryByteMatches", sizes), MessageKind.Info);
         else
-            await ShowMessage($"{older.Name} and {newer.Name} are different",
-                $"{sizes} They first differ at byte {first:N0} (0x{first:X}).\n\nThey aren't text, so the differences can't be shown line by line. Extract both to look at them in a tool for this kind of file.",
+            await ShowMessage(L.T("MainWindow.Different", older.Name, newer.Name),
+                L.T("MainWindow.TheyFirstDifferByte", sizes, first),
                 MessageKind.Info);
     }
 
@@ -154,7 +155,7 @@ public partial class MainWindow
     public void Reveal(EntryItem item)
     {
         if (!ShellReveal.Show([DiskLocation(item.Entry)]))
-            ShowError("It isn't on disk any more.\n\nIt was moved or deleted after it was opened.");
+            ShowError(L.T("MainWindow.IsntDiskAnyMore2"));
     }
 
     /// <summary>A SHA-256 of a file's contents, to tell copies apart.</summary>
@@ -167,11 +168,11 @@ public partial class MainWindow
         var highlighted = Highlighted();
         var items = highlighted.Count > 1 ? highlighted : _shown;
         if (items.Count == 0) return;
-        string name = FolderTree.SelectedItem is FolderNode node ? node.DisplayName : "Files";
+        string name = FolderTree.SelectedItem is FolderNode node ? node.DisplayName : L.T("Common.Files");
         var dialog = new SaveFileDialog
         {
-            Title = items == highlighted ? "Save the highlighted files as a list" : "Save the files shown as a list",
-            Filter = "CSV, for Excel and other spreadsheets (*.csv)|*.csv",
+            Title = items == highlighted ? L.T("MainWindow.SaveHighlightedFilesList") : L.T("MainWindow.SaveFilesShownList"),
+            Filter = L.T("MainWindow.CSVExcelOtherSpreadsheets"),
             FileName = string.Concat(name.Split(Path.GetInvalidFileNameChars())) + ".csv",
             InitialDirectory = Directory.Exists(OutputBox.Text.Trim()) ? OutputBox.Text.Trim() : "",
         };
@@ -188,11 +189,11 @@ public partial class MainWindow
             // with a BOM, so Excel reads accented names correctly
             FileSafety.CheckWrite(dialog.FileName);
             File.WriteAllText(dialog.FileName, csv.ToString(), new UTF8Encoding(true));
-            SetStatus($"Saved a list of {Format.Count(items.Count, "file")} to {dialog.FileName}");
+            SetStatus(L.T("MainWindow.SavedList", L.T("Count.File", items.Count), dialog.FileName));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            ShowError($"The list could not be saved.\n\n{ex.Message}");
+            ShowError(L.T("MainWindow.ListCouldNotSaved", ex.Message));
         }
 
         static string Quote(string field) =>
@@ -209,14 +210,14 @@ public partial class MainWindow
         GridCopiesItem.Visibility = items.Count == 1 ? Visibility.Visible : Visibility.Collapsed;
         GridRevealExtractedItem.Visibility = items.Any(i => _extracted.ContainsKey(i.Entry)) ? Visibility.Visible : Visibility.Collapsed;
         bool loose = items.Count > 0 && items.All(i => i.Entry is LooseScriptEntry or StringsEntry);
-        GridRevealItem.Header = loose ? "Show in Explorer" : items.Select(i => i.Entry.Archive).Distinct().Count() > 1 ? "Show their archives in Explorer" : $"Show {ArchiveWord(items.FirstOrDefault())} in Explorer";
+        GridRevealItem.Header = loose ? L.T("Common.ShowExplorer") : items.Select(i => i.Entry.Archive).Distinct().Count() > 1 ? L.T("MainWindow.ShowTheirArchivesExplorer") : L.T("MainWindow.ShowExplorer", ArchiveWord(items.FirstOrDefault()));
     }
 
     private static string ArchiveWord(EntryItem? item) => item?.Entry.Archive switch
     {
-        TextureCacheArchive => "the texture cache",
-        ScriptArchive => "the compiled script",
+        TextureCacheArchive => L.T("MainWindow.TextureCache"),
+        ScriptArchive => L.T("MainWindow.CompiledScript"),
         null => "it",
-        _ => "the bundle",
+        _ => L.T("MainWindow.Bundle"),
     };
 }

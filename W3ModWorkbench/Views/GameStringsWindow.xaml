@@ -1,8 +1,9 @@
 <Window x:Class="W3ModWorkbench.GameStringsWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:l="clr-namespace:W3ModWorkbench.Localisation"
         xmlns:local="clr-namespace:W3ModWorkbench"
-        Title="Game strings" Icon="pack://application:,,,/W3ModWorkbench;component/Assets/app.ico"
+        Title="{l:T GameStringsWindow.GameStrings}" Icon="pack://application:,,,/W3ModWorkbench;component/Assets/app.ico"
         Width="1180" Height="760" MinWidth="760" MinHeight="420"
         WindowStartupLocation="CenterOwner" PreviewKeyDown="Window_PreviewKeyDown">
     <Window.Resources>
@@ -61,37 +62,37 @@
 
             <DockPanel Margin="0,0,0,10">
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
-                    <TextBlock Text="Read from" VerticalAlignment="Center" Margin="0,0,8,0" />
+                    <TextBlock Text="{l:T GameStringsWindow.Read}" VerticalAlignment="Center" Margin="0,0,8,0" />
                     <ComboBox x:Name="SourceBox" Width="190" Margin="0,0,16,0" SelectionChanged="SourceBox_SelectionChanged"
-                              ToolTip="The game's .w3strings files, or REDkit's strings database, which also has each key's name, the voiceover and the scene or resource a string is used in">
-                        <ComboBoxItem x:Name="GameItem" Content="Game files (.w3strings)" Tag="Game" />
-                        <ComboBoxItem x:Name="RedkitItem" Content="REDkit database" Tag="REDkit" />
-                        <ComboBoxItem x:Name="FileItem" Content="Database file…" Tag="File" />
+                              ToolTip="{l:T GameStringsWindow.GamesW3stringsFilesREDkits}">
+                        <ComboBoxItem x:Name="GameItem" Content="{l:T GameStringsWindow.GameFilesW3strings}" Tag="Game" />
+                        <ComboBoxItem x:Name="RedkitItem" Content="{l:T GameStringsWindow.REDkitDatabase}" Tag="REDkit" />
+                        <ComboBoxItem x:Name="FileItem" Content="{l:T GameStringsWindow.DatabaseFile}" Tag="File" />
                     </ComboBox>
-                    <TextBlock Text="Language" VerticalAlignment="Center" Margin="0,0,8,0" />
+                    <TextBlock Text="{l:T Common.Language}" VerticalAlignment="Center" Margin="0,0,8,0" />
                     <ComboBox x:Name="LanguageBox" Width="90" SelectionChanged="LanguageBox_SelectionChanged" />
                 </StackPanel>
                 <StackPanel VerticalAlignment="Center">
-                    <TextBlock Text="Game strings" FontSize="16" FontWeight="SemiBold" />
+                    <TextBlock Text="{l:T GameStringsWindow.GameStrings}" FontSize="16" FontWeight="SemiBold" />
                     <TextBlock x:Name="DetailText" Opacity="0.65" TextTrimming="CharacterEllipsis" Margin="0,2,0,0"
-                               Text="Search the text, IDs and keys of the game's own strings, and DLC and mods" />
+                               Text="{l:T GameStringsWindow.SearchTextIDsKeys}" />
                 </StackPanel>
             </DockPanel>
 
             <DockPanel Grid.Row="1" Margin="0,0,0,10" LastChildFill="True">
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
-                    <CheckBox x:Name="WholeWordCheck" MinWidth="0" Content="Whole words" Checked="Option_Changed" Unchecked="Option_Changed"
-                              ToolTip="Only match words as they're written, so 'ale' doesn't find 'scale'" />
-                    <CheckBox x:Name="ModsCheck" Margin="14,0,0,0" MinWidth="0" Content="Include DLC and mods" IsChecked="True"
+                    <CheckBox x:Name="WholeWordCheck" MinWidth="0" Content="{l:T GameStringsWindow.WholeWords}" Checked="Option_Changed" Unchecked="Option_Changed"
+                              ToolTip="{l:T GameStringsWindow.OnlyMatchWordsTheyre}" />
+                    <CheckBox x:Name="ModsCheck" Margin="14,0,0,0" MinWidth="0" Content="{l:T GameStringsWindow.IncludeDLCMods}" IsChecked="True"
                               Checked="Source_Changed" Unchecked="Source_Changed"
-                              ToolTip="Also read the strings of the DLC and the mods you have installed" />
+                              ToolTip="{l:T GameStringsWindow.AlsoReadStringsDLC}" />
                 </StackPanel>
                 <Grid>
                     <TextBox x:Name="SearchBox" Padding="32,6,8,6" VerticalContentAlignment="Center" TextChanged="SearchBox_TextChanged" />
                     <TextBlock Style="{StaticResource IconText}" Text="&#xE721;" FontSize="13" Margin="11,0,0,0" Opacity="0.6"
                                HorizontalAlignment="Left" IsHitTestVisible="False" />
                     <TextBlock x:Name="SearchPlaceholder" Margin="33,0,0,0" Opacity="0.55" VerticalAlignment="Center" IsHitTestVisible="False"
-                               Text="Search by text, ID (2115940000), or key (name or hash)  (Ctrl+F)" />
+                               Text="{l:T GameStringsWindow.SearchTextIDKey}" />
                 </Grid>
             </DockPanel>
 
@@ -103,30 +104,30 @@
                           CellStyle="{StaticResource ResultCell}" MouseDoubleClick="Grid_MouseDoubleClick">
                     <DataGrid.ContextMenu>
                         <ContextMenu>
-                            <MenuItem Header="Copy ID" Click="CopyId_Click" />
-                            <MenuItem x:Name="CopyKeyItem" Header="Copy key" Click="CopyKey_Click" />
-                            <MenuItem Header="Copy text" Click="CopyText_Click" />
-                            <MenuItem Header="Copy as GetLocStringById(…)" Click="CopyScript_Click" />
-                            <MenuItem x:Name="CopyKeyScriptItem" Header="Copy as GetLocStringByKeyExt(…)" Click="CopyKeyScript_Click" />
-                            <MenuItem Header="Copy as a strings CSV line" Click="CopyCsv_Click" />
+                            <MenuItem Header="{l:T GameStringsWindow.CopyID}" Click="CopyId_Click" />
+                            <MenuItem x:Name="CopyKeyItem" Header="{l:T GameStringsWindow.CopyKey}" Click="CopyKey_Click" />
+                            <MenuItem Header="{l:T GameStringsWindow.CopyText}" Click="CopyText_Click" />
+                            <MenuItem Header="{l:T GameStringsWindow.CopyGetLocStringById}" Click="CopyScript_Click" />
+                            <MenuItem x:Name="CopyKeyScriptItem" Header="{l:T GameStringsWindow.CopyGetLocStringByKeyExt}" Click="CopyKeyScript_Click" />
+                            <MenuItem Header="{l:T GameStringsWindow.CopyStringsCSVLine}" Click="CopyCsv_Click" />
                         </ContextMenu>
                     </DataGrid.ContextMenu>
                     <DataGrid.Columns>
-                        <DataGridTextColumn Header="ID" Binding="{Binding Id}" Width="110" ElementStyle="{StaticResource CodeCellText}" />
-                        <DataGridTextColumn x:Name="KeyColumn" Header="Key hash" Binding="{Binding Key}" Width="90" ElementStyle="{StaticResource CodeCellText}" />
-                        <DataGridTextColumn Header="Text" Binding="{Binding Text}" Width="*" ElementStyle="{StaticResource CellText}" />
-                        <DataGridTextColumn x:Name="KindColumn" Header="Kind" Binding="{Binding Kind}" Width="110" ElementStyle="{StaticResource CellText}" Visibility="Collapsed" />
-                        <DataGridTextColumn x:Name="UsedInColumn" Header="Used in" Binding="{Binding UsedIn}" Width="230" ElementStyle="{StaticResource CellText}" Visibility="Collapsed" />
-                        <DataGridTextColumn x:Name="VoiceoverColumn" Header="Voiceover" Binding="{Binding Voiceover}" Width="150" ElementStyle="{StaticResource CodeCellText}" Visibility="Collapsed" />
-                        <DataGridTextColumn Header="From" Binding="{Binding Source}" Width="150" ElementStyle="{StaticResource CellText}" />
+                        <DataGridTextColumn Header="{l:T GameStringsWindow.ID}" Binding="{Binding Id}" Width="110" ElementStyle="{StaticResource CodeCellText}" />
+                        <DataGridTextColumn x:Name="KeyColumn" Header="{l:T GameStringsWindow.KeyHash}" Binding="{Binding Key}" Width="90" ElementStyle="{StaticResource CodeCellText}" />
+                        <DataGridTextColumn Header="{l:T Common.Text}" Binding="{Binding Text}" Width="*" ElementStyle="{StaticResource CellText}" />
+                        <DataGridTextColumn x:Name="KindColumn" Header="{l:T Common.Kind}" Binding="{Binding Kind}" Width="110" ElementStyle="{StaticResource CellText}" Visibility="Collapsed" />
+                        <DataGridTextColumn x:Name="UsedInColumn" Header="{l:T GameStringsWindow.Used}" Binding="{Binding UsedIn}" Width="230" ElementStyle="{StaticResource CellText}" Visibility="Collapsed" />
+                        <DataGridTextColumn x:Name="VoiceoverColumn" Header="{l:T GameStringsWindow.Voiceover}" Binding="{Binding Voiceover}" Width="150" ElementStyle="{StaticResource CodeCellText}" Visibility="Collapsed" />
+                        <DataGridTextColumn Header="{l:T Common.From}" Binding="{Binding Source}" Width="150" ElementStyle="{StaticResource CellText}" />
                     </DataGrid.Columns>
                 </DataGrid>
             </Border>
 
             <DockPanel Grid.Row="3" Margin="2,8,2,0">
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-                    <Button x:Name="CopyIdButton" Padding="12,4" Click="CopyId_Click" IsEnabled="False" Content="Copy ID" />
-                    <Button x:Name="CopyScriptButton" Margin="6,0,0,0" Padding="12,4" Click="CopyScript_Click" IsEnabled="False" Content="Copy GetLocStringById" />
+                    <Button x:Name="CopyIdButton" Padding="12,4" Click="CopyId_Click" IsEnabled="False" Content="{l:T GameStringsWindow.CopyID}" />
+                    <Button x:Name="CopyScriptButton" Margin="6,0,0,0" Padding="12,4" Click="CopyScript_Click" IsEnabled="False" Content="{l:T GameStringsWindow.CopyGetLocStringById2}" />
                 </StackPanel>
                 <TextBlock x:Name="StatusText" Opacity="0.75" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
             </DockPanel>

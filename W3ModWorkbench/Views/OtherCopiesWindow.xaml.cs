@@ -6,6 +6,7 @@ using System.Windows.Media;
 using W3ModWorkbench.Core;
 using W3ModWorkbench.Core.LoadOrder;
 using W3ModWorkbench.ViewModels;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -24,8 +25,8 @@ public sealed class CopyRow(EntryItem item, int rank, OtherCopiesWindow.Place pl
     public string SizeText => $"{item.SizeText}  ·  {item.CompressionText}";
 
     public Visibility CompareVisibility => highlighted ? Visibility.Collapsed : Visibility.Visible;
-    public string CompareTip => item.IsPreviewable ? "Open the two side by side with the differences marked" : "Compare the two byte for byte";
-    public string RevealTip => $"Show {item.Entry.Archive.Name} in Explorer";
+    public string CompareTip => item.IsPreviewable ? L.T("OtherCopiesWindow.OpenTwoSideSide") : L.T("OtherCopiesWindow.CompareTwoByteByte");
+    public string RevealTip => L.T("OtherCopiesWindow.ShowExplorer", item.Entry.Archive.Name);
 
     /// <summary>The same as the highlighted copy: null while it's being read, or when it couldn't be.</summary>
     private bool? _same;
@@ -40,10 +41,10 @@ public sealed class CopyRow(EntryItem item, int rank, OtherCopiesWindow.Place pl
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(SameBrush)));
     }
 
-    public string SameText => highlighted ? "The highlighted copy"
-        : _failed ? "Couldn't be read"
-        : _same is null ? "Reading…"
-        : _same.Value ? "Same content as the highlighted copy" : "Different content";
+    public string SameText => highlighted ? L.T("OtherCopiesWindow.HighlightedCopy")
+        : _failed ? L.T("OtherCopiesWindow.CouldntRead")
+        : _same is null ? L.T("OtherCopiesWindow.Reading")
+        : _same.Value ? L.T("OtherCopiesWindow.SameContentHighlightedCopy") : L.T("OtherCopiesWindow.DifferentContent");
 
     public string SameGlyph => highlighted ? "" : _same is null ? "" : _same.Value ? "" : "";
 
@@ -82,10 +83,9 @@ public partial class OtherCopiesWindow : Window, IMessageHost
 
         int others = rows.Count - 1;
         Summary.Text = others == 0
-            ? "This is the only copy in what's open. The asset browser (Tools > Asset Browser) looks in every installed mod, the DLC and the game."
-            : $"{Format.Count(others, "other copy", "other copies")} at the same path. Files at the same path replace each other: the game uses the copy from whatever loads first, and the rest are ignored.";
-        OrderNote.Text = (settings.Count > 0 ? "Load order from mods.settings: " : "mods.settings wasn't found, so mods are in folder name order: ")
-            + "mod.io mods, then DLC, then mods by priority (unlisted ones after, by name), then the game's own files. The same order the load order analyser uses. Only open archives are listed.";
+            ? L.T("OtherCopiesWindow.OnlyCopyWhatsOpen")
+            : L.T("OtherCopiesWindow.SamePathFilesSame", L.T("Count.OtherCopy", others));
+        OrderNote.Text = L.T("OtherCopiesWindow.ModIoModsThen", (settings.Count > 0 ? L.T("OtherCopiesWindow.LoadOrderModsSettings") : L.T("OtherCopiesWindow.ModsSettingsWasntFound")));
 
         Loaded += async (_, _) => await CompareContentsAsync(rows);
     }
@@ -96,7 +96,7 @@ public partial class OtherCopiesWindow : Window, IMessageHost
         new OtherCopiesWindow(owner, item, copies).Standalone(owner).Show();
     }
 
-    public Task ShowMessage(string? title, string message, MessageKind kind) => Message.Show(title, message, kind, primary: "OK");
+    public Task ShowMessage(string? title, string message, MessageKind kind) => Message.Show(title, message, kind, primary: L.T("Common.OK"));
 
     private const int OutsideGroup = 4;
 
@@ -114,15 +114,15 @@ public partial class OtherCopiesWindow : Window, IMessageHost
             {
                 string mod = parts[i + 1];
                 return new Place(2, settings.TryGetValue(mod, out var s) ? s.Priority : null, mod,
-                    settings.TryGetValue(mod, out var e) && !e.Enabled ? "mod, switched off" : "mod");
+                    settings.TryGetValue(mod, out var e) && !e.Enabled ? L.T("OtherCopiesWindow.ModSwitchedOff") : "mod");
             }
             if (part.Equals("dlc", StringComparison.OrdinalIgnoreCase) && i + 1 < parts.Length - 1)
                 return new Place(1, null, parts[i + 1], "DLC");
             if (part.Equals("content", StringComparison.OrdinalIgnoreCase) && i + 1 < parts.Length - 1 && GameLocator.Resolve(null) is { } game
                 && full.StartsWith(Path.GetFullPath(game).TrimEnd('\\') + "\\", StringComparison.OrdinalIgnoreCase))
-                return new Place(3, null, parts[i + 1], "the game");
+                return new Place(3, null, parts[i + 1], L.T("OtherCopiesWindow.Game"));
         }
-        return new Place(OutsideGroup, null, ArchiveEntry.OwnerOf(full), "outside the game folder");
+        return new Place(OutsideGroup, null, ArchiveEntry.OwnerOf(full), L.T("OtherCopiesWindow.OutsideGameFolder"));
     }
 
     /// <summary>Reads every copy and says whether it's the same as the highlighted one.</summary>

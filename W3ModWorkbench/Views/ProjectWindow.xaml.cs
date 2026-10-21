@@ -5,6 +5,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using Microsoft.Win32;
 using W3ModWorkbench.Core.Projects;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -46,20 +47,20 @@ public partial class ProjectWindow : Window
             _rootTouched = root is not null;
             NameBox.Text = name ?? "";
             ModBox.Text = WorkbenchProject.ModFolderFor(NameBox.Text);
-            ScriptsBox.Text = scripts ?? (root is not null ? WorkbenchProject.DetectScriptsFolder(root) : null) ?? "scripts";
+            ScriptsBox.Text = scripts ?? (root is not null ? WorkbenchProject.DetectScriptsFolder(root) : null) ?? L.T("ProjectWindow.Scripts");
             _scriptsTouched = scripts is not null;
             FilesPanel.Visibility = Visibility.Collapsed;
         }
         else
         {
-            Title = "Project properties";
+            Title = L.T("ProjectWindow.ProjectProperties");
             HeadingText.Text = existing.Name;
             IntroText.Text = existing.FilePath;
-            OkButton.Content = "Save";
+            OkButton.Content = L.T("Common.Save");
             RootBox.Text = existing.Root;
             RootBox.IsReadOnly = true;
             RootBrowse.Visibility = Visibility.Collapsed;
-            RootHint.Text = "Where the .w3bench file is. To move the project, move its folder and open the .w3bench file again.";
+            RootHint.Text = L.T("ProjectWindow.WhereW3benchFileMove");
             NameBox.Text = existing.Name;
             ModBox.Text = existing.ModFolderName;
             _modTouched = true;
@@ -107,7 +108,7 @@ public partial class ProjectWindow : Window
         if (sender == RootBox && !_scriptsTouched && _existing is null)
         {
             _setting = true;
-            ScriptsBox.Text = FullRoot() is { } root ? WorkbenchProject.DetectScriptsFolder(root) ?? "scripts" : "scripts";
+            ScriptsBox.Text = FullRoot() is { } root ? WorkbenchProject.DetectScriptsFolder(root) ?? L.T("ProjectWindow.Scripts") : L.T("ProjectWindow.Scripts");
             _setting = false;
         }
         Validate();
@@ -129,14 +130,14 @@ public partial class ProjectWindow : Window
     {
         string? problem = null;
         string mod = WorkbenchProject.ModFolderFor(ModBox.Text.Trim().Length > 0 ? ModBox.Text : NameBox.Text);
-        ModHint.Text = $"Build makes {mod}, ready to install in the game's mods folder.";
-        if (NameBox.Text.Trim().Length == 0) problem = "Give the project a name.";
-        else if (FullRoot() is not { } root) problem = "Choose the project's folder.";
+        ModHint.Text = L.T("ProjectWindow.BuildMakesReadyInstall", mod);
+        if (NameBox.Text.Trim().Length == 0) problem = L.T("ProjectWindow.GiveProjectName");
+        else if (FullRoot() is not { } root) problem = L.T("ProjectWindow.ChooseProjectsFolder");
         else if (_existing is null && FileSafety.Protection(Path.Combine(root, "_")) is not null)
-            problem = "That folder is in the game's folders (or REDkit's), where nothing is written. Choose a folder of your own, such as Documents.";
-        else if (!ScriptsInside(root, out _)) problem = "The scripts folder has to be inside the project folder.";
+            problem = L.T("ProjectWindow.FolderGamesFoldersREDkits");
+        else if (!ScriptsInside(root, out _)) problem = L.T("ProjectWindow.ScriptsFolderHasInside");
         else if (_existing is null && Directory.Exists(root) && WorkbenchProject.FileIn(root) is { } there)
-            problem = $"{Path.GetFileName(there)} is in that folder already. Open it from Project > Open project.";
+            problem = L.T("ProjectWindow.FolderAlreadyOpenProject", Path.GetFileName(there));
         ProblemText.Text = problem ?? "";
         OkButton.IsEnabled = problem is null;
     }
@@ -164,7 +165,7 @@ public partial class ProjectWindow : Window
 
     private void BrowseRoot_Click(object sender, RoutedEventArgs e)
     {
-        var dialog = new OpenFolderDialog { Title = "Choose the mod's folder", InitialDirectory = Directory.Exists(RootText) ? RootText : "" };
+        var dialog = new OpenFolderDialog { Title = L.T("ProjectWindow.ChooseModsFolder"), InitialDirectory = Directory.Exists(RootText) ? RootText : "" };
         if (dialog.ShowDialog(this) != true) return;
         RootBox.Text = dialog.FolderName;
         if (NameBox.Text.Trim().Length == 0) NameBox.Text = Path.GetFileName(dialog.FolderName.TrimEnd('\\'));
@@ -173,7 +174,7 @@ public partial class ProjectWindow : Window
     private void BrowseScripts_Click(object sender, RoutedEventArgs e)
     {
         if (FullRoot() is not { } root) return;
-        var dialog = new OpenFolderDialog { Title = "Choose the scripts folder", InitialDirectory = Directory.Exists(root) ? root : "" };
+        var dialog = new OpenFolderDialog { Title = L.T("ProjectWindow.ChooseScriptsFolder"), InitialDirectory = Directory.Exists(root) ? root : "" };
         if (dialog.ShowDialog(this) != true) return;
         string relative = Path.GetRelativePath(root, dialog.FolderName);
         ScriptsBox.Text = relative.Replace('\\', '/');
@@ -184,9 +185,9 @@ public partial class ProjectWindow : Window
         string start = FullRoot() is { } root ? root : "";
         var dialog = new SaveFileDialog
         {
-            Title = "Where should the compiled scripts go?",
+            Title = L.T("ProjectWindow.WhereShouldCompiledScripts"),
             FileName = "precompiled.rsblob",
-            Filter = "Compiled scripts (*.rsblob)|*.rsblob",
+            Filter = L.T("ProjectWindow.CompiledScriptsRsblobRsblob"),
             InitialDirectory = Directory.Exists(start) ? start : "",
             OverwritePrompt = false,
         };
@@ -204,14 +205,14 @@ public partial class ProjectWindow : Window
 
     private void AddFiles_Click(object sender, RoutedEventArgs e)
     {
-        var dialog = new OpenFileDialog { Title = "Add files to the project", Multiselect = true, InitialDirectory = Directory.Exists(RootText) ? RootText : "" };
+        var dialog = new OpenFileDialog { Title = L.T("ProjectWindow.AddFilesProject"), Multiselect = true, InitialDirectory = Directory.Exists(RootText) ? RootText : "" };
         if (dialog.ShowDialog(this) != true) return;
         foreach (string file in dialog.FileNames) AddMember(file);
     }
 
     private void AddFolder_Click(object sender, RoutedEventArgs e)
     {
-        var dialog = new OpenFolderDialog { Title = "Add a folder to the project", InitialDirectory = Directory.Exists(RootText) ? RootText : "" };
+        var dialog = new OpenFolderDialog { Title = L.T("ProjectWindow.AddFolderProject"), InitialDirectory = Directory.Exists(RootText) ? RootText : "" };
         if (dialog.ShowDialog(this) != true) return;
         AddMember(dialog.FolderName);
     }

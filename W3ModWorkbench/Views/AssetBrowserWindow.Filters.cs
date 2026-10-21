@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Controls;
 using W3ModWorkbench.Core;
 using W3ModWorkbench.ViewModels;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -19,25 +20,25 @@ public partial class AssetBrowserWindow
     /// </summary>
     private static readonly Dictionary<string, string> FreeDlcNames = new(StringComparer.OrdinalIgnoreCase)
     {
-        ["dlc1"] = "Temerian Armor Set",
-        ["dlc2"] = "Beard and Hairstyle Set",
-        ["dlc3"] = "Contract: Missing Miners",
-        ["dlc4"] = "Alternative look for Yennefer",
-        ["dlc5"] = "Nilfgaardian Armor Set",
-        ["dlc6"] = "Alternative look for Triss",
-        ["dlc7"] = "Fool's Gold",
-        ["dlc8"] = "Ballad Heroes Gwent cards",
-        ["dlc9"] = "New Game +",
-        ["dlc10"] = "Scavenger Hunt: Wolf School Gear",
-        ["dlc11"] = "Alternative look for Ciri",
-        ["dlc12"] = "Contract: Skellige's Most Wanted",
-        ["dlc13"] = "Elite Crossbow Set",
-        ["dlc14"] = "Skellige Armor Set",
-        ["dlc15"] = "Where the Cat and Wolf Play…",
-        ["dlc16"] = "New Finisher Animations",
-        ["dlc17"] = "Dandelion's Netflix outfit",
-        ["dlc18"] = "Netflix armour and swords for Geralt",
-        ["dlc20"] = "Netflix Nilfgaardian armour",
+        ["dlc1"] = L.T("AssetBrowserWindow.TemerianArmorSet"),
+        ["dlc2"] = L.T("AssetBrowserWindow.BeardHairstyleSet"),
+        ["dlc3"] = L.T("AssetBrowserWindow.ContractMissingMiners"),
+        ["dlc4"] = L.T("AssetBrowserWindow.AlternativeLookYennefer"),
+        ["dlc5"] = L.T("AssetBrowserWindow.NilfgaardianArmorSet"),
+        ["dlc6"] = L.T("AssetBrowserWindow.AlternativeLookTriss"),
+        ["dlc7"] = L.T("AssetBrowserWindow.FoolsGold"),
+        ["dlc8"] = L.T("AssetBrowserWindow.BalladHeroesGwentCards"),
+        ["dlc9"] = L.T("AssetBrowserWindow.NewGame"),
+        ["dlc10"] = L.T("AssetBrowserWindow.ScavengerHuntWolfSchool"),
+        ["dlc11"] = L.T("AssetBrowserWindow.AlternativeLookCiri"),
+        ["dlc12"] = L.T("AssetBrowserWindow.ContractSkelligesMostWanted"),
+        ["dlc13"] = L.T("AssetBrowserWindow.EliteCrossbowSet"),
+        ["dlc14"] = L.T("AssetBrowserWindow.SkelligeArmorSet"),
+        ["dlc15"] = L.T("AssetBrowserWindow.WhereCatWolfPlay"),
+        ["dlc16"] = L.T("AssetBrowserWindow.NewFinisherAnimations"),
+        ["dlc17"] = L.T("AssetBrowserWindow.DandelionsNetflixOutfit"),
+        ["dlc18"] = L.T("AssetBrowserWindow.NetflixArmourSwordsGeralt"),
+        ["dlc20"] = L.T("AssetBrowserWindow.NetflixNilfgaardianArmour"),
     };
 
     private const string BaseSource = "base";
@@ -53,10 +54,10 @@ public partial class AssetBrowserWindow
     /// <summary>A part of the game in words: "Blood and Wine", "dlc5: Nilfgaardian Armor Set".</summary>
     private static string SourceName(string source) => source.ToLowerInvariant() switch
     {
-        BaseSource => "Base game",
-        "ep1" => "Hearts of Stone",
-        "bob" => "Blood and Wine",
-        FreeDlcShared => "Free DLC, shared files",
+        BaseSource => L.T("AssetBrowserWindow.BaseGame"),
+        "ep1" => L.T("AssetBrowserWindow.HeartsStone"),
+        "bob" => L.T("AssetBrowserWindow.BloodWine"),
+        FreeDlcShared => L.T("AssetBrowserWindow.FreeDLCSharedFiles"),
         _ => FreeDlcNames.TryGetValue(source, out string? name) ? $"{source}: {name}" : source,
     };
 
@@ -146,9 +147,9 @@ public partial class AssetBrowserWindow
     private List<string> DescribeExtra()
     {
         var on = new List<string>();
-        if (RegexMode && _nameRegex is not null) on.Add($"name /{SearchBox.Text}/");
-        if (FolderBox.Text.Trim() is { Length: > 0 } folder) on.Add(RegexMode ? $"folder /{folder}/" : $"folder \"{folder}\"");
-        if (_hiddenSources.Count > 0) on.Add($"{_hiddenSources.Count} part{(_hiddenSources.Count == 1 ? "" : "s")} of the game hidden");
+        if (RegexMode && _nameRegex is not null) on.Add(L.T("AssetBrowserWindow.Name", SearchBox.Text));
+        if (FolderBox.Text.Trim() is { Length: > 0 } folder) on.Add(RegexMode ? L.T("AssetBrowserWindow.Folder", folder) : L.T("AssetBrowserWindow.Folder2", folder));
+        if (_hiddenSources.Count > 0) on.Add(L.T("AssetBrowserWindow.PartsHidden", _hiddenSources.Count));
         on.AddRange(DescribeEab());
         return on;
     }
@@ -183,7 +184,7 @@ public partial class AssetBrowserWindow
             catch (ArgumentException ex)
             {
                 box.BorderBrush = (System.Windows.Media.Brush)FindResource("SystemFillColorCriticalBrush");
-                StatusText.Text = $"\"{box.Text}\" isn't a regular expression: {ex.Message}";
+                StatusText.Text = L.T("AssetBrowserWindow.IsntRegularExpression", box.Text, ex.Message);
                 return false;
             }
         }
@@ -200,12 +201,12 @@ public partial class AssetBrowserWindow
     /// <summary>Says in the boxes what they match, which depends on whether they're regular expressions.</summary>
     private void ApplySearchHints()
     {
-        SearchPlaceholder.Text = RegexMode ? "File name, as a regular expression (Ctrl+F)" : "Search the game's files (Ctrl+F)";
-        SearchBox.ToolTip = RegexMode ? "A regular expression the file's name must match, such as ^c_0[1-4]_.*\\.w2mesh$. Case doesn't matter."
-            : "Words must all appear in the path. Use * and ? to match file names, e.g. *.w2mesh";
-        FolderPlaceholder.Text = RegexMode ? "Folder, as a regular expression" : "Folder";
-        FolderBox.ToolTip = RegexMode ? "A regular expression the file's folder must match, such as ^dlc/(bob|ep1)/. Separate folders with / (or \\\\). Case doesn't matter."
-            : "Words that must all appear in the file's folder, not its name";
+        SearchPlaceholder.Text = RegexMode ? L.T("AssetBrowserWindow.FileNameRegularExpression") : L.T("AssetBrowserWindow.SearchGamesFilesCtrl");
+        SearchBox.ToolTip = RegexMode ? L.T("AssetBrowserWindow.RegularExpressionFilesName")
+            : L.T("AssetBrowserWindow.WordsMustAllAppear");
+        FolderPlaceholder.Text = RegexMode ? L.T("AssetBrowserWindow.FolderRegularExpression") : L.T("Common.Folder");
+        FolderBox.ToolTip = RegexMode ? L.T("AssetBrowserWindow.RegularExpressionFilesFolder")
+            : L.T("AssetBrowserWindow.WordsMustAllAppear2");
     }
 
     private void FolderBox_TextChanged(object sender, TextChangedEventArgs e)
@@ -227,22 +228,22 @@ public partial class AssetBrowserWindow
             if (SourceOf(item) is { } source) counts[source] = counts.GetValueOrDefault(source) + 1;
         if (counts.Count == 0)
         {
-            menu.Items.Add(new MenuItem { Header = "The files here are a mod's, not the game's.", IsEnabled = false });
+            menu.Items.Add(new MenuItem { Header = L.T("AssetBrowserWindow.FilesHereModsNot"), IsEnabled = false });
             menu.IsOpen = true;
             return;
         }
-        var all = new MenuItem { Header = "Show every part", Icon = Glyph(""), IsEnabled = _hiddenSources.Count > 0 };
+        var all = new MenuItem { Header = L.T("AssetBrowserWindow.ShowEveryPart"), Icon = Glyph(""), IsEnabled = _hiddenSources.Count > 0 };
         all.Click += (_, _) => SetHiddenSources([]);
-        var only = new MenuItem { Header = "Base game only", Icon = Glyph("") };
+        var only = new MenuItem { Header = L.T("AssetBrowserWindow.BaseGameOnly"), Icon = Glyph("") };
         only.Click += (_, _) => SetHiddenSources(counts.Keys.Where(k => k != BaseSource));
-        var noDlc = new MenuItem { Header = "Expansions only", ToolTip = "Hearts of Stone and Blood and Wine" };
+        var noDlc = new MenuItem { Header = L.T("AssetBrowserWindow.ExpansionsOnly"), ToolTip = L.T("AssetBrowserWindow.HeartsStoneBloodWine") };
         noDlc.Click += (_, _) => SetHiddenSources(counts.Keys.Where(k => k is not ("ep1" or "bob")));
         menu.Items.Add(all);
         menu.Items.Add(only);
         menu.Items.Add(noDlc);
         menu.Items.Add(new Separator());
 
-        var free = new MenuItem { Header = "Free DLC" };
+        var free = new MenuItem { Header = L.T("AssetBrowserWindow.FreeDLC") };
         foreach (var (source, count) in counts.OrderBy(c => SourceOrder(c.Key)))
         {
             var item = new MenuItem
@@ -265,9 +266,9 @@ public partial class AssetBrowserWindow
         if (free.Items.Count > 0)
         {
             int freeCount = counts.Where(c => c.Key is not (BaseSource or "ep1" or "bob")).Sum(c => c.Value);
-            free.Header = Counted("Free DLC", freeCount);
-            var freeAll = new MenuItem { Header = "Show them all", StaysOpenOnClick = false };
-            var freeNone = new MenuItem { Header = "Hide them all", StaysOpenOnClick = false };
+            free.Header = Counted(L.T("AssetBrowserWindow.FreeDLC"), freeCount);
+            var freeAll = new MenuItem { Header = L.T("AssetBrowserWindow.ShowThemAll"), StaysOpenOnClick = false };
+            var freeNone = new MenuItem { Header = L.T("AssetBrowserWindow.HideThemAll"), StaysOpenOnClick = false };
             var freeSources = counts.Keys.Where(k => k is not (BaseSource or "ep1" or "bob")).ToList();
             freeAll.Click += (_, _) => SetHiddenSources(_hiddenSources.Except(freeSources, StringComparer.OrdinalIgnoreCase));
             freeNone.Click += (_, _) => SetHiddenSources(_hiddenSources.Union(freeSources, StringComparer.OrdinalIgnoreCase));
@@ -304,9 +305,9 @@ public partial class AssetBrowserWindow
     /// <summary>Says on the button which parts of the game are hidden, without listing the files again.</summary>
     private void AfterSourcesChangedQuietly()
     {
-        SourcesText.Text = _hiddenSources.Count == 0 ? "Whole game" : $"{_hiddenSources.Count} hidden";
-        SourcesButton.ToolTip = _hiddenSources.Count == 0 ? "Show only some parts of the game: the base game, Hearts of Stone, Blood and Wine, each free DLC"
-            : "Hidden: " + string.Join(", ", _hiddenSources.OrderBy(SourceOrder).Select(SourceName));
+        SourcesText.Text = _hiddenSources.Count == 0 ? L.T("AssetBrowserWindow.WholeGame") : L.T("AssetBrowserWindow.Hidden", _hiddenSources.Count);
+        SourcesButton.ToolTip = _hiddenSources.Count == 0 ? L.T("AssetBrowserWindow.ShowOnlySomeParts")
+            : L.T("AssetBrowserWindow.Hidden2", string.Join(", ", _hiddenSources.OrderBy(SourceOrder).Select(SourceName)));
     }
 
     // ---------------------------------------------------------------- recent files
@@ -327,7 +328,7 @@ public partial class AssetBrowserWindow
         var menu = new ContextMenu { PlacementTarget = RecentButton, Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom };
         if (_settings.AssetRecent.Count == 0)
         {
-            menu.Items.Add(new MenuItem { Header = "No files opened yet. Files you open from here are listed, newest first.", IsEnabled = false });
+            menu.Items.Add(new MenuItem { Header = L.T("AssetBrowserWindow.NoFilesOpenedYet"), IsEnabled = false });
             menu.IsOpen = true;
             return;
         }
@@ -337,7 +338,7 @@ public partial class AssetBrowserWindow
             menu.Items.Add(BookmarkMenuItem(path, () => _ = GoToBookmarkAsync(path)));
         }
         menu.Items.Add(new Separator());
-        var clear = new MenuItem { Header = "Clear the list", Icon = Glyph("") };
+        var clear = new MenuItem { Header = L.T("AssetBrowserWindow.ClearList"), Icon = Glyph("") };
         clear.Click += (_, _) =>
         {
             _settings.AssetRecent.Clear();

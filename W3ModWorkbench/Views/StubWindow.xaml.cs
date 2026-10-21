@@ -7,6 +7,7 @@ using System.Windows.Threading;
 using W3ModWorkbench.Core;
 using W3ModWorkbench.Core.Scripts;
 using W3ModWorkbench.Highlighting;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -63,7 +64,7 @@ public partial class StubWindow : Window, IMessageHost
         if (scripts is null || !Directory.Exists(scripts))
         {
             if (owner is IMessageHost host)
-                _ = host.ShowMessage("The game's scripts weren't found", "The stub generator reads the game's own scripts (content\\content0\\scripts). Set the game folder in Settings.", MessageKind.Info);
+                _ = host.ShowMessage(L.T("StubWindow.GamesScriptsWerentFound"), L.T("StubWindow.StubGeneratorReadsGames"), MessageKind.Info);
             return;
         }
         var window = new StubWindow(scripts).Standalone(owner);
@@ -87,9 +88,9 @@ public partial class StubWindow : Window, IMessageHost
 
     private async Task LoadAsync()
     {
-        StatusText.Text = "Reading the game's scripts…";
+        StatusText.Text = L.T("StubWindow.ReadingGamesScripts");
         _stubs = await StubGenerator.LoadAsync(_scriptsFolder);
-        DetailText.Text = $"{Format.Count(_stubs.Functions.Count, "function")} in {Format.Count(_stubs.Classes.Count, "class", "classes")} read from the game's scripts";
+        DetailText.Text = L.T("StubWindow.ReadGamesScripts", L.T("Count.Function", _stubs.Functions.Count), L.T("Count.Class", _stubs.Classes.Count));
         RefreshList();
     }
 
@@ -110,7 +111,7 @@ public partial class StubWindow : Window, IMessageHost
         {
             var found = (query.Length == 0 ? _stubs.Classes : _stubs.SearchClasses(query)).Take(MaxShown + 1).ToList();
             more = found.Count > MaxShown;
-            items = [.. found.Take(MaxShown).Select(c => new StubItem(c.Name, c.Base is null ? (c.IsState ? "state" : "class") : $"extends {c.Base}", null, c))];
+            items = [.. found.Take(MaxShown).Select(c => new StubItem(c.Name, c.Base is null ? (c.IsState ? "state" : "class") : L.T("StubWindow.Extends", c.Base), null, c))];
         }
         var before = (ResultList.SelectedItem as StubItem)?.Function;
         ResultList.ItemsSource = items;
@@ -120,9 +121,9 @@ public partial class StubWindow : Window, IMessageHost
         // the selection may not have changed, so the output has to be written again for the new kind
         RefreshOutput();
         if (keep > 0) ResultList.ScrollIntoView(items[keep]);
-        StatusText.Text = items.Count == 0 ? "Nothing matches"
-            : more ? $"First {MaxShown} shown: add more words to narrow it down"
-            : (kind is StubKind.Wrap or StubKind.Replace ? Format.Count(items.Count, "function") : Format.Count(items.Count, "class", "classes"));
+        StatusText.Text = items.Count == 0 ? L.T("Common.NothingMatches")
+            : more ? L.T("StubWindow.FirstShownAddMore", MaxShown)
+            : (kind is StubKind.Wrap or StubKind.Replace ? L.T("Count.Function", items.Count) : L.T("Count.Class", items.Count));
     }
 
     private void RefreshOutput()
@@ -158,8 +159,8 @@ public partial class StubWindow : Window, IMessageHost
         if (Kind == StubKind.AddMethod && NameBox.Text == "myField") NameBox.Text = "MyMethod";
         if (Kind == StubKind.AddField && NameBox.Text == "MyMethod") NameBox.Text = "myField";
         SearchPlaceholder.Text = Kind is StubKind.Wrap or StubKind.Replace
-            ? "Search by class or function, e.g. W3PlayerWitcher OnSpawned  (Ctrl+F)"
-            : "Search for a class, e.g. CR4Player  (Ctrl+F)";
+            ? L.T("StubWindow.SearchClassFunctionE")
+            : L.T("StubWindow.SearchClassEG");
         RefreshList();
     }
 
@@ -181,7 +182,7 @@ public partial class StubWindow : Window, IMessageHost
         try
         {
             Clipboard.SetText(Output.Text.Replace("\n", Environment.NewLine));
-            _ = Message.Show(null, "Copied to the clipboard.", MessageKind.Info, autoClose: true);
+            _ = Message.Show(null, L.T("Common.CopiedClipboard"), MessageKind.Info, autoClose: true);
         }
         catch (System.Runtime.InteropServices.COMException)
         {
@@ -204,5 +205,5 @@ public partial class StubWindow : Window, IMessageHost
         e.Handled = true;
     }
 
-    public Task ShowMessage(string? title, string message, MessageKind kind) => Message.Show(title, message, kind, primary: "OK");
+    public Task ShowMessage(string? title, string message, MessageKind kind) => Message.Show(title, message, kind, primary: L.T("Common.OK"));
 }

@@ -15,6 +15,7 @@ using W3ModWorkbench.Core;
 using W3ModWorkbench.Core.Projects;
 using W3ModWorkbench.Core.Menu;
 using W3ModWorkbench.Highlighting;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -86,7 +87,7 @@ public partial class XmlWindow : Window, IMessageHost
         Editor.TextArea.Caret.PositionChanged += (_, _) =>
         {
             if (OutlineHost.Visibility == Visibility.Visible) Outline.Reveal(Editor.CaretOffset);
-            PositionText.Text = $"Line {Editor.TextArea.Caret.Line}, column {Editor.TextArea.Caret.Column}";
+            PositionText.Text = L.T("XmlWindow.LineColumn", Editor.TextArea.Caret.Line, Editor.TextArea.Caret.Column);
         };
 
         Loaded += (_, _) =>
@@ -128,7 +129,7 @@ public partial class XmlWindow : Window, IMessageHost
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            if (owner is IMessageHost host) _ = host.ShowMessage($"{Path.GetFileName(path)} could not be opened", ex.Message, MessageKind.Error);
+            if (owner is IMessageHost host) _ = host.ShowMessage(L.T("XmlWindow.CouldNotOpened", Path.GetFileName(path)), ex.Message, MessageKind.Error);
             return;
         }
         var window = new XmlWindow(Path.GetFileName(path), Path.GetDirectoryName(path) ?? "") { _path = path, _gamePath = FileSafety.GamePathOf(path) }.Standalone(owner);
@@ -150,7 +151,7 @@ public partial class XmlWindow : Window, IMessageHost
     /// <summary>A new mod menu, with a page and a few settings to start from, in the builder.</summary>
     public static void OpenNewMenu(Window owner)
     {
-        var window = new XmlWindow("New mod menu.xml", "Not saved yet").Standalone(owner);
+        var window = new XmlWindow(L.T("XmlWindow.NewModMenuXml"), L.T("XmlWindow.NotSavedYet")).Standalone(owner);
         window.Editor.Text = MenuFile.Starter().ToXml();
         window._edited = true;
         window.Loaded += (_, _) => window.EnterBuilder(askAboutLoss: false);
@@ -188,15 +189,15 @@ public partial class XmlWindow : Window, IMessageHost
     {
         string name = Path.GetFileName(_path ?? "") is { Length: > 0 } n ? n : FileNameText.Text.TrimStart('•', ' ');
         FileNameText.Text = (_edited ? "• " : "") + name;
-        Title = $"{(_edited ? "• " : "")}{name} - XML";
+        Title = L.T("XmlWindow.XML2", (_edited ? "• " : ""), name);
         string encoding = _encoding switch
         {
             UnicodeEncoding => "UTF-16",
-            UTF8Encoding { } u when u.GetPreamble().Length > 0 => "UTF-8 with BOM",
+            UTF8Encoding { } u when u.GetPreamble().Length > 0 => L.T("XmlWindow.UTFBOM"),
             _ => "UTF-8",
         };
         DetailText.Text = $"{_path ?? _source}  ·  {encoding}";
-        SaveButton.ToolTip = _path is null ? "Save as a file (Ctrl+S)" : $"Save to {Path.GetFileName(_path)} (Ctrl+S)";
+        SaveButton.ToolTip = _path is null ? L.T("XmlWindow.SaveFileCtrl") : L.T("XmlWindow.SaveCtrl", Path.GetFileName(_path));
     }
 
     // ---------------------------------------------------------------- checking
@@ -237,7 +238,7 @@ public partial class XmlWindow : Window, IMessageHost
         {
             var doc = XDocument.Parse(text, LoadOptions.SetLineInfo);
             int elements = doc.Descendants().Count();
-            StatusText.Text = $"Well-formed  ·  <{doc.Root?.Name.LocalName}>  ·  {Format.Count(elements, "element")}";
+            StatusText.Text = L.T("XmlWindow.WellFormed", doc.Root?.Name.LocalName, L.T("Count.Element", elements));
             StatusText.SetResourceReference(System.Windows.Controls.TextBlock.ForegroundProperty, "TextFillColorSecondaryBrush");
             StatusText.Cursor = Cursors.Arrow;
             if (text.Length < MaxFoldedLength) _foldingStrategy.UpdateFoldings(_folding, Editor.Document);
@@ -245,7 +246,7 @@ public partial class XmlWindow : Window, IMessageHost
         catch (XmlException ex)
         {
             _errorAt = (Math.Max(1, ex.LineNumber), Math.Max(1, ex.LinePosition));
-            StatusText.Text = $"Line {ex.LineNumber}, column {ex.LinePosition}: {ex.Message}";
+            StatusText.Text = L.T("XmlWindow.LineColumn2", ex.LineNumber, ex.LinePosition, ex.Message);
             StatusText.SetResourceReference(System.Windows.Controls.TextBlock.ForegroundProperty, "SystemFillColorCautionBrush");
             StatusText.Cursor = Cursors.Hand;
         }
@@ -266,7 +267,7 @@ public partial class XmlWindow : Window, IMessageHost
     {
         if (_builderOn)
         {
-            _ = ShowMessage("Formatting isn't needed here", "The builder writes the XML already indented. Switch to the code to format it yourself.", MessageKind.Info);
+            _ = ShowMessage(L.T("XmlWindow.FormattingIsntNeededHere"), L.T("XmlWindow.BuilderWritesXMLAlready"), MessageKind.Info);
             return;
         }
         string text = Editor.Text;
@@ -277,7 +278,7 @@ public partial class XmlWindow : Window, IMessageHost
         }
         catch (XmlException ex)
         {
-            _ = ShowMessage("The XML has to be well-formed first", $"Line {ex.LineNumber}, column {ex.LinePosition}: {ex.Message}", MessageKind.Warning);
+            _ = ShowMessage(L.T("XmlWindow.XMLHasWellFormed"), L.T("XmlWindow.LineColumn2", ex.LineNumber, ex.LinePosition, ex.Message), MessageKind.Warning);
             return;
         }
         string declaration = Declaration.Match(text) is { Success: true } m ? m.Value.Trim() : "";
@@ -306,21 +307,21 @@ public partial class XmlWindow : Window, IMessageHost
         catch (XmlException ex)
         {
             BuilderToggle.IsChecked = false;
-            await ShowMessage("The XML has to be well-formed first",
-                $"Line {ex.LineNumber}, column {ex.LinePosition}: {ex.Message}\n\nFix it in the code, then switch to the builder.", MessageKind.Warning);
+            await ShowMessage(L.T("XmlWindow.XMLHasWellFormed"),
+                L.T("XmlWindow.LineColumnFixCode", ex.LineNumber, ex.LinePosition, ex.Message), MessageKind.Warning);
             return;
         }
         catch (InvalidDataException ex)
         {
             BuilderToggle.IsChecked = false;
-            await ShowMessage("This isn't a mod menu", ex.Message + "\n\nA mod menu starts with <UserConfig>, and lives in bin\\config\\r4game\\user_config_matrix\\pc.", MessageKind.Info);
+            await ShowMessage(L.T("XmlWindow.IsntModMenu"), L.T("XmlWindow.ModMenuStartsUserConfig", ex.Message), MessageKind.Info);
             return;
         }
 
         if (askAboutLoss && model.Warnings.Count > 0
-            && !await Message.Show("The builder will change the file",
-                "Writing the menu from the builder drops what it can't keep: " + string.Join("; ", model.Warnings) + ".\n\nYou can undo it in the code, or Save as a copy first.",
-                MessageKind.Question, primary: "Use the builder", secondary: "Stay in the code"))
+            && !await Message.Show(L.T("XmlWindow.BuilderWillChangeFile"),
+                L.T("XmlWindow.WritingMenuBuilderDrops", string.Join("; ", model.Warnings)),
+                MessageKind.Question, primary: L.T("XmlWindow.UseBuilder"), secondary: L.T("XmlWindow.StayCode")))
         {
             BuilderToggle.IsChecked = false;
             return;
@@ -366,7 +367,7 @@ public partial class XmlWindow : Window, IMessageHost
     {
         if (_model is null) return;
         string current = Editor.Text;
-        string declaration = Declaration.Match(current) is { Success: true } m ? m.Value.Trim() : "<?xml version=\"1.0\" encoding=\"utf-8\"?>";
+        string declaration = Declaration.Match(current) is { Success: true } m ? m.Value.Trim() : L.T("XmlWindow.XmlVersionEncodingUtf");
         string xml = _model.ToXml(declaration);
         if (xml == current) return;
         _syncing = true;
@@ -392,22 +393,22 @@ public partial class XmlWindow : Window, IMessageHost
             WriteModel();
         }
         // the game's own file, or a copy from a bundle: it goes into the project, never back where it came from
-        string? protection = path is not null ? FileSafety.Protection(path) : _gamePath is not null ? "It came from inside a bundle, which is never changed." : null;
+        string? protection = path is not null ? FileSafety.Protection(path) : _gamePath is not null ? L.T("XmlWindow.CameInsideBundleWhich") : null;
         if (protection is not null && _gamePath is not null)
         {
-            var choice = await Message.Ask($"Save {Path.GetFileName(_gamePath)} into your project?",
-                $"{protection} Saved into your project at its game path ({_gamePath}), the mod uses it in place of the game's.",
-                MessageKind.Question, "Save to project", "Save as…");
+            var choice = await Message.Ask(L.T("XmlWindow.SaveIntoYourProject", Path.GetFileName(_gamePath)),
+                L.T("XmlWindow.SavedIntoYourProject", protection, _gamePath),
+                MessageKind.Question, L.T("Common.SaveProject"), L.T("Common.Save3"));
             if (choice == MessageChoice.Cancel) return false;
             path = null;
             if (choice == MessageChoice.Primary)
             {
                 if (Application.Current.MainWindow is not MainWindow main
-                    || await main.EnsureProjectAsync("Game files are changed as copies in a project, so the game's own are never touched.", Message) is not { } project)
+                    || await main.EnsureProjectAsync(L.T("XmlWindow.GameFilesChangedCopies"), Message) is not { } project)
                     return false;
                 path = project.CopyPathFor(_gamePath);
-                if (File.Exists(path) && !await Message.Show($"{project.Name} has {Path.GetFileName(path)} already",
-                        $"Replace the project's copy, {path}, with this one?", MessageKind.Question, primary: "Replace", secondary: "Cancel"))
+                if (File.Exists(path) && !await Message.Show(L.T("XmlWindow.HasAlready", project.Name, Path.GetFileName(path)),
+                        L.T("XmlWindow.ReplaceProjectsCopyOne", path), MessageKind.Question, primary: L.T("Common.Replace"), secondary: L.T("Common.Cancel")))
                     return false;
                 Directory.CreateDirectory(Path.GetDirectoryName(path)!);
                 if (!project.Contains(path) && !project.Contains(project.WorkspacePath)) _ = main.AddToProjectAsync([project.WorkspacePath]);
@@ -415,15 +416,15 @@ public partial class XmlWindow : Window, IMessageHost
         }
         else if (protection is not null)
         {
-            await ShowMessage($"{Path.GetFileName(path)} is read-only", protection + " Save as puts a copy somewhere of your own.", MessageKind.Info);
+            await ShowMessage(L.T("XmlWindow.ReadOnly", Path.GetFileName(path)), L.T("XmlWindow.SavePutsCopySomewhere", protection), MessageKind.Info);
             path = null;
         }
         if (path is null)
         {
             var dialog = new SaveFileDialog
             {
-                Title = "Save XML",
-                Filter = "XML (*.xml)|*.xml|All files (*.*)|*.*",
+                Title = L.T("XmlWindow.SaveXML"),
+                Filter = L.T("XmlWindow.XMLXmlXmlAll"),
                 FileName = Path.GetFileName(_path) is { Length: > 0 } n ? n : FileNameText.Text.TrimStart('•', ' '),
                 InitialDirectory = Directory.Exists(_path is null ? _source : Path.GetDirectoryName(_path)) ? (_path is null ? _source : Path.GetDirectoryName(_path)!) : "",
             };
@@ -450,14 +451,14 @@ public partial class XmlWindow : Window, IMessageHost
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            await ShowMessage("The file could not be saved", ex.Message, MessageKind.Error);
+            await ShowMessage(L.T("Common.FileCouldNotSaved"), ex.Message, MessageKind.Error);
             return false;
         }
         _path = path;
         _edited = false;
         UpdateHeader();
-        if (ProjectPrompts.ShouldOffer(path)) _ = ProjectPrompts.OfferAsync(path, Message, $"Saved {Path.GetFileName(path)}.");
-        else _ = Message.Show(null, $"Saved {Path.GetFileName(path)}.", MessageKind.Info, autoClose: true);
+        if (ProjectPrompts.ShouldOffer(path)) _ = ProjectPrompts.OfferAsync(path, Message, L.T("XmlWindow.Saved", Path.GetFileName(path)));
+        else _ = Message.Show(null, L.T("XmlWindow.Saved", Path.GetFileName(path)), MessageKind.Info, autoClose: true);
         return true;
     }
 
@@ -467,8 +468,8 @@ public partial class XmlWindow : Window, IMessageHost
     {
         if (!_edited || _closeConfirmed) return;
         e.Cancel = true;
-        var choice = await Message.Ask("Save the changes?", $"{Path.GetFileName(_path ?? FileNameText.Text.TrimStart('•', ' '))} has changes that haven't been saved.",
-            MessageKind.Question, primary: "Save", secondary: "Don't save");
+        var choice = await Message.Ask(L.T("Common.SaveChanges"), L.T("XmlWindow.HasChangesHaventBeen", Path.GetFileName(_path ?? FileNameText.Text.TrimStart('•', ' '))),
+            MessageKind.Question, primary: L.T("Common.Save"), secondary: L.T("Common.DontSave"));
         if (choice == MessageChoice.Cancel) return;
         if (choice == MessageChoice.Primary && !await SaveAsync(_path)) return;
         _closeConfirmed = true;
@@ -495,5 +496,5 @@ public partial class XmlWindow : Window, IMessageHost
         e.Handled = true;
     }
 
-    public Task ShowMessage(string? title, string message, MessageKind kind) => Message.Show(title, message, kind, primary: "OK");
+    public Task ShowMessage(string? title, string message, MessageKind kind) => Message.Show(title, message, kind, primary: L.T("Common.OK"));
 }

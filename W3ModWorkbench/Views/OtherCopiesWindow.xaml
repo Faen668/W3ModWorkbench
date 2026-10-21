@@ -1,8 +1,9 @@
 <Window x:Class="W3ModWorkbench.OtherCopiesWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:l="clr-namespace:W3ModWorkbench.Localisation"
         xmlns:local="clr-namespace:W3ModWorkbench"
-        Title="Other copies" Icon="pack://application:,,,/W3ModWorkbench;component/Assets/app.ico"
+        Title="{l:T OtherCopiesWindow.OtherCopies}" Icon="pack://application:,,,/W3ModWorkbench;component/Assets/app.ico"
         Width="820" Height="560" MinWidth="560" MinHeight="360"
         WindowStartupLocation="CenterOwner" PreviewKeyDown="Window_PreviewKeyDown">
     <Window.Resources>
@@ -38,7 +39,7 @@
                 <TextBlock x:Name="Summary" Margin="0,10,0,0" TextWrapping="Wrap" />
             </StackPanel>
 
-            <TextBlock Grid.Row="1" Style="{StaticResource Caption}" Margin="0,16,0,6" Text="COPIES IN WHAT'S OPEN   (first = the one the game uses)" />
+            <TextBlock Grid.Row="1" Style="{StaticResource Caption}" Margin="0,16,0,6" Text="{l:T OtherCopiesWindow.CopiesWhatsOpenFirst}" />
 
             <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
                 <ItemsControl x:Name="CopyRows" Margin="0,0,14,0">
@@ -48,9 +49,9 @@
                                     BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" Background="{DynamicResource CardBackgroundFillColorDefaultBrush}">
                                 <DockPanel>
                                     <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
-                                        <Button Style="{StaticResource RowButton}" Content="Compare" Tag="{Binding}" Click="Compare_Click"
+                                        <Button Style="{StaticResource RowButton}" Content="{l:T OtherCopiesWindow.Compare}" Tag="{Binding}" Click="Compare_Click"
                                                 Visibility="{Binding CompareVisibility}" ToolTip="{Binding CompareTip}" />
-                                        <Button Style="{StaticResource RowButton}" Content="Open" Tag="{Binding}" Click="Open_Click" ToolTip="Open it as double-clicking it in the list does" />
+                                        <Button Style="{StaticResource RowButton}" Content="{l:T Common.Open}" Tag="{Binding}" Click="Open_Click" ToolTip="{l:T OtherCopiesWindow.OpenDoubleClickingList}" />
                                         <Button Style="{StaticResource RowButton}" Tag="{Binding}" Click="Reveal_Click" ToolTip="{Binding RevealTip}">
                                             <TextBlock Style="{StaticResource IconText}" Text="&#xE838;" />
                                         </Button>
@@ -62,11 +63,11 @@
                                             <TextBlock Text="{Binding Where}" Opacity="0.6" Margin="8,0,0,0" VerticalAlignment="Center" />
                                             <Border x:Name="WinsBadge" Visibility="Collapsed" CornerRadius="3" Padding="6,0,6,1" Margin="10,0,0,0" VerticalAlignment="Center"
                                                     Background="{DynamicResource AccentFillColorDefaultBrush}">
-                                                <TextBlock Text="USED BY THE GAME" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource TextOnAccentFillColorPrimaryBrush}" />
+                                                <TextBlock Text="{l:T OtherCopiesWindow.UsedGame}" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource TextOnAccentFillColorPrimaryBrush}" />
                                             </Border>
                                             <Border x:Name="ThisBadge" Visibility="Collapsed" CornerRadius="3" Padding="6,0,6,1" Margin="8,0,0,0" VerticalAlignment="Center"
                                                     BorderThickness="1" BorderBrush="{DynamicResource AccentTextFillColorPrimaryBrush}">
-                                                <TextBlock Text="HIGHLIGHTED" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}" />
+                                                <TextBlock Text="{l:T OtherCopiesWindow.Highlighted}" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}" />
                                             </Border>
                                         </StackPanel>
                                         <TextBlock Text="{Binding Location}" Opacity="0.6" FontSize="12" Margin="0,3,0,0" TextTrimming="CharacterEllipsis" ToolTip="{Binding Location}" />

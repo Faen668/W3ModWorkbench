@@ -1,5 +1,6 @@
 using System.Windows.Controls;
 using W3ModWorkbench.ViewModels;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -14,9 +15,9 @@ public sealed record FileFilterResult(List<EntryItem> Shown, Dictionary<string, 
 
     /// <summary>What to say over an empty list: which filter leaves nothing, and what turning it off would show.</summary>
     public string NoMatches(string? type, string? resourceClass) =>
-        type is not null && AnyType > 0 ? $"No {type} files match. {AnyType:N0} of other types do: set File type to (all) to see them."
-        : resourceClass is not null && AnyClass > 0 ? $"No {resourceClass} files match. {AnyClass:N0} of other classes do: set Class to (all) to see them."
-        : "No files match.";
+        type is not null && AnyType > 0 ? L.T("MainWindow.NoFilesMatchOther", type, AnyType)
+        : resourceClass is not null && AnyClass > 0 ? L.T("MainWindow.NoFilesMatchOther2", resourceClass, AnyClass)
+        : L.T("MainWindow.NoFilesMatch");
 
     /// <summary>
     /// Narrows the files in view by all three filters at once, counting the types among the files the search and class
@@ -80,7 +81,7 @@ public partial class MainWindow
     private bool _fillingTypes;
 
     /// <summary>A file's type: its extension, or "(none)".</summary>
-    internal static string TypeOf(EntryItem item) => System.IO.Path.GetExtension(item.Name) is { Length: > 0 } ext ? ext.ToLowerInvariant() : "(none)";
+    internal static string TypeOf(EntryItem item) => System.IO.Path.GetExtension(item.Name) is { Length: > 0 } ext ? ext.ToLowerInvariant() : L.T("MainWindow.None");
 
     /// <summary>Lists the file types and the classes the other filters leave, with how many of each, keeping those picked.</summary>
     private void FillChoices(FileFilterResult result)

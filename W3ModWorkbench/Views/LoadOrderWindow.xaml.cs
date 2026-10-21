@@ -8,6 +8,7 @@ using Microsoft.Win32;
 using W3ModWorkbench.Core;
 using W3ModWorkbench.Core.LoadOrder;
 using W3ModWorkbench.Core.Projects;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -27,8 +28,8 @@ public sealed class ModItem(ModEntry mod)
     {
         get
         {
-            string state = mod.Enabled ? "" : "disabled · ";
-            string kind = mod.IsDlc ? "DLC · " : mod.IsModio ? "mod.io · " : mod.Priority is { } p ? $"priority {p} · " : "";
+            string state = mod.Enabled ? "" : L.T("LoadOrderWindow.Disabled");
+            string kind = mod.IsDlc ? "DLC · " : mod.IsModio ? "mod.io · " : mod.Priority is { } p ? L.T("LoadOrderWindow.PriorityOf", p) : "";
             return state + kind + mod.Contents;
         }
     }
@@ -39,8 +40,8 @@ public sealed class ModItem(ModEntry mod)
         {
             var lines = new List<string> { mod.Folder };
             if (mod.Title.Length > 0) lines.Add(mod.Title + (mod.Version.Length > 0 ? " " + mod.Version : ""));
-            if (mod.DependsOn.Count > 0) lines.Add("Needs: " + string.Join(", ", mod.DependsOn));
-            if (mod.UsedBy.Count > 0) lines.Add("Needed by: " + string.Join(", ", mod.UsedBy));
+            if (mod.DependsOn.Count > 0) lines.Add(L.T("LoadOrderWindow.Needs", string.Join(", ", mod.DependsOn)));
+            if (mod.UsedBy.Count > 0) lines.Add(L.T("LoadOrderWindow.Needed", string.Join(", ", mod.UsedBy)));
             return string.Join("\n", lines);
         }
     }
@@ -56,7 +57,7 @@ public sealed class FindingItem(Finding finding)
         : $"{finding.Category}  ·  {string.Join(", ", finding.Mods)}";
 
     /// <summary>"★ modA wins": who the game ends up using, shown on the row so it reads at a glance.</summary>
-    public string WinnerText => finding.Winner is null ? "" : $"\u2605 {finding.Winner} wins";
+    public string WinnerText => finding.Winner is null ? "" : L.T("LoadOrderWindow.Wins", finding.Winner);
     public Visibility WinnerVisibility => finding.Winner is null ? Visibility.Collapsed : Visibility.Visible;
 }
 
@@ -66,7 +67,7 @@ public sealed class FindingItem(Finding finding)
 /// </summary>
 public partial class LoadOrderWindow : Window, IMessageHost
 {
-    private const string AllCategories = "All kinds";
+    private static string AllCategories => L.T("LoadOrderWindow.AllKinds");
 
     private static LoadOrderWindow? _open;
 
@@ -114,7 +115,7 @@ public partial class LoadOrderWindow : Window, IMessageHost
         _open.Show();
     }
 
-    public Task ShowMessage(string? title, string message, MessageKind kind) => Message.Show(title, message, kind, primary: "OK");
+    public Task ShowMessage(string? title, string message, MessageKind kind) => Message.Show(title, message, kind, primary: L.T("Common.OK"));
 
     // ---------------------------------------------------------------- input
 
@@ -134,12 +135,12 @@ public partial class LoadOrderWindow : Window, IMessageHost
         catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException) { exists = false; }
         AnalyseButton.IsEnabled = exists && !_busy;
         if (!_busy && _report is null)
-            StatusText.Text = ModsFolder.Length == 0 ? "Choose the game's mods folder" : exists ? "" : "That folder doesn't exist";
+            StatusText.Text = ModsFolder.Length == 0 ? L.T("LoadOrderWindow.ChooseGamesModsFolder") : exists ? "" : L.T("LoadOrderWindow.FolderDoesntExist");
     }
 
     private void Browse_Click(object sender, RoutedEventArgs e)
     {
-        var dialog = new OpenFolderDialog { Title = "Choose the game's mods folder", InitialDirectory = Directory.Exists(ModsFolder) ? ModsFolder : "" };
+        var dialog = new OpenFolderDialog { Title = L.T("LoadOrderWindow.ChooseGamesModsFolder"), InitialDirectory = Directory.Exists(ModsFolder) ? ModsFolder : "" };
         if (dialog.ShowDialog(this) != true) return;
         FolderBox.Text = dialog.FolderName;
     }
@@ -171,11 +172,11 @@ public partial class LoadOrderWindow : Window, IMessageHost
         }
         catch (OperationCanceledException)
         {
-            StatusText.Text = "Cancelled";
+            StatusText.Text = L.T("Common.Cancelled");
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
         {
-            await ShowMessage("The mods couldn't be analysed", ex.Message, MessageKind.Error);
+            await ShowMessage(L.T("LoadOrderWindow.ModsCouldntAnalysed"), ex.Message, MessageKind.Error);
             StatusText.Text = "";
         }
         finally
@@ -187,7 +188,7 @@ public partial class LoadOrderWindow : Window, IMessageHost
     private void SetBusy(bool busy)
     {
         _busy = busy;
-        AnalyseLabel.Text = busy ? "Cancel" : "Analyse";
+        AnalyseLabel.Text = busy ? L.T("Common.Cancel") : L.T("LoadOrderWindow.Analyse");
         FolderBox.IsEnabled = !busy;
         DlcCheck.IsEnabled = !busy;
         if (!busy) UpdateInputs();
@@ -200,18 +201,17 @@ public partial class LoadOrderWindow : Window, IMessageHost
         if (report is null) return;
         _picked = null;
         ModList.ItemsSource = report.Mods.Select(m => new ModItem(m)).ToList();
-        ProblemsText.Text = $"{report.Count(Severity.Error):N0} problems";
-        WarningsText.Text = $"{report.Count(Severity.Warning):N0} warnings";
-        NotesText.Text = $"{report.Count(Severity.Info):N0} notes";
+        ProblemsText.Text = L.T("LoadOrderWindow.Problems", report.Count(Severity.Error));
+        WarningsText.Text = L.T("LoadOrderWindow.Warnings2", report.Count(Severity.Warning));
+        NotesText.Text = L.T("LoadOrderWindow.Notes2", report.Count(Severity.Info));
         CategoryFilter.ItemsSource = new[] { AllCategories }.Concat(report.Findings.Select(f => f.Category).Distinct().Order());
         CategoryFilter.SelectedIndex = 0;
         ExportButton.IsEnabled = true;
         ApplyFilter();
 
-        string game = report.GameScriptsFolder is null ? "the game's scripts weren't found" : $"checked against {report.VanillaTypes:N0} game types";
-        string priorities = report.SettingsFile is null ? "no mods.settings" : "priorities from mods.settings";
-        StatusText.Text = $"{Format.Count(report.Mods.Count, "mod")} read in {report.Elapsed.TotalSeconds:0.0} s · {game} · {priorities}"
-                          + (report.Warnings.Count > 0 ? "  ·  " + report.Warnings[0] : "");
+        string game = report.GameScriptsFolder is null ? L.T("LoadOrderWindow.GamesScriptsWerentFound") : L.T("LoadOrderWindow.CheckedAgainstGameTypes", report.VanillaTypes);
+        string priorities = report.SettingsFile is null ? L.T("LoadOrderWindow.NoModsSettings") : L.T("LoadOrderWindow.PrioritiesModsSettings");
+        StatusText.Text = L.T("LoadOrderWindow.Read", L.T("Count.Mod", report.Mods.Count), report.Elapsed.TotalSeconds, game, priorities, (report.Warnings.Count > 0 ? "  ·  " + report.Warnings[0] : ""));
         StatusText.ToolTip = string.Join("\n", report.Warnings);
     }
 
@@ -235,7 +235,7 @@ public partial class LoadOrderWindow : Window, IMessageHost
         _picked = (ModList.SelectedItem as ModItem)?.Mod;
         OpenFolderButton.IsEnabled = _picked is not null;
         ClearModButton.Visibility = _picked is null ? Visibility.Collapsed : Visibility.Visible;
-        ClearModButton.Content = _picked is null ? "All mods" : $"Only {_picked.Name}: show all";
+        ClearModButton.Content = _picked is null ? L.T("LoadOrderWindow.AllMods") : L.T("LoadOrderWindow.OnlyShowAll", _picked.Name);
         ApplyFilter();
     }
 
@@ -259,9 +259,9 @@ public partial class LoadOrderWindow : Window, IMessageHost
         if (shown.Count == 0)
         {
             bool anyHidden = _report.Findings.Count > 0;
-            EmptyTitle.Text = anyHidden ? "Nothing matches" : "No conflicts found";
-            EmptyText.Text = anyHidden ? "Turn on more of Problems, Warnings and Notes, or clear the search."
-                : "No two mods collide and nothing points at a missing function or mod.";
+            EmptyTitle.Text = anyHidden ? L.T("Common.NothingMatches") : L.T("LoadOrderWindow.NoConflictsFound");
+            EmptyText.Text = anyHidden ? L.T("LoadOrderWindow.TurnMoreProblemsWarnings")
+                : L.T("LoadOrderWindow.NoTwoModsCollide");
         }
     }
 
@@ -286,7 +286,7 @@ public partial class LoadOrderWindow : Window, IMessageHost
         {
             var winner = _report?.Mods.FirstOrDefault(m => m.Name == f.Winner);
             DetailWinnerName.Text = f.Winner;
-            DetailWinnerWhy.Text = winner is null ? "" : $"  ·  #{winner.Order} in the load order{(winner.Priority is { } p ? $", priority {p}" : "")}: the game uses its version. The others lose.";
+            DetailWinnerWhy.Text = winner is null ? "" : L.T("LoadOrderWindow.WinnerWhy", winner.Order, winner.Priority is { } p ? L.T("LoadOrderWindow.PriorityOf", p) : "");
         }
         DetailItems.Text = string.Join(Environment.NewLine, f.Items);
         DetailItems.Visibility = ItemsCaption.Visibility = f.Items.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
@@ -299,13 +299,13 @@ public partial class LoadOrderWindow : Window, IMessageHost
     {
         if (!ScriptMerger.IsSet(_settings.ScriptMergerPath))
         {
-            _ = ShowMessage("Script Merger isn't set", "Set the path to Script Merger Remastered (by relapse12) in Settings, under Script merger.", MessageKind.Info);
+            _ = ShowMessage(L.T("LoadOrderWindow.ScriptMergerIsntSet"), L.T("LoadOrderWindow.SetPathScriptMerger"), MessageKind.Info);
             return;
         }
         try { ScriptMerger.Start(_settings.ScriptMergerPath); }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or IOException)
         {
-            _ = ShowMessage("Script Merger couldn't be started", ex.Message, MessageKind.Error);
+            _ = ShowMessage(L.T("LoadOrderWindow.ScriptMergerCouldntStarted"), ex.Message, MessageKind.Error);
         }
     }
 
@@ -320,8 +320,8 @@ public partial class LoadOrderWindow : Window, IMessageHost
         if (_report is null) return;
         var dialog = new SaveFileDialog
         {
-            Title = "Save the load order report",
-            Filter = "Markdown (*.md)|*.md",
+            Title = L.T("LoadOrderWindow.SaveLoadOrderReport"),
+            Filter = L.T("LoadOrderWindow.MarkdownMdMd"),
             FileName = $"load-order-{DateTime.Now:yyyy-MM-dd}.md",
             InitialDirectory = Directory.Exists(_settings.OutputFolder) ? _settings.OutputFolder : "",
         };
@@ -330,11 +330,11 @@ public partial class LoadOrderWindow : Window, IMessageHost
         {
             FileSafety.CheckWrite(dialog.FileName);
             await File.WriteAllTextAsync(dialog.FileName, LoadOrderAnalyzer.ToMarkdown(_report));
-            _ = Message.Show(null, "Report saved.", MessageKind.Info, autoClose: true);
+            _ = Message.Show(null, L.T("LoadOrderWindow.ReportSaved"), MessageKind.Info, autoClose: true);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            await ShowMessage("The report couldn't be saved", ex.Message, MessageKind.Error);
+            await ShowMessage(L.T("LoadOrderWindow.ReportCouldntSaved"), ex.Message, MessageKind.Error);
         }
     }
 

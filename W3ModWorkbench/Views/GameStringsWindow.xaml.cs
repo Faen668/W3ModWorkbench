@@ -6,6 +6,7 @@ using System.Windows.Input;
 using System.Windows.Threading;
 using W3ModWorkbench.Core;
 using W3ModWorkbench.Core.Strings;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -47,8 +48,8 @@ public partial class GameStringsWindow : Window, IMessageHost
         LanguageBox.SelectedItem = W3Strings.Language(handle) ?? App.GameLanguage;
         GameItem.IsEnabled = gameFolder is not null;
         RedkitItem.IsEnabled = _redkitDatabase is not null;
-        RedkitItem.Content = _redkitDatabase is null ? "REDkit database (not found)" : "REDkit database";
-        RedkitItem.ToolTip = _redkitDatabase ?? "REDkit wasn't found. Set wcc_lite in Settings to the REDkit you have, or pick the database with Database file…";
+        RedkitItem.Content = _redkitDatabase is null ? L.T("GameStringsWindow.REDkitDatabaseNotFound") : L.T("GameStringsWindow.REDkitDatabase");
+        RedkitItem.ToolTip = _redkitDatabase ?? L.T("GameStringsWindow.REDkitWasntFoundSet");
         string saved = App.Settings.GameStringsSource;
         if (saved == "File" && !File.Exists(App.Settings.StringsDatabasePath)) saved = "REDkit";
         if (saved == "REDkit" && _redkitDatabase is null) saved = "Game";
@@ -84,7 +85,7 @@ public partial class GameStringsWindow : Window, IMessageHost
         if (gameFolder is null && RedkitStrings.Find(App.Settings.WccLitePath) is null && !File.Exists(App.Settings.StringsDatabasePath))
         {
             if (owner is IMessageHost host)
-                _ = host.ShowMessage("The game folder isn't set", "Searching the game's strings needs The Witcher 3's folder, or REDkit for its strings database. Set either in Settings, or let Settings find them.", MessageKind.Info);
+                _ = host.ShowMessage(L.T("Common.GameFolderIsntSet"), L.T("GameStringsWindow.SearchingGamesStringsNeeds"), MessageKind.Info);
             return;
         }
         var window = new GameStringsWindow(gameFolder, handle).Standalone(owner);
@@ -110,19 +111,19 @@ public partial class GameStringsWindow : Window, IMessageHost
         bool database = SourceTag != "Game";
         var shown = database ? Visibility.Visible : Visibility.Collapsed;
         KindColumn.Visibility = UsedInColumn.Visibility = VoiceoverColumn.Visibility = shown;
-        KeyColumn.Header = database ? "Key" : "Key hash";
+        KeyColumn.Header = database ? L.T("Common.Key") : L.T("GameStringsWindow.KeyHash");
         KeyColumn.Width = database ? 220 : 90;
-        ModsCheck.Content = database ? "Include installed mods" : "Include DLC and mods";
+        ModsCheck.Content = database ? L.T("GameStringsWindow.IncludeInstalledMods") : L.T("GameStringsWindow.IncludeDLCMods");
         ModsCheck.ToolTip = database
-            ? "Also read the strings of the mods you have installed (the database already has the DLC's)"
-            : "Also read the strings of the DLC and the mods you have installed";
+            ? L.T("GameStringsWindow.AlsoReadStringsMods")
+            : L.T("GameStringsWindow.AlsoReadStringsDLC");
         ModsCheck.IsEnabled = _gameFolder is not null;
         FileItem.Content = SourceTag == "File" && App.Settings.StringsDatabasePath.Length > 0
-            ? "File: " + Path.GetFileName(App.Settings.StringsDatabasePath)
-            : "Database file…";
+            ? L.T("GameStringsWindow.File", Path.GetFileName(App.Settings.StringsDatabasePath))
+            : L.T("GameStringsWindow.DatabaseFile");
         SearchPlaceholder.Text = database
-            ? "Search by text, ID, key name, voiceover or scene path  (Ctrl+F)"
-            : "Search by text, ID (2115940000), or key (name or hash)  (Ctrl+F)";
+            ? L.T("GameStringsWindow.SearchTextIDKey2")
+            : L.T("GameStringsWindow.SearchTextIDKey");
     }
 
     private async Task LoadAsync()
@@ -131,7 +132,7 @@ public partial class GameStringsWindow : Window, IMessageHost
         _index = null;
         Grid.ItemsSource = null;
         string? database = Database;
-        StatusText.Text = database is null ? $"Reading the {PickedLanguage.Handle} strings…" : $"Reading the {PickedLanguage.Handle} strings from {Path.GetFileName(database)}…";
+        StatusText.Text = database is null ? L.T("GameStringsWindow.ReadingStrings", PickedLanguage.Handle) : L.T("GameStringsWindow.ReadingStrings2", PickedLanguage.Handle, Path.GetFileName(database));
         try
         {
             var index = await GameStringIndex.GetAsync(_gameFolder, PickedLanguage, ModsCheck.IsChecked == true && _gameFolder is not null, database);
@@ -139,17 +140,17 @@ public partial class GameStringsWindow : Window, IMessageHost
             _index = index;
             int files = index.Sources.Count - (database is null ? 0 : 1);
             string sources = database is not null
-                ? $"{Format.Count(index.All.Count, "string")} from {Path.GetFileName(database)}" + (files > 0 ? $" and {Format.Count(files, "mod file")}" : "")
+                ? L.T("GameStringsWindow.FromDatabase", L.T("Count.String", index.All.Count), Path.GetFileName(database)) + (files > 0 ? L.T("GameStringsWindow.AndModFiles", L.T("Count.ModFile", files)) : "")
                 : index.Sources.Count == 0
-                ? $"No {PickedLanguage.Handle}.w3strings files found under the game folder"
-                : $"{Format.Count(index.All.Count, "string")} from {Format.Count(index.Sources.Count, "file")}";
-            DetailText.Text = sources + (index.Problems.Count > 0 ? $"  ·  {Format.Count(index.Problems.Count, "file")} couldn't be read" : "");
+                ? L.T("GameStringsWindow.NoW3stringsFilesFound", PickedLanguage.Handle)
+                : L.T("GameStringsWindow.From", L.T("Count.String", index.All.Count), L.T("Count.File", index.Sources.Count));
+            DetailText.Text = sources + (index.Problems.Count > 0 ? L.T("GameStringsWindow.CouldntRead", L.T("Count.File", index.Problems.Count)) : "");
             RunSearch();
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
         {
             if (id != _loadId) return;
-            StatusText.Text = database is null ? ex.Message : $"{Path.GetFileName(database)} couldn't be read: {ex.Message}";
+            StatusText.Text = database is null ? ex.Message : L.T("GameStringsWindow.CouldntRead2", Path.GetFileName(database), ex.Message);
         }
     }
 
@@ -160,15 +161,15 @@ public partial class GameStringsWindow : Window, IMessageHost
         if (query.Trim().Length == 0)
         {
             Grid.ItemsSource = null;
-            StatusText.Text = $"{Format.Count(_index.All.Count, "string")} ready to search";
+            StatusText.Text = L.T("GameStringsWindow.ReadySearch", L.T("Count.String", _index.All.Count));
             return;
         }
         var matches = _index.Search(query, WholeWordCheck.IsChecked == true).Take(MaxShown + 1).ToList();
         bool more = matches.Count > MaxShown;
         Grid.ItemsSource = matches.Take(MaxShown).Select(m => new GameStringRow(m)).ToList();
-        StatusText.Text = matches.Count == 0 ? "Nothing matches"
-            : more ? $"First {MaxShown:N0} matches shown: add more words to narrow it down"
-            : matches.Count == 1 ? "1 match" : $"{matches.Count:N0} matches";
+        StatusText.Text = matches.Count == 0 ? L.T("Common.NothingMatches")
+            : more ? L.T("GameStringsWindow.FirstMatchesShownAdd", MaxShown)
+            : matches.Count == 1 ? L.T("GameStringsWindow.Match") : L.T("GameStringsWindow.Matches", matches.Count);
     }
 
     private void SearchBox_TextChanged(object sender, TextChangedEventArgs e)
@@ -217,8 +218,8 @@ public partial class GameStringsWindow : Window, IMessageHost
         string current = App.Settings.StringsDatabasePath;
         var dialog = new Microsoft.Win32.OpenFileDialog
         {
-            Title = "Pick a REDkit strings database",
-            Filter = "REDkit strings database (*.db)|*.db|All files (*.*)|*.*",
+            Title = L.T("GameStringsWindow.PickREDkitStringsDatabase"),
+            Filter = L.T("GameStringsWindow.REDkitStringsDatabaseDb"),
             InitialDirectory = Path.GetDirectoryName(current.Length > 0 ? current : _redkitDatabase ?? "") ?? "",
         };
         if (dialog.ShowDialog(this) != true) return false;
@@ -235,7 +236,7 @@ public partial class GameStringsWindow : Window, IMessageHost
         try
         {
             Clipboard.SetText(text);
-            _ = Message.Show(null, $"Copied {what}.", MessageKind.Info, autoClose: true);
+            _ = Message.Show(null, L.T("GameStringsWindow.Copied", what), MessageKind.Info, autoClose: true);
         }
         catch (System.Runtime.InteropServices.COMException)
         {
@@ -304,5 +305,5 @@ public partial class GameStringsWindow : Window, IMessageHost
         e.Handled = true;
     }
 
-    public Task ShowMessage(string? title, string message, MessageKind kind) => Message.Show(title, message, kind, primary: "OK");
+    public Task ShowMessage(string? title, string message, MessageKind kind) => Message.Show(title, message, kind, primary: L.T("Common.OK"));
 }

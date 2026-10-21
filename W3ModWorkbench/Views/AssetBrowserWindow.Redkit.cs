@@ -1,6 +1,7 @@
 using System.Windows;
 using W3ModWorkbench.Core;
 using W3ModWorkbench.ViewModels;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -12,8 +13,7 @@ public partial class AssetBrowserWindow
 {
     private const string RedkitTitle = "REDkit";
 
-    private const string RedkitNotSet = "REDkit's own files, from before they're cooked. Set REDkit's wcc_lite in Settings to list them here "
-        + "(Find automatically looks in your Steam and GOG libraries). REDkit is free on Steam and GOG for owners of the game.";
+    private static string RedkitNotSet => L.T("AssetBrowserWindow.RedkitNotSet");
 
     // read once a run, like the game's, and again when Settings points at another REDkit
     private static FolderNode? _redkit;
@@ -30,11 +30,11 @@ public partial class AssetBrowserWindow
             return;
         }
         if (_redkit is { IsUnavailable: false } && string.Equals(_redkitFolder, folder, StringComparison.OrdinalIgnoreCase)) return;
-        var node = await Loading.RunAsync("Reading REDkit's files", async (report, token) =>
+        var node = await Loading.RunAsync(L.T("AssetBrowserWindow.ReadingREDkitsFiles"), async (report, token) =>
         {
-            report.Step($"Listing REDkit's files in {folder}");
+            report.Step(L.T("AssetBrowserWindow.ListingREDkitsFiles", folder));
             var depot = await Task.Run(() => RedkitDepot.Open(folder, name => report.Detail(name), token), token);
-            report.Step("Sorting them into folders");
+            report.Step(L.T("AssetBrowserWindow.SortingThemIntoFolders"));
             var built = await Task.Run(() => FolderNode.Build(depot, (_, _) => { }), token);
             built.IsHeading = true;
             built.IsExpanded = false;

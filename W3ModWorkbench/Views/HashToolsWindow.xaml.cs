@@ -7,6 +7,7 @@ using System.Windows.Input;
 using W3ModWorkbench.Core;
 using W3ModWorkbench.Core.Scripts;
 using W3ModWorkbench.Core.Strings;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -76,13 +77,13 @@ public partial class HashToolsWindow : Window, IMessageHost
         }
         if (Hashes.ParseNumber(typed) is not { } hash)
         {
-            LookupStatus.Text = "That isn't a number. Type it in decimal, or in hex with 0x in front.";
+            LookupStatus.Text = L.T("HashToolsWindow.IsntNumberTypeDecimal");
             LookupList.ItemsSource = null;
             return;
         }
         if (_names is not { IsCompleted: true })
         {
-            LookupStatus.Text = "Reading the names in the game's scripts and strings…";
+            LookupStatus.Text = L.T("HashToolsWindow.ReadingNamesGamesScripts");
             LookupList.ItemsSource = null;
         }
         var names = await KnownNames();
@@ -91,8 +92,8 @@ public partial class HashToolsWindow : Window, IMessageHost
         var found = names.GetValueOrDefault(hash) ?? (hash > uint.MaxValue ? names.GetValueOrDefault(hash & 0xFFFFFFFF) : null) ?? [];
         LookupList.ItemsSource = found.Select(f => new HashRow(f.Kind.Name, f.Name, f.Kind.UsedFor)).ToList();
         LookupStatus.Text = found.Count == 0
-            ? $"None of the {_nameCount:N0} names known hashes to {hash} (0x{hash:X}). It may be a name no script or string key uses, such as a resource's."
-            : found.Count == 1 ? "One name hashes to it:" : $"{found.Count} names hash to it:";
+            ? L.T("HashToolsWindow.NoneNamesKnownHashes", _nameCount, hash)
+            : found.Count == 1 ? L.T("HashToolsWindow.OneNameHashes") : L.T("HashToolsWindow.NamesHash", found.Count);
     }
 
     private static Task<Dictionary<ulong, List<(string Name, HashKind Kind)>>> KnownNames() =>
@@ -149,39 +150,39 @@ public partial class HashToolsWindow : Window, IMessageHost
         if (Hashes.ParseNumber(NumberBox.Text) is not { } n)
         {
             NumberList.ItemsSource = NumberBox.Text.Trim().Length == 0 ? null
-                : new List<HashRow> { new("", "That isn't a number. Type it in decimal, or in hex with 0x in front.") };
+                : new List<HashRow> { new("", L.T("HashToolsWindow.IsntNumberTypeDecimal")) };
             return;
         }
-        var rows = new List<HashRow> { new("Decimal", n.ToString()) };
+        var rows = new List<HashRow> { new(L.T("HashToolsWindow.Decimal"), n.ToString()) };
         if (n <= uint.MaxValue)
         {
             uint u = (uint)n;
             Span<byte> bytes = stackalloc byte[4];
             BinaryPrimitives.WriteUInt32LittleEndian(bytes, u);
-            rows.Add(new("Hex", $"0x{u:X8}"));
-            rows.Add(new("Signed 32-bit", ((int)u).ToString()));
-            rows.Add(new("As a float", BitConverter.Int32BitsToSingle((int)u).ToString("R", System.Globalization.CultureInfo.InvariantCulture),
-                "The same 32 bits read as a float, as a value in a file would be"));
-            rows.Add(new("Bytes in a file", Convert.ToHexString(bytes).Chunk(2).Select(c => new string(c)).Aggregate((a, b) => a + " " + b),
-                "Little-endian, as the game stores numbers"));
+            rows.Add(new(L.T("HashToolsWindow.Hex"), $"0x{u:X8}"));
+            rows.Add(new(L.T("HashToolsWindow.SignedBit"), ((int)u).ToString()));
+            rows.Add(new(L.T("HashToolsWindow.Float"), BitConverter.Int32BitsToSingle((int)u).ToString("R", System.Globalization.CultureInfo.InvariantCulture),
+                L.T("HashToolsWindow.SameBitsReadFloat")));
+            rows.Add(new(L.T("HashToolsWindow.BytesFile"), Convert.ToHexString(bytes).Chunk(2).Select(c => new string(c)).Aggregate((a, b) => a + " " + b),
+                L.T("HashToolsWindow.LittleEndianGameStores")));
         }
         else
         {
             Span<byte> bytes = stackalloc byte[8];
             BinaryPrimitives.WriteUInt64LittleEndian(bytes, n);
-            rows.Add(new("Hex", $"0x{n:X16}"));
-            rows.Add(new("Signed 64-bit", ((long)n).ToString()));
-            rows.Add(new("Bytes in a file", Convert.ToHexString(bytes).Chunk(2).Select(c => new string(c)).Aggregate((a, b) => a + " " + b),
-                "Little-endian, as the game stores numbers"));
+            rows.Add(new(L.T("HashToolsWindow.Hex"), $"0x{n:X16}"));
+            rows.Add(new(L.T("HashToolsWindow.SignedBit2"), ((long)n).ToString()));
+            rows.Add(new(L.T("HashToolsWindow.BytesFile"), Convert.ToHexString(bytes).Chunk(2).Select(c => new string(c)).Aggregate((a, b) => a + " " + b),
+                L.T("HashToolsWindow.LittleEndianGameStores")));
         }
         if (Hashes.SplitModId(n) is { } mod)
         {
-            rows.Add(new("Mod's Nexus ID", mod.NexusId.ToString(), "The four digits after 211, by the usual convention for mods' string IDs"));
-            rows.Add(new("String number", mod.Index.ToString(), "The last three digits: which of the mod's 1000 strings it is"));
+            rows.Add(new(L.T("HashToolsWindow.ModsNexusID"), mod.NexusId.ToString(), L.T("HashToolsWindow.FourDigitsAfterUsual")));
+            rows.Add(new(L.T("HashToolsWindow.StringNumber"), mod.Index.ToString(), L.T("HashToolsWindow.LastThreeDigitsWhich")));
         }
         if (n <= uint.MaxValue)
         {
-            rows.Add(new("In a script", $"GetLocStringById({n})", "Reads the string with this ID in the player's language"));
+            rows.Add(new(L.T("HashToolsWindow.Script"), $"GetLocStringById({n})", L.T("HashToolsWindow.ReadsStringIDPlayers")));
         }
         NumberList.ItemsSource = rows;
     }
@@ -199,15 +200,15 @@ public partial class HashToolsWindow : Window, IMessageHost
             NexusList.ItemsSource = new List<HashRow>
             {
                 new("", int.TryParse(text, out _)
-                    ? "The convention only has room for IDs up to 9999. Mods with longer IDs pick a free block of their own: Tools > Search game strings can check one."
-                    : "Type the mod's ID on Nexus, a number."),
+                    ? L.T("HashToolsWindow.ConventionOnlyHasRoom")
+                    : L.T("HashToolsWindow.TypeModsIDNexus")),
             };
             return;
         }
         NexusList.ItemsSource = new List<HashRow>
         {
-            new("First ID", block.First.ToString()),
-            new("Last ID", block.Last.ToString()),
+            new(L.T("HashToolsWindow.FirstID"), block.First.ToString()),
+            new(L.T("HashToolsWindow.LastID"), block.Last.ToString()),
         };
     }
 
@@ -219,7 +220,7 @@ public partial class HashToolsWindow : Window, IMessageHost
         try
         {
             Clipboard.SetText(copied);
-            _ = Message.Show(null, $"Copied {copied}", MessageKind.Info, autoClose: true);
+            _ = Message.Show(null, L.T("HashToolsWindow.Copied", copied), MessageKind.Info, autoClose: true);
         }
         catch (System.Runtime.InteropServices.COMException)
         {
@@ -236,7 +237,7 @@ public partial class HashToolsWindow : Window, IMessageHost
         }
     }
 
-    public Task ShowMessage(string? title, string message, MessageKind kind) => Message.Show(title, message, kind, primary: "OK");
+    public Task ShowMessage(string? title, string message, MessageKind kind) => Message.Show(title, message, kind, primary: L.T("Common.OK"));
 
     [GeneratedRegex(@"\b[A-Za-z_][A-Za-z0-9_]{2,}\b")]
     private static partial Regex Word();

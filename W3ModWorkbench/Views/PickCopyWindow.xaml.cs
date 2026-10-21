@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Input;
 using W3ModWorkbench.Core;
 using W3ModWorkbench.Core.LoadOrder;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -22,8 +23,7 @@ public partial class PickCopyWindow : Window
     {
         InitializeComponent();
         FileTitle.Text = name;
-        Summary.Text = $"{copies.Count} archives have {copies[0].Path}. Pick the copy to open: what it loads (meshes, materials, "
-            + "textures, animations) comes from that copy's mod first, then the game.";
+        Summary.Text = L.T("PickCopyWindow.ArchivesHavePickCopy", copies.Count, copies[0].Path);
         var settings = ModScanner.ReadSettings(ModScanner.FindSettingsFile());
         string? modio = ModioLocator.Root();
         Copies.ItemsSource = copies.Select((c, i) =>

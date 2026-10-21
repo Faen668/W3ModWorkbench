@@ -7,13 +7,14 @@ using System.Windows.Threading;
 using W3ModWorkbench.Core;
 using W3ModWorkbench.Core.LoadOrder;
 using W3ModWorkbench.ViewModels;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
 /// <summary>One choice in the class filter: a resource class and how many of the files in view hold it, or every class.</summary>
 public sealed record ClassChoice(string? Class, int Count)
 {
-    public string Name => Class ?? "(all)";
+    public string Name => Class ?? L.T("AssetBrowserWindow.All");
     public string CountText => Count.ToString("N0");
 }
 
@@ -105,29 +106,29 @@ public partial class AssetBrowserWindow : Window
         string? game = GameLocator.Resolve(null);
         if (game is null || !Directory.Exists(Path.Combine(game, "content")))
         {
-            StatusText.Text = "The game folder isn't set. The asset browser lists the files of The Witcher 3's content, DLC and mods: set its folder in Settings.";
+            StatusText.Text = L.T("AssetBrowserWindow.GameFolderIsntSet");
             return;
         }
         if (_root is null || !string.Equals(_rootGame, game, StringComparison.OrdinalIgnoreCase))
         {
             (FolderNode? ModDlc, FolderNode? Mods, List<IArchive> Order) read = default;
-            var root = await Loading.RunAsync("Reading the game's files", async (report, token) =>
+            var root = await Loading.RunAsync(L.T("AssetBrowserWindow.ReadingGamesFiles"), async (report, token) =>
             {
-                report.Step("Reading the game's bundles and texture caches");
+                report.Step(L.T("AssetBrowserWindow.ReadingGamesBundlesTexture"));
                 var archive = await Task.Run(() => GameFilesArchive.Open(game, name => report.Detail(name)), token);
                 var files = await Task.Run(() => FolderNode.Build(archive, (_, _) => { }), token);
                 files.IsHeading = true;
-                report.Step("Reading the installed mods");
+                report.Step(L.T("AssetBrowserWindow.ReadingInstalledMods"));
                 read = await Task.Run(() => ReadMods(game, archive, report, token), token);
-                report.Step("Finding every copy of each file");
+                report.Step(L.T("AssetBrowserWindow.FindingEveryCopyEach"));
                 _copies = await Task.Run(() => IndexCopies(read.Order), token);
-                report.Step("Finding which part of the game each file is from");
+                report.Step(L.T("AssetBrowserWindow.FindingWhichPartGame"));
                 _sourceOf = await Task.Run(() => ReadSources(game, archive, _copies), token);
                 return files;
             });
             if (root is null)
             {
-                StatusText.Text = "Reading the game's files was stopped. Close the asset browser and open it again to read them.";
+                StatusText.Text = L.T("AssetBrowserWindow.ReadingGamesFilesStopped");
                 return;
             }
             (_root, _modDlc, _mods, _rootGame, _order) = (root, read.ModDlc, read.Mods, game, read.Order);
@@ -187,7 +188,7 @@ public partial class AssetBrowserWindow : Window
             group.IsExpanded = false;
             return group;
         }
-        return (Group("Mod DLC", dlc), Group("Mods", mods), order);
+        return (Group(L.T("AssetBrowserWindow.ModDLC"), dlc), Group(L.T("AssetBrowserWindow.Mods"), mods), order);
     }
 
     /// <summary>Whether a file is from Game files (the game and its official DLC), rather than a mod's under Mod DLC or Mods.</summary>
@@ -236,7 +237,7 @@ public partial class AssetBrowserWindow : Window
             _shown = [];
             BindFiles();
             NoMatchesText.Visibility = Visibility.Collapsed;
-            StatusText.Text = "REDkit isn't set up in Settings.";
+            StatusText.Text = L.T("AssetBrowserWindow.REDkitIsntSetUp2");
             return;
         }
         if (!ReadRegexes()) return;
@@ -258,12 +259,11 @@ public partial class AssetBrowserWindow : Window
         NoMatchesText.Text = result.NoMatches(_typeFilter, _classFilter);
         NoMatchesText.Visibility = _shown.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         bool redkit = folder.Archive is RedkitDepot;
-        string where = folder == _root ? "the game's files" : folder == _mods ? "the installed mods" : folder == _modDlc ? "the mods installed as DLC"
-            : folder == _redkit ? "REDkit's files" : redkit ? "REDkit's " + folder.FullPath : folder.FullPath;
-        string describe = string.Join(" and ", DescribeExtra().Concat(result.Describe.Length > 0 ? [result.Describe] : []));
-        StatusText.Text = $"{_shown.Count:N0} of {scope.Count:N0} files in {where}" + (describe.Length > 0 ? $" match {describe}" : "")
-            + (redkit ? $"   ·   {folder.Archive.FilePath}   ·   Double-click to open REDkit's copy, read-only."
-                : $"   ·   {_root.Archive.Name}   ·   Double-click to open; what it loads comes from its own mod, then the game.");
+        string where = folder == _root ? L.T("AssetBrowserWindow.GamesFiles") : folder == _mods ? L.T("AssetBrowserWindow.InstalledMods") : folder == _modDlc ? L.T("AssetBrowserWindow.ModsInstalledDLC")
+            : folder == _redkit ? L.T("AssetBrowserWindow.REDkitsFiles") : redkit ? L.T("AssetBrowserWindow.RedkitFolder", folder.FullPath) : folder.FullPath;
+        string describe = string.Join(L.T("AssetBrowserWindow.And"), DescribeExtra().Concat(result.Describe.Length > 0 ? [result.Describe] : []));
+        StatusText.Text = L.T("AssetBrowserWindow.FilesIn", _shown.Count, scope.Count, where) + (describe.Length > 0 ? L.T("AssetBrowserWindow.Match", describe) : "")
+            + (redkit ? L.T("AssetBrowserWindow.StatusRedkit", folder.Archive.FilePath) : L.T("AssetBrowserWindow.StatusGame", _root.Archive.Name));
         QueuePreview();
     }
 
@@ -442,7 +442,7 @@ public partial class AssetBrowserWindow : Window
         }
         OpenCopyItem.Visibility = items.Count == 1 && CopiesOf(items[0]).Count > 1 ? Visibility.Visible : Visibility.Collapsed;
         EabDetailsItem.Visibility = _settings.EasyAssetBrowserOn && Eab is not null ? Visibility.Visible : Visibility.Collapsed;
-        BookmarkItem.Header = items.All(i => IsBookmarked(i.Path)) ? "Remove bookmark" : "Bookmark";
+        BookmarkItem.Header = items.All(i => IsBookmarked(i.Path)) ? L.T("AssetBrowserWindow.RemoveBookmark") : L.T("AssetBrowserWindow.Bookmark");
     }
 
     private void Open_Click(object sender, RoutedEventArgs e)
@@ -520,8 +520,8 @@ public partial class AssetBrowserWindow : Window
         BookmarkButton.IsEnabled = folder is not null;
         bool marked = folder is not null && IsBookmarked(folder);
         BookmarkGlyph.Text = marked ? "" : "";
-        BookmarkButton.ToolTip = folder is null ? "Pick a folder to bookmark it"
-            : marked ? $"Take {folder} off the bookmarks" : $"Bookmark {folder}, to come back to it from the bookmarks list";
+        BookmarkButton.ToolTip = folder is null ? L.T("AssetBrowserWindow.PickFolderBookmark")
+            : marked ? L.T("AssetBrowserWindow.TakeOffBookmarks", folder) : L.T("AssetBrowserWindow.BookmarkComeBackBookmarks", folder);
     }
 
     private void ToggleBookmark(string path)
@@ -551,7 +551,7 @@ public partial class AssetBrowserWindow : Window
         var bookmarks = _settings.AssetBookmarks.OrderBy(b => b, StringComparer.OrdinalIgnoreCase).ToList();
         if (bookmarks.Count == 0)
         {
-            menu.Items.Add(new MenuItem { Header = "No bookmarks yet. Pick a folder and press the star, or right-click a file and choose Bookmark.", IsEnabled = false });
+            menu.Items.Add(new MenuItem { Header = L.T("AssetBrowserWindow.NoBookmarksYetPick"), IsEnabled = false });
             menu.IsOpen = true;
             return;
         }
@@ -561,7 +561,7 @@ public partial class AssetBrowserWindow : Window
             menu.Items.Add(BookmarkMenuItem(path, () => _ = GoToBookmarkAsync(path)));
         }
         menu.Items.Add(new Separator());
-        var remove = new MenuItem { Header = "Remove a bookmark", Icon = Glyph("") };
+        var remove = new MenuItem { Header = L.T("AssetBrowserWindow.RemoveBookmark2"), Icon = Glyph("") };
         foreach (string bookmark in bookmarks)
         {
             string path = bookmark;
@@ -603,7 +603,7 @@ public partial class AssetBrowserWindow : Window
         {
             if (node.Children.FirstOrDefault(c => c.Name.Equals(part, StringComparison.OrdinalIgnoreCase)) is not { } child)
             {
-                StatusText.Text = $"{path} isn't in the game's files" + (_redkit is { IsUnavailable: false } ? " or REDkit's" : "") + ". It may have come from a mod that's no longer installed.";
+                StatusText.Text = _redkit is { IsUnavailable: false } ? L.T("AssetBrowserWindow.NotInGameOrRedkit", path) : L.T("AssetBrowserWindow.NotInGame", path);
                 return;
             }
             node = child;
@@ -625,7 +625,7 @@ public partial class AssetBrowserWindow : Window
         if (folder) return;
         if (_shown.FirstOrDefault(i => i.Path.Equals(path, StringComparison.OrdinalIgnoreCase)) is not { } file)
         {
-            StatusText.Text = $"{path} isn't in the game's files. It may have come from a mod that's no longer installed.";
+            StatusText.Text = L.T("AssetBrowserWindow.IsntGamesFilesMay", path);
             return;
         }
         if (ThumbsMode)

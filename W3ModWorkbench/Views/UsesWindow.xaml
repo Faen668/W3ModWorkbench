@@ -1,7 +1,8 @@
 <Window x:Class="W3ModWorkbench.UsesWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="What uses this file" Icon="pack://application:,,,/W3ModWorkbench;component/Assets/app.ico"
+        xmlns:l="clr-namespace:W3ModWorkbench.Localisation"
+        Title="{l:T UsesWindow.WhatUsesFile}" Icon="pack://application:,,,/W3ModWorkbench;component/Assets/app.ico"
         Width="1180" Height="640" MinWidth="700" MinHeight="360"
         WindowStartupLocation="CenterOwner" PreviewKeyDown="Window_PreviewKeyDown">
     <Window.Resources>
@@ -83,14 +84,14 @@
 
             <!-- the files that refer to this one, from the index -->
             <DockPanel>
-                <TextBlock x:Name="UsedByTitle" DockPanel.Dock="Top" Margin="2,0,0,6" FontWeight="SemiBold" Text="Used by" />
+                <TextBlock x:Name="UsedByTitle" DockPanel.Dock="Top" Margin="2,0,0,6" FontWeight="SemiBold" Text="{l:T UsesWindow.Used}" />
                 <Border Style="{StaticResource Card}" ClipToBounds="True">
                     <Grid>
                         <DataGrid x:Name="UsedByList" Style="{StaticResource Links}">
                             <DataGrid.Columns>
-                                <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="2*" MinWidth="120" ElementStyle="{StaticResource CellText}" />
-                                <DataGridTextColumn Header="Folder" Binding="{Binding Folder}" Width="3*" MinWidth="120" ElementStyle="{StaticResource DimCellText}" />
-                                <DataGridTextColumn Header="From" Binding="{Binding From}" Width="170" ElementStyle="{StaticResource DimCellText}" />
+                                <DataGridTextColumn Header="{l:T Common.Name}" Binding="{Binding Name}" Width="2*" MinWidth="120" ElementStyle="{StaticResource CellText}" />
+                                <DataGridTextColumn Header="{l:T Common.Folder}" Binding="{Binding Folder}" Width="3*" MinWidth="120" ElementStyle="{StaticResource DimCellText}" />
+                                <DataGridTextColumn Header="{l:T Common.From}" Binding="{Binding From}" Width="170" ElementStyle="{StaticResource DimCellText}" />
                             </DataGrid.Columns>
                         </DataGrid>
                         <!-- reading every file's links, the first time -->
@@ -108,13 +109,13 @@
 
             <!-- the files this one refers to, from the file itself -->
             <DockPanel Grid.Column="2">
-                <TextBlock x:Name="UsesTitle" DockPanel.Dock="Top" Margin="2,0,0,6" FontWeight="SemiBold" Text="Uses" />
+                <TextBlock x:Name="UsesTitle" DockPanel.Dock="Top" Margin="2,0,0,6" FontWeight="SemiBold" Text="{l:T UsesWindow.Uses}" />
                 <Border Style="{StaticResource Card}" ClipToBounds="True">
                     <Grid>
                         <DataGrid x:Name="UsesList" Style="{StaticResource Links}">
                             <DataGrid.Columns>
-                                <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="2*" MinWidth="120" ElementStyle="{StaticResource CellText}" />
-                                <DataGridTextColumn Header="Folder" Binding="{Binding Folder}" Width="3*" MinWidth="100" ElementStyle="{StaticResource DimCellText}" />
+                                <DataGridTextColumn Header="{l:T Common.Name}" Binding="{Binding Name}" Width="2*" MinWidth="120" ElementStyle="{StaticResource CellText}" />
+                                <DataGridTextColumn Header="{l:T Common.Folder}" Binding="{Binding Folder}" Width="3*" MinWidth="100" ElementStyle="{StaticResource DimCellText}" />
                             </DataGrid.Columns>
                         </DataGrid>
                         <TextBlock x:Name="UsesEmpty" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="24,0" TextWrapping="Wrap" TextAlignment="Center"
@@ -126,13 +127,13 @@
 
         <DockPanel Grid.Row="2" Margin="0,12,0,0">
             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-                <Button x:Name="ShowButton" Padding="12,6" Click="Show_Click" Content="Show in the Asset Browser" ToolTip="Go to the file highlighted in either list" />
-                <Button x:Name="OpenButton" Margin="8,0,0,0" Padding="12,6" Click="Open_Click" Content="Open" ToolTip="Open the file highlighted in either list (or double-click it)" />
-                <Button x:Name="RebuildButton" Margin="8,0,0,0" Padding="12,6" Click="Rebuild_Click" Content="Read every file again"
-                        ToolTip="Forget what's known of which files use which, and read every archive again (only archives that changed are read otherwise)" />
+                <Button x:Name="ShowButton" Padding="12,6" Click="Show_Click" Content="{l:T UsesWindow.ShowAssetBrowser}" ToolTip="{l:T UsesWindow.GoFileHighlightedEither}" />
+                <Button x:Name="OpenButton" Margin="8,0,0,0" Padding="12,6" Click="Open_Click" Content="{l:T Common.Open}" ToolTip="{l:T UsesWindow.OpenFileHighlightedEither}" />
+                <Button x:Name="RebuildButton" Margin="8,0,0,0" Padding="12,6" Click="Rebuild_Click" Content="{l:T UsesWindow.ReadEveryFileAgain}"
+                        ToolTip="{l:T UsesWindow.ForgetWhatsKnownWhich}" />
             </StackPanel>
             <TextBlock x:Name="NoteText" VerticalAlignment="Center" Opacity="0.65" TextWrapping="Wrap" Margin="0,0,12,0"
-                       Text="Found from each file's links to the files it uses, as the engine loads them. A file named in a script or a CSV isn't counted." />
+                       Text="{l:T UsesWindow.FoundEachFilesLinks}" />
         </DockPanel>
     </Grid>
 </Window>

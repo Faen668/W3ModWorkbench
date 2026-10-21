@@ -8,6 +8,7 @@ using System.Windows.Threading;
 using Microsoft.Win32;
 using W3ModWorkbench.Core;
 using W3ModWorkbench.Core.Scripts;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -18,7 +19,7 @@ namespace W3ModWorkbench;
 public partial class LogWindow : Window, IMessageHost
 {
     private const int MaxKept = 300_000;
-    private const string AllChannels = "All channels";
+    private static string AllChannels => L.T("LogWindow.AllChannels");
 
     private static LogWindow? _instance;
 
@@ -90,7 +91,7 @@ public partial class LogWindow : Window, IMessageHost
     }
 
     private void UpdateFileText() =>
-        FileText.Text = File.Exists(_tail.Path) ? _tail.Path : $"{_tail.Path} doesn't exist yet: it's made when the game starts with debug scripts on (-debugscripts).";
+        FileText.Text = File.Exists(_tail.Path) ? _tail.Path : L.T("LogWindow.DoesntExistYetMade", _tail.Path);
 
     // ---------------------------------------------------------------- reading
 
@@ -104,7 +105,7 @@ public partial class LogWindow : Window, IMessageHost
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            StatusText.Text = $"The log can't be read right now: {ex.Message}";
+            StatusText.Text = L.T("LogWindow.LogCantReadRight", ex.Message);
             return;
         }
         if (_tail.Restarted)
@@ -161,8 +162,8 @@ public partial class LogWindow : Window, IMessageHost
     {
         int total = _all.Count(l => l.Number > _clearedAt);
         StatusText.Text = total == 0
-            ? (PauseToggle.IsChecked == true ? "Paused" : "Waiting for the game to write…")
-            : $"{_shown.Count:N0} of {total:N0} lines" + (PauseToggle.IsChecked == true ? "  ·  paused" : "");
+            ? (PauseToggle.IsChecked == true ? L.T("LogWindow.Paused") : L.T("LogWindow.WaitingGameWrite"))
+            : L.T("LogWindow.LinesOf", _shown.Count, total) + (PauseToggle.IsChecked == true ? L.T("LogWindow.PausedSuffix") : "");
     }
 
     // ---------------------------------------------------------------- filtering
@@ -225,8 +226,8 @@ public partial class LogWindow : Window, IMessageHost
     {
         var dialog = new OpenFileDialog
         {
-            Title = "Watch a log file",
-            Filter = "Logs (*.txt;*.log)|*.txt;*.log|All files (*.*)|*.*",
+            Title = L.T("LogWindow.WatchLogFile"),
+            Filter = L.T("LogWindow.LogsTxtLogTxt"),
             InitialDirectory = Path.GetDirectoryName(_tail.Path) is { } dir && Directory.Exists(dir) ? dir : "",
         };
         if (dialog.ShowDialog(this) == true) Watch(dialog.FileName);
@@ -274,7 +275,7 @@ public partial class LogWindow : Window, IMessageHost
         _findCts?.Cancel();
         var cts = _findCts = new CancellationTokenSource();
         string? game = GameLocator.Resolve(null);
-        StatusText.Text = $"Looking for the LogChannel call on '{line.Channel}'…";
+        StatusText.Text = L.T("LogWindow.LookingLogChannelCall", line.Channel);
         List<LogSource> found;
         try
         {
@@ -288,10 +289,10 @@ public partial class LogWindow : Window, IMessageHost
         if (cts != _findCts) return;
         if (found.Count == 0)
         {
-            string where = game is null ? "the open project" : "the open project, the installed mods (loose and compiled) or the game's scripts";
+            string where = game is null ? L.T("LogWindow.OpenProject") : L.T("LogWindow.OpenProjectInstalledMods");
             string channel = line.Channel.Length == 0 ? "Log(…)" : $"LogChannel('{line.Channel}', …)";
-            await ShowMessage("No script was found that writes this line",
-                $"Nothing in {where} calls {channel}. It may come from the engine itself, or a mod that isn't installed.", MessageKind.Info);
+            await ShowMessage(L.T("LogWindow.NoScriptFoundWrites"),
+                L.T("LogWindow.NothingCallsMayCome", where, channel), MessageKind.Info);
             return;
         }
         if (found.Count == 1)
@@ -303,14 +304,14 @@ public partial class LogWindow : Window, IMessageHost
         foreach (var source in found.Take(25))
         {
             var header = new StackPanel();
-            header.Children.Add(new TextBlock { Text = source.Hit.LineText.Trim(), FontFamily = new System.Windows.Media.FontFamily("Cascadia Mono, Consolas"), MaxWidth = 760,
+            header.Children.Add(new TextBlock { Text = source.Hit.LineText.Trim(), FontFamily = new System.Windows.Media.FontFamily(L.T("LogWindow.CascadiaMonoConsolas")), MaxWidth = 760,
                 TextTrimming = TextTrimming.CharacterEllipsis });
             header.Children.Add(new TextBlock { Text = $"{source.File.File.Source}  ·  {source.File.File.Path} : {source.Hit.Line}", Opacity = 0.65, FontSize = 12 });
             var item = new MenuItem { Header = header };
             item.Click += (_, _) => Open(source);
             menu.Items.Add(item);
         }
-        if (found.Count > 25) menu.Items.Add(new MenuItem { Header = $"…and {found.Count - 25} more", IsEnabled = false });
+        if (found.Count > 25) menu.Items.Add(new MenuItem { Header = L.T("LogWindow.More", found.Count - 25), IsEnabled = false });
         menu.IsOpen = true;
     }
 
@@ -329,5 +330,5 @@ public partial class LogWindow : Window, IMessageHost
         e.Handled = true;
     }
 
-    public Task ShowMessage(string? title, string message, MessageKind kind) => Message.Show(title, message, kind, primary: "OK");
+    public Task ShowMessage(string? title, string message, MessageKind kind) => Message.Show(title, message, kind, primary: L.T("Common.OK"));
 }

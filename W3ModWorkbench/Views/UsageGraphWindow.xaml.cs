@@ -5,6 +5,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Shapes;
 using W3ModWorkbench.Core.Scripts.Navigation;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -72,11 +73,11 @@ public partial class UsageGraphWindow : Window
         var parsed = _parsed;
         int levels = Levels;
         string name = targets[0].Title;
-        TitleText.Text = $"Usage of {name}";
-        Title = $"Usage graph: {name}";
+        TitleText.Text = L.T("UsageGraphWindow.Usage", name);
+        Title = L.T("UsageGraphWindow.UsageGraph2", name);
         _columnGap = MinColumnGap;
         Show(null);
-        BusyText.Text = "Looking through every script…";
+        BusyText.Text = L.T("UsageGraphWindow.LookingThroughEveryScript");
         BusyText.Visibility = Visibility.Visible;
         StatusText.Text = "";
         var progress = new Progress<string>(text =>
@@ -96,7 +97,7 @@ public partial class UsageGraphWindow : Window
         }
         catch (Exception ex) when (!cancel.IsCancellationRequested)
         {
-            BusyText.Text = "The graph couldn't be built: " + ex.Message;
+            BusyText.Text = L.T("UsageGraphWindow.GraphCouldntBuilt", ex.Message);
         }
     }
 
@@ -136,7 +137,7 @@ public partial class UsageGraphWindow : Window
             Surface.Children.Add(line);
             Surface.Children.Add(arrow);
 
-            string text = edge.Sites.Count == 1 ? $"line {edge.Sites[0].Line}" : $"{edge.Sites.Count} calls";
+            string text = edge.Sites.Count == 1 ? L.T("UsageGraphWindow.Line", edge.Sites[0].Line) : L.T("UsageGraphWindow.Calls", edge.Sites.Count);
             var label = new Border
             {
                 CornerRadius = new CornerRadius(8), Padding = new Thickness(6, 1, 6, 1), BorderThickness = new Thickness(1),
@@ -170,11 +171,8 @@ public partial class UsageGraphWindow : Window
         int functions = graph.Nodes.Count - 1;
         int calls = graph.Edges.Sum(e => e.Sites.Count);
         StatusText.Text = functions == 0
-            ? $"Nothing in the scripts searched uses {graph.Target.Title}."
-            : $"{functions} {(functions == 1 ? "caller" : "callers")}, {calls} {(calls == 1 ? "use" : "uses")}"
-              + (graph.Truncated ? $"  ·  stopped at {UsageGraphBuilder.MaxNodes} boxes, try fewer levels" : "")
-              + (graph.Nodes.Any(n => n.MoreCallers > 0) ? "  ·  boxes marked “+N more” have callers that aren't shown" : "")
-              + "  ·  drag (left or right button) to pan, Ctrl+wheel to zoom";
+            ? L.T("UsageGraphWindow.NothingScriptsSearchedUses", graph.Target.Title)
+            : L.T("UsageGraphWindow.DragLeftRightButton", functions, (functions == 1 ? L.T("UsageGraphWindow.Caller") : L.T("UsageGraphWindow.Callers")), calls, (calls == 1 ? L.T("UsageGraphWindow.Use") : L.T("UsageGraphWindow.Uses")), (graph.Truncated ? L.T("UsageGraphWindow.StoppedBoxesTryFewer", UsageGraphBuilder.MaxNodes) : ""), (graph.Nodes.Any(n => n.MoreCallers > 0) ? L.T("UsageGraphWindow.BoxesMarkedNMore") : ""));
         if (!keepView) Dispatcher.BeginInvoke(() => FitView(onlyIfLarger: true), System.Windows.Threading.DispatcherPriority.Loaded);
     }
 
@@ -236,7 +234,7 @@ public partial class UsageGraphWindow : Window
         glyph.SetResourceReference(TextBlock.ForegroundProperty, node.IsTarget ? "TextOnAccentFillColorPrimaryBrush" : "AccentTextFillColorPrimaryBrush");
 
         var title = new TextBlock { Text = node.Title, FontWeight = FontWeights.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis };
-        string note = (node.IsRecursive ? "calls itself" : "") + (node.MoreCallers > 0 ? (node.IsRecursive ? "  ·  " : "") + $"+{node.MoreCallers} more" : "");
+        string note = (node.IsRecursive ? L.T("UsageGraphWindow.CallsItself") : "") + (node.MoreCallers > 0 ? L.T("UsageGraphWindow.More2", (node.IsRecursive ? "  ·  " : ""), node.MoreCallers) : "");
         var detail = new TextBlock { Text = node.Detail + (note.Length > 0 ? "  ·  " + note : ""), FontSize = 11, Opacity = 0.7, TextTrimming = TextTrimming.CharacterEllipsis };
         var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
         text.Children.Add(title);
@@ -253,7 +251,7 @@ public partial class UsageGraphWindow : Window
         {
             Width = NodeWidth, Height = NodeHeight, CornerRadius = new CornerRadius(8), BorderThickness = new Thickness(1.5),
             Child = row, Cursor = Cursors.Hand, ContextMenu = MenuFor(node),
-            ToolTip = $"{node.Title}\n{node.File.Path} : {node.Line}  ·  {node.File.Source}\nDouble-click to open, Ctrl+double-click to open to the side",
+            ToolTip = L.T("UsageGraphWindow.DoubleClickOpenCtrl", node.Title, node.File.Path, node.Line, node.File.Source),
         };
         if (node.IsTarget) box.SetResourceReference(Border.BackgroundProperty, "AccentFillColorDefaultBrush");
         else box.SetResourceReference(Border.BackgroundProperty, "ControlFillColorDefaultBrush");
@@ -276,42 +274,42 @@ public partial class UsageGraphWindow : Window
     /// <summary>The mod a box's file belongs to, or "Game Script" for the game's own scripts.</summary>
     private static string OriginOf(ScriptFile file)
     {
-        if (file.Source.Equals("Game scripts", StringComparison.OrdinalIgnoreCase) || W3ModWorkbench.Core.Scripts.ScriptFolder.IsGameScripts(file.SourceKey)) return "Game Script";
+        if (file.Source.Equals("Game scripts", StringComparison.OrdinalIgnoreCase) || W3ModWorkbench.Core.Scripts.ScriptFolder.IsGameScripts(file.SourceKey)) return L.T("UsageGraphWindow.GameScript");
         string name = file.Source;
         int slash = name.IndexOf('\\');
         if (slash > 0) name = name[..slash];
-        const string loose = " (loose scripts)";
+        const string loose = " (loose scripts)"; // loc-ignore: how the scripts index names a mod's loose scripts, not shown
         return name.EndsWith(loose, StringComparison.OrdinalIgnoreCase) ? name[..^loose.Length] : name;
     }
 
     private static ToolTip SitesTip(UsageEdge edge)
     {
         var panel = new StackPanel();
-        panel.Children.Add(new TextBlock { Text = $"{edge.From.Title} uses {edge.To.Title}", FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 4) });
+        panel.Children.Add(new TextBlock { Text = L.T("UsageGraphWindow.Uses2", edge.From.Title, edge.To.Title), FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 4) });
         foreach (var site in edge.Sites.Take(12))
             panel.Children.Add(new TextBlock { Text = $"{site.Line,5}  {site.LineText.Trim()}", FontFamily = new FontFamily("Cascadia Mono, Consolas"), FontSize = 11.5 });
-        if (edge.Sites.Count > 12) panel.Children.Add(new TextBlock { Text = $"…and {edge.Sites.Count - 12} more", Opacity = 0.7, Margin = new Thickness(0, 4, 0, 0) });
-        panel.Children.Add(new TextBlock { Text = "Click to open the first", Opacity = 0.6, FontSize = 11, Margin = new Thickness(0, 6, 0, 0) });
+        if (edge.Sites.Count > 12) panel.Children.Add(new TextBlock { Text = L.T("UsageGraphWindow.More", edge.Sites.Count - 12), Opacity = 0.7, Margin = new Thickness(0, 4, 0, 0) });
+        panel.Children.Add(new TextBlock { Text = L.T("UsageGraphWindow.ClickOpenFirst"), Opacity = 0.6, FontSize = 11, Margin = new Thickness(0, 6, 0, 0) });
         return new ToolTip { Content = panel };
     }
 
     private ContextMenu MenuFor(UsageNode node)
     {
         var menu = new ContextMenu();
-        var open = new MenuItem { Header = "Open" };
+        var open = new MenuItem { Header = L.T("Common.Open") };
         open.Click += (_, _) => OpenAt(node.File, node.Offset, node.Length, false);
-        var side = new MenuItem { Header = "Open to the side" };
+        var side = new MenuItem { Header = L.T("UsageGraphWindow.OpenSide") };
         side.Click += (_, _) => OpenAt(node.File, node.Offset, node.Length, true);
         menu.Items.Add(open);
         menu.Items.Add(side);
         if (node.Symbol is { Kind: SymbolKind.Function or SymbolKind.Event } symbol && !node.IsTarget)
         {
-            var again = new MenuItem { Header = "Show usage graph of this" };
+            var again = new MenuItem { Header = L.T("UsageGraphWindow.ShowUsageGraph") };
             again.Click += (_, _) => Reroot(symbol);
             menu.Items.Add(new Separator());
             menu.Items.Add(again);
         }
-        var copy = new MenuItem { Header = "Copy name" };
+        var copy = new MenuItem { Header = L.T("Common.CopyName") };
         copy.Click += (_, _) =>
         {
             try { Clipboard.SetText(node.Symbol?.Name ?? node.File.Path); }
@@ -373,7 +371,7 @@ public partial class UsageGraphWindow : Window
             box.BorderThickness = new Thickness(picked ? 2.5 : 1.5);
         }
         DetailText.Text = node.IsTarget
-            ? "This is what the graph is about. Callers are on its left"
+            ? L.T("UsageGraphWindow.WhatGraphAboutCallers")
             : $"{node.Title}  ·  {node.File.Path} : {node.Line}  ·  {node.File.Source}";
     }
 

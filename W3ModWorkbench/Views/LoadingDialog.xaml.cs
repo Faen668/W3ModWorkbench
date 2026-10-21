@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Threading;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -35,7 +36,7 @@ public partial class LoadingDialog : Window
         DetailText.Text = detail ?? "";
         Bar.IsIndeterminate = total <= 0;
         if (total > 0) Bar.Value = Math.Clamp(done / (double)total, 0, 1);
-        CountText.Text = total > 0 ? $"{done} of {total}" : "";
+        CountText.Text = total > 0 ? L.T("LoadingDialog.Of", done, total) : "";
     }
 
     /// <summary>Closes it when the job is done, without cancelling anything.</summary>
@@ -49,7 +50,7 @@ public partial class LoadingDialog : Window
     private void Cancel_Click(object sender, RoutedEventArgs e)
     {
         CancelButton.IsEnabled = false;
-        StepText.Text = "Stopping…";
+        StepText.Text = L.T("LoadingDialog.Stopping");
         _cancel.Cancel();
     }
 

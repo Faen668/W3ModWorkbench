@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using W3ModWorkbench.Core;
 using W3ModWorkbench.ViewModels;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -20,13 +21,13 @@ public partial class AssetBrowserWindow
     private static EasyAssetBrowser? Eab => EasyAssetBrowser.Current;
 
     /// <summary>The EAB category choice for files of the kinds EAB lists that it doesn't list yet.</summary>
-    private const string NotInEab = "Not in EAB";
+    private static string NotInEab => L.T("AssetBrowserWindow.NotInEab");
 
     /// <summary>Reads EasyAssetBrowser's lists (from the cache, or GitHub once a day or when <paramref name="refresh"/>) and shows them.</summary>
     private async Task LoadEabAsync(bool refresh)
     {
         if (!_settings.EasyAssetBrowserOn) return;
-        if (Eab is null || refresh) EabStatus = "Reading EasyAssetBrowser's tags…";
+        if (Eab is null || refresh) EabStatus = L.T("AssetBrowserWindow.ReadingEasyAssetBrowsersTags");
         ApplyEab();
         await EasyAssetBrowser.LoadAsync(refresh);
         EabStatus = null;
@@ -46,10 +47,10 @@ public partial class AssetBrowserWindow
         EabCategoryColumn.Visibility = EabTagsColumn.Visibility = on && Eab is not null ? Visibility.Visible : Visibility.Collapsed;
         EabCategoryBox.IsEnabled = EabTagsButton.IsEnabled = on && Eab is not null;
         EabButton.ToolTip = Eab is { } eab
-            ? $"Categories and tags from EasyAssetBrowser by Vincent.02: {eab.Count:N0} assets, {eab.Note}, {eab.Read:g}"
-            : EabStatus ?? "EasyAssetBrowser's tags couldn't be read. Click to try again.";
+            ? L.T("AssetBrowserWindow.CategoriesTagsEasyAssetBrowserVincent", eab.Count, eab.Note, eab.Read)
+            : EabStatus ?? L.T("AssetBrowserWindow.EasyAssetBrowsersTagsCouldntRead");
         int tagCount = _eabInclude.Count + _eabExclude.Count;
-        EabTagsText.Text = tagCount == 0 ? "EAB tags" : $"EAB tags ({tagCount})";
+        EabTagsText.Text = tagCount == 0 ? L.T("AssetBrowserWindow.EABTags") : L.T("AssetBrowserWindow.EABTags2", tagCount);
     }
 
     /// <summary>Whether the EAB category and tags picked leave a file, or null when none is picked.</summary>
@@ -73,10 +74,10 @@ public partial class AssetBrowserWindow
     private IEnumerable<string> DescribeEab()
     {
         if (!_settings.EasyAssetBrowserOn || Eab is null) yield break;
-        if (_eabCategory == NotInEab) yield return "not in EAB yet";
-        else if (_eabCategory is not null) yield return $"EAB category {_eabCategory}";
-        if (_eabInclude.Count > 0) yield return "EAB tags " + string.Join(" + ", _eabInclude.Order(StringComparer.OrdinalIgnoreCase));
-        if (_eabExclude.Count > 0) yield return "no EAB tag " + string.Join(" or ", _eabExclude.Order(StringComparer.OrdinalIgnoreCase));
+        if (_eabCategory == NotInEab) yield return L.T("AssetBrowserWindow.NotEABYet");
+        else if (_eabCategory is not null) yield return L.T("AssetBrowserWindow.EABCategory2", _eabCategory);
+        if (_eabInclude.Count > 0) yield return L.T("AssetBrowserWindow.EABTags3", string.Join(" + ", _eabInclude.Order(StringComparer.OrdinalIgnoreCase)));
+        if (_eabExclude.Count > 0) yield return L.T("AssetBrowserWindow.NoEabTag", string.Join(L.T("AssetBrowserWindow.Or"), _eabExclude.Order(StringComparer.OrdinalIgnoreCase)));
     }
 
     /// <summary>Lists the EAB categories with how many of the files the other filters leave each has, keeping the one picked.</summary>
@@ -125,8 +126,8 @@ public partial class AssetBrowserWindow
     {
         if (Eab is not { } eab) return;
         var menu = new ContextMenu { PlacementTarget = EabTagsButton, Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom, MaxHeight = 640 };
-        menu.Items.Add(new MenuItem { Header = "Click a tag to show only files with it, again to leave out files with it, and again to stop.", IsEnabled = false });
-        var clear = new MenuItem { Header = "Clear the tag filters", Icon = Glyph(""), IsEnabled = _eabInclude.Count + _eabExclude.Count > 0 };
+        menu.Items.Add(new MenuItem { Header = L.T("AssetBrowserWindow.ClickTagShowOnly"), IsEnabled = false });
+        var clear = new MenuItem { Header = L.T("AssetBrowserWindow.ClearTagFilters"), Icon = Glyph(""), IsEnabled = _eabInclude.Count + _eabExclude.Count > 0 };
         clear.Click += (_, _) =>
         {
             _eabInclude.Clear();
@@ -151,7 +152,7 @@ public partial class AssetBrowserWindow
             void Show()
             {
                 bool include = _eabInclude.Contains(name), exclude = _eabExclude.Contains(name);
-                item.Header = Counted(exclude ? $"not {name}" : name, counts.GetValueOrDefault(name));
+                item.Header = Counted(exclude ? L.T("AssetBrowserWindow.Not", name) : name, counts.GetValueOrDefault(name));
                 item.Icon = include ? Glyph("") : exclude ? Glyph("") : null;
                 item.FontWeight = include || exclude ? FontWeights.SemiBold : FontWeights.Normal;
             }
@@ -174,27 +175,27 @@ public partial class AssetBrowserWindow
     {
         var menu = new ContextMenu { PlacementTarget = EabButton, Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom };
         string about = Eab is { } eab
-            ? $"EAB categories and tags come from EasyAssetBrowser by Vincent.02: {eab.Count:N0} assets, {eab.Note} ({eab.Read:g})."
-            : "EAB categories and tags come from EasyAssetBrowser by Vincent.02. They haven't been read yet.";
+            ? L.T("AssetBrowserWindow.EABCategoriesTagsCome", eab.Count, eab.Note, eab.Read)
+            : L.T("AssetBrowserWindow.EABCategoriesTagsCome2");
         menu.Items.Add(new MenuItem { Header = new TextBlock { Text = about, TextWrapping = TextWrapping.Wrap, MaxWidth = 420 }, IsEnabled = false });
         menu.Items.Add(new Separator());
-        menu.Items.Add(Item("View EAB details of the highlighted files…", "\uE946", EabDetails_Click, Eab is not null && Highlighted().Count > 0));
-        menu.Items.Add(Item("Open EasyAssetBrowser", "", (_, _) => OpenLink(EasyAssetBrowser.Site)));
-        menu.Items.Add(Item("Open its GitHub repository", "", (_, _) => OpenLink(EasyAssetBrowser.Repository)));
-        menu.Items.Add(Item("Read the tags again from GitHub", "", (_, _) => _ = LoadEabAsync(true), _settings.EasyAssetBrowserOn));
+        menu.Items.Add(Item(L.T("AssetBrowserWindow.ViewEABDetailsHighlighted"), "\uE946", EabDetails_Click, Eab is not null && Highlighted().Count > 0));
+        menu.Items.Add(Item(L.T("AssetBrowserWindow.OpenEasyAssetBrowser"), "", (_, _) => OpenLink(EasyAssetBrowser.Site)));
+        menu.Items.Add(Item(L.T("AssetBrowserWindow.OpenGitHubRepository"), "", (_, _) => OpenLink(EasyAssetBrowser.Repository)));
+        menu.Items.Add(Item(L.T("AssetBrowserWindow.ReadTagsAgainGitHub"), "", (_, _) => _ = LoadEabAsync(true), _settings.EasyAssetBrowserOn));
         menu.Items.Add(new Separator());
         var links = new MenuItem
         {
-            Header = "Open files from EasyAssetBrowser's site here",
+            Header = L.T("AssetBrowserWindow.OpenFilesEasyAssetBrowsersSite"),
             IsCheckable = true,
             IsChecked = AppLinks.IsRegistered,
-            ToolTip = "Lets a link on EasyAssetBrowser's site (w3modworkbench://…) open the file in this Asset Browser. Windows asks the first time.",
+            ToolTip = L.T("AssetBrowserWindow.LetsLinkEasyAssetBrowsersSite"),
         };
         links.Click += (_, _) => SiteLinks_Click(links.IsChecked);
         menu.Items.Add(links);
-        menu.Items.Add(Item("Privacy notice", "", (_, _) => SettingsWindow.ShowPrivacy(this)));
-        menu.Items.Add(Item("Turn EasyAssetBrowser tags off", "", (_, _) => TurnEabOff(deleteLists: false)));
-        menu.Items.Add(Item("Turn them off and delete the downloaded lists", "", (_, _) => TurnEabOff(deleteLists: true)));
+        menu.Items.Add(Item(L.T("AssetBrowserWindow.PrivacyNotice"), "", (_, _) => SettingsWindow.ShowPrivacy(this)));
+        menu.Items.Add(Item(L.T("AssetBrowserWindow.TurnEasyAssetBrowserTagsOff"), "", (_, _) => TurnEabOff(deleteLists: false)));
+        menu.Items.Add(Item(L.T("AssetBrowserWindow.TurnThemOffDelete"), "", (_, _) => TurnEabOff(deleteLists: true)));
         menu.IsOpen = true;
 
         MenuItem Item(string header, string glyph, RoutedEventHandler click, bool enabled = true)
@@ -277,7 +278,7 @@ public partial class AssetBrowserWindow
     {
         if (ItemForPath(item.Path) is not null) return null;
         string mod = item.Entry.Archive is Core.RedkitDepot ? "" : $" ({item.Entry.Archive.Owner})";
-        return $"Only a mod{mod} has this file; the game and its official DLC don't. EasyAssetBrowser lists only the game's own files, so it can't be suggested.";
+        return L.T("AssetBrowserWindow.OnlyModHasFile", mod);
     }
 
     /// <summary>A part of the game as EasyAssetBrowser names it: BaseGame, HoS, BnW, dlc5.</summary>
@@ -330,7 +331,7 @@ public partial class AssetBrowserWindow
         }
         catch (Exception ex) when (ex is UnauthorizedAccessException or System.IO.IOException or System.Security.SecurityException)
         {
-            MessageBox.Show(this, $"Windows wouldn't let the tool {(on ? "register" : "remove")} its links: {ex.Message}", "W3 Mod Workbench", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show(this, on ? L.T("AssetBrowserWindow.LinksRegisterFailed", ex.Message) : L.T("AssetBrowserWindow.LinksRemoveFailed", ex.Message), "W3 Mod Workbench", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
 
@@ -344,7 +345,7 @@ public partial class AssetBrowserWindow
         try { Process.Start(new ProcessStartInfo(url) { UseShellExecute = true })?.Dispose(); }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
         {
-            MessageBox.Show($"The browser couldn't be opened: {ex.Message}\n\n{url}", "W3 Mod Workbench", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show(L.T("AssetBrowserWindow.BrowserCouldntOpened", ex.Message, url), "W3 Mod Workbench", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
 }

@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using W3ModWorkbench.Core;
 using W3ModWorkbench.ViewModels;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -29,7 +30,7 @@ public partial class UsesWindow : Window
         InitializeComponent();
         _browser = browser;
         _item = item;
-        Title = $"What uses {item.Name}";
+        Title = L.T("UsesWindow.WhatUses", item.Name);
         FileTitle.Text = item.Name;
         FilePath.Text = $"{item.Path}   ·   {item.BundleName}";
         AssetBrowserWindow.IndexProgress += ShowProgress;
@@ -55,14 +56,14 @@ public partial class UsesWindow : Window
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
         {
-            UsesEmpty.Text = $"{_item.Name} couldn't be read: {ex.Message}";
+            UsesEmpty.Text = L.T("UsesWindow.CouldntRead", _item.Name, ex.Message);
             UsesEmpty.Visibility = Visibility.Visible;
             return;
         }
         var rows = links.Order(StringComparer.OrdinalIgnoreCase).Select(path => new LinkRow(path, "", _browser.ItemForPath(path))).ToList();
         UsesList.ItemsSource = rows;
-        UsesTitle.Text = $"Uses ({rows.Count:N0})";
-        UsesEmpty.Text = "It doesn't name any other file.";
+        UsesTitle.Text = L.T("UsesWindow.Uses2", rows.Count);
+        UsesEmpty.Text = L.T("UsesWindow.DoesntNameAnyOther");
         UsesEmpty.Visibility = rows.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
@@ -73,7 +74,7 @@ public partial class UsesWindow : Window
         UsedByEmpty.Visibility = Visibility.Collapsed;
         RebuildButton.IsEnabled = false;
         IndexPanel.Visibility = Visibility.Visible;
-        IndexText.Text = "Finding which files use which: every file of the game, its DLC, the installed mods and REDkit is read once, and kept, so this only happens again for archives that change.";
+        IndexText.Text = L.T("UsesWindow.FindingWhichFilesUse");
         ReferenceIndex index;
         try
         {
@@ -82,7 +83,7 @@ public partial class UsesWindow : Window
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or OperationCanceledException)
         {
             IndexPanel.Visibility = Visibility.Collapsed;
-            UsedByEmpty.Text = $"The files couldn't all be read: {ex.Message}";
+            UsedByEmpty.Text = L.T("UsesWindow.FilesCouldntAllRead", ex.Message);
             UsedByEmpty.Visibility = Visibility.Visible;
             RebuildButton.IsEnabled = true;
             return;
@@ -93,15 +94,15 @@ public partial class UsesWindow : Window
             .Select(s => _browser.ItemFor(s) is { } item ? new LinkRow(s.Path, item.BundleName, item) : new LinkRow(s.Path, Path.GetFileName(s.ArchivePath), null))
             .OrderBy(r => r.Name, StringComparer.OrdinalIgnoreCase).ThenBy(r => r.From, StringComparer.OrdinalIgnoreCase).ToList();
         UsedByList.ItemsSource = rows;
-        UsedByTitle.Text = $"Used by ({rows.Count:N0})";
-        UsedByEmpty.Text = $"No file names {_item.Name}. It may still be used from a script, a CSV or an XML file, which name files as text.";
+        UsedByTitle.Text = L.T("UsesWindow.Used2", rows.Count);
+        UsedByEmpty.Text = L.T("UsesWindow.NoFileNamesMay", _item.Name);
         UsedByEmpty.Visibility = rows.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void ShowProgress(int done, int total, string name)
     {
         IndexBar.Value = total == 0 ? 0 : (double)done / total;
-        IndexDetail.Text = name.Length > 0 ? $"{done:N0} of {total:N0} files   ·   {name}" : $"{done:N0} of {total:N0} files";
+        IndexDetail.Text = name.Length > 0 ? L.T("UsesWindow.Files", done, total, name) : L.T("UsesWindow.Files2", done, total);
     }
 
     // the list a file was last highlighted in, which the buttons act on
@@ -119,7 +120,7 @@ public partial class UsesWindow : Window
     private void Open(LinkRow row)
     {
         if (row.Item is { } item) _browser.OpenFromElsewhere(item);
-        else MessageBox.Show(this, $"{row.Path} isn't among the files the Asset Browser lists.", Title, MessageBoxButton.OK, MessageBoxImage.Information);
+        else MessageBox.Show(this, L.T("UsesWindow.IsntAmongFilesAsset", row.Path), Title, MessageBoxButton.OK, MessageBoxImage.Information);
     }
 
     private void Open_Click(object sender, RoutedEventArgs e)

@@ -14,6 +14,7 @@ using W3ModWorkbench.Core;
 using W3ModWorkbench.Core.Cr2w;
 using W3ModWorkbench.Core.Projects;
 using W3ModWorkbench.Highlighting;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -98,7 +99,7 @@ public partial class JsonWindow : Window, IMessageHost
         Editor.TextArea.Caret.PositionChanged += (_, _) =>
         {
             if (OutlineHost.Visibility == Visibility.Visible) Outline.Reveal(Editor.CaretOffset);
-            PositionText.Text = $"Line {Editor.TextArea.Caret.Line}, column {Editor.TextArea.Caret.Column}";
+            PositionText.Text = L.T("JsonWindow.LineColumn", Editor.TextArea.Caret.Line, Editor.TextArea.Caret.Column);
             _embeddedAt = EmbeddedAt(Editor.CaretOffset);
             EmbeddedButton.IsEnabled = _embeddedAt is not null;
         };
@@ -149,7 +150,7 @@ public partial class JsonWindow : Window, IMessageHost
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            if (owner is IMessageHost host) _ = host.ShowMessage($"{Path.GetFileName(path)} could not be opened", ex.Message, MessageKind.Error);
+            if (owner is IMessageHost host) _ = host.ShowMessage(L.T("JsonWindow.CouldNotOpened", Path.GetFileName(path)), ex.Message, MessageKind.Error);
             return;
         }
         var window = new JsonWindow(Path.GetFileName(path), Path.GetDirectoryName(path) ?? "") { _path = path, _gamePath = FileSafety.GamePathOf(path) }.Standalone(owner);
@@ -179,7 +180,7 @@ public partial class JsonWindow : Window, IMessageHost
         }
         catch (Exception ex) when (ex is InvalidDataException or NotSupportedException or FormatException or InvalidOperationException)
         {
-            if (owner is IMessageHost host) _ = host.ShowMessage($"{name} can't be shown as JSON", ex.Message, MessageKind.Warning);
+            if (owner is IMessageHost host) _ = host.ShowMessage(L.T("JsonWindow.CantShownJson", name), ex.Message, MessageKind.Warning);
             return;
         }
         var window = new JsonWindow(name + Cr2wJsonBatch.Suffix, source)
@@ -189,7 +190,7 @@ public partial class JsonWindow : Window, IMessageHost
             _cr2wPath = diskPath,
         }.Standalone(owner);
         window.Load(Encoding.UTF8.GetBytes(json));
-        if (note is not null) window.Loaded += (_, _) => _ = window.Message.Show(null, $"{name}: {note}. Those can't be edited, but are kept.", MessageKind.Info, autoClose: true);
+        if (note is not null) window.Loaded += (_, _) => _ = window.Message.Show(null, L.T("JsonWindow.ThoseCantEditedBut", name, note), MessageKind.Info, autoClose: true);
         window.Show();
     }
 
@@ -225,21 +226,21 @@ public partial class JsonWindow : Window, IMessageHost
     {
         string name = ShownName;
         FileNameText.Text = (_edited ? "• " : "") + name;
-        Title = $"{(_edited ? "• " : "")}{name} - JSON";
+        Title = L.T("JsonWindow.Json2", (_edited ? "• " : ""), name);
         string encoding = _encoding switch
         {
             UnicodeEncoding => "UTF-16",
-            UTF8Encoding { } u when u.GetPreamble().Length > 0 => "UTF-8 with BOM",
+            UTF8Encoding { } u when u.GetPreamble().Length > 0 => L.T("JsonWindow.UTFBOM"),
             _ => "UTF-8",
         };
-        string kind = _cr2wName is not null ? $"{_cr2wName} as JSON, saved back as CR2W" : _converted ? "a converted CR2W file" : encoding;
-        DetailText.Text = _parent is not null ? $"Embedded in {_parent.ShownName}  ·  Save writes it back there" : $"{_path ?? _cr2wPath ?? _source}  ·  {kind}";
-        SaveButton.ToolTip = _parent is not null ? $"Write it back into {_parent.ShownName} (Ctrl+S)"
+        string kind = _cr2wName is not null ? L.T("JsonWindow.JsonSavedBackCR2W", _cr2wName) : _converted ? L.T("JsonWindow.ConvertedCR2WFile") : encoding;
+        DetailText.Text = _parent is not null ? L.T("JsonWindow.EmbeddedSaveWritesBack", _parent.ShownName) : $"{_path ?? _cr2wPath ?? _source}  ·  {kind}";
+        SaveButton.ToolTip = _parent is not null ? L.T("JsonWindow.WriteBackIntoCtrl", _parent.ShownName)
             : _cr2wName is not null
-            ? (_cr2wPath is not null && FileSafety.CanEdit(_cr2wPath) ? $"Save back to {_cr2wName} (Ctrl+S)" : $"Save {_cr2wName} into your project (Ctrl+S)")
-            : _path is null ? "Save as a file (Ctrl+S)" : $"Save to {Path.GetFileName(_path)} (Ctrl+S)";
+            ? (_cr2wPath is not null && FileSafety.CanEdit(_cr2wPath) ? L.T("JsonWindow.SaveBackCtrl", _cr2wName) : L.T("JsonWindow.SaveIntoYourProject", _cr2wName))
+            : _path is null ? L.T("JsonWindow.SaveFileCtrl") : L.T("JsonWindow.SaveCtrl", Path.GetFileName(_path));
         SaveCr2wButton.Visibility = _converted && _cr2wName is null ? Visibility.Visible : Visibility.Collapsed;
-        SaveCr2wText.Text = $"Save as {Cr2wTargetName()}";
+        SaveCr2wText.Text = L.T("JsonWindow.Save", Cr2wTargetName());
     }
 
     /// <summary>The game file a converted JSON file makes: its name without .json.</summary>
@@ -293,7 +294,7 @@ public partial class JsonWindow : Window, IMessageHost
         {
             int line = (int)(ex.LineNumber ?? 0) + 1, column = (int)(ex.BytePositionInLine ?? 0) + 1;
             _errorAt = (line, column);
-            ShowStatus($"Line {line}, column {column}: {Plain(ex.Message)}", problem: true, jumps: true);
+            ShowStatus(L.T("JsonWindow.LineColumn2", line, column, Plain(ex.Message)), problem: true, jumps: true);
             return;
         }
         bool converted = root is JsonObject o && (string?)o["$format"] == Cr2wJson.FormatName;
@@ -302,14 +303,14 @@ public partial class JsonWindow : Window, IMessageHost
             _converted = converted;
             UpdateHeader();
         }
-        string summary = $"Valid JSON  ·  {Format.Count(Editor.Document.LineCount, "line")}";
+        string summary = L.T("JsonWindow.ValidJson", L.T("Count.Line", Editor.Document.LineCount));
         if (!converted || root is not JsonObject document)
         {
             ShowStatus(summary, problem: false);
             return;
         }
         string classes = string.Join(", ", (document["objects"] as JsonArray ?? []).OfType<JsonObject>().Select(x => (string?)x["$class"]).Where(c => c is not null).Distinct().Take(3));
-        ShowStatus($"{summary}  ·  {classes}  ·  checking that it converts back…", problem: false);
+        ShowStatus(L.T("JsonWindow.CheckingConvertsBack", summary, classes), problem: false);
         var cts = _checking = new CancellationTokenSource();
         Task.Run(() =>
         {
@@ -322,8 +323,8 @@ public partial class JsonWindow : Window, IMessageHost
         {
             if (cts.IsCancellationRequested || t.IsCanceled || t.IsFaulted) return;
             var (size, error) = t.Result;
-            if (error is null) ShowStatus($"{summary}  ·  {classes}  ·  converts back to CR2W ({Format.Bytes(size)})", problem: false);
-            else ShowStatus($"Won't convert back to CR2W: {error}", problem: true);
+            if (error is null) ShowStatus(L.T("JsonWindow.ConvertsBackCR2W", summary, classes, Format.Bytes(size)), problem: false);
+            else ShowStatus(L.T("JsonWindow.WontConvertBackCR2W", error), problem: true);
         }, TaskScheduler.FromCurrentSynchronizationContext());
     }
 
@@ -384,13 +385,13 @@ public partial class JsonWindow : Window, IMessageHost
         }
         catch (JsonException ex)
         {
-            await ShowMessage("The JSON has to be valid first", $"Line {(ex.LineNumber ?? 0) + 1}: {Plain(ex.Message)}", MessageKind.Warning);
+            await ShowMessage(L.T("JsonWindow.JsonHasValidFirst"), L.T("JsonWindow.Line", (ex.LineNumber ?? 0) + 1, Plain(ex.Message)), MessageKind.Warning);
             return;
         }
         if (node is null) return;
         if (JsonScanner.Scan(text).Any(s => s.Kind == JsonSpanKind.Comment)
-            && !await Message.Show("Format drops the comments", "JSON has no comments of its own, so formatting leaves them out. You can undo it.",
-                MessageKind.Question, primary: "Format", secondary: "Cancel"))
+            && !await Message.Show(L.T("JsonWindow.FormatDropsComments"), L.T("JsonWindow.JsonHasNoComments"),
+                MessageKind.Question, primary: L.T("Common.Format"), secondary: L.T("Common.Cancel")))
             return;
         string formatted = Cr2wJson.Format(node);
         if (formatted == text) return;
@@ -412,8 +413,8 @@ public partial class JsonWindow : Window, IMessageHost
         // name.env.json on disk: name.env beside it, asked where when that's somewhere that can't be written
         string? beside = _path is not null ? Path.Combine(Path.GetDirectoryName(_path)!, Cr2wTargetName()) : null;
         if (beside is not null && File.Exists(beside) && FileSafety.CanEdit(beside)
-            && !await Message.Show($"Replace {Path.GetFileName(beside)}?", $"{beside} is there already. Save the JSON over it as CR2W?",
-                MessageKind.Question, primary: "Replace", secondary: "Choose where…"))
+            && !await Message.Show(L.T("JsonWindow.Replace", Path.GetFileName(beside)), L.T("JsonWindow.ThereAlreadySaveJson", beside),
+                MessageKind.Question, primary: L.T("Common.Replace"), secondary: L.T("JsonWindow.ChooseWhere")))
             beside = null;
         await SaveAsync(beside, asCr2w: true);
     }
@@ -433,7 +434,7 @@ public partial class JsonWindow : Window, IMessageHost
         }
         catch (InvalidDataException ex)
         {
-            await ShowMessage("It can't be saved as CR2W", ex.Message, MessageKind.Warning);
+            await ShowMessage(L.T("JsonWindow.CantSavedCR2W"), ex.Message, MessageKind.Warning);
             return null;
         }
     }
@@ -443,24 +444,24 @@ public partial class JsonWindow : Window, IMessageHost
     {
         string targetName = asCr2w ? Cr2wTargetName() : ShownName;
         // the game's own file, or a copy from a bundle: it goes into the project, never back where it came from
-        string? protection = path is not null ? FileSafety.Protection(path) : _gamePath is not null && _path is null && _cr2wPath is null ? "It came from inside a bundle, which is never changed." : null;
+        string? protection = path is not null ? FileSafety.Protection(path) : _gamePath is not null && _path is null && _cr2wPath is null ? L.T("JsonWindow.CameInsideBundleWhich") : null;
         string? gamePath = asCr2w ? (_cr2wName is not null ? _gamePath : _gamePath is { } g && g.EndsWith(Cr2wJsonBatch.Suffix, StringComparison.OrdinalIgnoreCase) ? g[..^Cr2wJsonBatch.Suffix.Length] : null)
             : _cr2wName is null ? _gamePath : null;
         if (protection is not null && gamePath is not null)
         {
-            var choice = await Message.Ask($"Save {Path.GetFileName(gamePath)} into your project?",
-                $"{protection} Saved into your project at its game path ({gamePath}), the mod uses it in place of the game's.",
-                MessageKind.Question, "Save to project", "Save as…");
+            var choice = await Message.Ask(L.T("JsonWindow.SaveIntoYourProject2", Path.GetFileName(gamePath)),
+                L.T("JsonWindow.SavedIntoYourProject", protection, gamePath),
+                MessageKind.Question, L.T("Common.SaveProject"), L.T("Common.Save3"));
             if (choice == MessageChoice.Cancel) return false;
             path = null;
             if (choice == MessageChoice.Primary)
             {
                 if (Application.Current.MainWindow is not MainWindow main
-                    || await main.EnsureProjectAsync("Game files are changed as copies in a project, so the game's own are never touched.", Message) is not { } project)
+                    || await main.EnsureProjectAsync(L.T("JsonWindow.GameFilesChangedCopies"), Message) is not { } project)
                     return false;
                 path = project.CopyPathFor(gamePath);
-                if (File.Exists(path) && !await Message.Show($"{project.Name} has {Path.GetFileName(path)} already",
-                        $"Replace the project's copy, {path}, with this one?", MessageKind.Question, primary: "Replace", secondary: "Cancel"))
+                if (File.Exists(path) && !await Message.Show(L.T("JsonWindow.HasAlready", project.Name, Path.GetFileName(path)),
+                        L.T("JsonWindow.ReplaceProjectsCopyOne", path), MessageKind.Question, primary: L.T("Common.Replace"), secondary: L.T("Common.Cancel")))
                     return false;
                 Directory.CreateDirectory(Path.GetDirectoryName(path)!);
                 if (!project.Contains(path) && !project.Contains(project.WorkspacePath)) _ = main.AddToProjectAsync([project.WorkspacePath]);
@@ -468,7 +469,7 @@ public partial class JsonWindow : Window, IMessageHost
         }
         else if (protection is not null)
         {
-            await ShowMessage($"{Path.GetFileName(path ?? targetName)} is read-only", protection + " Save as puts a copy somewhere of your own.", MessageKind.Info);
+            await ShowMessage(L.T("JsonWindow.ReadOnly", Path.GetFileName(path ?? targetName)), L.T("JsonWindow.SavePutsCopySomewhere", protection), MessageKind.Info);
             path = null;
         }
         if (path is null)
@@ -477,9 +478,9 @@ public partial class JsonWindow : Window, IMessageHost
             string folder = Path.GetDirectoryName(_path ?? _cr2wPath ?? "") is { Length: > 0 } d ? d : _source;
             var dialog = new SaveFileDialog
             {
-                Title = asCr2w ? $"Save {targetName}" : "Save JSON",
-                Filter = asCr2w && extension.Length > 1 && !extension.Contains(' ') ? $"{extension.TrimStart('.').ToUpperInvariant()} file (*{extension})|*{extension}|All files (*.*)|*.*"
-                    : asCr2w ? "CR2W files (*.*)|*.*" : "JSON (*.json)|*.json|All files (*.*)|*.*",
+                Title = asCr2w ? L.T("JsonWindow.Save2", targetName) : L.T("JsonWindow.SaveJson"),
+                Filter = asCr2w && extension.Length > 1 && !extension.Contains(' ') ? L.T("JsonWindow.FileAllFiles", extension.TrimStart('.').ToUpperInvariant(), extension)
+                    : asCr2w ? L.T("JsonWindow.CR2WFiles") : L.T("JsonWindow.JsonJsonJsonAll"),
                 FileName = targetName,
                 InitialDirectory = Directory.Exists(folder) ? folder : "",
             };
@@ -495,7 +496,7 @@ public partial class JsonWindow : Window, IMessageHost
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            await ShowMessage("The file could not be saved", ex.Message, MessageKind.Error);
+            await ShowMessage(L.T("Common.FileCouldNotSaved"), ex.Message, MessageKind.Error);
             return false;
         }
         // the window now edits what was saved: a CR2W file as JSON, or the JSON file
@@ -508,8 +509,8 @@ public partial class JsonWindow : Window, IMessageHost
         }
         if (!asCr2w || _cr2wName is not null) _edited = false;
         UpdateHeader();
-        if (ProjectPrompts.ShouldOffer(path)) _ = ProjectPrompts.OfferAsync(path, Message, $"Saved {Path.GetFileName(path)}.");
-        else _ = Message.Show(null, $"Saved {Path.GetFileName(path)}.", MessageKind.Info, autoClose: true);
+        if (ProjectPrompts.ShouldOffer(path)) _ = ProjectPrompts.OfferAsync(path, Message, L.T("JsonWindow.Saved", Path.GetFileName(path)));
+        else _ = Message.Show(null, L.T("JsonWindow.Saved", Path.GetFileName(path)), MessageKind.Info, autoClose: true);
         return true;
     }
 
@@ -545,7 +546,7 @@ public partial class JsonWindow : Window, IMessageHost
         try { data = Convert.FromBase64String(Editor.Document.GetText(at.Start, at.End - at.Start)); }
         catch (FormatException)
         {
-            await ShowMessage("That isn't a whole file", "The buffer's text isn't valid base64, so it can't be opened.", MessageKind.Warning);
+            await ShowMessage(L.T("JsonWindow.IsntWholeFile"), L.T("JsonWindow.BuffersTextIsntValid"), MessageKind.Warning);
             return;
         }
         // one window for each buffer: the same one comes forward when it's open already
@@ -562,7 +563,7 @@ public partial class JsonWindow : Window, IMessageHost
         }
         catch (Exception ex) when (ex is InvalidDataException or NotSupportedException or FormatException or InvalidOperationException)
         {
-            await ShowMessage($"{label} can't be shown as JSON", ex.Message, MessageKind.Warning);
+            await ShowMessage(L.T("JsonWindow.CantShownJson2", label), ex.Message, MessageKind.Warning);
             return;
         }
         var doc = Editor.Document;
@@ -571,7 +572,7 @@ public partial class JsonWindow : Window, IMessageHost
         var end = doc.CreateAnchor(at.End);
         start.MovementType = ICSharpCode.AvalonEdit.Document.AnchorMovementType.BeforeInsertion;
         end.MovementType = ICSharpCode.AvalonEdit.Document.AnchorMovementType.AfterInsertion;
-        var child = new JsonWindow(label, $"Embedded in {ShownName}")
+        var child = new JsonWindow(label, L.T("JsonWindow.Embedded", ShownName))
         {
             _parent = this,
             _cr2wName = label,
@@ -601,7 +602,7 @@ public partial class JsonWindow : Window, IMessageHost
             var m = System.Text.RegularExpressions.Regex.Match(text, "\"(?:name|childName|effectName)\"\\s*:\\s*\"([^\"]*)\"");
             if (m.Success) name = m.Groups[1].Value;
         }
-        return name is { Length: > 0 } ? $"{name} · {(key.Length > 0 ? key : "buffer")}" : key.Length > 0 ? key : "embedded file";
+        return name is { Length: > 0 } ? $"{name} · {(key.Length > 0 ? key : "buffer")}" : key.Length > 0 ? key : L.T("JsonWindow.EmbeddedFile");
     }
 
     /// <summary>Builds the file and puts it back, as base64, where it came from in the parent window's text.</summary>
@@ -609,7 +610,7 @@ public partial class JsonWindow : Window, IMessageHost
     {
         if (_parent is null || _embedStart is not { IsDeleted: false } start || _embedEnd is not { IsDeleted: false } end || end.Offset < start.Offset)
         {
-            await ShowMessage("There's nowhere to put it back", "The buffer it came from was removed from the file. Save as keeps it as a file of its own.", MessageKind.Warning);
+            await ShowMessage(L.T("JsonWindow.TheresNowherePutBack"), L.T("JsonWindow.BufferCameRemovedFile"), MessageKind.Warning);
             return false;
         }
         if (await BytesAsync(asCr2w: true) is not { } data) return false;
@@ -618,7 +619,7 @@ public partial class JsonWindow : Window, IMessageHost
         if (doc.GetText(start.Offset, end.Offset - start.Offset) != base64) doc.Replace(start.Offset, end.Offset - start.Offset, base64);
         _edited = false;
         UpdateHeader();
-        _ = Message.Show(null, $"Written back into {_parent.ShownName}. Save it there to keep the change.", MessageKind.Info, autoClose: true);
+        _ = Message.Show(null, L.T("JsonWindow.WrittenBackIntoSave", _parent.ShownName), MessageKind.Info, autoClose: true);
         return true;
     }
 
@@ -636,8 +637,8 @@ public partial class JsonWindow : Window, IMessageHost
     {
         if (!_edited || _closeConfirmed) return;
         e.Cancel = true;
-        var choice = await Message.Ask("Save the changes?", $"{ShownName} has changes that haven't been saved.",
-            MessageKind.Question, primary: "Save", secondary: "Don't save");
+        var choice = await Message.Ask(L.T("Common.SaveChanges"), L.T("JsonWindow.HasChangesHaventBeen", ShownName),
+            MessageKind.Question, primary: L.T("Common.Save"), secondary: L.T("Common.DontSave"));
         if (choice == MessageChoice.Cancel) return;
         if (choice == MessageChoice.Primary && !await SaveCurrentAsync()) return;
         _closeConfirmed = true;
@@ -657,5 +658,5 @@ public partial class JsonWindow : Window, IMessageHost
         e.Handled = true;
     }
 
-    public Task ShowMessage(string? title, string message, MessageKind kind) => Message.Show(title, message, kind, primary: "OK");
+    public Task ShowMessage(string? title, string message, MessageKind kind) => Message.Show(title, message, kind, primary: L.T("Common.OK"));
 }

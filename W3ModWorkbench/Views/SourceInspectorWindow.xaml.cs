@@ -13,6 +13,7 @@ using W3ModWorkbench.Core;
 using W3ModWorkbench.Core.Inspector;
 using W3ModWorkbench.Highlighting;
 using W3ModWorkbench.Core.Projects;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -29,7 +30,7 @@ public sealed class MatchItem(MatchRow row)
     public double SuspectPercent => row.SuspectInOriginal * 100;
     public string OriginalText => $"{OriginalPercent:0}%";
     public string SuspectText => $"{SuspectPercent:0}%";
-    public string Note => row.SamePath ? row.Note + " · same path" : row.Note;
+    public string Note => row.SamePath ? L.T("SourceInspectorWindow.SamePath", row.Note) : row.Note;
 }
 
 /// <summary>A row of the content breakdown.</summary>
@@ -38,11 +39,11 @@ public sealed class CategoryItem(CategoryResult c)
     public string Name => c.Name;
     public int OriginalFiles => c.OriginalFiles;
     public int SuspectFiles => c.SuspectFiles;
-    public string Detail => c.OriginalFiles == 0 && c.SuspectFiles == 0 ? "Neither source has any" : c.Detail;
+    public string Detail => c.OriginalFiles == 0 && c.SuspectFiles == 0 ? L.T("SourceInspectorWindow.NeitherSourceHasAny") : c.Detail;
     public double OriginalPercent => (c.OriginalInSuspect ?? 0) * 100;
     public double SuspectPercent => (c.SuspectInOriginal ?? 0) * 100;
-    public string OriginalText => c.OriginalInSuspect is { } v ? $"{v * 100:0}%" : "n/a";
-    public string SuspectText => c.SuspectInOriginal is { } v ? $"{v * 100:0}%" : "n/a";
+    public string OriginalText => c.OriginalInSuspect is { } v ? $"{v * 100:0}%" : L.T("SourceInspectorWindow.N");
+    public string SuspectText => c.SuspectInOriginal is { } v ? $"{v * 100:0}%" : L.T("SourceInspectorWindow.N");
 }
 
 /// <summary>A row of the coding style list. Its bar is how alike the habit is.</summary>
@@ -86,9 +87,9 @@ public partial class SourceInspectorWindow : Window, IMessageHost
         SuspectBox.Text = _settings.InspectorSuspect;
         IgnoreGameCheck.IsChecked = _settings.InspectorIgnoreGame;
 
-        KindFilter.ItemsSource = new[] { "All kinds", "Scripts", "Menus and XML", "Text and strings", "Bundle contents and files" };
+        KindFilter.ItemsSource = new[] { L.T("SourceInspectorWindow.AllKinds"), L.T("SourceInspectorWindow.Scripts"), L.T("SourceInspectorWindow.MenusXML"), L.T("SourceInspectorWindow.TextStrings"), L.T("SourceInspectorWindow.BundleContentsFiles") };
         KindFilter.SelectedIndex = 0;
-        LevelFilter.ItemsSource = new[] { "Every match", "Copies and above", "Large overlaps and above" };
+        LevelFilter.ItemsSource = new[] { L.T("SourceInspectorWindow.EveryMatch"), L.T("SourceInspectorWindow.CopiesAbove"), L.T("SourceInspectorWindow.LargeOverlapsAbove") };
         LevelFilter.SelectedIndex = 0;
 
         foreach (var (editor, marks) in new[] { (LeftEditor, _leftMarks), (RightEditor, _rightMarks) })
@@ -137,7 +138,7 @@ public partial class SourceInspectorWindow : Window, IMessageHost
         _open.Show();
     }
 
-    public Task ShowMessage(string? title, string message, MessageKind kind) => Message.Show(title, message, kind, primary: "OK");
+    public Task ShowMessage(string? title, string message, MessageKind kind) => Message.Show(title, message, kind, primary: L.T("Common.OK"));
 
     // ---------------------------------------------------------------- sources
 
@@ -149,7 +150,7 @@ public partial class SourceInspectorWindow : Window, IMessageHost
         {
             IgnoreGameCheck.IsEnabled = false;
             IgnoreGameCheck.IsChecked = false;
-            GameNote.Text = "The game's folder wasn't found: set it in Settings to use this";
+            GameNote.Text = L.T("SourceInspectorWindow.GamesFolderWasntFound");
         }
         else
         {
@@ -183,7 +184,7 @@ public partial class SourceInspectorWindow : Window, IMessageHost
         bool found;
         try { found = SourceScanner.Exists(path); }
         catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException) { found = false; }
-        info.Text = found ? (Directory.Exists(path) ? "Folder found" : "File found") : "Can't find this path";
+        info.Text = found ? (Directory.Exists(path) ? L.T("SourceInspectorWindow.FolderFound") : L.T("SourceInspectorWindow.FileFound")) : L.T("SourceInspectorWindow.CantFindPath");
         info.SetResourceReference(TextBlock.ForegroundProperty, found ? "TextFillColorSecondaryBrush" : "SystemFillColorCriticalBrush");
         return found;
     }
@@ -193,9 +194,9 @@ public partial class SourceInspectorWindow : Window, IMessageHost
         var button = (Button)sender;
         bool original = (string)button.Tag == "Original";
         var menu = new ContextMenu { PlacementTarget = button, Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom };
-        var folder = new MenuItem { Header = "Choose a folder…" };
+        var folder = new MenuItem { Header = L.T("SourceInspectorWindow.ChooseFolder") };
         folder.Click += (_, _) => ChooseFolder(original);
-        var file = new MenuItem { Header = "Choose a bundle or compiled script file…" };
+        var file = new MenuItem { Header = L.T("SourceInspectorWindow.ChooseBundleCompiledScript") };
         file.Click += (_, _) => ChooseFile(original);
         menu.Items.Add(folder);
         menu.Items.Add(file);
@@ -207,7 +208,7 @@ public partial class SourceInspectorWindow : Window, IMessageHost
         var box = original ? OriginalBox : SuspectBox;
         var dialog = new OpenFolderDialog
         {
-            Title = original ? "Choose the original mod's folder" : "Choose the folder of the mod to check",
+            Title = original ? L.T("SourceInspectorWindow.ChooseOriginalModsFolder") : L.T("SourceInspectorWindow.ChooseFolderModCheck"),
             InitialDirectory = StartFolder(box),
         };
         if (dialog.ShowDialog(this) == true) box.Text = dialog.FolderName;
@@ -218,8 +219,8 @@ public partial class SourceInspectorWindow : Window, IMessageHost
         var box = original ? OriginalBox : SuspectBox;
         var dialog = new OpenFileDialog
         {
-            Title = original ? "Choose the original mod's file" : "Choose the file to check",
-            Filter = "Bundles and compiled scripts (*.bundle;*.rsblob)|*.bundle;*.rsblob|All files (*.*)|*.*",
+            Title = original ? L.T("SourceInspectorWindow.ChooseOriginalModsFile") : L.T("SourceInspectorWindow.ChooseFileCheck"),
+            Filter = L.T("SourceInspectorWindow.BundlesCompiledScriptsBundle"),
             InitialDirectory = StartFolder(box),
         };
         if (dialog.ShowDialog(this) == true) box.Text = dialog.FileName;
@@ -267,12 +268,12 @@ public partial class SourceInspectorWindow : Window, IMessageHost
         string fullA = Path.GetFullPath(original).TrimEnd('\\'), fullB = Path.GetFullPath(suspect).TrimEnd('\\');
         if (fullA.Equals(fullB, StringComparison.OrdinalIgnoreCase))
         {
-            await ShowMessage("These are the same", "The original and the suspect are the same folder. Choose two different mods to compare.", MessageKind.Info);
+            await ShowMessage(L.T("SourceInspectorWindow.TheseSame"), L.T("SourceInspectorWindow.OriginalSuspectSameFolder"), MessageKind.Info);
             return;
         }
         if (fullA.StartsWith(fullB + "\\", StringComparison.OrdinalIgnoreCase) || fullB.StartsWith(fullA + "\\", StringComparison.OrdinalIgnoreCase))
         {
-            await ShowMessage("One folder is inside the other", "Each mod needs a folder of its own. With one inside the other, every file would be found in both.", MessageKind.Warning);
+            await ShowMessage(L.T("SourceInspectorWindow.OneFolderInsideOther"), L.T("SourceInspectorWindow.EachModNeedsFolder"), MessageKind.Warning);
             return;
         }
 
@@ -296,16 +297,16 @@ public partial class SourceInspectorWindow : Window, IMessageHost
         {
             var report = await Task.Run(() => InspectorEngine.Run(original, suspect, options, progress, cancel.Token));
             Show(report);
-            StatusText.Text = $"Compared in {clock.Elapsed.TotalSeconds:0.#} s";
+            StatusText.Text = L.T("SourceInspectorWindow.Compared", clock.Elapsed.TotalSeconds);
         }
         catch (OperationCanceledException)
         {
-            StatusText.Text = "Cancelled";
+            StatusText.Text = L.T("Common.Cancelled");
         }
         catch (Exception ex)
         {
             StatusText.Text = "";
-            await ShowMessage("The comparison failed", ex.Message, MessageKind.Error);
+            await ShowMessage(L.T("SourceInspectorWindow.ComparisonFailed"), ex.Message, MessageKind.Error);
         }
         finally
         {
@@ -318,7 +319,7 @@ public partial class SourceInspectorWindow : Window, IMessageHost
     private void Cancel_Click(object sender, RoutedEventArgs e)
     {
         _cancel?.Cancel();
-        PhaseText.Text = "Cancelling…";
+        PhaseText.Text = L.T("SourceInspectorWindow.Cancelling");
     }
 
     private void SetBusy(bool busy)
@@ -326,7 +327,7 @@ public partial class SourceInspectorWindow : Window, IMessageHost
         _busy = busy;
         ProgressCard.Visibility = busy ? Visibility.Visible : Visibility.Collapsed;
         CancelButton.Visibility = busy ? Visibility.Visible : Visibility.Collapsed;
-        PhaseText.Text = "Starting…";
+        PhaseText.Text = L.T("SourceInspectorWindow.Starting");
         PhaseDetail.Text = "";
         Progress.Value = 0;
         OriginalCard.IsEnabled = SuspectCard.IsEnabled = SwapButton.IsEnabled = !busy;
@@ -370,15 +371,15 @@ public partial class SourceInspectorWindow : Window, IMessageHost
         FindingsList.ItemsSource = report.Findings;
         CategoryGrid.ItemsSource = report.Categories.Select(c => new CategoryItem(c)).ToList();
         GameNoteResult.Text = report.GameCodeIgnored
-            ? $"The game's own scripts ({report.GameScriptsRead:N0} files) were set aside" + (report.GameCodeFiles > 0 ? $", along with {Format.Count(report.GameCodeFiles, "file")} that hold nothing else." : ".")
-            : "The game's own scripts were not set aside, so code both mods took from the game counts as shared.";
+            ? L.T("SourceInspectorWindow.GameSetAside", report.GameScriptsRead) + (report.GameCodeFiles > 0 ? L.T("SourceInspectorWindow.AlongWith", L.T("Count.File", report.GameCodeFiles)) : ".")
+            : L.T("SourceInspectorWindow.GamesOwnScriptsWere");
 
         // matches
         _matches = [.. report.Matches.Select(m => new MatchItem(m))];
         ApplyMatchFilter();
 
         // evidence
-        var kinds = new List<string> { "All kinds" };
+        var kinds = new List<string> { L.T("SourceInspectorWindow.AllKinds") };
         kinds.AddRange(report.Evidence.Select(x => x.Category).Distinct());
         EvidenceFilter.ItemsSource = kinds;
         EvidenceFilter.SelectedIndex = 0;
@@ -388,7 +389,7 @@ public partial class SourceInspectorWindow : Window, IMessageHost
         StyleGrid.Visibility = report.Style.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
         StyleEmpty.Visibility = report.Style.Count > 0 ? Visibility.Collapsed : Visibility.Visible;
         StyleEmpty.Text = report.StyleNote;
-        StyleScore.Text = report.StyleSimilarity is { } style ? $"{style * 100:0}%" : "n/a";
+        StyleScore.Text = report.StyleSimilarity is { } style ? $"{style * 100:0}%" : L.T("SourceInspectorWindow.N");
         StyleNote.Text = report.StyleNote;
 
         // sources
@@ -396,7 +397,7 @@ public partial class SourceInspectorWindow : Window, IMessageHost
         SuspectPathText.Text = report.Suspect.Path;
         OriginalFacts.Text = Facts(report.Original);
         SuspectFacts.Text = Facts(report.Suspect);
-        var warnings = report.Original.Warnings.Select(w => "Original: " + w).Concat(report.Suspect.Warnings.Select(w => "Suspect: " + w)).ToList();
+        var warnings = report.Original.Warnings.Select(w => L.T("SourceInspectorWindow.Original5", w)).Concat(report.Suspect.Warnings.Select(w => L.T("SourceInspectorWindow.Suspect5", w))).ToList();
         WarningsList.ItemsSource = warnings;
         WarningsCard.Visibility = warnings.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
     }
@@ -405,9 +406,9 @@ public partial class SourceInspectorWindow : Window, IMessageHost
     {
         var text = new StringBuilder();
         text.AppendLine(s.Summary);
-        text.AppendLine($"{Format.Count(s.Files, "file")} on disk");
+        text.AppendLine(L.T("SourceInspectorWindow.Disk", L.T("Count.File", s.Files)));
         if (s.Oldest is { } oldest && s.Newest is { } newest)
-            text.AppendLine($"File dates {oldest:d MMM yyyy} to {newest:d MMM yyyy}");
+            text.AppendLine(L.T("SourceInspectorWindow.FileDates", oldest, newest));
         return text.ToString().TrimEnd();
     }
 
@@ -448,15 +449,15 @@ public partial class SourceInspectorWindow : Window, IMessageHost
                                         && (query.Length == 0 || m.OriginalName.Contains(query, StringComparison.OrdinalIgnoreCase)
                                                               || m.SuspectName.Contains(query, StringComparison.OrdinalIgnoreCase))).ToList();
         MatchGrid.ItemsSource = shown;
-        MatchCount.Text = shown.Count == _matches.Count ? Format.Count(shown.Count, "match", "matches") : $"{shown.Count:N0} of {_matches.Count:N0} matches";
+        MatchCount.Text = shown.Count == _matches.Count ? L.T("Count.Match", shown.Count) : L.T("SourceInspectorWindow.Matches", shown.Count, _matches.Count);
         if (shown.Count > 0) MatchGrid.SelectedIndex = 0;
-        else ClearDetail("No files match. Try another filter.");
+        else ClearDetail(L.T("SourceInspectorWindow.NoFilesMatchTry"));
     }
 
     private void MatchGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (MatchGrid.SelectedItem is MatchItem item) _ = ShowDetailAsync(item.Row);
-        else ClearDetail("Select a match to compare the two files side by side");
+        else ClearDetail(L.T("SourceInspectorWindow.SelectMatchCompareTwo"));
     }
 
     private void ClearDetail(string title)
@@ -475,8 +476,8 @@ public partial class SourceInspectorWindow : Window, IMessageHost
     {
         int version = ++_detailVersion;
         DetailTitle.Text = $"{row.LevelText} · {row.KindText}";
-        LeftHeader.Text = "ORIGINAL  " + row.Original.Origin;
-        RightHeader.Text = "SUSPECT  " + row.Suspect.Origin;
+        LeftHeader.Text = L.T("SourceInspectorWindow.Original4", row.Original.Origin);
+        RightHeader.Text = L.T("SourceInspectorWindow.Suspect4", row.Suspect.Origin);
 
         if (row.Original.Text is null || row.Suspect.Text is null)
         {
@@ -484,7 +485,7 @@ public partial class SourceInspectorWindow : Window, IMessageHost
             RightEditor.Document = new TextDocument();
             _leftMarks.Kinds = _rightMarks.Kinds = null;
             DiffLegend.Text = "";
-            BinaryNote.Text = $"These files are not text, so there is nothing to show side by side.\n\nBoth are {Format.Bytes(row.Original.Size)} with the same SHA-256:\n{row.Original.Hash}";
+            BinaryNote.Text = L.T("SourceInspectorWindow.TheseFilesNotText", Format.Bytes(row.Original.Size), row.Original.Hash);
             BinaryNote.Visibility = Visibility.Visible;
             return;
         }
@@ -539,13 +540,13 @@ public partial class SourceInspectorWindow : Window, IMessageHost
         {
             _leftMarks.Kinds = Shared(_leftDiff, _leftLines);
             _rightMarks.Kinds = Shared(_rightDiff, _rightLines);
-            DiffLegend.Text = "Green lines are in both files";
+            DiffLegend.Text = L.T("SourceInspectorWindow.GreenLinesBothFiles");
         }
         else
         {
             _leftMarks.Kinds = _leftDiff;
             _rightMarks.Kinds = _rightDiff;
-            DiffLegend.Text = "Amber changed · red only in the original · green only in the suspect";
+            DiffLegend.Text = L.T("SourceInspectorWindow.AmberChangedRedOnly");
         }
         LeftEditor.TextArea.TextView.InvalidateLayer(KnownLayer.Background);
         RightEditor.TextArea.TextView.InvalidateLayer(KnownLayer.Background);
@@ -580,7 +581,7 @@ public partial class SourceInspectorWindow : Window, IMessageHost
         string? category = EvidenceFilter.SelectedIndex > 0 ? EvidenceFilter.SelectedItem as string : null;
         var shown = _report.Evidence.Where(x => category is null || x.Category == category).ToList();
         EvidenceGrid.ItemsSource = shown;
-        EvidenceCount.Text = Format.Count(shown.Count, "shared item");
+        EvidenceCount.Text = L.T("Count.SharedItem", shown.Count);
         EvidenceEmpty.Visibility = shown.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         EvidenceGrid.Visibility = shown.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
     }
@@ -592,7 +593,7 @@ public partial class SourceInspectorWindow : Window, IMessageHost
         try
         {
             Clipboard.SetText(string.Join(Environment.NewLine, items));
-            _ = Message.Show(null, "Copied to the clipboard.", MessageKind.Info, autoClose: true);
+            _ = Message.Show(null, L.T("Common.CopiedClipboard"), MessageKind.Info, autoClose: true);
         }
         catch (System.Runtime.InteropServices.COMException)
         {
@@ -605,9 +606,9 @@ public partial class SourceInspectorWindow : Window, IMessageHost
     private void Export_Click(object sender, RoutedEventArgs e)
     {
         var menu = new ContextMenu { PlacementTarget = ExportButton, Placement = System.Windows.Controls.Primitives.PlacementMode.Top };
-        var html = new MenuItem { Header = "Web page (.html)" };
+        var html = new MenuItem { Header = L.T("SourceInspectorWindow.WebPageHtml") };
         html.Click += (_, _) => Save(true);
-        var md = new MenuItem { Header = "Markdown (.md)" };
+        var md = new MenuItem { Header = L.T("SourceInspectorWindow.MarkdownMd") };
         md.Click += (_, _) => Save(false);
         menu.Items.Add(html);
         menu.Items.Add(md);
@@ -619,8 +620,8 @@ public partial class SourceInspectorWindow : Window, IMessageHost
         if (_report is null) return;
         var dialog = new SaveFileDialog
         {
-            Title = "Save the report",
-            Filter = html ? "Web page (*.html)|*.html" : "Markdown (*.md)|*.md",
+            Title = L.T("SourceInspectorWindow.SaveReport2"),
+            Filter = html ? L.T("SourceInspectorWindow.WebPageHtmlHtml") : L.T("SourceInspectorWindow.MarkdownMdMd"),
             FileName = $"Source inspector {_report.Original.Name} vs {_report.Suspect.Name}".Replace(' ', '_') + (html ? ".html" : ".md"),
             InitialDirectory = Directory.Exists(_settings.LastOpenFolder) ? _settings.LastOpenFolder : "",
         };
@@ -633,10 +634,10 @@ public partial class SourceInspectorWindow : Window, IMessageHost
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            await ShowMessage("The report couldn't be saved", ex.Message, MessageKind.Error);
+            await ShowMessage(L.T("SourceInspectorWindow.ReportCouldntSaved"), ex.Message, MessageKind.Error);
             return;
         }
-        if (await Message.Show("Report saved", dialog.FileName, MessageKind.Info, "Open", "Close"))
+        if (await Message.Show(L.T("SourceInspectorWindow.ReportSaved"), dialog.FileName, MessageKind.Info, L.T("Common.Open"), L.T("Common.Close")))
         {
             try { Process.Start(new ProcessStartInfo(dialog.FileName) { UseShellExecute = true }); }
             catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException) { }

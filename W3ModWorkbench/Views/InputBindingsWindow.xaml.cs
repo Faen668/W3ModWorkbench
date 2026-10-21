@@ -9,6 +9,7 @@ using W3ModWorkbench.Core;
 using W3ModWorkbench.Core.Input;
 using W3ModWorkbench.Core.Scripts.Standalone;
 using W3ModWorkbench.Highlighting;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -93,8 +94,8 @@ public partial class InputBindingsWindow : Window, IMessageHost
             _settings = null;
         }
         FileText.Text = _settings is null
-            ? $"{_settingsPath} wasn't found, so taken keys can't be checked. Run the game once, or pick the file."
-            : $"Checking keys against {_settingsPath}  ·  {Format.Count(_settings.Bindings.Count, "binding")} in {Format.Count(_settings.Contexts.Count, "context")}";
+            ? L.T("InputBindingsWindow.WasntFoundSoTaken", _settingsPath)
+            : L.T("InputBindingsWindow.CheckingKeysAgainst", _settingsPath, L.T("Count.Binding", _settings.Bindings.Count), L.T("Count.Context", _settings.Contexts.Count));
 
         var names = new List<string>(InputSettings.CommonContexts);
         if (AllContextsCheck.IsChecked == true && _settings is not null)
@@ -127,22 +128,13 @@ public partial class InputBindingsWindow : Window, IMessageHost
     {
         if (!_ready) return;
         var b = Binding();
-        string settings = b.Contexts.Count == 0 ? "// tick at least one context the key works in\n" : InputSettings.Write(b);
-        Output.Text = $"""
-            // ---- Documents\The Witcher 3\input.settings: under each heading
-            {settings.TrimEnd()}
-
-            // ---- bin\config\r4game\user_config_matrix\pc\input.xml: inside <VisibleVars>
-            {InputSettings.MenuEntry(b)}
-
-            // ---- your script
-            {InputSettings.Script(b)}
-            """;
+        string settings = b.Contexts.Count == 0 ? L.T("InputBindingsWindow.TickLeastOneContext") : InputSettings.Write(b);
+        Output.Text = L.T("InputBindingsWindow.DocumentsWitcherInputSettings", settings.TrimEnd(), InputSettings.MenuEntry(b), InputSettings.Script(b));
 
         bool known = Keys().Contains(b.Key);
         if (!known)
         {
-            KeyNote.Text = $"{b.Key} isn't one of the engine's keys.";
+            KeyNote.Text = L.T("InputBindingsWindow.IsntOneEnginesKeys", b.Key);
             KeyNote.SetResourceReference(TextBlock.ForegroundProperty, "SystemFillColorCautionBrush");
         }
         else if (_settings is null)
@@ -154,21 +146,20 @@ public partial class InputBindingsWindow : Window, IMessageHost
             var taken = _settings.OnKey(b.Key, b.Contexts).Where(t => !t.Action.Equals(b.Action, StringComparison.OrdinalIgnoreCase)).ToList();
             if (taken.Count == 0)
             {
-                KeyNote.Text = b.Contexts.Count == 0 ? "" : $"{b.Key} is free in {string.Join(", ", b.Contexts)}.";
+                KeyNote.Text = b.Contexts.Count == 0 ? "" : L.T("InputBindingsWindow.Free", b.Key, string.Join(", ", b.Contexts));
                 KeyNote.SetResourceReference(TextBlock.ForegroundProperty, "SystemFillColorSuccessBrush");
             }
             else
             {
-                KeyNote.Text = $"{b.Key} is already bound: " + string.Join("; ", taken.GroupBy(t => t.Context)
-                    .Select(g => $"{g.Key}: {string.Join(", ", g.Select(t => t.Action).Distinct())}"))
-                    + ". Both actions would fire when it's pressed.";
+                KeyNote.Text = L.T("InputBindingsWindow.AlreadyBound", b.Key, string.Join("; ", taken.GroupBy(t => t.Context)
+                    .Select(g => $"{g.Key}: {string.Join(", ", g.Select(t => t.Action).Distinct())}")));
                 KeyNote.SetResourceReference(TextBlock.ForegroundProperty, "SystemFillColorCautionBrush");
             }
         }
 
         var existing = _settings?.ForAction(b.Action) ?? [];
         ActionNote.Text = existing.Count == 0 ? ""
-            : $"{b.Action} is in your input.settings already, on {string.Join(", ", existing.Select(e => $"{e.Key} in {e.Context}").Distinct().Take(8))}.";
+            : L.T("InputBindingsWindow.AlreadyIn", b.Action, string.Join(", ", existing.Select(e => L.T("InputBindingsWindow.KeyIn", e.Key, e.Context)).Distinct().Take(8)));
         AddButton.IsEnabled = b.Contexts.Count > 0 && known;
     }
 
@@ -190,8 +181,8 @@ public partial class InputBindingsWindow : Window, IMessageHost
     {
         var dialog = new OpenFileDialog
         {
-            Title = "Pick input.settings",
-            Filter = "Input settings (input.settings)|input.settings|Settings files (*.settings)|*.settings|All files (*.*)|*.*",
+            Title = L.T("InputBindingsWindow.PickInputSettings"),
+            Filter = L.T("InputBindingsWindow.InputSettingsInputSettings"),
             InitialDirectory = Path.GetDirectoryName(_settingsPath) is { } dir && Directory.Exists(dir) ? dir : "",
         };
         if (dialog.ShowDialog(this) != true) return;
@@ -213,7 +204,7 @@ public partial class InputBindingsWindow : Window, IMessageHost
         try
         {
             Clipboard.SetText(text.Replace("\r\n", "\n").Replace("\n", Environment.NewLine));
-            _ = Message.Show(null, $"Copied {what}.", MessageKind.Info, autoClose: true);
+            _ = Message.Show(null, L.T("InputBindingsWindow.Copied", what), MessageKind.Info, autoClose: true);
         }
         catch (System.Runtime.InteropServices.COMException)
         {
@@ -226,44 +217,42 @@ public partial class InputBindingsWindow : Window, IMessageHost
         var b = Binding();
         if (!File.Exists(_settingsPath))
         {
-            await ShowMessage("input.settings wasn't found", $"{_settingsPath} doesn't exist. Run the game once to make it, or pick the file with Change.", MessageKind.Warning);
+            await ShowMessage(L.T("InputBindingsWindow.InputSettingsWasntFound"), L.T("InputBindingsWindow.DoesntExistRunGame", _settingsPath), MessageKind.Warning);
             return;
         }
         // first your own key bindings, in Documents
-        if (!await Message.Show($"Add {b.Action} on {b.Key} to your key bindings?",
-                $"This adds the lines to {_settingsPath}, keeping a copy as input.settings.bak. The game must be closed: it writes input.settings when it quits.",
-                MessageKind.Question, primary: "Add", secondary: "Cancel"))
+        if (!await Message.Show(L.T("InputBindingsWindow.AddYourKeyBindings", b.Action, b.Key),
+                L.T("InputBindingsWindow.AddsLinesKeepingCopy", _settingsPath),
+                MessageKind.Question, primary: L.T("Common.Add"), secondary: L.T("Common.Cancel")))
             return;
         var done = new List<string>();
         string? menu = InputSettings.MenuPath(_gameFolder);
         try
         {
             int added = InputSettings.Add(_settingsPath, b);
-            done.Add(added == 0 ? "input.settings had the binding already" : $"{Format.Count(added, "line")} added to input.settings");
+            done.Add(added == 0 ? L.T("InputBindingsWindow.InputSettingsHadBinding") : L.T("InputBindingsWindow.AddedInputSettings", L.T("Count.Line", added)));
 
             // then, only if asked separately, the game's own file, so the key shows in the key bindings menu
             if (menu is null || !File.Exists(menu))
-                done.Add("the game's input.xml wasn't found, so the key won't show in the key bindings menu (set the game folder in Settings)");
+                done.Add(L.T("InputBindingsWindow.GamesInputXmlWasnt"));
             else if (InputSettings.HasMenuEntry(menu, b.Action))
-                done.Add("the game's input.xml lists it already");
-            else if (await Message.Show("Change one of the game's files?",
-                         $"To show {b.Action} in the game's key bindings menu, its entry has to go in the game's own input.xml:\n\n{menu}\n\n"
-                         + "This changes a file in the game folder. A copy is kept as input.xml.bak beside it, and a game update may put the original back. "
-                         + "Your mod should still ship the entry itself: Copy input.xml has it.",
-                         MessageKind.Warning, primary: "Change the game's input.xml", secondary: "Leave it"))
-                done.Add(InputSettings.AddToMenu(menu, b) ? "the entry added to the game's input.xml" : "the game's input.xml had no list to add it to");
+                done.Add(L.T("InputBindingsWindow.GamesInputXmlLists"));
+            else if (await Message.Show(L.T("InputBindingsWindow.ChangeOneGamesFiles"),
+                         L.T("InputBindingsWindow.ShowGamesKeyBindings", b.Action, menu),
+                         MessageKind.Warning, primary: L.T("InputBindingsWindow.ChangeGamesInputXml"), secondary: L.T("InputBindingsWindow.Leave")))
+                done.Add(InputSettings.AddToMenu(menu, b) ? L.T("InputBindingsWindow.EntryAddedGamesInput") : L.T("InputBindingsWindow.GamesInputXmlHad"));
             else
-                done.Add("the game's input.xml was left alone, so the key won't show in the key bindings menu");
+                done.Add(L.T("InputBindingsWindow.GamesInputXmlLeft"));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            await ShowMessage("The binding could not be added", ex.Message
-                + (ex is UnauthorizedAccessException ? "\n\nThe game's folder may need the tool to be run as administrator." : ""), MessageKind.Warning);
+            await ShowMessage(L.T("InputBindingsWindow.BindingCouldNotAdded"), ex.Message
+                + (ex is UnauthorizedAccessException ? L.T("InputBindingsWindow.GamesFolderMayNeed") : ""), MessageKind.Warning);
             return;
         }
         ReadSettings();
         Refresh();
-        await ShowMessage($"{b.Action} is set up", string.Join(", ", done) + ". Start the game to try it.", MessageKind.Info);
+        await ShowMessage(L.T("InputBindingsWindow.SetUp", b.Action), L.T("InputBindingsWindow.StartGameTry", string.Join(", ", done)), MessageKind.Info);
     }
 
     private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
@@ -275,5 +264,5 @@ public partial class InputBindingsWindow : Window, IMessageHost
         }
     }
 
-    public Task ShowMessage(string? title, string message, MessageKind kind) => Message.Show(title, message, kind, primary: "OK");
+    public Task ShowMessage(string? title, string message, MessageKind kind) => Message.Show(title, message, kind, primary: L.T("Common.OK"));
 }

@@ -1,8 +1,9 @@
 <Window x:Class="W3ModWorkbench.Cr2wJsonWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:l="clr-namespace:W3ModWorkbench.Localisation"
         xmlns:local="clr-namespace:W3ModWorkbench"
-        Title="CR2W and JSON" Icon="pack://application:,,,/W3ModWorkbench;component/Assets/app.ico"
+        Title="{l:T Cr2wJsonWindow.CR2WJson}" Icon="pack://application:,,,/W3ModWorkbench;component/Assets/app.ico"
         Width="1000" Height="860" MinWidth="720" MinHeight="560"
         WindowStartupLocation="CenterOwner" PreviewKeyDown="Window_PreviewKeyDown"
         AllowDrop="True" DragOver="Window_DragOver" Drop="Window_Drop">
@@ -144,14 +145,14 @@
             </Grid.RowDefinitions>
 
             <StackPanel Margin="0,0,0,8">
-                <TextBlock Text="CR2W and JSON" FontSize="16" FontWeight="SemiBold" />
+                <TextBlock Text="{l:T Cr2wJsonWindow.CR2WJson}" FontSize="16" FontWeight="SemiBold" />
                 <TextBlock Opacity="0.65" Margin="0,2,0,0" TextWrapping="Wrap"
-                           Text="Turn the game's resource files (.env, .w2mi, .w2ent and the rest) into JSON to edit by hand or with a script, and back, byte for byte. Or make the same edit to hundreds of them at once." />
+                           Text="{l:T Cr2wJsonWindow.TurnGamesResourceFiles}" />
             </StackPanel>
 
             <TabControl x:Name="Tabs" Grid.Row="1" Style="{StaticResource SegmentTabs}" ItemContainerStyle="{StaticResource SegmentTab}">
                 <!-- ============================================================ convert -->
-                <TabItem Header="Convert" Tag="&#xE8AB;">
+                <TabItem Header="{l:T Cr2wJsonWindow.Convert}" Tag="&#xE8AB;">
                     <Grid Margin="0,10,0,0">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
@@ -162,14 +163,14 @@
                         <Border Style="{StaticResource Card}">
                             <DockPanel>
                                 <StackPanel DockPanel.Dock="Top">
-                                    <TextBlock Text="Files and folders" Style="{StaticResource Heading}" />
+                                    <TextBlock Text="{l:T Cr2wJsonWindow.FilesFolders}" Style="{StaticResource Heading}" />
                                     <TextBlock Style="{StaticResource Note}"
-                                               Text="Add or drop files and folders. In a folder, converting to JSON takes every CR2W file; converting back takes every .json file this tool made." />
+                                               Text="{l:T Cr2wJsonWindow.AddDropFilesFolders}" />
                                     <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                                        <Button Style="{StaticResource Small}" Content="Add files…" Click="ConvertAddFiles_Click" />
-                                        <Button Style="{StaticResource Small}" Content="Add folder…" Click="ConvertAddFolder_Click" />
-                                        <Button Style="{StaticResource Small}" Content="Remove" Click="ConvertRemove_Click" />
-                                        <Button Style="{StaticResource Small}" Content="Clear" Click="ConvertClear_Click" />
+                                        <Button Style="{StaticResource Small}" Content="{l:T Cr2wJsonWindow.AddFiles}" Click="ConvertAddFiles_Click" />
+                                        <Button Style="{StaticResource Small}" Content="{l:T Cr2wJsonWindow.AddFolder}" Click="ConvertAddFolder_Click" />
+                                        <Button Style="{StaticResource Small}" Content="{l:T Common.Remove}" Click="ConvertRemove_Click" />
+                                        <Button Style="{StaticResource Small}" Content="{l:T Cr2wJsonWindow.Clear}" Click="ConvertClear_Click" />
                                     </StackPanel>
                                 </StackPanel>
                                 <ListBox x:Name="ConvertList" Height="110" SelectionMode="Extended" ItemTemplate="{StaticResource InputRow}" KeyDown="InputList_KeyDown" />
@@ -179,35 +180,35 @@
                         <Border Grid.Row="1" Style="{StaticResource Card}">
                             <StackPanel>
                                 <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="Convert" Style="{StaticResource Label}" />
-                                    <RadioButton x:Name="ToJsonRadio" Content="CR2W to JSON" IsChecked="True" GroupName="Direction" MinWidth="0" Margin="0,0,18,0" />
-                                    <RadioButton x:Name="FromJsonRadio" Content="JSON back to CR2W" GroupName="Direction" MinWidth="0" Margin="0,0,18,0" />
-                                    <RadioButton x:Name="ResaveRadio" Content="Resave as version 164" GroupName="Direction" MinWidth="0"
-                                                 ToolTip="Save older CR2W files (REDkit's go back to version 120) as version 164, the way the engine would after loading them" />
+                                    <TextBlock Text="{l:T Cr2wJsonWindow.Convert}" Style="{StaticResource Label}" />
+                                    <RadioButton x:Name="ToJsonRadio" Content="{l:T Cr2wJsonWindow.CR2WJson2}" IsChecked="True" GroupName="Direction" MinWidth="0" Margin="0,0,18,0" />
+                                    <RadioButton x:Name="FromJsonRadio" Content="{l:T Cr2wJsonWindow.JsonBackCR2W}" GroupName="Direction" MinWidth="0" Margin="0,0,18,0" />
+                                    <RadioButton x:Name="ResaveRadio" Content="{l:T Cr2wJsonWindow.ResaveVersion}" GroupName="Direction" MinWidth="0"
+                                                 ToolTip="{l:T Cr2wJsonWindow.SaveOlderCR2WFiles}" />
                                 </StackPanel>
-                                <CheckBox x:Name="AsLatestCheck" Margin="110,6,0,0" MinWidth="0" Content="Save older files as version 164"
+                                <CheckBox x:Name="AsLatestCheck" Margin="110,6,0,0" MinWidth="0" Content="{l:T Cr2wJsonWindow.SaveOlderFilesVersion}"
                                           IsEnabled="{Binding IsChecked, ElementName=FromJsonRadio}"
-                                          ToolTip="JSON made from an older CR2W file is written back as version 164 rather than the version it was" />
+                                          ToolTip="{l:T Cr2wJsonWindow.JsonMadeOlderCR2W}" />
                                 <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
-                                    <TextBlock Text="Save" Style="{StaticResource Label}" />
-                                    <RadioButton x:Name="ConvertBesideRadio" Content="Beside each file" GroupName="ConvertOut" MinWidth="0" Margin="0,0,18,0" IsChecked="True" />
-                                    <RadioButton x:Name="ConvertFolderRadio" Content="Into a folder, keeping the folders below what was added" GroupName="ConvertOut" MinWidth="0" />
+                                    <TextBlock Text="{l:T Common.Save}" Style="{StaticResource Label}" />
+                                    <RadioButton x:Name="ConvertBesideRadio" Content="{l:T Cr2wJsonWindow.BesideEachFile}" GroupName="ConvertOut" MinWidth="0" Margin="0,0,18,0" IsChecked="True" />
+                                    <RadioButton x:Name="ConvertFolderRadio" Content="{l:T Cr2wJsonWindow.IntoFolderKeepingFolders}" GroupName="ConvertOut" MinWidth="0" />
                                 </StackPanel>
                                 <DockPanel Margin="110,6,0,0" IsEnabled="{Binding IsChecked, ElementName=ConvertFolderRadio}">
-                                    <Button DockPanel.Dock="Right" Content="Browse…" Padding="12,4" Margin="6,0,0,0" Click="ConvertBrowse_Click" />
+                                    <Button DockPanel.Dock="Right" Content="{l:T Common.Browse}" Padding="12,4" Margin="6,0,0,0" Click="ConvertBrowse_Click" />
                                     <TextBox x:Name="ConvertOutputBox" />
                                 </DockPanel>
                                 <StackPanel Orientation="Horizontal" Margin="110,8,0,0">
-                                    <CheckBox x:Name="ConvertRecursiveCheck" Content="Look in subfolders" IsChecked="True" MinWidth="0" Margin="0,0,18,0" />
-                                    <CheckBox x:Name="OverwriteCheck" Content="Replace files that are there already" MinWidth="0" />
+                                    <CheckBox x:Name="ConvertRecursiveCheck" Content="{l:T Cr2wJsonWindow.LookSubfolders}" IsChecked="True" MinWidth="0" Margin="0,0,18,0" />
+                                    <CheckBox x:Name="OverwriteCheck" Content="{l:T Cr2wJsonWindow.ReplaceFilesThereAlready}" MinWidth="0" />
                                 </StackPanel>
                                 <DockPanel Margin="0,12,0,0">
                                     <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-                                        <Button x:Name="ConvertStopButton" Content="Stop" Padding="14,6" Margin="0,0,6,0" Click="Stop_Click" Visibility="Collapsed" />
+                                        <Button x:Name="ConvertStopButton" Content="{l:T Cr2wJsonWindow.Stop}" Padding="14,6" Margin="0,0,6,0" Click="Stop_Click" Visibility="Collapsed" />
                                         <Button x:Name="ConvertButton" Padding="18,6" Click="Convert_Click" Style="{DynamicResource AccentButtonStyle}">
                                             <StackPanel Orientation="Horizontal">
                                                 <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE8AB;" FontSize="13" VerticalAlignment="Center" />
-                                                <TextBlock Text="Convert" Margin="8,0,0,0" />
+                                                <TextBlock Text="{l:T Cr2wJsonWindow.Convert}" Margin="8,0,0,0" />
                                             </StackPanel>
                                         </Button>
                                     </StackPanel>
@@ -222,9 +223,9 @@
                         <Border Grid.Row="2" Style="{StaticResource Card}" Margin="0">
                             <DockPanel>
                                 <DockPanel DockPanel.Dock="Top" Margin="0,0,0,6">
-                                    <Button DockPanel.Dock="Right" Style="{StaticResource Small}" Margin="0" Content="Show in Explorer" Click="ConvertReveal_Click"
-                                            ToolTip="Show the highlighted results (or all of them) in File Explorer" />
-                                    <TextBlock Text="Results" Style="{StaticResource Heading}" VerticalAlignment="Center" />
+                                    <Button DockPanel.Dock="Right" Style="{StaticResource Small}" Margin="0" Content="{l:T Common.ShowExplorer}" Click="ConvertReveal_Click"
+                                            ToolTip="{l:T Cr2wJsonWindow.ShowHighlightedResultsAll}" />
+                                    <TextBlock Text="{l:T Cr2wJsonWindow.Results}" Style="{StaticResource Heading}" VerticalAlignment="Center" />
                                 </DockPanel>
                                 <ListBox x:Name="ConvertResults" ItemTemplate="{StaticResource ResultRow}" SelectionMode="Extended"
                                          MouseDoubleClick="Results_DoubleClick" ScrollViewer.HorizontalScrollBarVisibility="Disabled" />
@@ -234,21 +235,21 @@
                 </TabItem>
 
                 <!-- ============================================================ bulk edit -->
-                <TabItem Header="Bulk edit" Tag="&#xE70F;">
+                <TabItem Header="{l:T Cr2wJsonWindow.BulkEdit}" Tag="&#xE70F;">
                     <ScrollViewer VerticalScrollBarVisibility="Auto">
                         <StackPanel Margin="0,10,4,0">
                             <Border Style="{StaticResource Card}">
                                 <DockPanel>
                                     <StackPanel DockPanel.Dock="Top">
-                                        <TextBlock Text="Files to edit" Style="{StaticResource Heading}" />
+                                        <TextBlock Text="{l:T Cr2wJsonWindow.FilesEdit}" Style="{StaticResource Heading}" />
                                         <TextBlock Style="{StaticResource Note}"
-                                                   Text="CR2W files or .json files this tool made, or folders of them. Each is saved in the form it's in. The game's own files are never changed: extract them first." />
+                                                   Text="{l:T Cr2wJsonWindow.CR2WFilesJsonFiles}" />
                                         <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                                            <Button Style="{StaticResource Small}" Content="Add files…" Click="BulkAddFiles_Click" />
-                                            <Button Style="{StaticResource Small}" Content="Add folder…" Click="BulkAddFolder_Click" />
-                                            <Button Style="{StaticResource Small}" Content="Remove" Click="BulkRemove_Click" />
-                                            <Button Style="{StaticResource Small}" Content="Clear" Click="BulkClear_Click" />
-                                            <CheckBox x:Name="BulkRecursiveCheck" Content="Look in subfolders" IsChecked="True" MinWidth="0" Margin="10,0,0,0" />
+                                            <Button Style="{StaticResource Small}" Content="{l:T Cr2wJsonWindow.AddFiles}" Click="BulkAddFiles_Click" />
+                                            <Button Style="{StaticResource Small}" Content="{l:T Cr2wJsonWindow.AddFolder}" Click="BulkAddFolder_Click" />
+                                            <Button Style="{StaticResource Small}" Content="{l:T Common.Remove}" Click="BulkRemove_Click" />
+                                            <Button Style="{StaticResource Small}" Content="{l:T Cr2wJsonWindow.Clear}" Click="BulkClear_Click" />
+                                            <CheckBox x:Name="BulkRecursiveCheck" Content="{l:T Cr2wJsonWindow.LookSubfolders}" IsChecked="True" MinWidth="0" Margin="10,0,0,0" />
                                         </StackPanel>
                                     </StackPanel>
                                     <ListBox x:Name="BulkList" Height="90" SelectionMode="Extended" ItemTemplate="{StaticResource InputRow}" KeyDown="InputList_KeyDown" />
@@ -257,31 +258,31 @@
 
                             <Border Style="{StaticResource Card}">
                                 <StackPanel>
-                                    <TextBlock Text="Edits" Style="{StaticResource Heading}" />
+                                    <TextBlock Text="{l:T Cr2wJsonWindow.Edits}" Style="{StaticResource Heading}" />
                                     <TextBlock Style="{StaticResource Note}"
-                                               Text="Made in order, to every object of the class in every file. A path is property names from the object down, with [n] for an item of a list: envParams.m_toneMapping. Choose it from a file with Choose…" />
+                                               Text="{l:T Cr2wJsonWindow.MadeOrderEveryObject}" />
 
                                     <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
-                                        <TextBlock Text="Edit" Style="{StaticResource Label}" />
+                                        <TextBlock Text="{l:T Cr2wJsonWindow.Edit}" Style="{StaticResource Label}" />
                                         <ComboBox x:Name="KindBox" Width="300" SelectedIndex="0" SelectionChanged="Kind_Changed">
-                                            <ComboBoxItem Content="Copy the value from another file" />
-                                            <ComboBoxItem Content="Set a value" />
-                                            <ComboBoxItem Content="Remove (the game uses its default)" />
-                                            <ComboBoxItem Content="Multiply numbers" />
-                                            <ComboBoxItem Content="Add to numbers" />
+                                            <ComboBoxItem Content="{l:T Cr2wJsonWindow.CopyValueAnotherFile}" />
+                                            <ComboBoxItem Content="{l:T Cr2wJsonWindow.SetValue}" />
+                                            <ComboBoxItem Content="{l:T Cr2wJsonWindow.RemoveGameUsesDefault}" />
+                                            <ComboBoxItem Content="{l:T Cr2wJsonWindow.MultiplyNumbers}" />
+                                            <ComboBoxItem Content="{l:T Cr2wJsonWindow.AddNumbers}" />
                                         </ComboBox>
                                     </StackPanel>
 
                                     <DockPanel x:Name="SourceRow" Margin="0,8,0,0">
-                                        <TextBlock Text="From file" Style="{StaticResource Label}" />
-                                        <Button DockPanel.Dock="Right" Content="Browse…" Padding="12,4" Margin="6,0,0,0" Click="SourceBrowse_Click" />
-                                        <TextBox x:Name="SourceBox" ToolTip="The file whose value is copied: a CR2W file or a .json file this tool made" />
+                                        <TextBlock Text="{l:T Cr2wJsonWindow.File}" Style="{StaticResource Label}" />
+                                        <Button DockPanel.Dock="Right" Content="{l:T Common.Browse}" Padding="12,4" Margin="6,0,0,0" Click="SourceBrowse_Click" />
+                                        <TextBox x:Name="SourceBox" ToolTip="{l:T Cr2wJsonWindow.FileWhoseValueCopied}" />
                                     </DockPanel>
 
                                     <DockPanel Margin="0,8,0,0">
-                                        <TextBlock Text="Path" Style="{StaticResource Label}" />
-                                        <Button DockPanel.Dock="Right" x:Name="ChooseButton" Content="Choose…" Padding="12,4" Margin="6,0,0,0" Click="Choose_Click"
-                                                ToolTip="Pick the property from the source file (or the first file to edit)" />
+                                        <TextBlock Text="{l:T Common.Path}" Style="{StaticResource Label}" />
+                                        <Button DockPanel.Dock="Right" x:Name="ChooseButton" Content="{l:T Cr2wJsonWindow.Choose}" Padding="12,4" Margin="6,0,0,0" Click="Choose_Click"
+                                                ToolTip="{l:T Cr2wJsonWindow.PickPropertySourceFile}" />
                                         <TextBox x:Name="PathBox" Style="{StaticResource Mono}" />
                                     </DockPanel>
 
@@ -289,7 +290,7 @@
                                             BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}">
                                         <DockPanel>
                                             <DockPanel DockPanel.Dock="Top" Margin="8,6">
-                                                <Button DockPanel.Dock="Right" Content="Close" Padding="10,2" Click="PickerClose_Click" />
+                                                <Button DockPanel.Dock="Right" Content="{l:T Common.Close}" Padding="10,2" Click="PickerClose_Click" />
                                                 <TextBlock x:Name="PickerTitle" VerticalAlignment="Center" Opacity="0.75" TextTrimming="CharacterEllipsis" />
                                             </DockPanel>
                                             <TreeView x:Name="PickerTree" BorderThickness="0" SelectedItemChanged="Picker_SelectedItemChanged">
@@ -306,29 +307,29 @@
                                     </Border>
 
                                     <DockPanel x:Name="ValueRow" Margin="0,8,0,0" Visibility="Collapsed">
-                                        <TextBlock Text="Value" Style="{StaticResource Label}" VerticalAlignment="Top" Margin="0,6,0,0" />
+                                        <TextBlock Text="{l:T Cr2wJsonWindow.Value}" Style="{StaticResource Label}" VerticalAlignment="Top" Margin="0,6,0,0" />
                                         <TextBox x:Name="ValueBox" Style="{StaticResource Mono}" AcceptsReturn="True" MinHeight="34" MaxHeight="160"
                                                  VerticalScrollBarVisibility="Auto" VerticalContentAlignment="Top"
-                                                 ToolTip="JSON: 1.5, true, &quot;text&quot;, or an object or list. Plain text is taken as a string." />
+                                                 ToolTip="{l:T Cr2wJsonWindow.JsonTrueTextObject}" />
                                     </DockPanel>
 
                                     <StackPanel x:Name="AmountRow" Orientation="Horizontal" Margin="0,8,0,0" Visibility="Collapsed">
-                                        <TextBlock x:Name="AmountLabel" Text="By" Style="{StaticResource Label}" />
+                                        <TextBlock x:Name="AmountLabel" Text="{l:T Cr2wJsonWindow.By}" Style="{StaticResource Label}" />
                                         <TextBox x:Name="AmountBox" Style="{StaticResource Mono}" Width="110" Text="1" />
-                                        <TextBlock Text="In properties" VerticalAlignment="Center" Opacity="0.8" Margin="18,0,10,0" />
-                                        <TextBox x:Name="FieldsBox" Style="{StaticResource Mono}" Width="220" Text="value"
-                                                 ToolTip="Only numbers in these properties change, at any depth below the path, comma separated: value for curves, X, Y, Z for colours and vectors. Empty for every number." />
+                                        <TextBlock Text="{l:T Cr2wJsonWindow.Properties}" VerticalAlignment="Center" Opacity="0.8" Margin="18,0,10,0" />
+                                        <TextBox x:Name="FieldsBox" Style="{StaticResource Mono}" Width="220" Text="{l:T Cr2wJsonWindow.Value2}"
+                                                 ToolTip="{l:T Cr2wJsonWindow.OnlyNumbersTheseProperties}" />
                                     </StackPanel>
 
                                     <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
-                                        <TextBlock Text="Only objects of" Style="{StaticResource Label}" />
+                                        <TextBlock Text="{l:T Cr2wJsonWindow.OnlyObjects}" Style="{StaticResource Label}" />
                                         <TextBox x:Name="ClassBox" Style="{StaticResource Mono}" Width="300"
-                                                 ToolTip="Edit only objects of this class (CEnvironmentDefinition). Empty for every object that has the path." />
+                                                 ToolTip="{l:T Cr2wJsonWindow.EditOnlyObjectsClass}" />
                                     </StackPanel>
 
                                     <StackPanel Orientation="Horizontal" Margin="110,10,0,0">
-                                        <Button Content="Add to the edits" Padding="14,5" Click="AddEdit_Click" />
-                                        <Button Content="Remove edit" Padding="14,5" Margin="6,0,0,0" Click="RemoveEdit_Click" />
+                                        <Button Content="{l:T Cr2wJsonWindow.AddEdits}" Padding="14,5" Click="AddEdit_Click" />
+                                        <Button Content="{l:T Cr2wJsonWindow.RemoveEdit}" Padding="14,5" Margin="6,0,0,0" Click="RemoveEdit_Click" />
                                     </StackPanel>
                                     <ListBox x:Name="EditsList" Margin="110,8,0,0" MinHeight="60" MaxHeight="140" ItemTemplate="{StaticResource EditRow}" />
                                 </StackPanel>
@@ -337,23 +338,23 @@
                             <Border Style="{StaticResource Card}">
                                 <StackPanel>
                                     <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text="Save" Style="{StaticResource Label}" />
-                                        <RadioButton x:Name="BulkFolderRadio" Content="Into a folder, keeping the folders below what was added" GroupName="BulkOut" MinWidth="0" Margin="0,0,18,0" IsChecked="True" />
-                                        <RadioButton x:Name="BulkInPlaceRadio" Content="Over the files" GroupName="BulkOut" MinWidth="0" />
+                                        <TextBlock Text="{l:T Common.Save}" Style="{StaticResource Label}" />
+                                        <RadioButton x:Name="BulkFolderRadio" Content="{l:T Cr2wJsonWindow.IntoFolderKeepingFolders}" GroupName="BulkOut" MinWidth="0" Margin="0,0,18,0" IsChecked="True" />
+                                        <RadioButton x:Name="BulkInPlaceRadio" Content="{l:T Cr2wJsonWindow.OverFiles}" GroupName="BulkOut" MinWidth="0" />
                                     </StackPanel>
                                     <DockPanel Margin="110,6,0,0" IsEnabled="{Binding IsChecked, ElementName=BulkFolderRadio}">
-                                        <Button DockPanel.Dock="Right" Content="Browse…" Padding="12,4" Margin="6,0,0,0" Click="BulkBrowse_Click" />
+                                        <Button DockPanel.Dock="Right" Content="{l:T Common.Browse}" Padding="12,4" Margin="6,0,0,0" Click="BulkBrowse_Click" />
                                         <TextBox x:Name="BulkOutputBox" />
                                     </DockPanel>
                                     <DockPanel Margin="0,12,0,0">
                                         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-                                            <Button x:Name="BulkStopButton" Content="Stop" Padding="14,6" Margin="0,0,6,0" Click="Stop_Click" Visibility="Collapsed" />
-                                            <Button x:Name="CheckButton" Content="Check" Padding="14,6" Margin="0,0,6,0" Click="BulkCheck_Click"
-                                                    ToolTip="Try the edits without saving anything: which files they'd change, and whether each could be saved" />
+                                            <Button x:Name="BulkStopButton" Content="{l:T Cr2wJsonWindow.Stop}" Padding="14,6" Margin="0,0,6,0" Click="Stop_Click" Visibility="Collapsed" />
+                                            <Button x:Name="CheckButton" Content="{l:T Cr2wJsonWindow.Check}" Padding="14,6" Margin="0,0,6,0" Click="BulkCheck_Click"
+                                                    ToolTip="{l:T Cr2wJsonWindow.TryEditsWithoutSaving}" />
                                             <Button x:Name="ApplyButton" Padding="18,6" Click="BulkApply_Click" Style="{DynamicResource AccentButtonStyle}">
                                                 <StackPanel Orientation="Horizontal">
                                                     <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE70F;" FontSize="13" VerticalAlignment="Center" />
-                                                    <TextBlock Text="Make the edits" Margin="8,0,0,0" />
+                                                    <TextBlock Text="{l:T Cr2wJsonWindow.MakeEdits}" Margin="8,0,0,0" />
                                                 </StackPanel>
                                             </Button>
                                         </StackPanel>
@@ -368,8 +369,8 @@
                             <Border Style="{StaticResource Card}">
                                 <DockPanel>
                                     <DockPanel DockPanel.Dock="Top" Margin="0,0,0,6">
-                                        <Button DockPanel.Dock="Right" Style="{StaticResource Small}" Margin="0" Content="Show in Explorer" Click="BulkReveal_Click" />
-                                        <TextBlock Text="Results" Style="{StaticResource Heading}" VerticalAlignment="Center" />
+                                        <Button DockPanel.Dock="Right" Style="{StaticResource Small}" Margin="0" Content="{l:T Common.ShowExplorer}" Click="BulkReveal_Click" />
+                                        <TextBlock Text="{l:T Cr2wJsonWindow.Results}" Style="{StaticResource Heading}" VerticalAlignment="Center" />
                                     </DockPanel>
                                     <ListBox x:Name="BulkResults" Height="220" ItemTemplate="{StaticResource ResultRow}" SelectionMode="Extended"
                                              MouseDoubleClick="Results_DoubleClick" ScrollViewer.HorizontalScrollBarVisibility="Disabled" />

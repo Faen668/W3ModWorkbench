@@ -4,6 +4,7 @@ using System.Windows.Input;
 using System.Windows.Threading;
 using W3ModWorkbench.Core;
 using W3ModWorkbench.Core.Scripts;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -69,7 +70,7 @@ public partial class FactsWindow : Window, IMessageHost
         _cts?.Cancel();
         var cts = _cts = new CancellationTokenSource();
         var options = new ScriptCorpus.Options(_gameFolder, ModsCheck.IsChecked == true);
-        StatusText.Text = "Reading every script…";
+        StatusText.Text = L.T("FactsWindow.ReadingEveryScript");
         ModsCheck.IsEnabled = false;
         try
         {
@@ -86,8 +87,8 @@ public partial class FactsWindow : Window, IMessageHost
         if (cts != _cts) return;
         _facts = FactUsages.Summarise(_uses);
         DetailText.Text = _gameFolder is null
-            ? "The game folder isn't set, so only the open project's facts are listed. Set it in Settings to see the game's and the mods'."
-            : $"{Format.Count(_facts.Count, "fact")} in {Format.Count(_uses.Count, "call")} to the facts functions";
+            ? L.T("FactsWindow.GameFolderIsntSet")
+            : L.T("FactsWindow.FactsFunctions", L.T("Count.Fact", _facts.Count), L.T("Count.Call", _uses.Count));
         RefreshList();
     }
 
@@ -124,12 +125,12 @@ public partial class FactsWindow : Window, IMessageHost
         int keep = before is null ? -1 : shown.FindIndex(r => r.Title == before);
         if (shown.Count > 0) FactList.SelectedIndex = Math.Max(keep, 0);
         else ShowFact(null);
-        StatusText.Text = shown.Count == 0 ? (_uses.Count == 0 ? "No facts found" : "Nothing matches")
-            : more ? $"First {MaxShown} of {rows.Count:N0} shown: type more to narrow it down"
-            : filter == 4 ? Format.Count(shown.Count, "expression") : Format.Count(shown.Count, "fact");
+        StatusText.Text = shown.Count == 0 ? (_uses.Count == 0 ? L.T("FactsWindow.NoFactsFound") : L.T("Common.NothingMatches"))
+            : more ? L.T("FactsWindow.FirstShownTypeMore", MaxShown, rows.Count)
+            : filter == 4 ? L.T("Count.Expression", shown.Count) : L.T("Count.Fact", shown.Count);
     }
 
-    private static string Count(int writes, int reads) => $"set in {writes}, read in {reads}";
+    private static string Count(int writes, int reads) => L.T("FactsWindow.SetRead", writes, reads);
 
     private static string Sources(IEnumerable<FactUse> uses) => string.Join(", ", uses.Select(u => u.File.Label).Distinct(StringComparer.OrdinalIgnoreCase));
 
@@ -140,7 +141,7 @@ public partial class FactsWindow : Window, IMessageHost
         if (row is null) return;
         FactName.Text = row.Title;
         int writes = row.Uses.Count(u => u.Access == FactAccess.Write), reads = row.Uses.Count - writes;
-        string note = writes == 0 ? "  ·  no script sets it" : reads == 0 ? "  ·  no script reads it" : "";
+        string note = writes == 0 ? L.T("FactsWindow.NoScriptSets") : reads == 0 ? L.T("FactsWindow.NoScriptReads") : "";
         FactSummary.Text = $"{Count(writes, reads)}{note}";
     }
 
@@ -184,7 +185,7 @@ public partial class FactsWindow : Window, IMessageHost
         try
         {
             Clipboard.SetText(text);
-            _ = Message.Show(null, $"Copied {text}", MessageKind.Info, autoClose: true);
+            _ = Message.Show(null, L.T("FactsWindow.Copied", text), MessageKind.Info, autoClose: true);
         }
         catch (System.Runtime.InteropServices.COMException)
         {
@@ -207,5 +208,5 @@ public partial class FactsWindow : Window, IMessageHost
         e.Handled = true;
     }
 
-    public Task ShowMessage(string? title, string message, MessageKind kind) => Message.Show(title, message, kind, primary: "OK");
+    public Task ShowMessage(string? title, string message, MessageKind kind) => Message.Show(title, message, kind, primary: L.T("Common.OK"));
 }

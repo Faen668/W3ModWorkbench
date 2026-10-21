@@ -4,6 +4,7 @@ using System.Windows.Input;
 using System.Windows.Threading;
 using W3ModWorkbench.Core;
 using W3ModWorkbench.Core.Scripts;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -62,7 +63,7 @@ public partial class ConsoleCommandsWindow : Window, IMessageHost
         _cts?.Cancel();
         var cts = _cts = new CancellationTokenSource();
         var options = new ScriptCorpus.Options(_gameFolder, ModsCheck.IsChecked == true);
-        StatusText.Text = "Reading every script…";
+        StatusText.Text = L.T("ConsoleCommandsWindow.ReadingEveryScript");
         ModsCheck.IsEnabled = false;
         try
         {
@@ -78,11 +79,11 @@ public partial class ConsoleCommandsWindow : Window, IMessageHost
         }
         if (cts != _cts) return;
         if (_gameFolder is null)
-            DetailText.Text = "The game folder isn't set, so only the open project's commands are listed. Set it in Settings to see the game's and the mods'.";
+            DetailText.Text = L.T("ConsoleCommandsWindow.GameFolderIsntSet");
         else
         {
             int game = _commands.Count(c => c.File.Origin == CorpusOrigin.Game);
-            DetailText.Text = $"{Format.Count(game, "command")} from the game and {Format.Count(_commands.Count - game, "command")} from the project and mods";
+            DetailText.Text = L.T("ConsoleCommandsWindow.GameProjectMods", L.T("Count.Command", game), L.T("Count.Command", _commands.Count - game));
         }
         RefreshList();
     }
@@ -101,9 +102,9 @@ public partial class ConsoleCommandsWindow : Window, IMessageHost
         ResultList.ItemsSource = shown;
         if (shown.Count > 0) ResultList.SelectedIndex = before is null ? 0 : Math.Max(0, shown.IndexOf(before));
         else ShowCommand(null);
-        StatusText.Text = shown.Count == 0 ? (_commands.Count == 0 ? "No commands found" : "Nothing matches")
-            : more ? $"First {MaxShown} shown: add more words to narrow it down"
-            : Format.Count(shown.Count, "command");
+        StatusText.Text = shown.Count == 0 ? (_commands.Count == 0 ? L.T("ConsoleCommandsWindow.NoCommandsFound") : L.T("Common.NothingMatches"))
+            : more ? L.T("ConsoleCommandsWindow.FirstShownAddMore", MaxShown)
+            : L.T("Count.Command", shown.Count);
     }
 
     private void ShowCommand(ConsoleCommand? command)
@@ -147,7 +148,7 @@ public partial class ConsoleCommandsWindow : Window, IMessageHost
         try
         {
             Clipboard.SetText(CommandBox.Text);
-            _ = Message.Show(null, "Copied. Open the console in the game with ` or ~ and paste it.", MessageKind.Info, autoClose: true);
+            _ = Message.Show(null, L.T("ConsoleCommandsWindow.CopiedOpenConsoleGame"), MessageKind.Info, autoClose: true);
         }
         catch (System.Runtime.InteropServices.COMException)
         {
@@ -171,5 +172,5 @@ public partial class ConsoleCommandsWindow : Window, IMessageHost
         e.Handled = true;
     }
 
-    public Task ShowMessage(string? title, string message, MessageKind kind) => Message.Show(title, message, kind, primary: "OK");
+    public Task ShowMessage(string? title, string message, MessageKind kind) => Message.Show(title, message, kind, primary: L.T("Common.OK"));
 }

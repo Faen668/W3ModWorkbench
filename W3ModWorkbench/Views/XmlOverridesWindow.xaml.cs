@@ -7,6 +7,7 @@ using System.Windows.Threading;
 using Microsoft.Win32;
 using W3ModWorkbench.Core;
 using W3ModWorkbench.Core.LoadOrder;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -18,7 +19,7 @@ public sealed class OverrideGroupItem(OverrideGroup group)
 
     public string Caption => group.Overrides.Count == 1
         ? $"{group.Overrides[0].Mod.Name} · {group.Overrides[0].Mode}"
-        : $"{group.Overrides.Count} overrides: {string.Join(", ", group.Overrides.Select(o => o.Mod.Name).Distinct())}";
+        : L.T("XmlOverridesWindow.Overrides", group.Overrides.Count, string.Join(", ", group.Overrides.Select(o => o.Mod.Name).Distinct()));
 
     public string Icon => group.IsClash ? "" : group.IsShared ? "" : "";
 
@@ -32,11 +33,11 @@ public sealed class OverrideRow(XmlOverride o, int rank)
     public XmlOverride Override => o;
     public string Rank => $"#{rank}  ";
     public string ModName => o.Mod.Name + (o.Mod.IsModio ? " (mod.io)" : o.Mod.IsDlc ? " (DLC)" : "");
-    public string ModeText => $"   {o.Mode}" + (o.MergedFrom is { Count: > 0 } from ? $"   ·   merge of {string.Join(", ", from)}"
-        : o.CoveredBy is not null ? $"   ·   already inside {o.CoveredBy}" : "");
+    public string ModeText => $"   {o.Mode}" + (o.MergedFrom is { Count: > 0 } from ? L.T("XmlOverridesWindow.Merge", string.Join(", ", from))
+        : o.CoveredBy is not null ? L.T("XmlOverridesWindow.AlreadyInside", o.CoveredBy) : "");
     public double Opacity => o.CoveredBy is null ? 1 : 0.55;
     public string Location => o.Line > 0 ? $"{o.Where}:{o.Line}" : o.Where;
-    public string FieldsText => o.Fields.Count == 0 ? "(no fields)" : string.Join("  ", o.Fields);
+    public string FieldsText => o.Fields.Count == 0 ? L.T("XmlOverridesWindow.NoFields") : string.Join("  ", o.Fields);
 }
 
 /// <summary>
@@ -91,13 +92,13 @@ public partial class XmlOverridesWindow : Window, IMessageHost
         _open.Show();
     }
 
-    public Task ShowMessage(string? title, string message, MessageKind kind) => Message.Show(title, message, kind, primary: "OK");
+    public Task ShowMessage(string? title, string message, MessageKind kind) => Message.Show(title, message, kind, primary: L.T("Common.OK"));
 
     private string ModsFolder => FolderBox.Text.Trim().Trim('"');
 
     private void Browse_Click(object sender, RoutedEventArgs e)
     {
-        var dialog = new OpenFolderDialog { Title = "Choose the game's mods folder", InitialDirectory = Directory.Exists(ModsFolder) ? ModsFolder : "" };
+        var dialog = new OpenFolderDialog { Title = L.T("XmlOverridesWindow.ChooseGamesModsFolder"), InitialDirectory = Directory.Exists(ModsFolder) ? ModsFolder : "" };
         if (dialog.ShowDialog(this) == true) FolderBox.Text = dialog.FolderName;
     }
 
@@ -115,7 +116,7 @@ public partial class XmlOverridesWindow : Window, IMessageHost
         _settings.Save();
         _cancel = new CancellationTokenSource();
         _busy = true;
-        ScanLabel.Text = "Cancel";
+        ScanLabel.Text = L.T("Common.Cancel");
         FolderBox.IsEnabled = false;
         var progress = new Progress<string>(text => StatusText.Text = text);
         var started = DateTime.UtcNow;
@@ -131,24 +132,24 @@ public partial class XmlOverridesWindow : Window, IMessageHost
                 return XmlOverrideScanner.Scan(entries, ScriptMerger.ReadInventory(_settings.ScriptMergerPath, options.GameFolder), progress, token);
             }, token);
             int modio = ModioLocator.InstalledMods().Select(m => m.ModId).Distinct().Count();
-            StatusText.Text = $"{Format.Count(mods, "mod")} read{(modio > 0 ? $" ({modio} from mod.io)" : "")} in {(DateTime.UtcNow - started).TotalSeconds:0.0} s · "
-                              + $"{Format.Count(_groups.Count, "overridden definition")}, {_groups.Count(g => g.IsShared)} shared, {_groups.Count(g => g.IsClash)} clashing";
+            StatusText.Text = L.T("XmlOverridesWindow.Status", L.T("Count.Mod", mods), modio > 0 ? L.T("XmlOverridesWindow.FromModio", modio) : "", (DateTime.UtcNow - started).TotalSeconds,
+                              L.T("Count.OverriddenDefinition", _groups.Count), _groups.Count(g => g.IsShared), _groups.Count(g => g.IsClash));
             CopyButton.IsEnabled = _groups.Count > 0;
             ApplyFilter();
         }
         catch (OperationCanceledException)
         {
-            StatusText.Text = "Cancelled";
+            StatusText.Text = L.T("Common.Cancelled");
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            await ShowMessage("The mods couldn't be read", ex.Message, MessageKind.Error);
+            await ShowMessage(L.T("XmlOverridesWindow.ModsCouldntRead"), ex.Message, MessageKind.Error);
             StatusText.Text = "";
         }
         finally
         {
             _busy = false;
-            ScanLabel.Text = "Scan";
+            ScanLabel.Text = L.T("XmlOverridesWindow.Scan");
             FolderBox.IsEnabled = true;
         }
     }
@@ -177,9 +178,9 @@ public partial class XmlOverridesWindow : Window, IMessageHost
         if (shown.Count == 0)
         {
             bool any = _groups.Count > 0;
-            EmptyTitle.Text = any ? "Nothing matches" : "No XML overrides found";
-            EmptyText.Text = any ? "Clear the search, or turn off the shared filter."
-                : "None of the scanned mods set on_conflict on a definition in a loose XML file.";
+            EmptyTitle.Text = any ? L.T("Common.NothingMatches") : L.T("XmlOverridesWindow.NoXMLOverridesFound");
+            EmptyText.Text = any ? L.T("XmlOverridesWindow.ClearSearchTurnOff")
+                : L.T("XmlOverridesWindow.NoneScannedModsSet");
         }
     }
 
@@ -195,8 +196,8 @@ public partial class XmlOverridesWindow : Window, IMessageHost
         OverrideRows.ItemsSource = g.Overrides.Select((o, i) => new OverrideRow(o, i + 1)).ToList();
         ClashText.Text = string.Join(Environment.NewLine, g.FieldClashes.Select(c =>
             c.Field.StartsWith('[')
-                ? $"{c.Winner.Mod.Name} wins the whole definition over {string.Join(", ", c.Losers.Select(l => l.Mod.Name))}"
-                : $"{c.Field}: {c.Winner.Mod.Name} = {Shorten(c.Winner.Values[c.Field])} beats " + string.Join(", ", c.Losers.Select(l => $"{l.Mod.Name} = {Shorten(l.Values[c.Field])}"))));
+                ? L.T("XmlOverridesWindow.WinsWholeDefinitionOver", c.Winner.Mod.Name, string.Join(", ", c.Losers.Select(l => l.Mod.Name)))
+                : L.T("XmlOverridesWindow.Beats", c.Field, c.Winner.Mod.Name, Shorten(c.Winner.Values[c.Field]), string.Join(", ", c.Losers.Select(l => $"{l.Mod.Name} = {Shorten(l.Values[c.Field])}")))));
         ClashText.Visibility = ClashCaption.Visibility = g.FieldClashes.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
     }
 
@@ -205,17 +206,16 @@ public partial class XmlOverridesWindow : Window, IMessageHost
     private static string Summary(OverrideGroup g)
     {
         if (g.Overrides.Count == 1)
-            return $"Only {g.Overrides[0].Mod.Name} sets it ({g.Overrides[0].Mode}). Nothing to clash with.";
+            return L.T("XmlOverridesWindow.OnlySetsNothingClash", g.Overrides[0].Mod.Name, g.Overrides[0].Mode);
         var active = g.Overrides.Where(o => o.CoveredBy is null).ToList();
         if (active.Count == 1 && g.Overrides.Count > 1)
-            return $"{active[0].Mod.Name} is the only live version: the other mods' copies are already merged into it, so they don't clash.";
+            return L.T("XmlOverridesWindow.OnlyLiveVersionOther", active[0].Mod.Name);
         string winner = active[0].Mod.Name;
         if (g.FieldClashes.Count > 0 && g.FieldClashes[0].Field.StartsWith('['))
-            return $"{winner} wins. This definition is a replace (or a card, which can only be replaced), so the whole thing comes from {winner} and the other mods' versions are discarded.";
+            return L.T("XmlOverridesWindow.WinsDefinitionReplaceCard", winner);
         return g.FieldClashes.Count == 0
-            ? "No two mods give the same field different values, so the changes combine."
-            : $"{g.FieldClashes.Count} field{(g.FieldClashes.Count == 1 ? " is" : "s are")} given different values by more than one mod; the first mod in the list wins each. "
-              + "The game orders DLC by name, the later name winning, and mod.io mods beat everything.";
+            ? L.T("XmlOverridesWindow.NoTwoModsGive")
+            : L.T("XmlOverridesWindow.FieldsClash", g.FieldClashes.Count);
     }
 
     private void OpenFile_Click(object sender, RoutedEventArgs e)
@@ -234,7 +234,7 @@ public partial class XmlOverridesWindow : Window, IMessageHost
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or InvalidOperationException or UnauthorizedAccessException)
         {
-            _ = ShowMessage("The file couldn't be opened", ex.Message, MessageKind.Error);
+            _ = ShowMessage(L.T("XmlOverridesWindow.FileCouldntOpened"), ex.Message, MessageKind.Error);
         }
     }
 
@@ -242,7 +242,7 @@ public partial class XmlOverridesWindow : Window, IMessageHost
     {
         var lines = _groups.Select(g => $"{g.Key}: " + string.Join(" > ", g.Overrides.Select(o => $"{o.Mod.Name} ({o.Mode})")));
         Clipboard.SetText(string.Join(Environment.NewLine, lines));
-        _ = Message.Show(null, "Copied to the clipboard.", MessageKind.Info, autoClose: true);
+        _ = Message.Show(null, L.T("Common.CopiedClipboard"), MessageKind.Info, autoClose: true);
     }
 
     private void Window_PreviewKeyDown(object sender, KeyEventArgs e)

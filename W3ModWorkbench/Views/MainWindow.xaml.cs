@@ -21,6 +21,7 @@ using W3ModWorkbench.Highlighting;
 using ICSharpCode.AvalonEdit.Document;
 using W3ModWorkbench.Core.Scripts.Navigation;
 using W3ModWorkbench.ViewModels;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -51,7 +52,7 @@ public partial class MainWindow : Window, IMessageHost
 
         var assembly = Assembly.GetExecutingAssembly();
         string copyright = assembly.GetCustomAttribute<AssemblyCopyrightAttribute>()?.Copyright ?? "Copyright © 2026 Faen90";
-        AboutText.Text = $"v{assembly.GetName().Version?.ToString(3)}  ·  {copyright.Replace("Copyright ", "")}";
+        AboutText.Text = $"v{assembly.GetName().Version?.ToString(3)}  ·  {copyright.Replace("Copyright ", "")}"; // loc-ignore: the version and copyright, as they are
 
         OutputBox.Text = _settings.OutputFolder;
         KeepStructureCheck.IsChecked = _settings.KeepStructure;
@@ -96,10 +97,8 @@ public partial class MainWindow : Window, IMessageHost
     {
         var dialog = new OpenFileDialog
         {
-            Title = "Open projects, bundles, scripts or strings",
-            Filter = "Projects, bundles, scripts, strings, XML, meshes, entities, cutscenes, scenes and behaviour trees (*.w3bench;*.bundle;*.rsblob;*.cache;*.ws;*.w3strings;*.csv;*.xml;*.json;*.w2mesh;*.w2ent;*.w2cutscene;*.w2scene;*.w2behtree)|*.w3bench;*.bundle;*.rsblob;*.cache;*.ws;*.w3strings;*.csv;*.xml;*.json;*.w2mesh;*.w2ent;*.w2cutscene;*.w2scene;*.w2behtree|"
-                   + "Projects (*.w3bench)|*.w3bench|Bundles (*.bundle)|*.bundle|Compiled scripts (*.rsblob)|*.rsblob|Texture caches (*.cache)|*.cache|Loose scripts (*.ws)|*.ws|"
-                   + "Strings (*.w3strings;*.csv)|*.w3strings;*.csv|XML, opened in the XML editor (*.xml)|*.xml|JSON, opened in the JSON editor (*.json)|*.json|Meshes, opened in the mesh viewer (*.w2mesh)|*.w2mesh|Entities, opened in the entity viewer (*.w2ent)|*.w2ent|Cutscenes, opened in the cutscene viewer (*.w2cutscene)|*.w2cutscene|Scenes, opened in the scene viewer (*.w2scene)|*.w2scene|Behaviour trees, opened in the behaviour tree viewer (*.w2behtree)|*.w2behtree|All files (*.*)|*.*",
+            Title = L.T("MainWindow.OpenProjectsBundlesScripts"),
+            Filter = L.T("MainWindow.ProjectsBundlesScriptsStrings"),
             Multiselect = true,
             InitialDirectory = Directory.Exists(_settings.LastOpenFolder) ? _settings.LastOpenFolder : "",
         };
@@ -113,7 +112,7 @@ public partial class MainWindow : Window, IMessageHost
     {
         var dialog = new OpenFolderDialog
         {
-            Title = "Open every bundle, compiled script and script project in a folder",
+            Title = L.T("MainWindow.OpenEveryBundleCompiled"),
             InitialDirectory = Directory.Exists(_settings.LastOpenFolder) ? _settings.LastOpenFolder : "",
         };
         if (dialog.ShowDialog(this) != true) return;
@@ -157,7 +156,7 @@ public partial class MainWindow : Window, IMessageHost
         }
         if (menu.Items.Count == 0) return;
         menu.Items.Add(new Separator());
-        var clear = new MenuItem { Header = "Clear the list" };
+        var clear = new MenuItem { Header = L.T("MainWindow.ClearList") };
         clear.Click += (_, _) =>
         {
             _settings.RecentPaths.Clear();
@@ -178,7 +177,7 @@ public partial class MainWindow : Window, IMessageHost
         {
             _settings.RecentPaths.RemoveAll(p => p.Equals(path, StringComparison.OrdinalIgnoreCase));
             UpdateRecentList();
-            ShowError($"{path} isn't there any more.\n\nIt was moved or deleted, so it's been taken off the list.");
+            ShowError(L.T("MainWindow.IsntThereAnyMore", path));
             return;
         }
         RememberRecent([path]);
@@ -263,7 +262,7 @@ public partial class MainWindow : Window, IMessageHost
                 }
                 catch (Exception ex)
                 {
-                    ShowError($"Could not read the folder {path}.\n\n{ex.Message}");
+                    ShowError(L.T("MainWindow.CouldNotReadFolder", path, ex.Message));
                 }
             }
             else if (File.Exists(path) && path.EndsWith(".ws", StringComparison.OrdinalIgnoreCase))
@@ -284,7 +283,7 @@ public partial class MainWindow : Window, IMessageHost
         files = [.. files.Select(Path.GetFullPath).Where(loaded.Add)];
         if (files.Count == 0)
         {
-            if (!paths.Any(File.Exists)) SetStatus("No .bundle, .rsblob, .ws or .w3strings files found there.");
+            if (!paths.Any(File.Exists)) SetStatus(L.T("MainWindow.NoBundleRsblobWs"));
             return;
         }
 
@@ -298,7 +297,7 @@ public partial class MainWindow : Window, IMessageHost
         for (int i = 0; i < files.Count; i++)
         {
             string file = files[i];
-            LoadingText.Text = files.Count == 1 ? $"Loading {Path.GetFileName(file)}…" : $"Loading {Path.GetFileName(file)}  ({i + 1} of {files.Count})";
+            LoadingText.Text = files.Count == 1 ? L.T("MainWindow.Loading2", Path.GetFileName(file)) : L.T("MainWindow.Loading3", Path.GetFileName(file), i + 1, files.Count);
             LoadingProgress.Value = i;
             try
             {
@@ -322,11 +321,11 @@ public partial class MainWindow : Window, IMessageHost
             if (FolderTree.SelectedItem is null) RefreshView();
         }
         int totalFiles = _roots.Sum(r => r.TotalFiles);
-        SetStatus($"{Format.Count(_roots.Count, "archive")} open, {Format.Count(totalFiles, "file")}");
+        SetStatus(L.T("MainWindow.Open", L.T("Count.Archive", _roots.Count), L.T("Count.File", totalFiles)));
 
         if (failures.Count > 0)
-            ShowError("Some files could not be opened:\n\n" + string.Join("\n", failures.Take(15)) +
-                      (failures.Count > 15 ? $"\n…and {failures.Count - 15} more" : ""));
+            ShowError(L.T("MainWindow.SomeNotOpened", string.Join("\n", failures.Take(15))) +
+                      (failures.Count > 15 ? L.T("MainWindow.AndMore", failures.Count - 15) : ""));
     }
 
     /// <summary>A folder is a folder of strings, or else a script project.</summary>
@@ -373,10 +372,10 @@ public partial class MainWindow : Window, IMessageHost
     private void UpdateProjectUi()
     {
         var project = ProjectWorkspace.Current;
-        Title = project is null ? "W3 Mod Workbench" : $"{project.Name} - W3 Mod Workbench";
-        ProjectButtonText.Text = project is null ? "Project" : project.Name;
-        ProjectButton.ToolTip = project is null ? "New project, open a project (Ctrl+Shift+O)"
-            : $"{project.FilePath}\nProject properties, add files, recent projects";
+        Title = project is null ? "W3 Mod Workbench" : L.T("MainWindow.W3ModWorkbench", project.Name);
+        ProjectButtonText.Text = project is null ? L.T("MainWindow.Project") : project.Name;
+        ProjectButton.ToolTip = project is null ? L.T("MainWindow.NewProjectOpenProject2")
+            : L.T("MainWindow.ProjectPropertiesAddFiles", project.FilePath);
     }
 
     private void NewProject_Click(object sender, RoutedEventArgs e) => _ = NewProjectAsync();
@@ -398,8 +397,8 @@ public partial class MainWindow : Window, IMessageHost
     {
         var dialog = new OpenFileDialog
         {
-            Title = "Open a project",
-            Filter = "W3 Mod Workbench projects (*.w3bench)|*.w3bench",
+            Title = L.T("MainWindow.OpenProject"),
+            Filter = L.T("MainWindow.W3ModWorkbenchProjects"),
             InitialDirectory = Directory.Exists(_settings.LastOpenFolder) ? _settings.LastOpenFolder : "",
         };
         if (dialog.ShowDialog(this) != true) return;
@@ -423,7 +422,7 @@ public partial class MainWindow : Window, IMessageHost
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
         {
             ProjectWorkspace.ForgetRecent(file);
-            if (!quiet) ShowError($"{Path.GetFileName(file)} could not be opened.\n\n{ex.Message}");
+            if (!quiet) ShowError(L.T("MainWindow.CouldNotOpened", Path.GetFileName(file), ex.Message));
             return false;
         }
 
@@ -445,7 +444,7 @@ public partial class MainWindow : Window, IMessageHost
         LoadingOverlay.Visibility = Visibility.Visible;
         EmptyState.Visibility = Visibility.Collapsed;
         BrowserPanel.Visibility = Visibility.Collapsed;
-        LoadingText.Text = $"Opening {project.Name}…";
+        LoadingText.Text = L.T("MainWindow.Opening", project.Name);
         LoadingProgress.IsIndeterminate = true;
         FolderNode node;
         try
@@ -466,10 +465,10 @@ public partial class MainWindow : Window, IMessageHost
         if (FolderTree.SelectedItem is null) RefreshView();
         // a project kept inside the game's folders can't be changed there: say so once, now
         if (FileSafety.Protection(project.FilePath) is { } protection)
-            ShowError($"{project.Name} is inside the game's folders\n\n{protection}\n\nIts files open read-only there. Move the project's folder somewhere of your own, such as Documents, and open it from there to work on it.");
+            ShowError(L.T("MainWindow.InsideGamesFoldersFiles", project.Name, protection));
         SetStatus(Directory.Exists(project.ScriptsPath)
-            ? $"Opened {project.Name}: {Format.Count(node.TotalFiles, "file")}"
-            : $"Opened {project.Name}, but its scripts folder {project.ScriptsFolder} isn't there. Project properties can point it somewhere else.");
+            ? L.T("MainWindow.Opened", project.Name, L.T("Count.File", node.TotalFiles))
+            : L.T("MainWindow.OpenedButScriptsFolder", project.Name, project.ScriptsFolder));
         await RestoreWorkspaceAsync(project);
         return true;
     }
@@ -504,9 +503,9 @@ public partial class MainWindow : Window, IMessageHost
         var unsaved = PreviewWindow.UnsavedDocuments().Where(d => d.Item.DiskPath is { } p && project.Contains(p)).ToList();
         if (unsaved.Count > 0)
         {
-            var choice = await Message.Ask(unsaved.Count == 1 ? $"Save the changes to {unsaved[0].FileName}?" : $"Save the changes to {unsaved.Count} files?",
-                PreviewWindow.Names(unsaved) + (unsaved.Count == 1 ? " has" : " have") + $" changes that are lost if you don't save them before {project.Name} closes.",
-                MessageKind.Question, unsaved.Count == 1 ? "Save" : "Save all", "Don't save");
+            var choice = await Message.Ask(unsaved.Count == 1 ? L.T("MainWindow.SaveChanges", unsaved[0].FileName) : L.T("MainWindow.SaveChangesFiles", unsaved.Count),
+                L.T("MainWindow.ChangesLostBefore", PreviewWindow.Names(unsaved), project.Name, unsaved.Count),
+                MessageKind.Question, unsaved.Count == 1 ? L.T("Common.Save") : L.T("MainWindow.SaveAll"), L.T("Common.DontSave"));
             if (choice == MessageChoice.Cancel || choice == MessageChoice.Primary && !PreviewWindow.SaveAll(unsaved)) return false;
         }
         SaveWorkspaceState();
@@ -539,7 +538,7 @@ public partial class MainWindow : Window, IMessageHost
     {
         if (ProjectWorkspace.Current is not { } project)
         {
-            ShowError("No project is open.\n\nMake or open a project first with Project > New project.");
+            ShowError(L.T("MainWindow.NoProjectOpenMake"));
             return false;
         }
         int added = 0;
@@ -557,12 +556,12 @@ public partial class MainWindow : Window, IMessageHost
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            ShowError($"The project could not be saved.\n\n{ex.Message}");
+            ShowError(L.T("MainWindow.ProjectCouldNotSaved", ex.Message));
             return false;
         }
         await ReloadProjectAsync();
-        SetStatus($"Added {added:N0} {(added == 1 ? "file or folder" : "files and folders")} to {project.Name}"
-            + (outside ? ". Scripts outside the project's scripts folder are part of the project but aren't compiled with it" : ""));
+        SetStatus(L.T("MainWindow.AddedTo", added, project.Name)
+            + (outside ? L.T("MainWindow.OutsideNotCompiled") : ""));
         return true;
     }
 
@@ -573,8 +572,8 @@ public partial class MainWindow : Window, IMessageHost
         string root = ScriptFolder.SuggestedRoot(scriptsFolder);
         if (WorkbenchProject.FileIn(root) is { } existing)
         {
-            if (await Message.Ask("This folder is a project already", $"{Path.GetFileName(existing)} is in {root}. Open it, and its scripts are part of the project.",
-                    MessageKind.Question, "Open project", "Close") == MessageChoice.Primary)
+            if (await Message.Ask(L.T("MainWindow.FolderProjectAlready"), L.T("MainWindow.OpenScriptsPartProject", Path.GetFileName(existing), root),
+                    MessageKind.Question, L.T("MainWindow.OpenProject2"), L.T("Common.Close")) == MessageChoice.Primary)
                 await OpenProjectAsync(existing);
             return;
         }
@@ -593,14 +592,14 @@ public partial class MainWindow : Window, IMessageHost
             menu.Items.Add(item);
             return item;
         }
-        Add("Script Bench", "Ctrl+Shift+E", () => PreviewWindow.OpenBench(this))
-            .ToolTip = "Where scripts are written and read: your project's, the game's and the installed mods', with what compiling reads spelled out";
+        Add(L.T("MainWindow.ScriptBench"), "Ctrl+Shift+E", () => PreviewWindow.OpenBench(this))
+            .ToolTip = L.T("MainWindow.WhereScriptsWrittenRead");
         menu.Items.Add(new Separator());
-        Add("New project…", "Ctrl+Shift+N", () => _ = NewProjectAsync());
-        Add("Open project…", "Ctrl+Shift+O", OpenProjectDialog);
-        Add("New mod menu…", "", () => XmlWindow.OpenNewMenu(this))
-            .ToolTip = "A menu of your mod's options in the game's Mods menu, built page by page: the XML it needs, its strings and the script that reads it";
-        var recent = new MenuItem { Header = "Recent projects" };
+        Add(L.T("MainWindow.NewProject"), "Ctrl+Shift+N", () => _ = NewProjectAsync());
+        Add(L.T("MainWindow.OpenProject3"), "Ctrl+Shift+O", OpenProjectDialog);
+        Add(L.T("MainWindow.NewModMenu"), "", () => XmlWindow.OpenNewMenu(this))
+            .ToolTip = L.T("MainWindow.MenuYourModsOptions");
+        var recent = new MenuItem { Header = L.T("MainWindow.RecentProjects") };
         var recents = ProjectWorkspace.Recent().Where(p => project is null || !p.Equals(project.FilePath, StringComparison.OrdinalIgnoreCase)).ToList();
         foreach (string path in recents)
         {
@@ -611,19 +610,19 @@ public partial class MainWindow : Window, IMessageHost
         recent.IsEnabled = recents.Count > 0;
         menu.Items.Add(recent);
         menu.Items.Add(new Separator());
-        Add("Project properties…", "", () => ProjectProperties_Click(this, new RoutedEventArgs()), project is not null);
-        Add("Add files to the project…", "", () => ProjectAddFiles_Click(this, new RoutedEventArgs()), project is not null);
-        Add("Add a folder to the project…", "", AddFolderToProject, project is not null);
-        Add("Refresh the project", "", () => _ = ReloadProjectAsync(), project is not null);
-        Add("Open the project folder", "", () => ProjectReveal_Click(this, new RoutedEventArgs()), project is not null);
+        Add(L.T("MainWindow.ProjectProperties"), "", () => ProjectProperties_Click(this, new RoutedEventArgs()), project is not null);
+        Add(L.T("MainWindow.AddFilesProject"), "", () => ProjectAddFiles_Click(this, new RoutedEventArgs()), project is not null);
+        Add(L.T("MainWindow.AddFolderProject"), "", AddFolderToProject, project is not null);
+        Add(L.T("MainWindow.RefreshProject"), "", () => _ = ReloadProjectAsync(), project is not null);
+        Add(L.T("MainWindow.OpenProjectFolder"), "", () => ProjectReveal_Click(this, new RoutedEventArgs()), project is not null);
         menu.Items.Add(new Separator());
-        Add("Compile scripts", "", () => _ = PreviewWindow.CompileProjectAsync(this, chooseOutput: false), project is not null)
-            .ToolTip = "Compile the project's scripts in Script Bench to check them, listing any errors with links to their lines. Build compiles them into the mod as well";
-        Add("Compile scripts to…", "", () => _ = PreviewWindow.CompileProjectAsync(this, chooseOutput: true), project is not null);
-        Add(project is null ? "Build mod" : $"Build {project.ModFolderName.Replace("_", "__")}", "Ctrl+Shift+B", () => _ = BuildModAsync(), project is not null);
-        Add(project is null ? "Install mod…" : $"Install {project.ModFolderName.Replace("_", "__")}…", "", () => _ = InstallModAsync(), project is not null);
+        Add(L.T("MainWindow.CompileScripts"), "", () => _ = PreviewWindow.CompileProjectAsync(this, chooseOutput: false), project is not null)
+            .ToolTip = L.T("MainWindow.CompileProjectsScriptsScript");
+        Add(L.T("MainWindow.CompileScripts2"), "", () => _ = PreviewWindow.CompileProjectAsync(this, chooseOutput: true), project is not null);
+        Add(project is null ? L.T("MainWindow.BuildMod") : L.T("MainWindow.Build2", project.ModFolderName.Replace("_", "__")), "Ctrl+Shift+B", () => _ = BuildModAsync(), project is not null);
+        Add(project is null ? L.T("MainWindow.InstallMod") : L.T("MainWindow.Install4", project.ModFolderName.Replace("_", "__")), "", () => _ = InstallModAsync(), project is not null);
         menu.Items.Add(new Separator());
-        Add("Close project", "", () => _ = CloseProjectAsync(), project is not null);
+        Add(L.T("MainWindow.CloseProject"), "", () => _ = CloseProjectAsync(), project is not null);
         menu.IsOpen = true;
     }
 
@@ -640,7 +639,7 @@ public partial class MainWindow : Window, IMessageHost
     private async void ProjectAddFiles_Click(object sender, RoutedEventArgs e)
     {
         if (ProjectWorkspace.Current is not { } project) return;
-        var dialog = new OpenFileDialog { Title = "Add files to the project", Multiselect = true, InitialDirectory = Directory.Exists(project.Root) ? project.Root : "" };
+        var dialog = new OpenFileDialog { Title = L.T("MainWindow.AddFilesProject2"), Multiselect = true, InitialDirectory = Directory.Exists(project.Root) ? project.Root : "" };
         if (dialog.ShowDialog(this) != true) return;
 
         // a script only compiles with the project from inside its scripts folder: one from anywhere else is copied in, when you agree
@@ -650,12 +649,10 @@ public partial class MainWindow : Window, IMessageHost
         var rest = dialog.FileNames.Except(outside).ToList();
         if (outside.Count > 0)
         {
-            string which = outside.Count == 1 ? Path.GetFileName(outside[0]) : $"{outside.Count} scripts";
-            var choice = await Message.Ask($"Copy {which} into the project's scripts folder?",
-                $"Scripts are compiled with the project from its scripts folder ({project.ScriptsPath}). Copied there, {(outside.Count == 1 ? "it's" : "they're")} "
-                + "part of the mod and compiled with it, and the original is left as it is. Added where "
-                + (outside.Count == 1 ? "it is, it's" : "they are, they're") + " listed with the project but not compiled.",
-                MessageKind.Question, "Copy into scripts", "Add where it is");
+            string which = outside.Count == 1 ? Path.GetFileName(outside[0]) : L.T("MainWindow.Scripts", outside.Count);
+            var choice = await Message.Ask(L.T("MainWindow.CopyIntoProjectsScripts", which),
+                L.T("MainWindow.CopyOrAddWhere", project.ScriptsPath, outside.Count),
+                MessageKind.Question, L.T("MainWindow.CopyIntoScripts"), L.T("MainWindow.AddWhere"));
             if (choice == MessageChoice.Cancel) return;
             if (choice == MessageChoice.Secondary) rest.AddRange(outside);
             else if (!await CopyScriptsInAsync(project, outside)) return;
@@ -687,22 +684,21 @@ public partial class MainWindow : Window, IMessageHost
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            ShowError($"The scripts could not be copied into the project.\n\n{ex.Message}");
+            ShowError(L.T("MainWindow.ScriptsCouldNotCopied", ex.Message));
             return false;
         }
         if (copied.Count > 0) await ReloadProjectAsync();
         if (skipped.Count > 0)
-            await ShowMessage("Some scripts weren't copied", $"The scripts folder has a file with the same name already: {string.Join(", ", skipped)}. "
-                + "Rename the file you're adding, or open the one in the project.", MessageKind.Warning);
+            await ShowMessage(L.T("MainWindow.SomeScriptsWerentCopied"), L.T("MainWindow.ScriptsFolderHasFile", string.Join(", ", skipped)), MessageKind.Warning);
         if (copied.Count > 0)
-            SetStatus($"Copied {string.Join(", ", copied)} into {project.Name}'s scripts folder");
+            SetStatus(L.T("MainWindow.CopiedIntoScriptsFolder", string.Join(", ", copied), project.Name));
         return true;
     }
 
     private void AddFolderToProject()
     {
         if (ProjectWorkspace.Current is not { } project) return;
-        var dialog = new OpenFolderDialog { Title = "Add a folder to the project", InitialDirectory = Directory.Exists(project.Root) ? project.Root : "" };
+        var dialog = new OpenFolderDialog { Title = L.T("MainWindow.AddFolderProject2"), InitialDirectory = Directory.Exists(project.Root) ? project.Root : "" };
         if (dialog.ShowDialog(this) == true) _ = AddToProjectAsync([dialog.FolderName]);
     }
 
@@ -732,7 +728,7 @@ public partial class MainWindow : Window, IMessageHost
         foreach (var item in new[] { TreeProjectPropertiesItem, TreeAddFilesItem, TreeRefreshItem, TreeRevealItem })
             item.Visibility = project ? Visibility.Visible : Visibility.Collapsed;
         TreeProjectSeparator.Visibility = project || loose ? Visibility.Visible : Visibility.Collapsed;
-        TreeCloseItem.Header = project ? "Close project" : loose ? "Close scripts" : root is { IsGroup: true } ? "Close mod" : "Close bundle";
+        TreeCloseItem.Header = project ? L.T("MainWindow.CloseProject") : loose ? L.T("MainWindow.CloseScripts") : root is { IsGroup: true } ? L.T("MainWindow.CloseMod") : L.T("MainWindow.CloseBundle");
     }
 
     // ---------------------------------------------------------------- copying into the project
@@ -782,19 +778,19 @@ public partial class MainWindow : Window, IMessageHost
     {
         if (ProjectWorkspace.Current is null)
         {
-            var choice = await (card ?? Message).Ask("This needs a project", why + "\n\nMake a project for your mod, or open one.",
-                MessageKind.Question, "New project…", "Open project…");
+            var choice = await (card ?? Message).Ask(L.T("MainWindow.NeedsProject"), L.T("MainWindow.MakeProjectYourMod", why),
+                MessageKind.Question, L.T("MainWindow.NewProject"), L.T("MainWindow.OpenProject3"));
             if (choice == MessageChoice.Primary) await NewProjectAsync();
             else if (choice == MessageChoice.Secondary)
             {
-                var dialog = new OpenFileDialog { Title = "Open a project", Filter = "W3 Mod Workbench projects (*.w3bench)|*.w3bench" };
+                var dialog = new OpenFileDialog { Title = L.T("MainWindow.OpenProject"), Filter = L.T("MainWindow.W3ModWorkbenchProjects") };
                 if (dialog.ShowDialog() == true) await OpenProjectAsync(dialog.FileName);
             }
         }
         if (ProjectWorkspace.Current is not { } project) return null;
         if (FileSafety.Protection(project.FilePath) is { } protection)
         {
-            ShowError($"{project.Name} is inside the game's folders, where nothing is written.\n\n{protection}\n\nMove the project's folder somewhere of your own, such as Documents, and open it from there.");
+            ShowError(L.T("MainWindow.InsideGamesFoldersWhere", project.Name, protection));
             return null;
         }
         return project;
@@ -807,7 +803,7 @@ public partial class MainWindow : Window, IMessageHost
     /// </summary>
     public async Task<bool> CopyToProjectAsync(IReadOnlyList<(string GamePath, Func<byte[]> Read)> files, bool open = false)
     {
-        if (await EnsureProjectAsync("Game files are changed as copies in a project, at the same game path, so the game's own are never touched.") is not { } project)
+        if (await EnsureProjectAsync(L.T("MainWindow.GameFilesChangedCopies")) is not { } project)
             return false;
         var copied = new List<string>();
         var existing = new List<string>();
@@ -838,16 +834,14 @@ public partial class MainWindow : Window, IMessageHost
             await ReloadProjectAsync();
 
         SetStatus(copied.Count > 0
-            ? $"Copied {Format.Count(copied.Count, "file")} into {project.Name}" + (existing.Count > 0 ? $"; {Format.Count(existing.Count, "file")} it had already were left as they are" : "")
-            : existing.Count > 0 ? $"{project.Name} has {(existing.Count == 1 ? "that file" : "those files")} already; nothing was copied" : "Nothing was copied");
-        if (failed.Count > 0) ShowError("Some files could not be copied:\n\n" + string.Join("\n", failed.Take(15)));
+            ? L.T("MainWindow.CopiedInto", L.T("Count.File", copied.Count), project.Name) + (existing.Count > 0 ? L.T("MainWindow.HadAlready", L.T("Count.File", existing.Count)) : "")
+            : existing.Count > 0 ? L.T("MainWindow.HasAlready", project.Name, existing.Count) : L.T("MainWindow.NothingCopied"));
+        if (failed.Count > 0) ShowError(L.T("MainWindow.SomeFilesCouldNot", string.Join("\n", failed.Take(15))));
         // REDkit's source files can be copied, but the game can't load them uncooked: said now, not at the first build
         // (textures excepted, which Build cooks)
         var uncooked = copied.Where(p => project.GamePathOf(p) is not null && ModBuilder.IsUncooked(p) && !ModBuilder.BuildCooks(p)).ToList();
         if (uncooked.Count > 0)
-            ShowError($"{(uncooked.Count == 1 ? "The copy isn't" : $"{uncooked.Count} of the copies aren't")} cooked\n\n"
-                + string.Join("\n", uncooked.Take(10).Select(p => "• " + project.GamePathOf(p)))
-                + "\n\nThey're REDkit source files, which the game can't load until they're cooked, and Build only cooks textures so far. The same files from the game's bundles are cooked already.");
+            ShowError(L.T("MainWindow.CookedTheyreREDkitSource", (uncooked.Count == 1 ? L.T("MainWindow.CopyIsnt") : L.T("MainWindow.CopiesArent", uncooked.Count)), string.Join("\n", uncooked.Take(10).Select(p => "• " + project.GamePathOf(p)))));
         if (open && copied.Concat(existing).FirstOrDefault() is { } first) OpenProjectFile(first);
         return copied.Count > 0;
     }
@@ -882,11 +876,11 @@ public partial class MainWindow : Window, IMessageHost
         try { project.Save(); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            ShowError($"The project could not be saved.\n\n{ex.Message}");
+            ShowError(L.T("MainWindow.ProjectCouldNotSaved", ex.Message));
             return;
         }
         _ = ReloadProjectAsync();
-        SetStatus($"Removed {removed:N0} {(removed == 1 ? "file" : "files")} from {project.Name}. The files themselves are untouched");
+        SetStatus(L.T("MainWindow.RemovedFrom", removed, project.Name));
     }
 
     /// <summary>Closes an open archive, by its path.</summary>
@@ -966,7 +960,7 @@ public partial class MainWindow : Window, IMessageHost
         }
         UpdateEmptyState();
         RefreshView();
-        SetStatus(_roots.Count == 0 ? "Ready" : $"{Format.Count(_roots.Count, "archive")} open");
+        SetStatus(_roots.Count == 0 ? L.T("MainWindow.Ready") : L.T("MainWindow.Open2", L.T("Count.Archive", _roots.Count)));
     }
 
     private void UpdateEmptyState()
@@ -1012,7 +1006,7 @@ public partial class MainWindow : Window, IMessageHost
         NoMatchesText.Text = result.NoMatches(_typeFilter, _classFilter);
         NoMatchesText.Visibility = _shown.Count == 0 && _roots.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
         ExtractShownButton.IsEnabled = _shown.Count > 0;
-        ExtractShownText.Text = _shown.Count > 0 ? $"Extract shown ({_shown.Count:N0})" : "Extract shown";
+        ExtractShownText.Text = _shown.Count > 0 ? L.T("MainWindow.ExtractShown2", _shown.Count) : L.T("MainWindow.ExtractShown");
         QueueStatusUpdate();
     }
 
@@ -1164,7 +1158,7 @@ public partial class MainWindow : Window, IMessageHost
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
         {
-            ShowError($"{item.Name} could not be read.\n\n{ex.Message}");
+            ShowError(L.T("MainWindow.CouldNotRead", item.Name, ex.Message));
         }
     }
 
@@ -1184,7 +1178,7 @@ public partial class MainWindow : Window, IMessageHost
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
         {
-            ShowError($"{item.Name} could not be read.\n\n{ex.Message}");
+            ShowError(L.T("MainWindow.CouldNotRead", item.Name, ex.Message));
         }
     }
 
@@ -1204,7 +1198,7 @@ public partial class MainWindow : Window, IMessageHost
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
         {
-            ShowError($"{item.Name} could not be read.\n\n{ex.Message}");
+            ShowError(L.T("MainWindow.CouldNotRead", item.Name, ex.Message));
         }
     }
 
@@ -1224,7 +1218,7 @@ public partial class MainWindow : Window, IMessageHost
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
         {
-            ShowError($"{item.Name} could not be read.\n\n{ex.Message}");
+            ShowError(L.T("MainWindow.CouldNotRead", item.Name, ex.Message));
         }
     }
 
@@ -1244,7 +1238,7 @@ public partial class MainWindow : Window, IMessageHost
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
         {
-            ShowError($"{item.Name} could not be read.\n\n{ex.Message}");
+            ShowError(L.T("MainWindow.CouldNotRead", item.Name, ex.Message));
         }
     }
 
@@ -1264,7 +1258,7 @@ public partial class MainWindow : Window, IMessageHost
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
         {
-            ShowError($"{item.Name} could not be read.\n\n{ex.Message}");
+            ShowError(L.T("MainWindow.CouldNotRead", item.Name, ex.Message));
         }
     }
 
@@ -1281,11 +1275,11 @@ public partial class MainWindow : Window, IMessageHost
                 return entry.Read(fs);
             });
             if (!TextureWindow.Open(item.Name, $"{item.BundleName}  ·  {entry.Path}", data, this))
-                ShowError($"{item.Name} can't be shown.\n\nIt isn't a picture this viewer understands. It may be a .dds in a format that isn't supported yet (cube maps, BC2, and some others).");
+                ShowError(L.T("MainWindow.CantShownIsntPicture", item.Name));
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
         {
-            ShowError($"{item.Name} could not be read.\n\n{ex.Message}");
+            ShowError(L.T("MainWindow.CouldNotRead", item.Name, ex.Message));
         }
     }
 
@@ -1302,7 +1296,7 @@ public partial class MainWindow : Window, IMessageHost
         var header = item.Entry;
         // the .xbm (or .w2cube, .texarray) double-clicked is the texture's resource, with its properties
         if (found is not null) OpenTexture(found, () => ReadAsync(header).GetAwaiter().GetResult());
-        else ShowError($"The texture's pixels weren't found.\n\n{item.Name} only describes the texture; its pixels are in a texture.cache under the same path. Open the mod's texture.cache (or the game's, in content\\content0), or put one beside this bundle.");
+        else ShowError(L.T("MainWindow.TexturesPixelsWerentFound", item.Name));
     }
 
     /// <summary>The texture an .xbm in a bundle describes, from a cache that's open, the one beside the bundle or the game's. Null when none has it.</summary>
@@ -1381,7 +1375,7 @@ public partial class MainWindow : Window, IMessageHost
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
         {
-            ShowError($"{item.Name} could not be read.\n\n{ex.Message}");
+            ShowError(L.T("MainWindow.CouldNotRead", item.Name, ex.Message));
         }
     }
 
@@ -1416,7 +1410,7 @@ public partial class MainWindow : Window, IMessageHost
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
         {
-            ShowError($"{item.Name} could not be opened.\n\n{ex.Message}");
+            ShowError(L.T("MainWindow.CouldNotOpened2", item.Name, ex.Message));
         }
     }
 
@@ -1428,7 +1422,7 @@ public partial class MainWindow : Window, IMessageHost
         bool anyJson = Highlighted().Any(i => JsonWindow.CanOpen(i.Name)), anyCr2w = Highlighted().Any(i => Cr2wJsonBatch.LooksLikeCr2w(i.Name));
         GridJsonItem.Visibility = anyJson || anyCr2w ? Visibility.Visible : Visibility.Collapsed;
         GridPropertiesItem.Visibility = anyCr2w ? Visibility.Visible : Visibility.Collapsed;
-        GridJsonItem.Header = anyJson && !anyCr2w ? "Open in JSON editor" : "Open as JSON";
+        GridJsonItem.Header = anyJson && !anyCr2w ? L.T("MainWindow.OpenJsonEditor") : L.T("Common.OpenJson");
         var project = ProjectWorkspace.Current;
         var loose = Highlighted().Select(i => i.Entry).OfType<LooseScriptEntry>().ToList();
         // the game's files and installed mods' are copied into a project, not added to it: added, they'd still be read-only
@@ -1469,13 +1463,13 @@ public partial class MainWindow : Window, IMessageHost
             }
             catch (Exception ex)
             {
-                ShowError($"{item.Name} could not be opened in an external editor.\n\n{ex.Message}");
+                ShowError(L.T("MainWindow.CouldNotOpenedExternal", item.Name, ex.Message));
                 return;
             }
         }
         if (copies > 0)
-            SetStatus(copies == 1 ? $"Opened a read-only copy of {copied}: files inside archives can't be changed in place"
-                : $"Opened read-only copies of {copies} files: files inside archives can't be changed in place");
+            SetStatus(copies == 1 ? L.T("MainWindow.OpenedReadOnlyCopy", copied)
+                : L.T("MainWindow.OpenedReadOnlyCopies", copies));
     }
 
     /// <summary>Opens an XML file from a bundle (or a loose one in a project) in the XML editor.</summary>
@@ -1499,7 +1493,7 @@ public partial class MainWindow : Window, IMessageHost
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
         {
-            ShowError($"{item.Name} could not be opened.\n\n{ex.Message}");
+            ShowError(L.T("MainWindow.CouldNotOpened2", item.Name, ex.Message));
         }
     }
 
@@ -1565,12 +1559,12 @@ public partial class MainWindow : Window, IMessageHost
             item.Click += (_, _) => setView(view);
             menu.Items.Add(item);
         }
-        Choice("Details", "Details");
-        Choice("Small thumbnails", "Small");
-        Choice("Medium thumbnails", "Medium");
-        Choice("Large thumbnails", "Large");
+        Choice(L.T("MainWindow.Details"), "Details");
+        Choice(L.T("MainWindow.SmallThumbnails"), "Small");
+        Choice(L.T("MainWindow.MediumThumbnails"), "Medium");
+        Choice(L.T("MainWindow.LargeThumbnails"), "Large");
         menu.Items.Add(new Separator());
-        var pane = new MenuItem { Header = "Preview pane", InputGestureText = "Alt+P", IsCheckable = true, IsChecked = preview };
+        var pane = new MenuItem { Header = L.T("MainWindow.PreviewPane"), InputGestureText = L.T("MainWindow.AltP"), IsCheckable = true, IsChecked = preview };
         pane.Click += (_, _) => togglePreview();
         menu.Items.Add(pane);
         menu.IsOpen = true;
@@ -1626,19 +1620,19 @@ public partial class MainWindow : Window, IMessageHost
             menu.Items.Add(item);
             return item;
         }
-        Add("Asset Browser", "Ctrl+Shift+A", () => _ = BrowseGameFilesAsync());
+        Add(L.T("MainWindow.AssetBrowser"), "Ctrl+Shift+A", () => _ = BrowseGameFilesAsync());
         menu.Items.Add(new Separator());
-        Add("Search game strings…", "Ctrl+Shift+G", OpenGameStrings);
-        Add("Source inspector…", "Ctrl+Shift+I", () => SourceInspectorWindow.Open(this));
-        Add("Load order analyser…", "Ctrl+Shift+L", () => LoadOrderWindow.Open(this));
-        Add("View XML overrides…", "", () => XmlOverridesWindow.Open(this));
+        Add(L.T("MainWindow.SearchGameStrings"), "Ctrl+Shift+G", OpenGameStrings);
+        Add(L.T("MainWindow.SourceInspector"), "Ctrl+Shift+I", () => SourceInspectorWindow.Open(this));
+        Add(L.T("MainWindow.LoadOrderAnalyser"), "Ctrl+Shift+L", () => LoadOrderWindow.Open(this));
+        Add(L.T("MainWindow.ViewXMLOverrides"), "", () => XmlOverridesWindow.Open(this));
         menu.Items.Add(new Separator());
-        Add("Console commands…", "", () => ConsoleCommandsWindow.Open(this));
-        Add("Quest facts…", "", () => FactsWindow.Open(this));
-        Add("Scripts log…", "", () => LogWindow.Open(this));
-        Add("Key binding helper…", "", () => InputBindingsWindow.Open(this));
-        Add("Hashes and IDs…", "", () => HashToolsWindow.Open(this));
-        Add("CR2W and JSON…", "", () => Cr2wJsonWindow.Open(this));
+        Add(L.T("MainWindow.ConsoleCommands"), "", () => ConsoleCommandsWindow.Open(this));
+        Add(L.T("MainWindow.QuestFacts"), "", () => FactsWindow.Open(this));
+        Add(L.T("MainWindow.ScriptsLog"), "", () => LogWindow.Open(this));
+        Add(L.T("MainWindow.KeyBindingHelper"), "", () => InputBindingsWindow.Open(this));
+        Add(L.T("MainWindow.HashesIDs"), "", () => HashToolsWindow.Open(this));
+        Add(L.T("MainWindow.CR2WJson"), "", () => Cr2wJsonWindow.Open(this));
         menu.IsOpen = true;
     }
 
@@ -1692,7 +1686,7 @@ public partial class MainWindow : Window, IMessageHost
         }
         catch (Exception ex)
         {
-            ShowError($"{item.Name} could not be read.\n\n{ex.Message}");
+            ShowError(L.T("MainWindow.CouldNotRead", item.Name, ex.Message));
         }
     }
 
@@ -1761,7 +1755,7 @@ public partial class MainWindow : Window, IMessageHost
         Dispatcher.BeginInvoke(DispatcherPriority.Background, () =>
         {
             _statusQueued = false;
-            CheckedText.Text = _checkedCount > 0 ? $"{_checkedCount:N0} checked · {Format.Bytes(_checkedBytes)}" : "";
+            CheckedText.Text = _checkedCount > 0 ? L.T("MainWindow.Checked", _checkedCount, Format.Bytes(_checkedBytes)) : "";
             bool canExtract = _checkedCount > 0 && _extractCts is null;
             ExtractCheckedButton.IsEnabled = canExtract;
             // the Fluent accent style is near invisible when disabled, so only use it while enabled.
@@ -1770,7 +1764,7 @@ public partial class MainWindow : Window, IMessageHost
                 ExtractCheckedButton.SetResourceReference(StyleProperty, "AccentButtonStyle");
             else
                 ExtractCheckedButton.ClearValue(StyleProperty);
-            ExtractCheckedText.Text = _checkedCount > 0 ? $"Extract checked ({_checkedCount:N0})" : "Extract checked";
+            ExtractCheckedText.Text = _checkedCount > 0 ? L.T("MainWindow.ExtractChecked2", _checkedCount) : L.T("MainWindow.ExtractChecked");
 
             int checkedShown = _shown.Count(i => i.IsChecked);
             HeaderCheck.IsChecked = checkedShown == 0 ? false : checkedShown == _shown.Count ? true : null;
@@ -1797,7 +1791,7 @@ public partial class MainWindow : Window, IMessageHost
     {
         var dialog = new OpenFolderDialog
         {
-            Title = "Choose where to extract files",
+            Title = L.T("MainWindow.ChooseWhereExtractFiles"),
             InitialDirectory = Directory.Exists(OutputBox.Text) ? OutputBox.Text : "",
         };
         if (dialog.ShowDialog(this) != true) return false;
@@ -1827,7 +1821,7 @@ public partial class MainWindow : Window, IMessageHost
         }
         catch (Exception ex)
         {
-            ShowError($"The output folder can't be used.\n\n{ex.Message}");
+            ShowError(L.T("MainWindow.OutputFolderCantUsed", ex.Message));
             return;
         }
 
@@ -1843,7 +1837,7 @@ public partial class MainWindow : Window, IMessageHost
         var progress = new Progress<ExtractProgress>(p =>
         {
             ExtractProgressBar.Value = p.Done;
-            SetStatus($"Extracting {p.Done:N0} of {p.Total:N0}  ·  {p.CurrentPath}");
+            SetStatus(L.T("MainWindow.Extracting", p.Done, p.Total, p.CurrentPath));
         });
 
         var token = _extractCts.Token;
@@ -1860,15 +1854,14 @@ public partial class MainWindow : Window, IMessageHost
         }
 
         foreach (var (entry, path) in result.Written) _extracted[entry] = path;
-        string summary = $"{(result.Cancelled ? "Cancelled after extracting" : "Extracted")} {Format.Count(result.Extracted, "file")} ({Format.Bytes(result.Bytes)}) to {output}"
-            + (companions > 0 ? $", with {Format.Count(companions, "companion file")} the others need" : "");
+        string summary = L.T("MainWindow.ExtractedTo", result.Cancelled ? L.T("MainWindow.CancelledAfterExtracting") : L.T("MainWindow.Extracted"), L.T("Count.File", result.Extracted), Format.Bytes(result.Bytes), output)
+            + (companions > 0 ? L.T("MainWindow.OthersNeed", L.T("Count.CompanionFile", companions)) : "");
         SetStatus(summary);
 
         if (result.Failures.Count > 0)
         {
-            ShowError($"{Format.Count(result.Failures.Count, "file")} could not be extracted:\n\n" +
-                      string.Join("\n", result.Failures.Take(15).Select(f => $"{f.Path}\n    {f.Error}")) +
-                      (result.Failures.Count > 15 ? $"\n…and {result.Failures.Count - 15} more" : ""));
+            ShowError(L.T("MainWindow.NotExtracted", L.T("Count.File", result.Failures.Count), string.Join("\n", result.Failures.Take(15).Select(f => $"{f.Path}\n    {f.Error}"))) +
+                      (result.Failures.Count > 15 ? L.T("MainWindow.AndMore", result.Failures.Count - 15) : ""));
         }
 
         if (openWhenDone && result.Extracted > 0)
@@ -2055,9 +2048,9 @@ public partial class MainWindow : Window, IMessageHost
             return;
         }
         var assembly = Assembly.GetExecutingAssembly();
-        AboutVersionText.Text = $"Version {assembly.GetName().Version?.ToString(3)}  ·  by Faen90";
-        AboutCopyrightText.Text = assembly.GetCustomAttribute<AssemblyCopyrightAttribute>()?.Copyright ?? "Copyright © 2026 Faen90";
-        AboutSettingsText.Text = $"Settings are saved in {Settings.FilePath}";
+        AboutVersionText.Text = L.T("MainWindow.VersionFaen90", assembly.GetName().Version?.ToString(3));
+        AboutCopyrightText.Text = assembly.GetCustomAttribute<AssemblyCopyrightAttribute>()?.Copyright ?? L.T("MainWindow.CopyrightFaen90");
+        AboutSettingsText.Text = L.T("MainWindow.SettingsSaved", Settings.FilePath);
         // the card sits inside a 12px margin that leaves room for its shadow
         AboutPopup.HorizontalOffset = AboutButton.ActualWidth - AboutCard.Width - 12;
         AboutPopup.VerticalOffset = AboutButton.ActualHeight + 2;
@@ -2133,9 +2126,9 @@ public partial class MainWindow : Window, IMessageHost
 
     private async Task ConfirmCloseAsync(List<PreviewDocument> unsaved)
     {
-        var choice = await Message.Ask(unsaved.Count == 1 ? $"Save the changes to {unsaved[0].FileName}?" : $"Save the changes to {unsaved.Count} scripts?",
-            PreviewWindow.Names(unsaved) + (unsaved.Count == 1 ? " has" : " have") + " changes that are lost if you don't save them.",
-            MessageKind.Question, unsaved.Count == 1 ? "Save" : "Save all", "Don't save");
+        var choice = await Message.Ask(unsaved.Count == 1 ? L.T("MainWindow.SaveChanges", unsaved[0].FileName) : L.T("MainWindow.SaveChangesScripts", unsaved.Count),
+            L.T("MainWindow.ChangesLost", PreviewWindow.Names(unsaved), unsaved.Count),
+            MessageKind.Question, unsaved.Count == 1 ? L.T("Common.Save") : L.T("MainWindow.SaveAll"), L.T("Common.DontSave"));
         if (choice == MessageChoice.Cancel || choice == MessageChoice.Primary && !PreviewWindow.SaveAll(unsaved)) return;
         _closeConfirmed = true;
         Close();
@@ -2155,8 +2148,8 @@ public partial class MainWindow : Window, IMessageHost
         var unsaved = PreviewWindow.UnsavedDocuments().Where(d => d.Item.DiskPath is { } p && project.Contains(p)).ToList();
         if (unsaved.Count > 0)
         {
-            var choice = await Message.Ask(unsaved.Count == 1 ? $"Save {unsaved[0].FileName} first?" : $"Save {unsaved.Count} files first?",
-                "The build uses the files as they are on disk.", MessageKind.Question, "Save and build", "Build without them");
+            var choice = await Message.Ask(unsaved.Count == 1 ? L.T("MainWindow.SaveFirst", unsaved[0].FileName) : L.T("MainWindow.SaveFilesFirst", unsaved.Count),
+                L.T("MainWindow.BuildUsesFilesThey"), MessageKind.Question, L.T("MainWindow.SaveBuild"), L.T("MainWindow.BuildWithoutThem"));
             if (choice == MessageChoice.Cancel || choice == MessageChoice.Primary && !PreviewWindow.SaveAll(unsaved)) return false;
         }
         // files the build would pack but the game wouldn't use: said before, not found out in the game
@@ -2164,40 +2157,40 @@ public partial class MainWindow : Window, IMessageHost
         if (issues.Count > 0)
         {
             string list = string.Join("\n", issues.Take(10).Select(i => $"• {i.GamePath} {i.Problem}"))
-                + (issues.Count > 10 ? $"\n…and {issues.Count - 10} more" : "");
-            if (!await Message.Show(issues.Count == 1 ? "A file in the workspace won't work in the game" : $"{issues.Count} files in the workspace won't work in the game",
-                    list + "\n\nThe rest of the mod builds as usual. Files copied from the game's bundles with Copy to project are cooked already and work.",
-                    MessageKind.Warning, primary: "Build anyway", secondary: "Cancel"))
+                + (issues.Count > 10 ? L.T("MainWindow.More", issues.Count - 10) : "");
+            if (!await Message.Show(issues.Count == 1 ? L.T("MainWindow.FileWorkspaceWontWork") : L.T("MainWindow.FilesWorkspaceWontWork", issues.Count),
+                    L.T("MainWindow.RestModBuildsUsual", list),
+                    MessageKind.Warning, primary: L.T("MainWindow.BuildAnyway"), secondary: L.T("Common.Cancel")))
                 return false;
         }
         var compiler = PreviewWindow.CurrentCompiler();
         _building = true;
         try
         {
-            var progress = new Progress<string>(text => SetStatus($"Building {project.ModFolderName}: {text}"));
+            var progress = new Progress<string>(text => SetStatus(L.T("MainWindow.Building", project.ModFolderName, text)));
             // the game's files, for the textures pictures in the workspace take the place of
             var game = new ResourceLocator(OpenArchives(), null, GameLocator.Resolve(null));
             var result = await ModBuilder.BuildAsync(project, compiler, game.ReadFile, progress, CancellationToken.None);
             if (!result.Success)
             {
-                SetStatus($"{project.ModFolderName} wasn't built");
+                SetStatus(L.T("MainWindow.WasntBuilt", project.ModFolderName));
                 if (result.Compiled is { Success: false } compiled && compiler is not null && compiled.Messages.Count > 0)
                 {
                     // the errors are listed where each opens its line, as Compile scripts lists them
-                    if (await Message.Show($"{project.ModFolderName} wasn't built", result.Failure ?? "", MessageKind.Warning, primary: "Show errors", secondary: "Close"))
+                    if (await Message.Show(L.T("MainWindow.WasntBuilt", project.ModFolderName), result.Failure ?? "", MessageKind.Warning, primary: L.T("MainWindow.ShowErrors"), secondary: L.T("Common.Close")))
                         await PreviewWindow.ShowCompileErrorsAsync(this, compiled, Path.Combine(result.ModFolder, "content", "precompiled.rsblob"), compiler);
                     return false;
                 }
-                bool ok = await Message.Show($"{project.ModFolderName} wasn't built", result.Failure ?? "", MessageKind.Warning,
-                    primary: "OK", secondary: result.Log.Length > 0 ? "Show log" : null);
+                bool ok = await Message.Show(L.T("MainWindow.WasntBuilt", project.ModFolderName), result.Failure ?? "", MessageKind.Warning,
+                    primary: L.T("Common.OK"), secondary: result.Log.Length > 0 ? L.T("MainWindow.ShowLog") : null);
                 if (!ok && result.Log.Length > 0)
                     PreviewWindow.ShowAlone(new PreviewItem("build.log", project.Name, System.Text.Encoding.UTF8.GetBytes(result.Log)), this);
                 return false;
             }
-            SetStatus($"Built {project.ModFolderName} in {result.ModFolder}");
-            bool install = await Message.Show($"Built {project.ModFolderName}",
-                string.Join("\n", result.Made.Select(m => "• " + m)) + $"\n\nin {result.ModFolder}, ready to install.",
-                MessageKind.Info, primary: "Install…", secondary: "Done");
+            SetStatus(L.T("MainWindow.Built", project.ModFolderName, result.ModFolder));
+            bool install = await Message.Show(L.T("MainWindow.Built2", project.ModFolderName),
+                L.T("MainWindow.ReadyInstall", string.Join("\n", result.Made.Select(m => "• " + m)), result.ModFolder),
+                MessageKind.Info, primary: L.T("MainWindow.Install"), secondary: L.T("MainWindow.Done"));
             if (install) await InstallModAsync();
             return true;
         }
@@ -2216,37 +2209,37 @@ public partial class MainWindow : Window, IMessageHost
         if (ProjectWorkspace.Current is not { } project) return;
         if (GameLocator.Resolve(null) is not { } game)
         {
-            ShowError("The game folder isn't set\n\nInstalling puts the mod in the game's mods folder. Set where the game is in Settings.");
+            ShowError(L.T("MainWindow.GameFolderIsntSet"));
             return;
         }
         if (!Directory.Exists(Path.Combine(project.BuiltModPath, "content")))
         {
-            if (await Message.Show("There's no build to install yet", $"Build {project.ModFolderName} first, then install it.",
-                    MessageKind.Info, primary: "Build", secondary: "Cancel"))
+            if (await Message.Show(L.T("MainWindow.TheresNoBuildInstall"), L.T("MainWindow.BuildFirstThenInstall", project.ModFolderName),
+                    MessageKind.Info, primary: L.T("MainWindow.Build"), secondary: L.T("Common.Cancel")))
                 await BuildModAsync();
             return;
         }
         string target = ModBuilder.InstallPath(project, game);
         bool go = ModBuilder.Installed(project, game) switch
         {
-            InstalledState.Someone => await Message.Show($"Replace the {project.ModFolderName} that's installed?",
-                $"{target} is there already, and wasn't installed from this project: it may be someone else's mod of the same name, or one copied in by hand. Installing deletes it and puts this build in its place.",
-                MessageKind.Warning, primary: "Replace it", secondary: "Cancel"),
-            InstalledState.Ours => await Message.Show($"Install {project.ModFolderName} again?",
-                $"The build replaces the one installed before, in {target}.", MessageKind.Question, primary: "Install", secondary: "Cancel"),
-            _ => await Message.Show($"Install {project.ModFolderName}?",
-                $"The build is copied to {target}. That's the only place in the game's folder the tool writes.", MessageKind.Question, primary: "Install", secondary: "Cancel"),
+            InstalledState.Someone => await Message.Show(L.T("MainWindow.ReplaceThatsInstalled", project.ModFolderName),
+                L.T("MainWindow.ThereAlreadyWasntInstalled", target),
+                MessageKind.Warning, primary: L.T("MainWindow.Replace"), secondary: L.T("Common.Cancel")),
+            InstalledState.Ours => await Message.Show(L.T("MainWindow.InstallAgain", project.ModFolderName),
+                L.T("MainWindow.BuildReplacesOneInstalled", target), MessageKind.Question, primary: L.T("MainWindow.Install2"), secondary: L.T("Common.Cancel")),
+            _ => await Message.Show(L.T("MainWindow.Install3", project.ModFolderName),
+                L.T("MainWindow.BuildCopiedThatsOnly", target), MessageKind.Question, primary: L.T("MainWindow.Install2"), secondary: L.T("Common.Cancel")),
         };
         if (!go) return;
         try
         {
             string installed = await ModBuilder.InstallAsync(project, game);
-            SetStatus($"Installed {project.ModFolderName} in {installed}");
-            await ShowMessage($"Installed {project.ModFolderName}", $"It's in {installed}. Start the game to try it; build and install again after changes.", MessageKind.Info);
+            SetStatus(L.T("MainWindow.Installed", project.ModFolderName, installed));
+            await ShowMessage(L.T("MainWindow.Installed2", project.ModFolderName), L.T("MainWindow.StartGameTryBuild", installed), MessageKind.Info);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            ShowError($"{project.ModFolderName} could not be installed\n\n{ex.Message}");
+            ShowError(L.T("MainWindow.CouldNotInstalled", project.ModFolderName, ex.Message));
         }
     }
 
@@ -2259,7 +2252,7 @@ public partial class MainWindow : Window, IMessageHost
             : ShowMessage(null, message, MessageKind.Warning);
     }
 
-    public Task ShowMessage(string? title, string message, MessageKind kind) => Message.Show(title, message, kind, primary: "OK");
+    public Task ShowMessage(string? title, string message, MessageKind kind) => Message.Show(title, message, kind, primary: L.T("Common.OK"));
 
     private static T? FindParent<T>(DependencyObject? child) where T : DependencyObject
     {

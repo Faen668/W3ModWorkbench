@@ -1,7 +1,8 @@
 <Window x:Class="W3ModWorkbench.LoadingDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Loading" Icon="pack://application:,,,/W3ModWorkbench;component/Assets/app.ico"
+        xmlns:l="clr-namespace:W3ModWorkbench.Localisation"
+        Title="{l:T LoadingDialog.Loading}" Icon="pack://application:,,,/W3ModWorkbench;component/Assets/app.ico"
         Width="460" SizeToContent="Height" ResizeMode="NoResize" ShowInTaskbar="False"
         WindowStartupLocation="CenterOwner">
     <Grid Margin="22,18,22,18">
@@ -19,7 +20,7 @@
             <TextBlock x:Name="CountText" DockPanel.Dock="Right" Margin="12,0,0,0" Opacity="0.75" FontFamily="Cascadia Mono, Consolas" FontSize="12" />
             <TextBlock x:Name="DetailText" Opacity="0.65" FontSize="12" TextTrimming="CharacterEllipsis" />
         </DockPanel>
-        <Button x:Name="CancelButton" Grid.Row="4" HorizontalAlignment="Right" Margin="0,16,0,0" Padding="18,5" Content="Cancel" Click="Cancel_Click"
-                ToolTip="Stop loading" />
+        <Button x:Name="CancelButton" Grid.Row="4" HorizontalAlignment="Right" Margin="0,16,0,0" Padding="18,5" Content="{l:T Common.Cancel}" Click="Cancel_Click"
+                ToolTip="{l:T LoadingDialog.StopLoading}" />
     </Grid>
 </Window>

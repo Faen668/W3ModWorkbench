@@ -1,9 +1,10 @@
 <Window x:Class="W3ModWorkbench.AssetBrowserWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:l="clr-namespace:W3ModWorkbench.Localisation"
         xmlns:local="clr-namespace:W3ModWorkbench"
         xmlns:vm="clr-namespace:W3ModWorkbench.ViewModels"
-        Title="Asset Browser" Icon="pack://application:,,,/W3ModWorkbench;component/Assets/app.ico"
+        Title="{l:T AssetBrowserWindow.AssetBrowser}" Icon="pack://application:,,,/W3ModWorkbench;component/Assets/app.ico"
         Width="1280" Height="820" MinWidth="760" MinHeight="460"
         WindowStartupLocation="CenterOwner" PreviewKeyDown="Window_PreviewKeyDown">
     <Window.Resources>
@@ -73,9 +74,9 @@
         <DockPanel LastChildFill="True">
             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
                 <!-- search, then file type, then class, as in the main window -->
-                <TextBlock Text="File type" VerticalAlignment="Center" Margin="12,0,8,0" Opacity="0.7" />
+                <TextBlock Text="{l:T AssetBrowserWindow.FileType}" VerticalAlignment="Center" Margin="12,0,8,0" Opacity="0.7" />
                 <ComboBox x:Name="FileTypeBox" Width="150" IsTextSearchEnabled="True" TextSearch.TextPath="Name" SelectionChanged="FileTypeBox_SelectionChanged"
-                          ToolTip="Show only files of one type (.w2mesh, .xbm, .w2ent…)">
+                          ToolTip="{l:T AssetBrowserWindow.ShowOnlyFilesOne}">
                     <ComboBox.ItemTemplate>
                         <DataTemplate>
                             <StackPanel Orientation="Horizontal">
@@ -85,9 +86,9 @@
                         </DataTemplate>
                     </ComboBox.ItemTemplate>
                 </ComboBox>
-                <TextBlock Text="Class" VerticalAlignment="Center" Margin="12,0,8,0" Opacity="0.7" />
+                <TextBlock Text="{l:T AssetBrowserWindow.Class}" VerticalAlignment="Center" Margin="12,0,8,0" Opacity="0.7" />
                 <ComboBox x:Name="ClassBox" Width="230" IsTextSearchEnabled="True" TextSearch.TextPath="Name" SelectionChanged="ClassBox_SelectionChanged"
-                          ToolTip="Show only files that hold one class of resource, as REDkit's asset browser does (CMesh, CBitmapTexture, CEntityTemplate…)">
+                          ToolTip="{l:T AssetBrowserWindow.ShowOnlyFilesHold}">
                     <ComboBox.ItemTemplate>
                         <DataTemplate>
                             <StackPanel Orientation="Horizontal">
@@ -98,59 +99,59 @@
                     </ComboBox.ItemTemplate>
                 </ComboBox>
                 <Button x:Name="ViewButton" Margin="8,0,0,0" Click="View_Click"
-                        ToolTip="Show the files as a list or as thumbnails, and turn the preview pane on or off (Alt+P)">
+                        ToolTip="{l:T AssetBrowserWindow.ShowFilesListThumbnails}">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Style="{StaticResource IconText}" Text="&#xE8FD;" Margin="0,1,0,0" />
-                        <TextBlock Margin="8,0,0,0" Text="View" />
+                        <TextBlock Margin="8,0,0,0" Text="{l:T AssetBrowserWindow.View}" />
                         <TextBlock Style="{StaticResource IconText}" Text="&#xE70D;" FontSize="9" Margin="8,2,0,0" />
                     </StackPanel>
                 </Button>
                 <Button x:Name="BookmarkButton" Margin="8,0,0,0" Padding="8,6" Click="Bookmark_Click" IsEnabled="False"
-                        ToolTip="Bookmark the folder you're in, to come back to it from the bookmarks list">
+                        ToolTip="{l:T AssetBrowserWindow.BookmarkFolderYoureCome}">
                     <TextBlock x:Name="BookmarkGlyph" Style="{StaticResource IconText}" Text="&#xE734;" />
                 </Button>
-                <Button x:Name="BookmarksButton" Margin="4,0,0,0" Padding="8,6" Click="Bookmarks_Click" ToolTip="Go to a bookmarked folder or file">
+                <Button x:Name="BookmarksButton" Margin="4,0,0,0" Padding="8,6" Click="Bookmarks_Click" ToolTip="{l:T AssetBrowserWindow.GoBookmarkedFolderFile}">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Style="{StaticResource IconText}" Text="&#xE728;" Margin="0,1,0,0" />
                         <TextBlock Style="{StaticResource IconText}" Text="&#xE70D;" FontSize="9" Margin="6,2,0,0" />
                     </StackPanel>
                 </Button>
-                <Button x:Name="RecentButton" Margin="4,0,0,0" Padding="8,6" Click="Recent_Click" ToolTip="Go to a file you opened from here recently">
+                <Button x:Name="RecentButton" Margin="4,0,0,0" Padding="8,6" Click="Recent_Click" ToolTip="{l:T AssetBrowserWindow.GoFileYouOpened}">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Style="{StaticResource IconText}" Text="&#xE81C;" Margin="0,1,0,0" />
                         <TextBlock Style="{StaticResource IconText}" Text="&#xE70D;" FontSize="9" Margin="6,2,0,0" />
                     </StackPanel>
                 </Button>
                 <ToggleButton x:Name="AskToggle" Margin="8,0,0,0" Padding="10,6" Click="Ask_Click"
-                              ToolTip="When a file is in more than one place (a mod, a DLC, the game), ask which copy to open">
+                              ToolTip="{l:T AssetBrowserWindow.WhenFileMoreThan}">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Style="{StaticResource IconText}" Text="&#xE8C8;" />
-                        <TextBlock Margin="8,0,0,0" Text="Ask which copy" />
+                        <TextBlock Margin="8,0,0,0" Text="{l:T AssetBrowserWindow.AskWhichCopy}" />
                     </StackPanel>
                 </ToggleButton>
             </StackPanel>
             <Grid>
                 <TextBox x:Name="SearchBox" VerticalContentAlignment="Center" Padding="34,6,10,6" TextChanged="SearchBox_TextChanged"
-                         ToolTip="Words must all appear in the path. Use * and ? to match file names, e.g. *.w2mesh" />
+                         ToolTip="{l:T AssetBrowserWindow.WordsMustAllAppear}" />
                 <TextBlock Style="{StaticResource IconText}" Text="&#xE721;" Margin="12,0,0,0" Opacity="0.6" IsHitTestVisible="False" HorizontalAlignment="Left" />
-                <TextBlock x:Name="SearchPlaceholder" Text="Search the game's files (Ctrl+F)" Margin="36,0,0,0"
+                <TextBlock x:Name="SearchPlaceholder" Text="{l:T AssetBrowserWindow.SearchGamesFilesCtrl}" Margin="36,0,0,0"
                            VerticalAlignment="Center" Opacity="0.5" IsHitTestVisible="False" />
             </Grid>
         </DockPanel>
         <DockPanel Margin="0,8,0,0" LastChildFill="False">
             <!-- EasyAssetBrowser is off until the user agrees to it going online -->
             <Button x:Name="EabOffButton" DockPanel.Dock="Right" Click="EabOff_Click"
-                    ToolTip="Categories and tags for the game's assets from EasyAssetBrowser, a fan project by Vincent.02. Off until you turn it on, as it reads them from GitHub.">
+                    ToolTip="{l:T AssetBrowserWindow.CategoriesTagsGamesAssets}">
                 <StackPanel Orientation="Horizontal">
                     <TextBlock Style="{StaticResource IconText}" Text="&#xE8EC;" Margin="0,1,0,0" />
-                    <TextBlock Margin="8,0,0,0" Text="EasyAssetBrowser tags…" />
+                    <TextBlock Margin="8,0,0,0" Text="{l:T AssetBrowserWindow.EasyAssetBrowserTags}" />
                 </StackPanel>
             </Button>
             <!-- EasyAssetBrowser's categories and tags, named as its own -->
             <StackPanel x:Name="EabPanel" DockPanel.Dock="Right" Orientation="Horizontal">
-                <TextBlock Text="EAB category" VerticalAlignment="Center" Margin="12,0,8,0" Opacity="0.7" />
+                <TextBlock Text="{l:T AssetBrowserWindow.EABCategory}" VerticalAlignment="Center" Margin="12,0,8,0" Opacity="0.7" />
                 <ComboBox x:Name="EabCategoryBox" Width="170" SelectionChanged="EabCategoryBox_SelectionChanged" IsEnabled="False"
-                          ToolTip="Show only files EasyAssetBrowser lists in one category (Meshes, Entities, Decals, Particles, Communities, SRT Trees)">
+                          ToolTip="{l:T AssetBrowserWindow.ShowOnlyFilesEasyAssetBrowser}">
                     <ComboBox.ItemTemplate>
                         <DataTemplate>
                             <StackPanel Orientation="Horizontal">
@@ -161,10 +162,10 @@
                     </ComboBox.ItemTemplate>
                 </ComboBox>
                 <Button x:Name="EabTagsButton" Margin="8,0,0,0" Click="EabTags_Click" IsEnabled="False"
-                        ToolTip="Show only files with EasyAssetBrowser tags, or leave out files with them (Kaer Morhen, Ruin, Corpses…)">
+                        ToolTip="{l:T AssetBrowserWindow.ShowOnlyFilesEasyAssetBrowser2}">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Style="{StaticResource IconText}" Text="&#xE8EC;" Margin="0,1,0,0" />
-                        <TextBlock x:Name="EabTagsText" Margin="8,0,0,0" Text="EAB tags" />
+                        <TextBlock x:Name="EabTagsText" Margin="8,0,0,0" Text="{l:T AssetBrowserWindow.EABTags}" />
                         <TextBlock Style="{StaticResource IconText}" Text="&#xE70D;" FontSize="9" Margin="8,2,0,0" />
                     </StackPanel>
                 </Button>
@@ -178,26 +179,26 @@
             <Grid Width="360">
                 <TextBox x:Name="FolderBox" VerticalContentAlignment="Center" Padding="34,6,10,6" TextChanged="FolderBox_TextChanged" />
                 <TextBlock Style="{StaticResource IconText}" Text="&#xE8B7;" Margin="12,0,0,0" Opacity="0.6" IsHitTestVisible="False" HorizontalAlignment="Left" />
-                <TextBlock x:Name="FolderPlaceholder" Text="Folder" Margin="36,0,0,0" VerticalAlignment="Center" Opacity="0.5" IsHitTestVisible="False" />
+                <TextBlock x:Name="FolderPlaceholder" Text="{l:T Common.Folder}" Margin="36,0,0,0" VerticalAlignment="Center" Opacity="0.5" IsHitTestVisible="False" />
             </Grid>
             <ToggleButton x:Name="RegexToggle" Margin="8,0,0,0" Padding="10,6" Click="Regex_Click"
-                          ToolTip="Read the search as a regular expression for the file's name, and the folder box as one for its folder">
-                <TextBlock Text="Regex" />
+                          ToolTip="{l:T AssetBrowserWindow.ReadSearchRegularExpression}">
+                <TextBlock Text="{l:T AssetBrowserWindow.Regex}" />
             </ToggleButton>
             <Button x:Name="SourcesButton" Margin="8,0,0,0" Click="Sources_Click"
-                    ToolTip="Show only some parts of the game: the base game, Hearts of Stone, Blood and Wine, each free DLC">
+                    ToolTip="{l:T AssetBrowserWindow.ShowOnlySomeParts}">
                 <StackPanel Orientation="Horizontal">
                     <TextBlock Style="{StaticResource IconText}" Text="&#xE71C;" Margin="0,1,0,0" />
-                    <TextBlock x:Name="SourcesText" Margin="8,0,0,0" Text="Whole game" />
+                    <TextBlock x:Name="SourcesText" Margin="8,0,0,0" Text="{l:T AssetBrowserWindow.WholeGame}" />
                     <TextBlock Style="{StaticResource IconText}" Text="&#xE70D;" FontSize="9" Margin="8,2,0,0" />
                 </StackPanel>
             </Button>
             <!-- only while something narrows the list -->
             <Button x:Name="ClearFiltersButton" Margin="8,0,0,0" Click="ClearFilters_Click" Visibility="Collapsed"
-                    ToolTip="Take off every filter: the search, folder, file type, class, parts of the game and EAB tags">
+                    ToolTip="{l:T AssetBrowserWindow.TakeOffEveryFilter}">
                 <StackPanel Orientation="Horizontal">
                     <TextBlock Style="{StaticResource IconText}" Text="&#xE894;" Margin="0,1,0,0" />
-                    <TextBlock Margin="8,0,0,0" Text="Clear filters" />
+                    <TextBlock Margin="8,0,0,0" Text="{l:T AssetBrowserWindow.ClearFilters}" />
                 </StackPanel>
             </Button>
         </DockPanel>
@@ -255,61 +256,61 @@
                               CellStyle="{StaticResource FileGridCell}" MouseDoubleClick="FileGrid_MouseDoubleClick"
                               ContextMenuOpening="FileGrid_ContextMenuOpening" SelectionChanged="FileGrid_SelectionChanged">
                         <DataGrid.Columns>
-                            <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="3*" MinWidth="140" ElementStyle="{StaticResource NameCellText}" />
-                            <DataGridTextColumn Header="Folder" Binding="{Binding Folder}" Width="3*" MinWidth="120" ElementStyle="{StaticResource DimCellText}" />
-                            <DataGridTextColumn Header="Class" Binding="{Binding ResourceClass}" Width="150" ElementStyle="{StaticResource DimCellText}" />
-                            <DataGridTextColumn Header="Size" Binding="{Binding SizeText}" SortMemberPath="Size" Width="90" ElementStyle="{StaticResource RightText}" />
-                            <DataGridTextColumn Header="From" Binding="{Binding BundleName}" Width="210" ElementStyle="{StaticResource DimCellText}" />
-                            <DataGridTextColumn x:Name="EabCategoryColumn" Header="EAB category" Binding="{Binding EabCategory}" Width="100" ElementStyle="{StaticResource DimCellText}" Visibility="Collapsed" />
-                            <DataGridTextColumn x:Name="EabTagsColumn" Header="EAB tags" Binding="{Binding EabTags}" Width="160" ElementStyle="{StaticResource DimCellText}" Visibility="Collapsed" />
+                            <DataGridTextColumn Header="{l:T Common.Name}" Binding="{Binding Name}" Width="3*" MinWidth="140" ElementStyle="{StaticResource NameCellText}" />
+                            <DataGridTextColumn Header="{l:T Common.Folder}" Binding="{Binding Folder}" Width="3*" MinWidth="120" ElementStyle="{StaticResource DimCellText}" />
+                            <DataGridTextColumn Header="{l:T AssetBrowserWindow.Class}" Binding="{Binding ResourceClass}" Width="150" ElementStyle="{StaticResource DimCellText}" />
+                            <DataGridTextColumn Header="{l:T Common.Size}" Binding="{Binding SizeText}" SortMemberPath="Size" Width="90" ElementStyle="{StaticResource RightText}" />
+                            <DataGridTextColumn Header="{l:T Common.From}" Binding="{Binding BundleName}" Width="210" ElementStyle="{StaticResource DimCellText}" />
+                            <DataGridTextColumn x:Name="EabCategoryColumn" Header="{l:T AssetBrowserWindow.EABCategory}" Binding="{Binding EabCategory}" Width="100" ElementStyle="{StaticResource DimCellText}" Visibility="Collapsed" />
+                            <DataGridTextColumn x:Name="EabTagsColumn" Header="{l:T AssetBrowserWindow.EABTags}" Binding="{Binding EabTags}" Width="160" ElementStyle="{StaticResource DimCellText}" Visibility="Collapsed" />
                         </DataGrid.Columns>
                         <DataGrid.ContextMenu>
                             <ContextMenu>
-                                <MenuItem Header="Open" InputGestureText="Enter" Click="Open_Click" FontWeight="SemiBold" />
-                                <MenuItem x:Name="OpenCopyItem" Header="Open another copy…" Click="OpenCopy_Click" />
-                                <MenuItem Header="Preview" Click="Preview_Click" />
-                                <MenuItem Header="Properties" Click="Properties_Click" />
-                                <MenuItem Header="Open as JSON" Click="Json_Click" />
+                                <MenuItem Header="{l:T Common.Open}" InputGestureText="Enter" Click="Open_Click" FontWeight="SemiBold" />
+                                <MenuItem x:Name="OpenCopyItem" Header="{l:T AssetBrowserWindow.OpenAnotherCopy}" Click="OpenCopy_Click" />
+                                <MenuItem Header="{l:T Common.Preview2}" Click="Preview_Click" />
+                                <MenuItem Header="{l:T Common.Properties}" Click="Properties_Click" />
+                                <MenuItem Header="{l:T Common.OpenJson}" Click="Json_Click" />
                                 <Separator />
-                                <MenuItem Header="Copy to project" Click="CopyToProject_Click">
+                                <MenuItem Header="{l:T Common.CopyProject}" Click="CopyToProject_Click">
                                     <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE8C8;" /></MenuItem.Icon>
                                 </MenuItem>
-                                <MenuItem Header="Extract highlighted" Click="Extract_Click">
+                                <MenuItem Header="{l:T AssetBrowserWindow.ExtractHighlighted}" Click="Extract_Click">
                                     <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE896;" /></MenuItem.Icon>
                                 </MenuItem>
-                                <MenuItem x:Name="BookmarkItem" Header="Bookmark" Click="BookmarkFiles_Click" />
-                                <MenuItem Header="Other copies of this file…" Click="Copies_Click" />
-                                <MenuItem Header="What uses this file?" Click="WhatUses_Click"
-                                          ToolTip="The files that refer to it (an entity to its mesh, a mesh to its materials…) in the game, the mods and REDkit, and the files it refers to">
+                                <MenuItem x:Name="BookmarkItem" Header="{l:T AssetBrowserWindow.Bookmark}" Click="BookmarkFiles_Click" />
+                                <MenuItem Header="{l:T AssetBrowserWindow.OtherCopiesFile}" Click="Copies_Click" />
+                                <MenuItem Header="{l:T AssetBrowserWindow.WhatUsesFile}" Click="WhatUses_Click"
+                                          ToolTip="{l:T AssetBrowserWindow.FilesReferEntityMesh}">
                                     <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE71B;" /></MenuItem.Icon>
                                 </MenuItem>
-                                <MenuItem x:Name="EabDetailsItem" Header="View EAB details…" Click="EabDetails_Click"
-                                          ToolTip="What EasyAssetBrowser has for the files: category, origin and tags, with tags to suggest">
+                                <MenuItem x:Name="EabDetailsItem" Header="{l:T AssetBrowserWindow.ViewEABDetails}" Click="EabDetails_Click"
+                                          ToolTip="{l:T AssetBrowserWindow.WhatEasyAssetBrowserHasFiles}">
                                     <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE946;" /></MenuItem.Icon>
                                 </MenuItem>
                                 <Separator />
-                                <MenuItem Header="Copy">
-                                    <MenuItem Header="Path" InputGestureText="Ctrl+C" Click="CopyPath_Click" />
-                                    <MenuItem Header="Name" Click="CopyName_Click" />
-                                    <MenuItem Header="Folder" Click="CopyFolder_Click" />
-                                    <MenuItem Header="Location on disk" Click="CopyLocation_Click" />
-                                    <MenuItem Header="Link to open it in W3 Mod Workbench" Click="CopyAppLink_Click"
-                                              ToolTip="A w3modworkbench:// link that shows the file in the Asset Browser, for a web page or a message" />
+                                <MenuItem Header="{l:T Common.Copy}">
+                                    <MenuItem Header="{l:T Common.Path}" InputGestureText="Ctrl+C" Click="CopyPath_Click" />
+                                    <MenuItem Header="{l:T Common.Name}" Click="CopyName_Click" />
+                                    <MenuItem Header="{l:T Common.Folder}" Click="CopyFolder_Click" />
+                                    <MenuItem Header="{l:T AssetBrowserWindow.LocationDisk}" Click="CopyLocation_Click" />
+                                    <MenuItem Header="{l:T AssetBrowserWindow.LinkOpenW3Mod}" Click="CopyAppLink_Click"
+                                              ToolTip="{l:T AssetBrowserWindow.W3modworkbenchLinkShowsFile}" />
                                 </MenuItem>
-                                <MenuItem Header="Show in Explorer" Click="Reveal_Click" />
+                                <MenuItem Header="{l:T Common.ShowExplorer}" Click="Reveal_Click" />
                             </ContextMenu>
                         </DataGrid.ContextMenu>
                     </DataGrid>
                     <!-- the same files as pictures, in rows -->
                     <local:FileThumbnails x:Name="FileThumbs" Visibility="Collapsed" ShowChecks="False" ContextMenuOpening="FileGrid_ContextMenuOpening" />
-                    <TextBlock x:Name="NoMatchesText" Text="No files match." HorizontalAlignment="Center" VerticalAlignment="Center" Opacity="0.6"
+                    <TextBlock x:Name="NoMatchesText" Text="{l:T AssetBrowserWindow.NoFilesMatch}" HorizontalAlignment="Center" VerticalAlignment="Center" Opacity="0.6"
                                Visibility="Collapsed" IsHitTestVisible="False" />
                     <!-- REDkit picked before Settings has it -->
                     <StackPanel x:Name="RedkitSetupPanel" HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="460" Visibility="Collapsed">
-                        <TextBlock Text="REDkit isn't set up" FontSize="16" FontWeight="SemiBold" HorizontalAlignment="Center" />
+                        <TextBlock Text="{l:T AssetBrowserWindow.REDkitIsntSetUp}" FontSize="16" FontWeight="SemiBold" HorizontalAlignment="Center" />
                         <TextBlock Margin="0,8,0,0" TextWrapping="Wrap" TextAlignment="Center" Opacity="0.75"
-                                   Text="REDkit keeps its own copies of the game's files from before they're cooked, about 230,000 of them, as world building in REDkit uses them. Set REDkit's wcc_lite in Settings (Find automatically looks in your Steam and GOG libraries) to list them here." />
-                        <Button Margin="0,14,0,0" HorizontalAlignment="Center" Padding="14,6" Click="RedkitSetup_Click" Style="{DynamicResource AccentButtonStyle}" Content="Set up REDkit in Settings…" />
+                                   Text="{l:T AssetBrowserWindow.REDkitKeepsOwnCopies}" />
+                        <Button Margin="0,14,0,0" HorizontalAlignment="Center" Padding="14,6" Click="RedkitSetup_Click" Style="{DynamicResource AccentButtonStyle}" Content="{l:T AssetBrowserWindow.SetUpREDkitSettings}" />
                     </StackPanel>
                 </Grid>
             </Border>

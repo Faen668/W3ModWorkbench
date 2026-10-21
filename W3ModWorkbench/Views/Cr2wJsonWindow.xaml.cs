@@ -8,6 +8,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using Microsoft.Win32;
 using W3ModWorkbench.Core.Cr2w;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -25,7 +26,7 @@ public sealed class Cr2wResultRow(Cr2wJsonResult result, bool dryRun = false)
     public Brush? Brush => Application.Current.TryFindResource(!Result.Ok ? "SystemFillColorCriticalBrush"
         : Result.Output is null ? "SystemFillColorCautionBrush" : "SystemFillColorSuccessBrush") as Brush;
     public string Name => System.IO.Path.GetFileName(Result.Output ?? Result.Input);
-    public string Detail => Result.Error ?? (dryRun && Result.Output is not null ? "Would be saved" + (Result.Note is null ? "" : $": {Result.Note}") : Result.Note) ?? "";
+    public string Detail => Result.Error ?? (dryRun && Result.Output is not null ? Result.Note is null ? L.T("Cr2wJsonWindow.WouldBeSaved") : L.T("Cr2wJsonWindow.WouldBeSavedNote", Result.Note) : Result.Note) ?? "";
     public bool HasDetail => Detail.Length > 0;
     public string Tip => Result.Output is null ? Result.Input : $"{Result.Input}\n→ {Result.Output}";
 }
@@ -112,16 +113,16 @@ public partial class Cr2wJsonWindow : Window, IMessageHost
         return dialog.ShowDialog(this) == true ? dialog.FolderName : null;
     }
 
-    private const string AnyFilter = "Game resource files and their JSON|*.*";
+    private static string AnyFilter => L.T("Cr2wJsonWindow.AnyFilter");
 
     private void ConvertAddFiles_Click(object sender, RoutedEventArgs e)
     {
-        if (PickFiles("Choose files to convert", AnyFilter) is { } files) Add(_convertInputs, files);
+        if (PickFiles(L.T("Cr2wJsonWindow.ChooseFilesConvert"), AnyFilter) is { } files) Add(_convertInputs, files);
     }
 
     private void ConvertAddFolder_Click(object sender, RoutedEventArgs e)
     {
-        if (PickFolder("Choose a folder to convert") is { } folder) Add(_convertInputs, [folder]);
+        if (PickFolder(L.T("Cr2wJsonWindow.ChooseFolderConvert")) is { } folder) Add(_convertInputs, [folder]);
     }
 
     private void ConvertRemove_Click(object sender, RoutedEventArgs e) => RemoveSelected(ConvertList, _convertInputs);
@@ -129,12 +130,12 @@ public partial class Cr2wJsonWindow : Window, IMessageHost
 
     private void BulkAddFiles_Click(object sender, RoutedEventArgs e)
     {
-        if (PickFiles("Choose files to edit", AnyFilter) is { } files) Add(_bulkInputs, files);
+        if (PickFiles(L.T("Cr2wJsonWindow.ChooseFilesEdit"), AnyFilter) is { } files) Add(_bulkInputs, files);
     }
 
     private void BulkAddFolder_Click(object sender, RoutedEventArgs e)
     {
-        if (PickFolder("Choose a folder of files to edit") is { } folder) Add(_bulkInputs, [folder]);
+        if (PickFolder(L.T("Cr2wJsonWindow.ChooseFolderFilesEdit")) is { } folder) Add(_bulkInputs, [folder]);
     }
 
     private void BulkRemove_Click(object sender, RoutedEventArgs e) => RemoveSelected(BulkList, _bulkInputs);
@@ -184,7 +185,7 @@ public partial class Cr2wJsonWindow : Window, IMessageHost
 
     private void ConvertBrowse_Click(object sender, RoutedEventArgs e)
     {
-        if (PickFolder("Choose where to save the converted files", ConvertOutputBox.Text) is { } folder) ConvertOutputBox.Text = folder;
+        if (PickFolder(L.T("Cr2wJsonWindow.ChooseWhereSaveConverted"), ConvertOutputBox.Text) is { } folder) ConvertOutputBox.Text = folder;
     }
 
     private async void Convert_Click(object sender, RoutedEventArgs e)
@@ -192,7 +193,7 @@ public partial class Cr2wJsonWindow : Window, IMessageHost
         if (_cts is not null) return;
         if (_convertInputs.Count == 0)
         {
-            await ShowMessage("Nothing to convert", "Add files or folders first, or drop them on the window.", MessageKind.Info);
+            await ShowMessage(L.T("Cr2wJsonWindow.NothingConvert"), L.T("Cr2wJsonWindow.AddFilesFoldersFirst"), MessageKind.Info);
             return;
         }
         bool fromJson = FromJsonRadio.IsChecked == true, resave = ResaveRadio.IsChecked == true, asLatest = AsLatestCheck.IsChecked == true;
@@ -202,7 +203,7 @@ public partial class Cr2wJsonWindow : Window, IMessageHost
         var paths = _convertInputs.Select(r => r.Path).ToList();
 
         await RunAsync(ConvertButton, ConvertStopButton, ConvertProgress, ConvertStatus, ConvertResults, dryRun: false,
-            resave ? "Resaving" : fromJson ? "Converting back" : "Converting", (progress, token) =>
+            resave ? L.T("Cr2wJsonWindow.Resaving") : fromJson ? L.T("Cr2wJsonWindow.ConvertingBack") : L.T("Cr2wJsonWindow.Converting"), (progress, token) =>
             {
                 var inputs = Cr2wJsonBatch.Inputs(paths, fromJson, recursive);
                 return inputs.Count == 0 ? null
@@ -210,7 +211,7 @@ public partial class Cr2wJsonWindow : Window, IMessageHost
                     : fromJson ? Cr2wJsonBatch.FromJson(inputs, output, overwrite, progress, token, asLatest)
                     : Cr2wJsonBatch.ToJson(inputs, output, overwrite, progress, token);
             },
-            fromJson ? "No .json files made by this tool were found there." : "No CR2W files were found there.");
+            fromJson ? L.T("Cr2wJsonWindow.NoJsonFilesMade") : L.T("Cr2wJsonWindow.NoCR2WFilesWere"));
     }
 
     /// <summary>The output folder chosen, null for beside the files, or "" when one is chosen but not given (and said so).</summary>
@@ -220,13 +221,13 @@ public partial class Cr2wJsonWindow : Window, IMessageHost
         string folder = box.Text.Trim();
         if (folder.Length == 0)
         {
-            _ = ShowMessage("Choose a folder", "Choose the folder to save into, or save beside the files.", MessageKind.Info);
+            _ = ShowMessage(L.T("Common.ChooseFolder"), L.T("Cr2wJsonWindow.ChooseFolderSaveInto"), MessageKind.Info);
             return "";
         }
         try { return Path.GetFullPath(folder); }
         catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
         {
-            _ = ShowMessage("That folder can't be used", ex.Message, MessageKind.Warning);
+            _ = ShowMessage(L.T("Cr2wJsonWindow.FolderCantUsed"), ex.Message, MessageKind.Warning);
             return "";
         }
     }
@@ -248,7 +249,7 @@ public partial class Cr2wJsonWindow : Window, IMessageHost
             bar.IsIndeterminate = false;
             bar.Maximum = p.Total;
             bar.Value = p.Done;
-            status.Text = $"{doing} {p.Done:N0} of {p.Total:N0}  ·  {Path.GetFileName(p.Current)}";
+            status.Text = L.T("Cr2wJsonWindow.Of", doing, p.Done, p.Total, Path.GetFileName(p.Current));
         });
         var clock = System.Diagnostics.Stopwatch.StartNew();
         try
@@ -263,13 +264,12 @@ public partial class Cr2wJsonWindow : Window, IMessageHost
             results.ItemsSource = list.Select((r, i) => (Row: new Cr2wResultRow(r, dryRun), i))
                 .OrderBy(x => x.Row.Result.Ok ? x.Row.Result.Output is null ? 1 : 2 : 0).ThenBy(x => x.i).Select(x => x.Row).ToList();
             int failed = list.Count(r => !r.Ok), skipped = list.Count(r => r.Ok && r.Output is null), done = list.Count - failed - skipped;
-            string verb = dryRun ? "would be saved" : "saved";
-            status.Text = $"{done:N0} {verb}" + (skipped > 0 ? $", {skipped:N0} unchanged" : "") + (failed > 0 ? $", {failed:N0} failed" : "")
-                + (token.IsCancellationRequested ? " (stopped)" : "") + $"  ·  {clock.Elapsed.TotalSeconds:F1} s";
+            string verb = dryRun ? L.T("Cr2wJsonWindow.WouldSaved") : "saved";
+            status.Text = L.T("Cr2wJsonWindow.S", done, verb, (skipped > 0 ? L.T("Cr2wJsonWindow.Unchanged", skipped) : ""), (failed > 0 ? L.T("Cr2wJsonWindow.Failed", failed) : ""), (token.IsCancellationRequested ? L.T("Cr2wJsonWindow.Stopped") : ""), clock.Elapsed.TotalSeconds);
         }
         catch (OperationCanceledException)
         {
-            status.Text = "Stopped.";
+            status.Text = L.T("Cr2wJsonWindow.Stopped2");
         }
         finally
         {
@@ -308,19 +308,19 @@ public partial class Cr2wJsonWindow : Window, IMessageHost
         SourceRow.Visibility = kind == BulkEditKind.Copy ? Visibility.Visible : Visibility.Collapsed;
         ValueRow.Visibility = kind == BulkEditKind.Set ? Visibility.Visible : Visibility.Collapsed;
         AmountRow.Visibility = kind is BulkEditKind.Scale or BulkEditKind.Offset ? Visibility.Visible : Visibility.Collapsed;
-        AmountLabel.Text = kind == BulkEditKind.Scale ? "Multiply by" : "Add";
+        AmountLabel.Text = kind == BulkEditKind.Scale ? L.T("Cr2wJsonWindow.Multiply") : L.T("Common.Add");
         if (kind == BulkEditKind.Scale && AmountBox.Text == "0") AmountBox.Text = "1";
         if (kind == BulkEditKind.Offset && AmountBox.Text == "1") AmountBox.Text = "0";
     }
 
     private void SourceBrowse_Click(object sender, RoutedEventArgs e)
     {
-        if (PickFiles("Choose the file to copy from", AnyFilter) is [var file, ..]) SourceBox.Text = file;
+        if (PickFiles(L.T("Cr2wJsonWindow.ChooseFileCopy"), AnyFilter) is [var file, ..]) SourceBox.Text = file;
     }
 
     private void BulkBrowse_Click(object sender, RoutedEventArgs e)
     {
-        if (PickFolder("Choose where to save the edited files", BulkOutputBox.Text) is { } folder) BulkOutputBox.Text = folder;
+        if (PickFolder(L.T("Cr2wJsonWindow.ChooseWhereSaveEdited"), BulkOutputBox.Text) is { } folder) BulkOutputBox.Text = folder;
     }
 
     /// <summary>Shows the source file's properties (or the first file to edit's) to pick the path from.</summary>
@@ -331,23 +331,23 @@ public partial class Cr2wJsonWindow : Window, IMessageHost
                 ?? Cr2wJsonBatch.Inputs([p], true, true).Select(i => i.File).FirstOrDefault()).FirstOrDefault(p => p is not null);
         if (file is null)
         {
-            await ShowMessage("No file to choose from", Kind == BulkEditKind.Copy ? "Choose the file to copy from first." : "Add a file to edit first.", MessageKind.Info);
+            await ShowMessage(L.T("Cr2wJsonWindow.NoFileChoose"), Kind == BulkEditKind.Copy ? L.T("Cr2wJsonWindow.ChooseFileCopyFirst") : L.T("Cr2wJsonWindow.AddFileEditFirst"), MessageKind.Info);
             return;
         }
-        PickerTitle.Text = "Reading " + Path.GetFileName(file) + "…";
+        PickerTitle.Text = L.T("Cr2wJsonWindow.Reading", Path.GetFileName(file));
         PickerPanel.Visibility = Visibility.Visible;
         PickerTree.ItemsSource = null;
         try
         {
             var nodes = await Task.Run(() => Nodes(Cr2wJsonBatch.Load(Path.GetFullPath(file))));
             PickerTree.ItemsSource = nodes;
-            PickerTitle.Text = $"Properties of {Path.GetFileName(file)}: pick one";
+            PickerTitle.Text = L.T("Cr2wJsonWindow.PropertiesPickOne", Path.GetFileName(file));
             if (PickerTree.ItemContainerGenerator.ContainerFromIndex(0) is TreeViewItem first) first.IsExpanded = true;
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or NotSupportedException)
         {
             PickerPanel.Visibility = Visibility.Collapsed;
-            await ShowMessage($"{Path.GetFileName(file)} can't be read", ex.Message, MessageKind.Warning);
+            await ShowMessage(L.T("Cr2wJsonWindow.CantRead", Path.GetFileName(file)), ex.Message, MessageKind.Warning);
         }
     }
 
@@ -372,7 +372,7 @@ public partial class Cr2wJsonWindow : Window, IMessageHost
             result.Add(new Cr2wPathNode
             {
                 Name = $"{className}",
-                Summary = obj["$data"] is not null ? "kept as bytes" : $"object {i}",
+                Summary = obj["$data"] is not null ? L.T("Cr2wJsonWindow.KeptBytes") : L.T("Cr2wJsonWindow.Object", i),
                 ClassName = className,
                 Children = Children(obj, "", className, 0),
             });
@@ -407,11 +407,11 @@ public partial class Cr2wJsonWindow : Window, IMessageHost
         ClassName = className,
         Summary = value switch
         {
-            JsonObject o when o["$raw"] is not null => "kept as bytes",
-            JsonObject o when o["dataCurveValues"] is JsonArray points => $"curve, {points.Count} point{(points.Count == 1 ? "" : "s")}",
-            JsonObject o => o.Count == 0 ? "{ }" : $"{o.Count(p => !p.Key.StartsWith('$'))} properties",
-            JsonArray a => $"{a.Count} item{(a.Count == 1 ? "" : "s")}",
-            null => "null",
+            JsonObject o when o["$raw"] is not null => L.T("Cr2wJsonWindow.KeptBytes"),
+            JsonObject o when o["dataCurveValues"] is JsonArray points => L.T("Cr2wJsonWindow.Curve", points.Count),
+            JsonObject o => o.Count == 0 ? "{ }" : L.T("Cr2wJsonWindow.Properties2", o.Count(p => !p.Key.StartsWith('$'))),
+            JsonArray a => L.T("Cr2wJsonWindow.Items", a.Count),
+            null => L.T("Cr2wJsonWindow.Null"),
             _ => Shorten(value.ToJsonString()),
         },
         Children = value is JsonObject { } obj && obj["$raw"] is null || value is JsonArray ? Children(value!, path, className, depth + 1) : [],
@@ -429,7 +429,7 @@ public partial class Cr2wJsonWindow : Window, IMessageHost
         }
         catch (Exception ex) when (ex is FormatException or IOException or InvalidDataException or UnauthorizedAccessException)
         {
-            _ = ShowMessage("That edit can't be made", ex.Message, MessageKind.Warning);
+            _ = ShowMessage(L.T("Cr2wJsonWindow.EditCantMade"), ex.Message, MessageKind.Warning);
         }
     }
 
@@ -451,11 +451,11 @@ public partial class Cr2wJsonWindow : Window, IMessageHost
             case BulkEditKind.Copy:
             {
                 string source = SourceBox.Text.Trim();
-                if (source.Length == 0) throw new FormatException("Choose the file to copy from.");
+                if (source.Length == 0) throw new FormatException(L.T("Cr2wJsonWindow.ChooseFileCopy2"));
                 var document = Cr2wJsonBatch.Load(Path.GetFullPath(source));
                 var edit = new Cr2wBulkEdit { Kind = kind, Path = path, ClassName = className, Source = document };
                 if (edit.SourceObject() is not { } from || Cr2wBulkEdit.Find(from, Cr2wBulkEdit.ParsePath(path)) is null)
-                    throw new FormatException($"{Path.GetFileName(source)} has nothing at {path}.");
+                    throw new FormatException(L.T("Cr2wJsonWindow.HasNothing", Path.GetFileName(source), path));
                 return edit;
             }
             case BulkEditKind.Set:
@@ -469,7 +469,7 @@ public partial class Cr2wJsonWindow : Window, IMessageHost
             case BulkEditKind.Scale or BulkEditKind.Offset:
             {
                 if (!double.TryParse(AmountBox.Text.Trim().Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out double amount))
-                    throw new FormatException($"\"{AmountBox.Text}\" isn't a number.");
+                    throw new FormatException(L.T("Cr2wJsonWindow.IsntNumber", AmountBox.Text));
                 var fields = FieldsBox.Text.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
                 return new Cr2wBulkEdit { Kind = kind, Path = path, ClassName = className, Amount = amount, Fields = fields };
             }
@@ -480,15 +480,15 @@ public partial class Cr2wJsonWindow : Window, IMessageHost
 
     private string Describe(Cr2wBulkEdit edit)
     {
-        string where = edit.ClassName.Length > 0 ? $" in {edit.ClassName}" : "";
-        string fields = edit.Fields.Count > 0 ? $" (in {string.Join(", ", edit.Fields)})" : "";
+        string where = edit.ClassName.Length > 0 ? L.T("Cr2wJsonWindow.In", edit.ClassName) : "";
+        string fields = edit.Fields.Count > 0 ? L.T("Cr2wJsonWindow.In2", string.Join(", ", edit.Fields)) : "";
         return edit.Kind switch
         {
-            BulkEditKind.Copy => $"Copy {edit.Path} from {Path.GetFileName(SourceBox.Text.Trim())}{where}",
-            BulkEditKind.Set => $"Set {edit.Path} to {Shorten(edit.Value?.ToJsonString() ?? "null")}{where}",
-            BulkEditKind.Remove => $"Remove {edit.Path}{where}",
-            BulkEditKind.Scale => $"Multiply the numbers under {edit.Path}{fields} by {edit.Amount.ToString(CultureInfo.InvariantCulture)}{where}",
-            _ => $"Add {edit.Amount.ToString(CultureInfo.InvariantCulture)} to the numbers under {edit.Path}{fields}{where}",
+            BulkEditKind.Copy => L.T("Cr2wJsonWindow.Copy", edit.Path, Path.GetFileName(SourceBox.Text.Trim()), where),
+            BulkEditKind.Set => L.T("Cr2wJsonWindow.SetTo", edit.Path, Shorten(edit.Value?.ToJsonString() ?? "null"), where),
+            BulkEditKind.Remove => L.T("Cr2wJsonWindow.Remove", edit.Path, where),
+            BulkEditKind.Scale => L.T("Cr2wJsonWindow.MultiplyNumbersUnder", edit.Path, fields, edit.Amount.ToString(CultureInfo.InvariantCulture), where),
+            _ => L.T("Cr2wJsonWindow.AddNumbersUnder", edit.Amount.ToString(CultureInfo.InvariantCulture), edit.Path, fields, where),
         };
     }
 
@@ -500,7 +500,7 @@ public partial class Cr2wJsonWindow : Window, IMessageHost
         if (_cts is not null) return;
         if (_bulkInputs.Count == 0)
         {
-            await ShowMessage("No files to edit", "Add files or folders to edit first, or drop them on the window.", MessageKind.Info);
+            await ShowMessage(L.T("Cr2wJsonWindow.NoFilesEdit"), L.T("Cr2wJsonWindow.AddFilesFoldersEdit"), MessageKind.Info);
             return;
         }
         var edits = _edits.Select(r => r.Edit).ToList();
@@ -510,25 +510,25 @@ public partial class Cr2wJsonWindow : Window, IMessageHost
             try { edits.Add(MakeEdit()); }
             catch (Exception ex) when (ex is FormatException or IOException or InvalidDataException or UnauthorizedAccessException)
             {
-                await ShowMessage("No edits to make", "Add an edit to the list first.\n\n" + ex.Message, MessageKind.Info);
+                await ShowMessage(L.T("Cr2wJsonWindow.NoEditsMake"), L.T("Cr2wJsonWindow.AddEditListFirst", ex.Message), MessageKind.Info);
                 return;
             }
         }
         string? output = OutputFolder(BulkFolderRadio, BulkOutputBox);
         if (output == "") return;
-        if (!dryRun && output is null && !await Message.Show("Save over the files?",
-                $"The edits are saved into the files themselves, which can't be undone. Keep a copy, or save into a folder instead.",
-                MessageKind.Question, primary: "Save over them", secondary: "Cancel"))
+        if (!dryRun && output is null && !await Message.Show(L.T("Cr2wJsonWindow.SaveOverFiles"),
+                L.T("Cr2wJsonWindow.EditsSavedIntoFiles"),
+                MessageKind.Question, primary: L.T("Cr2wJsonWindow.SaveOverThem"), secondary: L.T("Common.Cancel")))
             return;
         bool recursive = BulkRecursiveCheck.IsChecked == true;
         var paths = _bulkInputs.Select(r => r.Path).ToList();
-        await RunAsync(ApplyButton, BulkStopButton, BulkProgress, BulkStatus, BulkResults, dryRun, dryRun ? "Checking" : "Editing", (progress, token) =>
+        await RunAsync(ApplyButton, BulkStopButton, BulkProgress, BulkStatus, BulkResults, dryRun, dryRun ? L.T("Cr2wJsonWindow.Checking") : L.T("Cr2wJsonWindow.Editing"), (progress, token) =>
         {
             // CR2W files and converted JSON files alike
             var inputs = Cr2wJsonBatch.Inputs(paths, fromJson: false, recursive);
             inputs.AddRange(Cr2wJsonBatch.Inputs(paths.Where(Directory.Exists), fromJson: true, recursive).Where(j => !inputs.Any(i => i.File.Equals(j.File, StringComparison.OrdinalIgnoreCase))));
             return inputs.Count == 0 ? null : Cr2wJsonBatch.BulkEdit(inputs, edits, output, progress, token, dryRun);
-        }, "No CR2W or converted JSON files were found there.");
+        }, L.T("Cr2wJsonWindow.NoCR2WConvertedJson"));
     }
 
     // ---------------------------------------------------------------- window
@@ -543,5 +543,5 @@ public partial class Cr2wJsonWindow : Window, IMessageHost
         }
     }
 
-    public Task ShowMessage(string? title, string message, MessageKind kind) => Message.Show(title, message, kind, primary: "OK");
+    public Task ShowMessage(string? title, string message, MessageKind kind) => Message.Show(title, message, kind, primary: L.T("Common.OK"));
 }
