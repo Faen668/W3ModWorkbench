@@ -60,6 +60,9 @@ public sealed class MeshView : Border
     private bool _showBounds, _showNormals, _showBones, _vertexColors;
     private IReadOnlyList<(Vector3[] Vertices, int[] Triangles)> _collision = [];
     private readonly Dictionary<int, MeshGeometryModel3D> _chunks = [];
+    // every chunk built since the meshes were last built whole, drawn or not: a mesh coming back to a LOD it was drawn at
+    // takes its chunks from here rather than building them again
+    private readonly Dictionary<int, MeshGeometryModel3D> _built = [];
     // hair's soft edges: the same cards again, blended, by the chunk they go with (see Fringe)
     private readonly Dictionary<int, MeshGeometryModel3D> _fringes = [];
     private readonly Dictionary<int, Material> _fringeMaterials = [];
@@ -147,7 +150,6 @@ public sealed class MeshView : Border
 
     private bool _autoLod;
     private int[] _partLods = [];
-    private long _lodsCheckedAt;
 
     /// <summary>
     /// Whether each mesh is drawn at the LOD the game would draw it at from where the camera is (its LOD distances),
@@ -166,33 +168,40 @@ public sealed class MeshView : Border
 
     /// <summary>
     /// The LOD each mesh would be drawn at from where the camera is now: the last whose distance it's past (a LOD's
-    /// distance of 0 past the first means it isn't picked by distance). Checked at most twice a second; true when any
-    /// changed.
+    /// distance of 0 past the first means it isn't picked by distance), with a little give either side of each distance
+    /// so a mesh right on one doesn't flick between two. Worked out each time the camera moves, so a camera cut shows
+    /// the new shot's LODs in its first frame; the meshes whose LOD changed, or null for none.
     /// </summary>
-    private bool PickLods(bool force = false)
+    private List<int>? PickLods()
     {
-        if (!_autoLod || _parts.Count == 0) return false;
-        long now = Environment.TickCount64;
-        if (!force && now - _lodsCheckedAt < 500) return false;
-        _lodsCheckedAt = now;
+        if (!_autoLod || _parts.Count == 0) return null;
         var eye = Numeric(_camera.Position);
+        // where each mesh is: posed, a vertex of it as it's posed; else the middle of its box, placed
+        var anchors = new Dictionary<int, Vector3>();
+        foreach (var ((part, _), positions) in _posedPositions)
+            if (positions.Length > 0) anchors.TryAdd(part, positions[0]);
+        bool fresh = _partLods.Length != _parts.Count;
         var lods = new int[_parts.Count];
+        List<int>? changed = null;
         for (int p = 0; p < _parts.Count; p++)
         {
             var (mesh, place) = _parts[p];
-            // where the mesh is: posed, a vertex of it as it's posed; else the middle of its box, placed
-            var at = (mesh.BoundsMin + mesh.BoundsMax) / 2;
-            var posed = _posedPositions.FirstOrDefault(e => e.Key.Part == p).Value;
-            at = posed is { Length: > 0 } ? posed[0] : Vector3.Transform(at, place);
+            var at = anchors.TryGetValue(p, out var anchor) ? anchor : Vector3.Transform((mesh.BoundsMin + mesh.BoundsMax) / 2, place);
             float distance = Vector3.Distance(eye, ToView(at));
-            int lod = 0;
-            for (int i = 1; i < mesh.LodDistances.Count && i < mesh.LodCount; i++)
-                if (mesh.LodDistances[i] > 0 && distance >= mesh.LodDistances[i]) lod = i;
-            lods[p] = lod;
+            int LodAt(float scale)
+            {
+                int lod = 0;
+                for (int i = 1; i < mesh.LodDistances.Count && i < mesh.LodCount; i++)
+                    if (mesh.LodDistances[i] > 0 && distance >= mesh.LodDistances[i] * scale) lod = i;
+                return lod;
+            }
+            int was = fresh ? -1 : _partLods[p];
+            // kept while it's within 5% of the distance it changes at
+            lods[p] = was >= LodAt(1.05f) && was <= LodAt(0.95f) ? was : LodAt(1);
+            if (!fresh && lods[p] != was) (changed ??= []).Add(p);
         }
-        bool changed = !lods.AsSpan().SequenceEqual(_partLods);
         _partLods = lods;
-        return changed;
+        return fresh ? [.. Enumerable.Range(0, _parts.Count)] : changed;
     }
 
     /// <summary>Whether a grid is drawn on the ground under the meshes, so what's shown stands on something.</summary>
@@ -555,60 +564,153 @@ public sealed class MeshView : Border
 
     private void Rebuild()
     {
-        if (_autoLod && _partLods.Length != _parts.Count) PickLods(force: true);
+        if (_autoLod && _partLods.Length != _parts.Count) PickLods();
         _models.Children.Clear();
         _chunks.Clear();
+        _built.Clear();
         _chunkOf.Clear();
         _fringes.Clear();
-        for (int p = 0; p < _parts.Count; p++)
-        {
-            var (mesh, place) = _parts[p];
-            var transform = place.IsIdentity ? null : new Media3D.MatrixTransform3D(ToView(place));
-            transform?.Freeze();
-            foreach (var chunk in DrawnAt(p))
+        var posed = PoseAhead(Enumerable.Range(0, _parts.Count));
+        for (int p = 0; p < _parts.Count; p++) AddPart(p, posed);
+        // with LODs picked by distance, every LOD's chunks are put in the scene now, hidden, so the graphics card has
+        // them before a camera cut asks for them
+        if (_autoLod)
+            for (int p = 0; p < _parts.Count; p++)
             {
-                if (!Shown(p, chunk)) continue;
-                int material = Key(p, chunk.Material);
-                var made = Geometry(chunk);
-                // each chunk its own geometry, sharing what a pose doesn't change, so each can be posed apart
-                var surface = MadeSurface(chunk);
-                var geometry = new HxMesh
+                var mesh = _parts[p].Mesh;
+                foreach (var chunk in Enumerable.Range(0, mesh.LodCount).SelectMany(lod => Drawn(mesh, lod)).Distinct())
                 {
-                    Positions = surface.Positions, Normals = surface.Normals, Tangents = surface.Tangents, BiTangents = surface.BiTangents,
-                    TextureCoordinates = made.TextureCoordinates, TriangleIndices = made.TriangleIndices,
-                };
-                // the vertex colours for the view's colours, or for a material that's coloured by them (hair)
-                if (_vertexColors || _looks.GetValueOrDefault(material)?.Constants.Glow.Y > 0) geometry.Colors = VertexColorsOf(chunk);
-                if (_posed?.Invoke(p, chunk) is { } positions)
-                {
-                    _posedPositions[(p, chunk)] = positions;
-                    var bent = Bent(chunk, positions);
-                    (geometry.Positions, geometry.Normals, geometry.Tangents, geometry.BiTangents) = (bent.Positions, bent.Normals, bent.Tangents, bent.BiTangents);
+                    int key = Key(p, chunk.Index);
+                    if (_chunks.ContainsKey(key) || !Shown(p, chunk)) continue;
+                    var model = Build(p, chunk, null);
+                    Fringe(key, model, Key(p, chunk.Material));
+                    Hide(key, model);
                 }
-                var model = new MeshGeometryModel3D
-                {
-                    Geometry = geometry,
-                    Material = _vertexColors ? VertexColorMaterial : MaterialFor(material, _highlighted.Contains(p)),
-                    // both sides drawn, as many of the game's cloth and foliage chunks are single sheets
-                    CullMode = SharpDX.Direct3D11.CullMode.None,
-                    // a see-through texture (hair) is blended over what's behind it, drawn after the solid ones
-                    IsTransparent = !_vertexColors && SeeThrough(material),
-                    RenderWireframe = _wireframe,
-                    WireframeColor = Color.FromRgb(225, 230, 235),
-                    // posed, a chunk is far from where it was made, so it's never left out for being off screen there
-                    EnableViewFrustumCheck = false,
-                    // hair's cards would shadow as the solid sheets they are, as the shadow map doesn't test their alpha
-                    IsThrowingShadow = !_vertexColors && !HasAlpha(material),
-                };
-                if (transform is not null) model.Transform = transform;
-                _chunks[Key(p, chunk.Index)] = model;
-                _chunkOf[model] = Key(p, chunk.Index);
-                _models.Children.Add(model);
-                Fringe(Key(p, chunk.Index), model, material);
             }
-        }
         RebuildFloor();
         RebuildDebug();
+    }
+
+    /// <summary>
+    /// Draws the meshes whose LOD changed at their new LOD: only theirs, hiding the chunks of the LOD they were drawn at
+    /// and showing the new LOD's (built once, kept), posed as the others are, rather than building the whole scene
+    /// again, which stalled a cutscene for a moment at each camera cut.
+    /// </summary>
+    private void SwitchLods(IEnumerable<int> parts)
+    {
+        var list = parts.ToList();
+        var posed = PoseAhead(list);
+        foreach (int p in list)
+        {
+            var wanted = DrawnAt(p).Where(c => Shown(p, c)).Select(c => Key(p, c.Index)).ToHashSet();
+            foreach (var key in _chunks.Keys.Where(k => k >> 16 == p && !wanted.Contains(k)).ToList())
+            {
+                Hide(key, _chunks[key]);
+                _chunks.Remove(key);
+            }
+            foreach (var entry in _posedPositions.Keys.Where(k => k.Part == p).ToList()) _posedPositions.Remove(entry);
+            AddPart(p, posed);
+        }
+    }
+
+    /// <summary>Takes a chunk out of the picture, and its soft edges with it, leaving both in the scene.</summary>
+    private void Hide(int key, MeshGeometryModel3D model)
+    {
+        model.IsRendering = false;
+        model.IsHitTestVisible = false;
+        if (_fringes.TryGetValue(key, out var fringe)) fringe.IsRendering = false;
+    }
+
+    /// <summary>
+    /// The chunks some of the meshes are drawn with, bent into the pose shown: worked out on all the cores at once, as
+    /// <see cref="PoseAsync"/> does, so a camera cut that changes the LOD of a whole cast doesn't hold the frame while
+    /// each is bent in turn.
+    /// </summary>
+    private Dictionary<int, (Vector3[] Positions, Surface Bent)> PoseAhead(IEnumerable<int> parts)
+    {
+        var found = new System.Collections.Concurrent.ConcurrentDictionary<int, (Vector3[], Surface)>();
+        if (_posed is not { } posed) return [];
+        var chunks = parts.SelectMany(p => DrawnAt(p).Where(c => Shown(p, c)).Select(c => (Part: p, Chunk: c))).ToList();
+        Parallel.ForEach(chunks, item =>
+        {
+            if (posed(item.Part, item.Chunk) is { } positions)
+                found[Key(item.Part, item.Chunk.Index)] = (positions, Bent(item.Chunk, positions));
+        });
+        return new(found);
+    }
+
+    /// <summary>
+    /// Shows one of the meshes' chunks at the LOD it's drawn at, each built (or taken from those built before) and posed,
+    /// with the poses <see cref="PoseAhead"/> worked out.
+    /// </summary>
+    private void AddPart(int p, Dictionary<int, (Vector3[] Positions, Surface Bent)> posed)
+    {
+        foreach (var chunk in DrawnAt(p))
+        {
+            if (!Shown(p, chunk)) continue;
+            int key = Key(p, chunk.Index);
+            int material = Key(p, chunk.Material);
+            var (positions, bent) = posed.TryGetValue(key, out var pose) ? pose : default;
+            if (positions is not null) _posedPositions[(p, chunk)] = positions;
+            if (_chunks.ContainsKey(key)) continue;
+            if (_built.TryGetValue(key, out var model))
+            {
+                // as it is now: its pose, and whatever was changed on the drawn chunks while it wasn't drawn
+                if (model.Geometry is HxMesh kept) PutPose(kept, chunk, bent);
+                model.Material = _vertexColors ? VertexColorMaterial : MaterialFor(material, _highlighted.Contains(p));
+                model.IsTransparent = !_vertexColors && SeeThrough(material);
+                model.IsThrowingShadow = !_vertexColors && !HasAlpha(material);
+                model.RenderWireframe = _wireframe;
+                model.IsRendering = true;
+                model.IsHitTestVisible = true;
+            }
+            else model = Build(p, chunk, bent);
+            _chunks[key] = model;
+            Fringe(key, model, material);
+        }
+    }
+
+    /// <summary>Builds a chunk's model, in a pose or as it was made, and puts it in the scene.</summary>
+    private MeshGeometryModel3D Build(int p, MeshChunk chunk, Surface? bent)
+    {
+        int key = Key(p, chunk.Index);
+        int material = Key(p, chunk.Material);
+        var place = _parts[p].Place;
+        var made = Geometry(chunk);
+        // each chunk its own geometry, sharing what a pose doesn't change, so each can be posed apart
+        var surface = bent ?? MadeSurface(chunk);
+        var geometry = new HxMesh
+        {
+            Positions = surface.Positions, Normals = surface.Normals, Tangents = surface.Tangents, BiTangents = surface.BiTangents,
+            TextureCoordinates = made.TextureCoordinates, TriangleIndices = made.TriangleIndices,
+        };
+        // the vertex colours for the view's colours, or for a material that's coloured by them (hair)
+        if (_vertexColors || _looks.GetValueOrDefault(material)?.Constants.Glow.Y > 0) geometry.Colors = VertexColorsOf(chunk);
+        var model = new MeshGeometryModel3D
+        {
+            Geometry = geometry,
+            Material = _vertexColors ? VertexColorMaterial : MaterialFor(material, _highlighted.Contains(p)),
+            // both sides drawn, as many of the game's cloth and foliage chunks are single sheets
+            CullMode = SharpDX.Direct3D11.CullMode.None,
+            // a see-through texture (hair) is blended over what's behind it, drawn after the solid ones
+            IsTransparent = !_vertexColors && SeeThrough(material),
+            RenderWireframe = _wireframe,
+            WireframeColor = Color.FromRgb(225, 230, 235),
+            // posed, a chunk is far from where it was made, so it's never left out for being off screen there
+            EnableViewFrustumCheck = false,
+            // hair's cards would shadow as the solid sheets they are, as the shadow map doesn't test their alpha
+            IsThrowingShadow = !_vertexColors && !HasAlpha(material),
+        };
+        if (!place.IsIdentity)
+        {
+            var transform = new Media3D.MatrixTransform3D(ToView(place));
+            transform.Freeze();
+            model.Transform = transform;
+        }
+        _built[key] = model;
+        _chunkOf[model] = key;
+        _models.Children.Add(model);
+        return model;
     }
 
     /// <summary>
@@ -625,7 +727,8 @@ public sealed class MeshView : Border
             if (_fringes.Remove(chunk, out var gone)) _models.Children.Remove(gone);
             return;
         }
-        if (!_fringes.TryGetValue(chunk, out var fringe))
+        if (_fringes.TryGetValue(chunk, out var fringe)) fringe.IsRendering = true;
+        else
         {
             fringe = new MeshGeometryModel3D
             {
@@ -1118,8 +1221,8 @@ public sealed class MeshView : Border
 
     private void UpdateCamera()
     {
-        // the meshes at the LODs the camera's distance gives, once it's moved (the frame after, as Rebuild poses again)
-        if (_autoLod && PickLods()) Dispatcher.BeginInvoke(Rebuild, System.Windows.Threading.DispatcherPriority.Background);
+        // the meshes at the LODs the camera's distance gives, switched before the frame is drawn
+        if (_autoLod && PickLods() is { Count: > 0 } changed) SwitchLods(changed);
         if (_lookingThrough is { } through)
         {
             _camera.Position = through.Eye;
