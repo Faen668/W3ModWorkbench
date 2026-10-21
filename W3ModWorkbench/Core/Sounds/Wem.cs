@@ -102,6 +102,8 @@ public sealed class WemInfo
             0x0001 or 0xFFFE when block > 0 && data is not null => data.Size / block,
             // 64 samples a channel in each 36 bytes a channel
             0x0002 when block > 0 && channels > 0 && data is not null => (long)data.Size / block * ((block / channels - 4) * 2 + 1),
+            // two samples, then two a byte after a five-byte header, in each channel's share of a block
+            0x8311 when block > 0 && channels > 0 && data is not null => (long)data.Size / block * (2 + (block / channels - 5) * 2),
             _ => 0,
         };
         // a Vorbis sound may keep its sample count in a "vorb" part of its own
@@ -274,11 +276,11 @@ public sealed class SoundBank
     }
 }
 
-/// <summary>Turns a Wwise sound into samples to play, for the codecs the tool reads: Wwise Opus, Wwise Vorbis and PCM.</summary>
+/// <summary>Turns a Wwise sound into samples to play, for the codecs the game uses: Wwise Opus, Wwise Vorbis, PlatinumGames' ADPCM and PCM.</summary>
 public static class SoundDecoder
 {
     /// <summary>Whether a codec can be played.</summary>
-    public static bool CanPlay(ushort codec) => codec is 0x3041 or 0xFFFF or 0x0001 or 0xFFFE;
+    public static bool CanPlay(ushort codec) => codec is 0x3041 or 0xFFFF or 0x8311 or 0x0001 or 0xFFFE;
 
     /// <summary>The sound's samples, its channels interleaved, and its rate. Throws for a codec it doesn't read.</summary>
     public static (short[] Samples, int Channels, int Rate) Decode(byte[] riff, WemInfo info)
@@ -300,6 +302,8 @@ public static class SoundDecoder
                     for (int i = 0; i < read; i++) output.Add((short)Math.Clamp(buffer[i] * 32767f, short.MinValue, short.MaxValue));
                 return ([.. output], count, reader.SampleRate);
             }
+            case 0x8311:
+                return (PtAdpcm.Decode(riff, info), Math.Max(1, info.Channels), info.SampleRate);
             case 0x0001 or 0xFFFE when info.BitsPerSample == 16:
                 var data = info.Chunks.First(c => c.Id == "data");
                 var pcm = new short[data.Size / 2];

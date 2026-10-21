@@ -164,7 +164,7 @@ public partial class SoundWindow : Window, IMessageHost
             _player = new SoundPlayer(decoded.Samples, decoded.Channels, decoded.Rate) { Loop = LoopCheck.IsChecked == true, Volume = (float)VolumeSlider.Value };
             _player.Ended += (_, _) => Dispatcher.BeginInvoke(() => { PlayIcon.Text = ""; _timer.Stop(); ShowPosition(); });
             double rate = Math.Max(1, info.SampleRate);
-            Wave.Show(_player.Stereo, decoded.Rate,
+            Wave.Show(_player.Stereo, _player.Rate,
                 info.Loop is var (start, end) ? (start / rate, end / rate) : null,
                 info.Markers.Select(m => (m.Sample / rate, m.Label ?? "")).ToList());
             WaveMessage.Visibility = Visibility.Collapsed;

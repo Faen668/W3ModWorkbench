@@ -36,9 +36,32 @@ public sealed class SoundPlayer : IDisposable
 
     public SoundPlayer(short[] samples, int channels, int rate)
     {
+        var stereo = ToStereo(samples, Math.Max(1, channels));
+        // a rate sound cards won't take (the controller's 2 kHz vibration waveforms) is played at 48 kHz, drawn between
+        if (rate < 8000)
+        {
+            stereo = Resample(stereo, rate, 48000);
+            rate = 48000;
+        }
         Rate = rate;
-        Stereo = ToStereo(samples, Math.Max(1, channels));
+        Stereo = stereo;
         _source = new Source(this);
+    }
+
+    /// <summary>Stereo samples at another rate, each new one drawn between the two old ones either side of it.</summary>
+    private static float[] Resample(float[] stereo, int from, int to)
+    {
+        int frames = stereo.Length / 2, made = (int)((long)frames * to / from);
+        var output = new float[made * 2];
+        for (int i = 0; i < made; i++)
+        {
+            double at = (double)i * from / to;
+            int a = Math.Min((int)at, frames - 1), b = Math.Min(a + 1, frames - 1);
+            float t = (float)(at - a);
+            output[i * 2] = stereo[a * 2] + (stereo[b * 2] - stereo[a * 2]) * t;
+            output[i * 2 + 1] = stereo[a * 2 + 1] + (stereo[b * 2 + 1] - stereo[a * 2 + 1]) * t;
+        }
+        return output;
     }
 
     /// <summary>Samples of any number of channels as stereo: mono to both, more than two mixed down.</summary>
