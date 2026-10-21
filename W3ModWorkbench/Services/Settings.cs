@@ -173,6 +173,38 @@ public sealed class Settings
     /// <summary>How many spaces wide a tab is drawn in the code and text editors. The game's own scripts are indented with tabs.</summary>
     public int EditorTabWidth { get; set; } = 4;
 
+    /// <summary>Check your project's scripts with the built-in compiler as you type, and mark what's wrong in the code.</summary>
+    public bool CheckScriptsAsYouType { get; set; } = true;
+
+    /// <summary>Parameter names shown in calls: "Off", "Held" (while Ctrl+Alt is held) or "Always".</summary>
+    public string ParameterHints { get; set; } = "Held";
+
+    /// <summary>Draw locals, parameters and private fields that are never used faded.</summary>
+    public bool DimUnusedNames { get; set; } = true;
+
+    /// <summary>Format a script of your project each time it's saved.</summary>
+    public bool FormatOnSave { get; set; }
+
+    /// <summary>How Format document lays scripts out: see <see cref="Core.Scripts.Formatting.FormatOptions"/>.</summary>
+    public bool FormatUseTabs { get; set; } = true;
+    public bool FormatCompactColon { get; set; }
+    public bool FormatBraceOnOwnLine { get; set; } = true;
+    public bool FormatAlignFieldColons { get; set; }
+    public bool FormatKeepAlignment { get; set; } = true;
+
+    /// <summary>"AsWritten", "OwnLine" or "SameLine": where an annotation goes against its function or var.</summary>
+    public string FormatAnnotations { get; set; } = "AsWritten";
+
+    /// <summary>"AsWritten", "None" or "Spaced": the spaces just inside brackets.</summary>
+    public string FormatParenSpacing { get; set; } = "AsWritten";
+
+    /// <summary>The formatter's options, from the settings above and the editor's tab width.</summary>
+    public Core.Scripts.Formatting.FormatOptions FormatOptions => new(
+        UseTabs: FormatUseTabs, IndentSize: Math.Clamp(EditorTabWidth, 1, 12), CompactColon: FormatCompactColon, BraceOnOwnLine: FormatBraceOnOwnLine,
+        AlignFieldColons: FormatAlignFieldColons, KeepAlignment: FormatKeepAlignment,
+        Annotations: Enum.TryParse<Core.Scripts.Formatting.AnnotationPlacement>(FormatAnnotations, out var a) ? a : Core.Scripts.Formatting.AnnotationPlacement.AsWritten,
+        ParenSpacing: Enum.TryParse<Core.Scripts.Formatting.ParenSpacing>(FormatParenSpacing, out var p) ? p : Core.Scripts.Formatting.ParenSpacing.AsWritten);
+
     /// <summary>
     /// The largest a texture is read for the 3D views (entities, scenes, cutscenes, rigs, animations): 512, 1024, 2048, or
     /// 0 for as big as the game's. Bigger is sharper, and slower to load with more memory used.

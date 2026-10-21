@@ -114,6 +114,7 @@ public partial class PreviewDocument : UserControl
     {
         InitializeComponent();
         Item = item;
+        _hintElements = new HintElements(this);
 
         EditorLook.Apply(Editor);
         Editor.Options.EnableHyperlinks = false;
@@ -192,6 +193,7 @@ public partial class PreviewDocument : UserControl
             };
             UpdateOutline();
             SetUpWordMarks();
+            SetUpInsights();
         }
         else if (IsXml(item.Path))
         {
@@ -287,6 +289,7 @@ public partial class PreviewDocument : UserControl
             underline.Freeze();
             _link.Faint = underline;
         }
+        ApplyInsightColours();
     }
 
     /// <summary>Whether a file is XML, by its extension, and so coloured as XML.</summary>
@@ -395,6 +398,8 @@ public partial class PreviewDocument : UserControl
     {
         if (!IsEditable || !InProject) return SaveAs();
         if (!IsDirty) return true;
+        // laid out first when Settings asks; a file the formatter won't touch is saved as it is
+        if (App.Settings.FormatOnSave && Item.IsScript) FormatScript(quiet: true);
         byte[] data = Encode(Editor.Text);
         try
         {
@@ -409,6 +414,7 @@ public partial class PreviewDocument : UserControl
         _size = data.Length;
         Editor.Document.UndoStack.MarkAsOriginalFile();
         if (Item.Script is { } script && _workspace?.ArchiveOf(script) is { } archive) ScriptWorkspace.Reindex(archive);
+        AnySaved?.Invoke(this);
         return true;
     }
 
@@ -560,6 +566,10 @@ public partial class PreviewDocument : UserControl
             ToggleOutline();
         else if (key == Key.F8 && mods is ModifierKeys.None or ModifierKeys.Shift && HasDiff)
             GoToDifference(mods == ModifierKeys.Shift ? -1 : 1);
+        else if (scripts && key == Key.OemPeriod && mods == ModifierKeys.Control)
+            ShowRefactors();
+        else if (Item.Script is not null && key == Key.F && mods == (ModifierKeys.Shift | ModifierKeys.Alt))
+            FormatDocument();
         else
         {
             if (key is Key.LeftCtrl or Key.RightCtrl) UpdateLink();
@@ -629,6 +639,22 @@ public partial class PreviewDocument : UserControl
         {
             SetMarks(0, []);
             return;
+        }
+        // once the scripts are read, only the uses of the same thing: not another class's member or another function's local
+        if (Finder() is { } finder && Item.Script is not null)
+        {
+            try
+            {
+                if (finder.Uses(w.Start, w.Length) is { } uses)
+                {
+                    SetMarks(w.Length, uses.Count is > 1 and <= MaxMarks ? uses : []);
+                    return;
+                }
+            }
+            catch (Exception ex) when (ex is ArgumentException or IndexOutOfRangeException)
+            {
+                // the text moved on: the words spelt the same will do
+            }
         }
         string code = document.Text, name = code.Substring(w.Start, w.Length);
         var found = new List<int>();
@@ -769,11 +795,13 @@ public partial class PreviewDocument : UserControl
         {
             _probed = word;
             // a declaration leads to its uses when it changes nothing else
-            _probedFound = finder.Find(word.Start, word.Length).Count > 0 || finder.IsDeclaration(word.Start);
+            _probedFound = finder.Find(word.Start, word.Length).Count > 0 || finder.IsDeclaration(word.Start)
+                || NativeDeclarations.Has(Editor.Document.GetText(word.Start, word.Length));
         }
         SetLink(_probedFound ? word : null, strong: (Keyboard.Modifiers & ModifierKeys.Control) != 0);
 
-        if (!_probedFound || !App.Settings.PeekDefinitions || Card.IsOpen)
+        // a problem's message shows there instead
+        if (!_probedFound || !App.Settings.PeekDefinitions || Card.IsOpen || OverProblem(offset))
         {
             ClosePeek();
         }
@@ -837,6 +865,19 @@ public partial class PreviewDocument : UserControl
         {
             ShowChoices(targets, fromMouse, toSide);
         }
+        else if (NativeDeclarations.For(Editor.Document.GetText(word.Start, word.Length), finder.OwnerOf(word.Start), finder.Layers) is { } native)
+        {
+            // the engine declares it in its own code: written out from its class list, to read
+            var file = new ScriptFile
+            {
+                Key = "native:" + native.Name,
+                Path = native.Path,
+                Source = L.T("ScriptBench.Native.Source"),
+                SourceKey = "native",
+                Read = () => System.Text.Encoding.UTF8.GetBytes(native.Text),
+            };
+            await NavigateAsync(file, native.Offset, native.Name.Length, toSide);
+        }
         else
         {
             string text = Editor.Document.GetText(word.Start, word.Length);
@@ -882,6 +923,9 @@ public partial class PreviewDocument : UserControl
     }
 
     private Task NavigateAsync(ScriptSymbol target, bool toSide) => Host?.NavigateAsync(this, target, toSide) ?? Task.CompletedTask;
+
+    private Task NavigateAsync(ScriptFile file, int offset, int length, bool toSide) =>
+        Host?.NavigateAsync(this, file, offset, length, toSide) ?? Task.CompletedTask;
 
     /// <summary>Puts the caret back where it was, for going back.</summary>
     public void MoveCaret(int offset)
@@ -1819,6 +1863,12 @@ public partial class PreviewDocument : UserControl
             return;
         }
         if (!ScriptParser.IsWordChar(c)) return;
+        // the first letter under @wrapMethod(Class): the class's functions straight away
+        if (AnnotationAbove() is not null && WordBeforeCaret().Length == 1)
+        {
+            _ = ShowCompletionAsync(explicitly: false);
+            return;
+        }
         // a name, once three letters of it are typed: fewer and it's as likely to be if, i or a short local
         string word = WordBeforeCaret();
         if (word.Length != AutoCompleteAfter || !ScriptParser.IsWordStart(word[0]) || Keyword(word)) return;
@@ -1885,6 +1935,8 @@ public partial class PreviewDocument : UserControl
     private async Task ShowCompletionAsync(bool explicitly)
     {
         if (Editor.IsReadOnly || Item.Script is null || _workspace is null) return;
+        // under @wrapMethod(Class) or @replaceMethod(Class): the class's functions, each written out whole
+        if (await ShowAnnotationCompletionAsync(explicitly)) return;
         if (!_workspace.IsReady)
         {
             if (!explicitly) return;
@@ -2170,6 +2222,9 @@ public partial class PreviewDocument : UserControl
     {
         var view = Editor.TextArea.TextView;
         menu.PlacementTarget = view;
+        // a menu takes its font from what it's placed on, and the editor's is the code font
+        menu.FontFamily = SystemFonts.MessageFontFamily;
+        menu.FontSize = 14;
         if (fromMouse)
         {
             menu.Placement = PlacementMode.MousePoint;
@@ -2196,7 +2251,7 @@ public partial class PreviewDocument : UserControl
             ? L.T("PreviewDocument.OnlyModsLooseCopy")
             : L.T("PreviewDocument.OpensGamesVersionBeside");
         CompareOpenMenuItem.IsEnabled = Host?.HasOtherFiles(this) == true;
-        SnippetMenuItem.IsEnabled = CompleteMenuItem.IsEnabled = !Editor.IsReadOnly;
+        SnippetMenuItem.IsEnabled = CompleteMenuItem.IsEnabled = RefactorMenuItem.IsEnabled = FormatMenuItem.IsEnabled = !Editor.IsReadOnly;
         NextDiffMenuItem.Visibility = ClearDiffMenuItem.Visibility = HasDiff ? Visibility.Visible : Visibility.Collapsed;
     }
 

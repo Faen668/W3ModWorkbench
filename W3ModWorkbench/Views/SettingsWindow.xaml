@@ -510,6 +510,94 @@
                             <CheckBox x:Name="CompleteCheck" Content="{l:T Settings.Scripts.Complete}" Margin="0,6,0,0" />
                         </StackPanel>
                     </Border>
+
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource SectionTitle}" Text="{l:T Settings.Scripts.AsYouType}" />
+                            <CheckBox x:Name="CheckAsYouTypeCheck" Content="{l:T Settings.Scripts.CheckAsYouType}" Margin="0,4,0,0" />
+                            <TextBlock Style="{StaticResource Hint}" Text="{l:T Settings.Scripts.CheckAsYouTypeHint}" />
+                            <TextBlock Style="{StaticResource Label}" Text="{l:T Settings.Scripts.ParameterHints}" />
+                            <Border Style="{StaticResource SegmentRow}">
+                                <StackPanel Orientation="Horizontal">
+                                    <RadioButton x:Name="HintsOff" GroupName="Hints" Style="{StaticResource Segment}" Content="{l:T Settings.Scripts.HintsOff}" />
+                                    <RadioButton x:Name="HintsHeld" GroupName="Hints" Style="{StaticResource Segment}" Content="{l:T Settings.Scripts.HintsHeld}" />
+                                    <RadioButton x:Name="HintsAlways" GroupName="Hints" Style="{StaticResource Segment}" Content="{l:T Settings.Scripts.HintsAlways}" />
+                                </StackPanel>
+                            </Border>
+                            <TextBlock Style="{StaticResource Hint}" Text="{l:T Settings.Scripts.ParameterHintsHint}" />
+                            <CheckBox x:Name="DimUnusedCheck" Content="{l:T Settings.Scripts.DimUnused}" Margin="0,14,0,0" />
+                            <TextBlock Style="{StaticResource Hint}" Text="{l:T Settings.Scripts.DimUnusedHint}" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource SectionTitle}" Text="{l:T Settings.Scripts.Formatting}" />
+                            <TextBlock TextWrapping="Wrap" Text="{l:T Settings.Scripts.FormattingIntro}" />
+                            <Grid Margin="0,12,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+                                <TextBlock Text="{l:T Settings.Scripts.FormatIndent}" VerticalAlignment="Center" Margin="0,0,14,6" />
+                                <Border Grid.Column="1" Style="{StaticResource SegmentRow}" Margin="0,0,0,6">
+                                    <StackPanel Orientation="Horizontal">
+                                        <RadioButton x:Name="IndentTabs" GroupName="FmtIndent" Style="{StaticResource Segment}" Content="{l:T Settings.Scripts.FormatTabs}" Checked="Format_Changed" />
+                                        <RadioButton x:Name="IndentSpaces" GroupName="FmtIndent" Style="{StaticResource Segment}" Content="{l:T Settings.Scripts.FormatSpaces}" Checked="Format_Changed" />
+                                    </StackPanel>
+                                </Border>
+                                <TextBlock Grid.Row="1" Text="{l:T Settings.Scripts.FormatColon}" VerticalAlignment="Center" Margin="0,0,14,6" />
+                                <Border Grid.Row="1" Grid.Column="1" Style="{StaticResource SegmentRow}" Margin="0,0,0,6">
+                                    <StackPanel Orientation="Horizontal">
+                                        <!-- loc-ignore -->
+                                        <RadioButton x:Name="ColonSpaced" GroupName="FmtColon" Style="{StaticResource Segment}" Content="x : int" FontFamily="Cascadia Mono, Consolas" Checked="Format_Changed" />
+                                        <!-- loc-ignore -->
+                                        <RadioButton x:Name="ColonCompact" GroupName="FmtColon" Style="{StaticResource Segment}" Content="x: int" FontFamily="Cascadia Mono, Consolas" Checked="Format_Changed" />
+                                    </StackPanel>
+                                </Border>
+                                <TextBlock Grid.Row="2" Text="{l:T Settings.Scripts.FormatBraces}" VerticalAlignment="Center" Margin="0,0,14,6" />
+                                <Border Grid.Row="2" Grid.Column="1" Style="{StaticResource SegmentRow}" Margin="0,0,0,6">
+                                    <StackPanel Orientation="Horizontal">
+                                        <RadioButton x:Name="BraceOwnLine" GroupName="FmtBrace" Style="{StaticResource Segment}" Content="{l:T Settings.Scripts.FormatBraceOwnLine}" Checked="Format_Changed" />
+                                        <RadioButton x:Name="BraceSameLine" GroupName="FmtBrace" Style="{StaticResource Segment}" Content="{l:T Settings.Scripts.FormatBraceSameLine}" Checked="Format_Changed" />
+                                    </StackPanel>
+                                </Border>
+                                <TextBlock Grid.Row="3" Text="{l:T Settings.Scripts.FormatAnnotations}" VerticalAlignment="Center" Margin="0,0,14,6" />
+                                <Border Grid.Row="3" Grid.Column="1" Style="{StaticResource SegmentRow}" Margin="0,0,0,6">
+                                    <StackPanel Orientation="Horizontal">
+                                        <RadioButton x:Name="AnnotationsAsWritten" GroupName="FmtAnno" Style="{StaticResource Segment}" Content="{l:T Settings.Scripts.FormatAsWritten}" Checked="Format_Changed" />
+                                        <RadioButton x:Name="AnnotationsOwnLine" GroupName="FmtAnno" Style="{StaticResource Segment}" Content="{l:T Settings.Scripts.FormatOwnLine}" Checked="Format_Changed" />
+                                        <RadioButton x:Name="AnnotationsSameLine" GroupName="FmtAnno" Style="{StaticResource Segment}" Content="{l:T Settings.Scripts.FormatSameLine}" Checked="Format_Changed" />
+                                    </StackPanel>
+                                </Border>
+                                <TextBlock Grid.Row="4" Text="{l:T Settings.Scripts.FormatBrackets}" VerticalAlignment="Center" Margin="0,0,14,0" />
+                                <Border Grid.Row="4" Grid.Column="1" Style="{StaticResource SegmentRow}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <RadioButton x:Name="ParensAsWritten" GroupName="FmtParen" Style="{StaticResource Segment}" Content="{l:T Settings.Scripts.FormatAsWritten}" Checked="Format_Changed" />
+                                        <!-- loc-ignore -->
+                                        <RadioButton x:Name="ParensSpaced" GroupName="FmtParen" Style="{StaticResource Segment}" Content="f( a, b )" FontFamily="Cascadia Mono, Consolas" Checked="Format_Changed" />
+                                        <!-- loc-ignore -->
+                                        <RadioButton x:Name="ParensNone" GroupName="FmtParen" Style="{StaticResource Segment}" Content="f(a, b)" FontFamily="Cascadia Mono, Consolas" Checked="Format_Changed" />
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
+                            <CheckBox x:Name="KeepAlignmentCheck" Content="{l:T Settings.Scripts.FormatKeepAlignment}" Margin="0,12,0,0" Click="Format_Changed" />
+                            <CheckBox x:Name="AlignColonsCheck" Content="{l:T Settings.Scripts.FormatAlignColons}" Margin="0,6,0,0" Click="Format_Changed" />
+                            <Border CornerRadius="6" BorderThickness="1" Padding="10,8" Margin="0,12,0,0"
+                                    Background="{DynamicResource SubtleFillColorSecondaryBrush}" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}">
+                                <TextBlock x:Name="FormatSample" FontFamily="Cascadia Mono, Consolas, Courier New" FontSize="12" xml:space="preserve" />
+                            </Border>
+                            <CheckBox x:Name="FormatOnSaveCheck" Content="{l:T Settings.Scripts.FormatOnSave}" Margin="0,12,0,0" />
+                            <TextBlock Style="{StaticResource Hint}" Text="{l:T Settings.Scripts.FormattingHint}" />
+                        </StackPanel>
+                    </Border>
                 </StackPanel>
 
                 <!-- Viewers -->

@@ -170,6 +170,10 @@
                                 <MenuItem x:Name="SnippetMenuItem" Header="{l:T PreviewDocument.InsertSnippet}" InputGestureText="Ctrl+J" Click="Snippet_Click"
                                           ToolTip="{l:T PreviewDocument.CommonWitcherScriptPatternsYour}" />
                                 <MenuItem x:Name="CompleteMenuItem" Header="{l:T PreviewDocument.CompleteName}" InputGestureText="Ctrl+Space" Click="Complete_Click" />
+                                <MenuItem x:Name="RefactorMenuItem" Header="{l:T ScriptBench.Menu.Refactor}" InputGestureText="Ctrl+." Click="Refactor_Click"
+                                          ToolTip="{l:T ScriptBench.Menu.RefactorTip}" />
+                                <MenuItem x:Name="FormatMenuItem" Header="{l:T ScriptBench.Menu.Format}" InputGestureText="Shift+Alt+F" Click="Format_Click"
+                                          ToolTip="{l:T ScriptBench.Menu.FormatTip}" />
                                 <Separator />
                                 <MenuItem x:Name="BackMenuItem" Header="{l:T PreviewDocument.Back}" InputGestureText="Alt+Left" Click="Back_Click" />
                                 <MenuItem x:Name="ForwardMenuItem" Header="{l:T PreviewDocument.Forward}" InputGestureText="Alt+Right" Click="Forward_Click" />

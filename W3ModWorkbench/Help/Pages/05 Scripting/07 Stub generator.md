@@ -17,4 +17,6 @@ Wrapping or replacing one of the game's functions always starts the same way: th
    - **Add method** and **Add field**: an `@addMethod` or `@addField` on the class, with the name (and type) filled in.
 3. **Copy** puts it on the clipboard, ready to paste into your script.
 
+A wrap or replacement starts at `function`: the original's `public`, `final` or `latent` aren't repeated after the annotation, which the compiler doesn't allow, and an event is written as a function that returns a `bool`, passing on what the original returns. In [[Script Bench]] you can also type `@wrapMethod(Class)` and pick the function from the list under it (see [[Writing scripts]]).
+
 **Note where it's from** adds the game's file and line as a comment. See [[WitcherScript annotations]] for what each annotation does.

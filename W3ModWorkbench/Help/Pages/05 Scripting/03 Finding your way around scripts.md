@@ -3,19 +3,25 @@ title: Finding your way around scripts
 icon: E8FD
 order: 3
 summary: Go to a definition, see who uses and changes something, and move around a file and the game's scripts.
-keywords: go to definition f12 ctrl click peek popup references outline symbol hierarchy usage graph who changes compare
+keywords: go to definition f12 ctrl click peek popup references outline symbol hierarchy usage graph who changes compare native import engine class highlight
 ---
 Script Bench knows where everything in the game's scripts, the installed mods and your project is declared.
 
 ## Going to a definition
 
 - Hold {{Ctrl}} and click a name, or put the cursor on it and press {{F12}}, to jump to where it's declared. Names that lead somewhere get a faint underline once the scripts are read, a few seconds after the bench opens. On a declaration that changes nothing elsewhere (the game's own native functions, say), it lists where the name is used instead.
-- Every use of the name the cursor is on is marked through the file with a soft box, so you can see at a glance where a variable is set and read.
+- Every use of the name the cursor is on is marked through the file with a soft box, so you can see at a glance where a variable is set and read. Only that one is marked: a local `health` and another class's `health` are different things, and a word in a comment or string isn't a use.
 - Rest the mouse on a name to see its declaration in a popup, with its file, what it belongs to, and the number behind an enum value.
 - {{Ctrl+Alt}}+click or {{Ctrl+F12}} opens it in the other group, so the code you came from stays in view.
 - {{Alt+Left}} (or the mouse's back button) goes back to where you jumped from, {{Alt+Right}} forward again. The clock button at the top lists where you've been.
 
 It follows `a.b` through variables, return types and casts, up the class's `extends` chain. Clicking the name of a `@wrapMethod` or `@replaceMethod`, or `wrappedMethod`, shows the original.
+
+### The engine's own classes
+
+Some classes, structs, enums and global functions have no script at all: the engine declares them in its own code (`CFXDefinition`, `SItemUniqueId`, `EInputKey`…). Going to one of those opens a read-only page written out from the engine's class list, named `native\CFXDefinition.ws`: a class's parents, variables and functions, an enum's values. The list doesn't give a function's parameters, so they're taken from the game's scripts where they `import` it. Its names lead on, like any other script's.
+
+![An engine class written out from the class list](bench-native.jpg)
 
 ## Moving around a file
 

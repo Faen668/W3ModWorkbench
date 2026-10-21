@@ -84,6 +84,7 @@ public partial class PreviewWindow
             if (_bench == this) _bench = null;
         };
         UpdateHeader();
+        SetUpBenchCheck();
         _ = BuildBenchAsync();
     }
 
@@ -158,6 +159,11 @@ public partial class PreviewWindow
         foreach (var root in _benchRoots) Restore(root, expanded, selected);
         ApplyBenchFilter();
         UpdateBenchStatus();
+        // the game's scripts and the mods are read for checking as you type, ahead of the first check
+        if (gameScripts is not null && ProjectWorkspace.Current is { } current && App.Settings.CheckScriptsAsYouType)
+            Core.Scripts.Standalone.ScriptChecker.Prepare(gameScripts, _modsFolder, Path.GetFileName(current.BuiltModPath));
+        ScheduleCheck();
+        UpdateProblemsButton();
     }
 
     private void Remember(BenchNode node)
@@ -569,6 +575,8 @@ public partial class PreviewWindow
 
     private void BenchRefresh_Click(object sender, RoutedEventArgs e)
     {
+        // a mod installed or changed since: checking reads the mods again too
+        Core.Scripts.Standalone.ScriptChecker.Forget();
         if (_benchMain is { } main && ProjectWorkspace.Current is not null) _ = main.ReloadProjectAsync(); // the project's change rebuilds the tree
         else _ = BuildBenchAsync();
     }

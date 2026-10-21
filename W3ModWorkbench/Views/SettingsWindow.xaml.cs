@@ -130,6 +130,17 @@ public partial class SettingsWindow : Window, IMessageHost
         FontSizeBox.SelectedIndex = Nearest(FontSizes, settings.EditorFontSize);
         TabWidthBox.ItemsSource = TabWidths.Select(w => L.T("Settings.Scripts.TabWidthItem", w)).ToList();
         TabWidthBox.SelectedIndex = Nearest(TabWidths.Select(w => (double)w).ToArray(), settings.EditorTabWidth);
+        CheckAsYouTypeCheck.IsChecked = settings.CheckScriptsAsYouType;
+        (settings.ParameterHints switch { "Off" => HintsOff, "Always" => HintsAlways, _ => HintsHeld }).IsChecked = true;
+        DimUnusedCheck.IsChecked = settings.DimUnusedNames;
+        (settings.FormatUseTabs ? IndentTabs : IndentSpaces).IsChecked = true;
+        (settings.FormatCompactColon ? ColonCompact : ColonSpaced).IsChecked = true;
+        (settings.FormatBraceOnOwnLine ? BraceOwnLine : BraceSameLine).IsChecked = true;
+        (settings.FormatAnnotations switch { "OwnLine" => AnnotationsOwnLine, "SameLine" => AnnotationsSameLine, _ => AnnotationsAsWritten }).IsChecked = true;
+        (settings.FormatParenSpacing switch { "Spaced" => ParensSpaced, "None" => ParensNone, _ => ParensAsWritten }).IsChecked = true;
+        KeepAlignmentCheck.IsChecked = settings.FormatKeepAlignment;
+        AlignColonsCheck.IsChecked = settings.FormatAlignFieldColons;
+        FormatOnSaveCheck.IsChecked = settings.FormatOnSave;
 
         // Viewers
         RedkitPropsCheck.IsChecked = settings.PreferRedkitProperties;
@@ -540,6 +551,36 @@ public partial class SettingsWindow : Window, IMessageHost
         EditorSample.FontSize = FontSizes[FontSizeBox.SelectedIndex];
         string tab = new(' ', TabWidths[TabWidthBox.SelectedIndex]);
         EditorSample.Text = $"function OnSpawned(data : SEntitySpawnData)\n{{\n{tab}if (IsAlive())\n{tab}{{\n{tab}{tab}Heal(10);\n{tab}}}\n}}"; // loc-ignore: code
+        UpdateFormatSample();
+    }
+
+    private void Format_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_loaded) UpdateFormatSample();
+    }
+
+    /// <summary>The formatter's choices as picked, before they're saved.</summary>
+    private Core.Scripts.Formatting.FormatOptions PickedFormat() => new(
+        UseTabs: IndentTabs.IsChecked == true, IndentSize: TabWidths[Math.Max(0, TabWidthBox.SelectedIndex)],
+        CompactColon: ColonCompact.IsChecked == true, BraceOnOwnLine: BraceOwnLine.IsChecked == true,
+        AlignFieldColons: AlignColonsCheck.IsChecked == true, KeepAlignment: KeepAlignmentCheck.IsChecked == true,
+        Annotations: AnnotationsOwnLine.IsChecked == true ? Core.Scripts.Formatting.AnnotationPlacement.OwnLine
+            : AnnotationsSameLine.IsChecked == true ? Core.Scripts.Formatting.AnnotationPlacement.SameLine : Core.Scripts.Formatting.AnnotationPlacement.AsWritten,
+        ParenSpacing: ParensSpaced.IsChecked == true ? Core.Scripts.Formatting.ParenSpacing.Spaced
+            : ParensNone.IsChecked == true ? Core.Scripts.Formatting.ParenSpacing.None : Core.Scripts.Formatting.ParenSpacing.AsWritten);
+
+    // loc-ignore-start: a script, formatted as the choices say, to show what they do
+    private const string FormatSampleCode =
+        "class MyGuard extends CNewNPC\n{\n\tprivate var health:float;\n\tprivate var maxHealth    :    float;\n\tprivate var name : string;\n\n"
+        + "\t@addMethod(CR4Player) function Greet( who : string ) {\n\t\tif(health>0) ShowHello(who,1);\n\t}\n}";
+    // loc-ignore-end
+
+    /// <summary>A small script laid out as the choices picked say, with a tab shown as the space it takes.</summary>
+    private void UpdateFormatSample()
+    {
+        if (TabWidthBox.SelectedIndex < 0) return;
+        var result = Core.Scripts.Formatting.ScriptFormatter.Format(FormatSampleCode, PickedFormat());
+        FormatSample.Text = result.Text.Replace("\t", new string(' ', TabWidths[TabWidthBox.SelectedIndex]));
     }
 
     // ---------------------------------------------------------------- privacy
@@ -604,6 +645,18 @@ public partial class SettingsWindow : Window, IMessageHost
         _settings.PreviewSplit = SplitDown.IsChecked == true ? "Down" : "Right";
         _settings.PeekDefinitions = PeekCheck.IsChecked == true;
         _settings.SuggestNames = CompleteCheck.IsChecked == true;
+        _settings.CheckScriptsAsYouType = CheckAsYouTypeCheck.IsChecked == true;
+        _settings.ParameterHints = HintsOff.IsChecked == true ? "Off" : HintsAlways.IsChecked == true ? "Always" : "Held";
+        _settings.DimUnusedNames = DimUnusedCheck.IsChecked == true;
+        var format = PickedFormat();
+        _settings.FormatUseTabs = format.UseTabs;
+        _settings.FormatCompactColon = format.CompactColon;
+        _settings.FormatBraceOnOwnLine = format.BraceOnOwnLine;
+        _settings.FormatAlignFieldColons = format.AlignFieldColons;
+        _settings.FormatKeepAlignment = format.KeepAlignment;
+        _settings.FormatAnnotations = format.Annotations.ToString();
+        _settings.FormatParenSpacing = format.ParenSpacing.ToString();
+        _settings.FormatOnSave = FormatOnSaveCheck.IsChecked == true;
         _settings.EditorFontSize = FontSizes[Math.Max(0, FontSizeBox.SelectedIndex)];
         _settings.EditorTabWidth = TabWidths[Math.Max(0, TabWidthBox.SelectedIndex)];
         _settings.PreferRedkitProperties = RedkitPropsCheck.IsChecked == true;

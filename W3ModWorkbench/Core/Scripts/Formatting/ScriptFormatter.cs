@@ -24,7 +24,12 @@ public enum AnnotationPlacement { AsWritten, OwnLine, SameLine }
 public enum ParenSpacing { AsWritten, None, Spaced }
 
 /// <summary>The formatted text, or why it wasn't formatted.</summary>
-public sealed record FormatResult(string Text, bool Changed, string? Refused = null);
+/// <param name="Refused">Why it wasn't formatted, in English, for logs; the app words it from <paramref name="Reason"/>.</param>
+/// <param name="Line">The line formatting would have changed more than spaces on, for <see cref="RefusedReason.WouldChangeCode"/>.</param>
+public sealed record FormatResult(string Text, bool Changed, string? Refused = null, RefusedReason Reason = RefusedReason.None, int Line = 0);
+
+/// <summary>Why formatting left a file as it was.</summary>
+public enum RefusedReason { None, Unreadable, WouldChangeCode }
 
 /// <summary>
 /// Lays out WitcherScript: indentation by braces (and a level more for a case's statements, an if's single statement and
@@ -47,7 +52,7 @@ public static class ScriptFormatter
         }
         catch (FormatException ex)
         {
-            return new FormatResult(text, false, ex.Message);
+            return new FormatResult(text, false, ex.Message, RefusedReason.Unreadable);
         }
         string laidOut = Braces(source, before, options);
         string spaced = Lines(laidOut, options);
@@ -58,7 +63,8 @@ public static class ScriptFormatter
         if (FirstDifference(before, Tokenize(result)) is { } at)
         {
             int line = source.Take(before[Math.Min(at, before.Count - 1)].Start).Count(c => c == '\n') + 1;
-            return new FormatResult(text, false, $"Formatting would have changed more than the spaces near line {line}, so the file was left as it is.");
+            return new FormatResult(text, false, $"Formatting would have changed more than the spaces near line {line}, so the file was left as it is.",
+                RefusedReason.WouldChangeCode, line);
         }
         result = result.Replace("\n", newline);
         return new FormatResult(result, result != text);

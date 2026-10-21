@@ -195,17 +195,19 @@ public sealed class StubGenerator
     {
         options ??= new Options();
         var sb = new StringBuilder();
-        bool returns = !string.IsNullOrEmpty(f.ReturnType) && !f.ReturnType.Equals("void", StringComparison.OrdinalIgnoreCase);
+        // an event's bool is passed back too, as the header now says it returns one
+        string? returnType = f.IsEvent && string.IsNullOrEmpty(f.ReturnType) ? "bool" : f.ReturnType;
+        bool returns = !string.IsNullOrEmpty(returnType) && !returnType.Equals("void", StringComparison.OrdinalIgnoreCase);
         string call = $"wrappedMethod({string.Join(", ", f.Parameters)})";
 
         if (options.CommentOriginal) sb.Append("// from ").Append(f.File).Append(", line ").Append(f.Line).Append('\n');
         switch (kind)
         {
             case StubKind.Wrap:
-                sb.Append("@wrapMethod(").Append(f.Owner).Append(")\n").Append(f.Header).Append("\n{\n");
+                sb.Append("@wrapMethod(").Append(f.Owner).Append(")\n").Append(AnnotatedHeader(f)).Append("\n{\n");
                 if (returns)
                 {
-                    sb.Append("\tvar result : ").Append(f.ReturnType).Append(";\n\n");
+                    sb.Append("\tvar result : ").Append(returnType).Append(";\n\n");
                     sb.Append("\t// runs before the original\n\n");
                     sb.Append("\tresult = ").Append(call).Append(";\n\n");
                     sb.Append("\t// runs after the original; change result to change what is returned\n\n");
@@ -221,17 +223,32 @@ public sealed class StubGenerator
                 break;
 
             case StubKind.Replace:
-                sb.Append("@replaceMethod(").Append(f.Owner).Append(")\n").Append(f.Header).Append('\n');
+                sb.Append("@replaceMethod(").Append(f.Owner).Append(")\n").Append(AnnotatedHeader(f)).Append('\n');
                 if (options.BodyForReplace) sb.Append(Dedent(f.Body)).Append('\n');
                 else
                 {
                     sb.Append("{\n");
-                    if (returns) sb.Append("\tvar result : ").Append(f.ReturnType).Append(";\n\n\treturn result;\n");
+                    if (returns) sb.Append("\tvar result : ").Append(returnType).Append(";\n\n\treturn result;\n");
                     sb.Append("}\n");
                 }
                 break;
         }
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// The header a wrap or a replacement is written with: from the word function on, with none of the original's
+    /// modifiers (public, final, latent…), which it takes from the original and may not repeat, and an event written as
+    /// a function, as wcc_lite expects after @wrapMethod and @replaceMethod.
+    /// </summary>
+    public static string AnnotatedHeader(GameFunction f)
+    {
+        var m = System.Text.RegularExpressions.Regex.Match(f.Header, @"\b(function|event)\s+(?=\w+\s*\()");
+        if (!m.Success) return f.Header;
+        string header = "function " + f.Header[(m.Index + m.Length)..].TrimStart();
+        // an event returns a bool without saying so; as a function it has to, or its return true won't compile
+        if (f.IsEvent && !header[header.LastIndexOf(')')..].Contains(':')) header += " : bool";
+        return header;
     }
 
     /// <summary>

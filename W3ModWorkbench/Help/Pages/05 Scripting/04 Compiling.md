@@ -13,6 +13,8 @@ Press **Compile** in [[Script Bench]]'s bottom bar ({{F7}}, or **Project > Compi
 
 ![Compiling a project: no warnings](bench-compile.jpg)
 
+You don't have to wait for **Compile** to find most mistakes: Script Bench checks your scripts the same way as you type, and underlines what's wrong (see [[Writing scripts]]).
+
 Compile only checks: nothing is kept. **Build** is what puts the compiled scripts in your mod (see [[Building and installing]]). **Project > Compile scripts to…** writes a `.rsblob` wherever you choose, to try it.
 
 ## Two compilers

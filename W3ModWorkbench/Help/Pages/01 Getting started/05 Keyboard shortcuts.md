@@ -56,6 +56,9 @@ keywords: keys hotkeys shortcuts keyboard
 | {{F2}} | rename (in a script) or rename the file (in the tree) |
 | {{Ctrl+Space}} | suggest names |
 | {{Ctrl+J}} | insert a snippet |
+| {{Ctrl+.}} | refactor: extract, inline, split or join, lay out |
+| {{Shift+Alt+F}} | format the script |
+| hold {{Ctrl+Alt}} | show parameter names in calls |
 | {{F4}} / {{Shift+F4}} | next / previous result in the list under the files |
 | {{F8}} / {{Shift+F8}} | next / previous difference when comparing |
 | {{Alt+Left}} / {{Alt+Right}} | back / forward |

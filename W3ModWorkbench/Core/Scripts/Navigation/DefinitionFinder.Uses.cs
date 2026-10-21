@@ -24,6 +24,19 @@ public sealed partial class DefinitionFinder
     }
 
     /// <summary>
+    /// For a member after a dot (<c>a.b</c>), the type of what's before the dot, when it can be worked out; for a name
+    /// written on its own inside a class, that class. Null otherwise.
+    /// </summary>
+    public string? OwnerOf(int start)
+    {
+        var fn = _doc.FunctionAt(start);
+        string? self = fn?.Symbol.Owner ?? _doc.TypeAt(start)?.Symbol.TypeKey;
+        int before = PrevNonSpace(start - 1);
+        if (before >= 0 && _code[before] == '.') return TypeOf(before, fn, self, 0);
+        return self;
+    }
+
+    /// <summary>
     /// What a word names, by declaration (file and place): the declaration itself when the word is one, else where it
     /// goes. Comments and strings are blanked in the code read, so a word in one is never found.
     /// </summary>

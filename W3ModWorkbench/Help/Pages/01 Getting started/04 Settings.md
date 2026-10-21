@@ -72,6 +72,10 @@ Under the list, it says whether your game has that language's text and voices in
 - **Split view**: whether a split ({{Ctrl+\}}) puts the second group of tabs beside the first or below it.
 - **Font size** and **tab width** of the code editors (scripts, XML and stubs), with a sample. The game's scripts are indented with tabs, so the tab width is how far in their code sits. JSON keeps its two spaces.
 - **Show a name's declaration when the mouse rests on it**, and **Suggest names while typing**. See [[Finding your way around scripts]].
+- **As you type**: whether your project's scripts are checked as you type, with what's wrong underlined; when the names of parameters show in calls (**Off**, **While Ctrl+Alt is held**, **Always**); and whether names that are never used are faded. See [[Writing scripts]].
+- **Formatting**: how **Format document** ({{Shift+Alt+F}}) lays a script out: tabs or spaces, `x : int` or `x: int`, braces on their own line or at the end of the line, where annotations go, and spaces inside brackets. **Keep the spaces that line declarations up with each other, as the game's scripts do** leaves lined-up code as it is; **Line up the colons of a class's fields declared one after another** does the lining up itself. A sample under them shows the result as you choose. Tick **Format a script of your project each time it's saved** to format on every save.
+
+![The As you type and Formatting cards](settings-scripts-typing.jpg)
 
 ## Viewers
 

@@ -189,6 +189,9 @@ public partial class PreviewWindow : Window, IMessageHost
             window.Layout();
             window.UpdateSplitButton();
             window.UpdateHeader();
+            foreach (var doc in window.AllDocuments) doc.ApplyInsightSettings();
+            window.ScheduleCheck();
+            window.UpdateProblemsButton();
         }
     }
 
@@ -1058,6 +1061,8 @@ public partial class PreviewWindow : Window, IMessageHost
     private void UpdateHeader()
     {
         if (_isBench) BenchEmpty.Visibility = Current is null ? Visibility.Visible : Visibility.Collapsed;
+        // a script shown in the bench gets what the last check found in it
+        if (_isBench) ApplyProblems(Current);
         if (Current is not { } doc)
         {
             if (_isBench) UpdateBenchTitle();
@@ -1482,7 +1487,8 @@ public partial class PreviewWindow : Window, IMessageHost
     }
 
     /// <summary>The compiler's warnings and errors, grouped by file, each opening its line. The log is a button away.</summary>
-    private void ShowCompileResult(string title, ScriptFolder project, CompileResult result, string output, TimeSpan took, CompilerChoice compiler, bool check = false)
+    /// <param name="live">What checking as you type found: no compile ran, so nothing is said of saving or of a log.</param>
+    private void ShowCompileResult(string title, ScriptFolder project, CompileResult result, string output, TimeSpan took, CompilerChoice compiler, bool check = false, bool live = false)
     {
         if (Results.Visibility != Visibility.Visible) OpenResultsPanel();
         int errors = result.Messages.Count(m => m.IsError), warnings = result.Messages.Count - errors;
@@ -1523,13 +1529,22 @@ public partial class PreviewWindow : Window, IMessageHost
         }
 
         string seconds = took.TotalSeconds < 10 ? $"{took.TotalSeconds:0.0} s" : $"{took.TotalSeconds:0} s";
-        string summary = result.Success
+        string summary = live
+            ? result.Messages.Count == 0 ? L.T("ScriptBench.Check.NoProblems")
+                : string.Join(", ", new[] { errors > 0 ? L.T("Count.Error", errors) : null, warnings > 0 ? L.T("Count.Warning", warnings) : null }.OfType<string>())
+            : result.Success
             ? warnings == 0 ? L.T("PreviewWindow.Compiled", seconds) : L.T("PreviewWindow.Compiled2", seconds, L.T("Count.Warning", warnings))
             : errors > 0 ? L.T("PreviewWindow.FailedCount", L.T("Count.Error", errors)) + (warnings > 0 ? $", {L.T("Count.Warning", warnings)}" : "")
             : L.T("PreviewWindow.Failed");
-        string empty = result.Success ? check ? L.T("PreviewWindow.CompiledNoWarningsBuild") : L.T("PreviewWindow.CompiledNoWarningsSaved", output)
+        string empty = live ? L.T("ScriptBench.Check.NoProblems")
+            : result.Success ? check ? L.T("PreviewWindow.CompiledNoWarningsBuild") : L.T("PreviewWindow.CompiledNoWarningsSaved", output)
             : result.Failure ?? L.T("PreviewWindow.DidntCompileScripts", compiler.Name);
         Results.ShowRows(title, summary, rows, empty);
+        if (live)
+        {
+            Results.SetActions(L.T("ScriptBench.Check.ListNote"), (L.T("ScriptBench.Check.CompileNow"), () => _ = BenchCompileAsync()));
+            return;
+        }
 
         var actions = new List<(string, Action)>();
         if (result.Success && !check)

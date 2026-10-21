@@ -221,6 +221,13 @@
                     <TextBlock Margin="8,0,0,0" Text="{l:T PreviewWindow.Compile}" />
                 </StackPanel>
             </Button>
+            <!-- what checking as you type found, a click from the list of it -->
+            <Button x:Name="ProblemsButton" DockPanel.Dock="Right" Click="Problems_Click" Padding="10,4" Margin="0,0,8,0" Visibility="Collapsed">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock x:Name="ProblemsIcon" FontFamily="{StaticResource IconFont}" VerticalAlignment="Center" />
+                    <TextBlock x:Name="ProblemsText" Margin="8,0,0,0" />
+                </StackPanel>
+            </Button>
             <TextBlock x:Name="BenchStatusText" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Margin="0,0,12,0" />
         </DockPanel>
     </Border>
