@@ -14,12 +14,14 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 //     --summary      a count per file instead of every line
 //     --file <part>  only files whose path has <part> in it
 //     --unused       also list keys in en.json nothing uses
+//     --strict       count single words in C# as text wherever they are, for a sweep by eye (it lists names and keys too)
 //
 // Text that isn't for people to read (code samples, file names, the licence) is marked so the check passes over it:
 // in C#, a "// loc-ignore" comment on the line, or the lines between "// loc-ignore-start" and "// loc-ignore-end";
 // in XAML, a <!-- loc-ignore --> comment on the line before the element.
 
 var options = args.ToHashSet(StringComparer.OrdinalIgnoreCase);
+bool strict = options.Contains("--strict");
 string? only = args.SkipWhile(a => a != "--file").Skip(1).FirstOrDefault();
 string root = FindRoot();
 string app = Path.Combine(root, "W3ModWorkbench");
@@ -40,9 +42,9 @@ foreach (string file in Directory.EnumerateFiles(tables, "*.json").Where(f => !P
     foreach (var (key, values) in table)
     {
         if (!english.TryGetValue(key, out var source)) { problems.Add((rel, 0, "table", $"{key}: not in en.json (renamed or removed?)")); continue; }
-        var names = source.SelectMany(PlaceholderNames).ToHashSet();
+        var names = source.SelectMany(Detection.PlaceholderNames).ToHashSet();
         foreach (string value in values)
-            foreach (string name in PlaceholderNames(value).Where(n => !names.Contains(n)))
+            foreach (string name in Detection.PlaceholderNames(value).Where(n => !names.Contains(n)))
                 problems.Add((rel, 0, "table", $"{key}: {{{name}}} isn't a placeholder the English names ({string.Join(", ", names.Select(n => "{" + n + "}"))})"));
     }
 }
@@ -69,11 +71,11 @@ foreach (string file in SourceFiles("*.xaml"))
             bool textProperty = xamlProperties.Contains(name)
                 || (element.Name.LocalName == "Setter" && name == "Value" && xamlProperties.Contains((string?)element.Attribute("Property") ?? ""));
             if (!textProperty || ignored || value.StartsWith('{')) continue;
-            if (IsText(value, uiContext: true)) problems.Add((rel, Line(attribute), "xaml", $"{name}=\"{value}\""));
+            if (Detection.IsText(value, uiContext: true)) problems.Add((rel, Line(attribute), "xaml", $"{name}=\"{value}\""));
         }
         if (!ignored)
             foreach (var text in element.Nodes().OfType<XText>())
-                if (text is not XCData && IsText(text.Value.Trim(), uiContext: true) && element.Name.LocalName is not ("Code" or "String" or "Style"))
+                if (text is not XCData && Detection.IsText(text.Value.Trim(), uiContext: true) && element.Name.LocalName is not ("Code" or "String" or "Style" or "FontFamily"))
                     problems.Add((rel, Line(text), "xaml", text.Value.Trim()));
     }
 }
@@ -89,26 +91,23 @@ foreach (string file in SourceFiles("*.cs"))
     string source = File.ReadAllText(file);
     var tree = CSharpSyntaxTree.ParseText(source);
     var lines = tree.GetText().Lines;
-    var ignoredLines = IgnoredLines(source);
+    var ignoredLines = Detection.IgnoredLines(source);
     foreach (var node in tree.GetRoot().DescendantNodes())
     {
-        string? text = node switch
-        {
-            LiteralExpressionSyntax l when l.IsKind(SyntaxKind.StringLiteralExpression) && l.Parent is not InterpolationSyntax => l.Token.ValueText,
-            InterpolatedStringExpressionSyntax i => string.Concat(i.Contents.Select(c => c is InterpolatedStringTextSyntax t ? t.TextToken.ValueText : "{0}")),
-            _ => null,
-        };
+        string? text = Detection.TextOf(node);
         if (text is null) continue;
         int line = lines.GetLineFromPosition(node.SpanStart).LineNumber + 1;
         // a key given to L.T: it must be in en.json
-        if (KeyArgument(node) is { } key)
+        if (Detection.KeyArgument(node) is { } key)
         {
             used.Add(key);
             if (!english.ContainsKey(key)) problems.Add((rel, line, "key", $"\"{key}\" isn't in en.json"));
             continue;
         }
-        if (ignoredLines.Contains(line) || NotShown(node)) continue;
-        if (IsText(text, UiContext(node))) problems.Add((rel, line, "cs", text.Replace("\n", "\\n").Replace("\r", "")));
+        // a key named anywhere else (a key picked by a test, a section's key in a list) counts as used
+        if (english.ContainsKey(text)) { used.Add(text); continue; }
+        if (ignoredLines.Contains(line) || Detection.NotShown(node)) continue;
+        if (Detection.IsText(text, strict || Detection.UiContext(node))) problems.Add((rel, line, "cs", text.Replace("\n", "\\n").Replace("\r", "")));
     }
 }
 
@@ -154,10 +153,11 @@ static int Line(IXmlLineInfo info) => info.HasLineInfo() ? info.LineNumber : 0;
 
 void CheckKeys(string rel, int line, string value)
 {
-    foreach (Match m in Regex.Matches(value, @"\{l:T\s+(?:Key=)?([^\s}]+)\s*\}"))
+    foreach (Match m in Regex.Matches(value, @"\{l:T\s+(?:Key=)?([^\s}]+)\s*\}|LocFormat\.Instance\},\s*ConverterParameter=([\w.]+)"))
     {
-        used.Add(m.Groups[1].Value);
-        if (!english.ContainsKey(m.Groups[1].Value)) problems.Add((rel, line, "key", $"\"{m.Groups[1].Value}\" isn't in en.json"));
+        string key = m.Groups[1].Success ? m.Groups[1].Value : m.Groups[2].Value;
+        used.Add(key);
+        if (!english.ContainsKey(key)) problems.Add((rel, line, "key", $"\"{key}\" isn't in en.json"));
     }
 }
 
@@ -189,138 +189,4 @@ static Dictionary<string, List<string>> ReadTable(string path, out List<string> 
         problems.Add("doesn't parse: " + e.Message);
     }
     return table;
-}
-
-static List<string> PlaceholderNames(string text) =>
-    [.. Regex.Matches(text, @"(?<!\{)\{([A-Za-z_][A-Za-z0-9_]*)(?:,-?\d+)?(?::[^{}]*)?\}(?!\})").Select(m => m.Groups[1].Value).Distinct()];
-
-/// <summary>Lines with a loc-ignore comment, and those between loc-ignore-start and loc-ignore-end.</summary>
-static HashSet<int> IgnoredLines(string source)
-{
-    var set = new HashSet<int>();
-    var lines = source.Replace("\r", "").Split('\n');
-    bool inside = false;
-    for (int i = 0; i < lines.Length; i++)
-    {
-        if (lines[i].Contains("loc-ignore-start", StringComparison.Ordinal)) inside = true;
-        if (inside || lines[i].Contains("loc-ignore", StringComparison.Ordinal)) set.Add(i + 1);
-        if (lines[i].Contains("loc-ignore-end", StringComparison.Ordinal)) inside = false;
-    }
-    return set;
-}
-
-/// <summary>The key when the literal is the first argument of L.T(…) or a Bind(…, key).</summary>
-static string? KeyArgument(SyntaxNode node)
-{
-    if (node is not LiteralExpressionSyntax literal || literal.Parent is not ArgumentSyntax argument
-        || argument.Parent is not ArgumentListSyntax list || list.Parent is not InvocationExpressionSyntax call) return null;
-    string callee = call.Expression.ToString();
-    if ((callee is "L.T" or "Localisation.L.T") && list.Arguments.IndexOf(argument) == 0) return literal.Token.ValueText;
-    if (callee.EndsWith(".Bind", StringComparison.Ordinal) && list.Arguments.IndexOf(argument) == 1) return literal.Token.ValueText;
-    return null;
-}
-
-/// <summary>Where a string is code rather than text: an attribute, a comparison, a case, a resource key, a path…</summary>
-static bool NotShown(SyntaxNode node)
-{
-    for (var parent = node.Parent; parent is not null; parent = parent.Parent)
-    {
-        switch (parent)
-        {
-            case AttributeSyntax:
-            case CaseSwitchLabelSyntax or ConstantPatternSyntax:
-                return true;
-            case SwitchExpressionArmSyntax arm when arm.Pattern.Span.Contains(node.Span):
-                return true;
-            case BinaryExpressionSyntax b when b.IsKind(SyntaxKind.EqualsExpression) || b.IsKind(SyntaxKind.NotEqualsExpression):
-                return true;
-            case ElementAccessExpressionSyntax e when e.ArgumentList.Span.Contains(node.Span):
-                return true;
-            case InvocationExpressionSyntax call:
-            {
-                string callee = call.Expression.ToString();
-                string name = callee[(callee.LastIndexOf('.') + 1)..];
-                if (Lists.NotShownCalls.Contains(name) || Lists.NotShownPrefixes.Any(p => callee.StartsWith(p, StringComparison.Ordinal))) return true;
-                return false; // the call's result may well be shown: stop looking
-            }
-            case ObjectCreationExpressionSyntax create when create.Type.ToString() is "Regex" or "Uri" or "XElement" or "XAttribute" or "XName" or "ProcessStartInfo" or "PropertyPath" or "FontFamily":
-                return true;
-            case StatementSyntax or MemberDeclarationSyntax:
-                return false;
-        }
-    }
-    return false;
-}
-
-/// <summary>Whether a string is put somewhere it's read: a Text, a title, a message.</summary>
-static bool UiContext(SyntaxNode node)
-{
-    for (var parent = node.Parent; parent is not null; parent = parent.Parent)
-    {
-        switch (parent)
-        {
-            case AssignmentExpressionSyntax a:
-                string target = a.Left.ToString();
-                return Lists.UiNames.Any(n => target.EndsWith(n, StringComparison.Ordinal));
-            case ArgumentSyntax { NameColon: { } colon } when Lists.UiNames.Any(n => colon.Name.Identifier.Text.Equals(n, StringComparison.OrdinalIgnoreCase)):
-                return true;
-            case InvocationExpressionSyntax call:
-                string callee = call.Expression.ToString();
-                return Lists.UiCalls.Any(c => callee.EndsWith(c, StringComparison.Ordinal));
-            case StatementSyntax or MemberDeclarationSyntax:
-                return false;
-        }
-    }
-    return false;
-}
-
-/// <summary>
-/// Whether a string reads as text for people: words with spaces between them, or in a place text goes, a word. Not a
-/// file name, a path, a key or an identifier, an icon glyph or a format with no words.
-/// </summary>
-static bool IsText(string text, bool uiContext)
-{
-    string t = text.Trim();
-    if (Lists.Names.Contains(t)) return false;
-    if (t.Length < 2 || !t.Any(char.IsLetter)) return false;
-    if (t.All(c => c is >= '\uE000' and <= '\uF8FF' || char.IsWhiteSpace(c) || char.IsPunctuation(c))) return false;
-    if (Regex.IsMatch(t, @"^[\w\-.]+\.[A-Za-z0-9]{1,8}$")) return false; // a file name
-    if (Regex.IsMatch(t, @"^(\*?\.\w+;?)+$")) return false; // a file pattern
-    if (t.Contains("://", StringComparison.Ordinal)) return t.Contains(' ') && Regex.IsMatch(t, @"[A-Za-z]{2,} [A-Za-z]{2,} [A-Za-z]"); // a link, unless in a sentence
-    if (Regex.IsMatch(t, @"^[A-Za-z]:\\|^\\\\|^%\w+%")) return false; // a path
-    bool words = Regex.IsMatch(t, @"\p{L}{2,}[,.:;!?'’)]*\s+[(\p{L}]");
-    if (words) return true;
-    // one word: only where text goes, and not an identifier-looking key (MyKey, my_key, my-key) or a code
-    if (!uiContext) return false;
-    return !Regex.IsMatch(t, @"^[a-z]+[A-Z_]\w*$|^[A-Z][a-z]+[A-Z]\w*$|^[\w]+[_\-][\w\-]+$|^\{0\}$");
-}
-
-static class Lists
-{
-    /// <summary>Calls whose string arguments are names, keys, paths or patterns, not text.</summary>
-    public static readonly HashSet<string> NotShownCalls = new(StringComparer.Ordinal)
-    {
-        "Combine", "GetFullPath", "GetFileName", "GetExtension", "ChangeExtension", "Exists", "ReadAllText", "ReadAllBytes", "WriteAllText",
-        "EnumerateFiles", "GetFiles", "EnumerateDirectories", "GetDirectories", "CreateDirectory", "Delete", "Move", "Copy",
-        "StartsWith", "EndsWith", "Contains", "IndexOf", "LastIndexOf", "Replace", "Split", "Trim", "TrimStart", "TrimEnd", "Equals", "Compare",
-        "IsMatch", "Match", "Matches", "Escape",
-        "GetManifestResourceStream", "FindResource", "TryFindResource", "SetResourceReference", "GetType", "GetMethod", "GetField",
-        "GetProperty", "GetValue", "GetString", "GetProperty", "TryGetProperty", "GetValueOrDefault", "TryGetValue", "ContainsKey", "Remove",
-        "Element", "Elements", "Attribute", "Attributes", "Descendants", "Parse", "TryParse", "ParseExact", "TryParseExact", "ToString",
-        "WriteLine", "Write", "Assert", "Fail", "Start", "GetEnvironmentVariable", "OpenSubKey", "CreateSubKey", "SetValue", "DeleteSubKey",
-        "nameof", "Navigate", "Find", "FirstOrDefault", "Lookup", "Resolve", "Open", "Register", "SetBinding", "Binding",
-        "PadLeft", "PadRight",
-    };
-
-    public static readonly string[] NotShownPrefixes = ["Debug.", "Trace.", "Console.", "Regex.", "Path.", "File.", "Directory.", "Log."];
-
-    /// <summary>Property and argument names text is given to.</summary>
-    public static readonly string[] UiNames =
-        ["Text", "Content", "Header", "ToolTip", "Title", "Caption", "Message", "message", "title", "Summary", "Hint", "Label", "Note", "Status", "Description", "primary", "secondary", "Filter"];
-
-    /// <summary>Names that are the same in every language: the app's, the game's.</summary>
-    public static readonly HashSet<string> Names = new(StringComparer.Ordinal) { "W3 Mod Workbench", "The Witcher 3" };
-
-    /// <summary>Calls whose arguments are shown.</summary>
-    public static readonly string[] UiCalls = ["ShowMessage", "Show", "SetStatus", "Status", "Confirm", "Ask", "AddItem", "MenuItem", "Item", "Note", "Hint"];
 }

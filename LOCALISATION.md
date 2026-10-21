@@ -55,17 +55,31 @@ label.Bind(TextBlock.TextProperty, "Settings.Nav.General");      // an element m
 - **Placeholders** are named in the English string and filled from the arguments in the order the English names
   them. A translation uses the same names in any order. Format strings work as in C#: `{count:N0}`,
   `{date:d MMMM yyyy}`, `{size:0}`. A literal brace is doubled: `{{` and `}}`.
-- **Plurals**: a value that's an object of plural forms is picked by the first argument.
+- **Plurals**: a value that's an object of plural forms is picked by its `{count}` argument, or else by the first
+  number given. A whole sentence can be plural, so each language words all of it as it needs:
 
   ```json
-  "Common.Count.File": { "one": "{count:N0} file", "other": "{count:N0} files" }
+  "Count.File": { "one": "{count:N0} file", "other": "{count:N0} files" },
+  "StringsWindow.SavedCopies": { "one": "Saved {file} and {count} copy for the other languages.",
+                                 "other": "Saved {file} and {count} copies for the other languages." },
+  "MainWindow.ChangesLost": { "one": "{names} has changes that are lost if you don't save them.",
+                              "other": "{names} have changes that are lost if you don't save them." }
   ```
+
+  `L.T("MainWindow.ChangesLost", names, unsaved.Count)` passes the count without showing it. The `Count.` keys are
+  "how many of a thing" (`L.T("Count.File", n)`), used inside other strings.
 
   English has `one` and `other`. Polish has `one`, `few` and `many`; Russian the same; Czech `one`, `few`, `other`;
   French counts 0 as `one`; Japanese and Chinese have only `other`. A table gives the forms its language has
   (`Loc.PluralCategory` has the rules); a form it leaves out falls back to `other`.
+- **In a binding**: a bound value goes into a string with the `LocFormat` converter, in place of a `StringFormat`:
+  `Text="{Binding Name, Converter={x:Static l:LocFormat.Instance}, ConverterParameter=SceneWindow.OpenCutscene}"`.
 - A sentence put together from pieces in English should be one string with placeholders, so a translation can order
   it as its language needs.
+
+Never compare or look up a translated string: a choice is known by its index, a name (`x:Name`), a tag or an enum,
+not by its text, which is different in every language. Text that goes somewhere read in English, such as an issue on
+EasyAssetBrowser's repository, stays English.
 
 Text that isn't for reading (code samples, file names, the licence, a language's own name) stays in the code, marked
 for the check with `// loc-ignore` on the line, or between `// loc-ignore-start` and `// loc-ignore-end`. In XAML,
@@ -110,8 +124,14 @@ It lists, with file and line:
   aren't CLDR's.
 
 It exits with 0 when there's nothing to fix. `--summary` gives a count per file, `--file Settings` checks only files
-with that in their path, and `--unused` lists English keys nothing uses. It skips `Core` (the game's formats) and
-`CommandLine.cs` (the command line's usage, kept in English). It tells text from code by what it looks like and where
+with that in their path, and `--unused` lists English keys nothing uses. `--strict` also counts single words in C#
+wherever they are (a heading made in code, a menu item), which lists many names and keys too: use it to sweep a new
+window by eye. It skips `Core` (the game's formats) and
+`CommandLine.cs` (the command line's usage, kept in English). Some text the windows show still comes from `Core` in
+English: the file kinds' names and descriptions, the game's own words (class names, event kinds) and messages from
+reading and compiling. Those are next.
+
+The check tells text from code by what it looks like and where
 it goes, so mark a string it gets wrong with `loc-ignore` rather than leaving the check failing.
 
 **Every new window and message goes through the tables**: run the check before committing.

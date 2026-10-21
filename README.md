@@ -262,10 +262,17 @@ The only NuGet package is [AvalonEdit](https://github.com/icsharpcode/AvalonEdit
 | `Core/Strings/` | The .w3strings reader and writer, and the index of the game's strings |
 | `Core/Menu/` | The mod menu model: reading and writing the XML, checks, keys and script |
 | `Highlighting/` | WebSpam's WitcherScript grammar, and the XML colouring |
-| `Help/` | The in-app guide (`HelpContent.cs` holds the text) |
+| `Help/` | The in-app guide: its pages in `Help/Pages`, their screenshots in `Help/Images` |
+| `Localisation/` | The app's text, a table per language (`Strings/en.json` is the source), and the code that reads it |
 | `ViewModels/` | The tree and list items behind the main window |
 
 </details>
+
+**Translating:** the app's text is in `W3ModWorkbench/Localisation/Strings/en.json`, and a language is a copy of it with the values translated. [LOCALISATION.md](LOCALISATION.md) says how, how to try a translation without building, and how to run the check that finds text left in the code:
+
+```bash
+dotnet run --project tools/StringCheck
+```
 
 ## 🙏 Credits
 

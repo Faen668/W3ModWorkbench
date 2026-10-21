@@ -26,6 +26,21 @@ public sealed class TExtension : MarkupExtension
         new($"[{key}]") { Source = Loc.Instance, Mode = BindingMode.OneWay };
 }
 
+/// <summary>
+/// A bound value put into a string of the tables, in place of a binding's StringFormat:
+/// <c>Text="{Binding Name, Converter={x:Static l:LocFormat.Instance}, ConverterParameter=SceneWindow.OpenCutscene}"</c>.
+/// </summary>
+public sealed class LocFormat : IValueConverter
+{
+    public static LocFormat Instance { get; } = new();
+
+    public object Convert(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture) =>
+        L.T(parameter as string ?? "", value);
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture) =>
+        throw new NotSupportedException();
+}
+
 /// <summary>Binds element text to the app's strings from code, so it follows the language as XAML's do.</summary>
 public static class LocBinding
 {

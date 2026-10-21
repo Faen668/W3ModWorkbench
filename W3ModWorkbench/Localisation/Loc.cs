@@ -20,7 +20,8 @@ public sealed record AppLanguage(string Tag, string Name, string EnglishName);
 /// A string is looked up in the language shown, then in English, then the key itself is shown, so a missing string is
 /// seen rather than blank. A value can name its placeholders (<c>{count:N0} files in {folder}</c>): the arguments
 /// fill them in the order the English string names them, so a translation can put them in any order. A value can also
-/// be plural forms (<c>{ "one": "…", "other": "…" }</c>), picked by the first argument and the language's rules.
+/// be plural forms (<c>{ "one": "…", "other": "…" }</c>), picked by the {count} argument (else the first number given, which
+/// needn't be shown) and the language's rules.
 /// </para>
 /// </summary>
 public sealed class Loc : INotifyPropertyChanged
@@ -141,7 +142,10 @@ public sealed class Loc : INotifyPropertyChanged
             text = entry.Text!;
         else
         {
-            long n = args.Length > 0 ? Number(args[0]) : 0;
+            // the {count} argument, else the first that's a number (which needn't be shown: it can come after the rest)
+            int at = SourceNames(source).IndexOf("count");
+            if (at < 0 || at >= args.Length) at = Array.FindIndex(args, a => a is int or long or short or byte or uint or ulong or double or float or decimal);
+            long n = at >= 0 ? Number(args[at]) : 0;
             string category = PluralCategory(entry == source ? English : Language, n);
             text = Pick(entry, category) ?? Pick(source, PluralCategory(English, n)) ?? source.Text ?? key;
         }
@@ -171,11 +175,7 @@ public sealed class Loc : INotifyPropertyChanged
         {
             if (!_templates.TryGetValue(cacheKey, out template!))
             {
-                var names = PlaceholderNames(source.Text ?? source.Forms?.GetValueOrDefault("other") ?? "");
-                if (source.Forms is { } forms)
-                    foreach (string form in forms.Values)
-                        foreach (string name in PlaceholderNames(form))
-                            if (!names.Contains(name)) names.Add(name);
+                var names = SourceNames(source);
                 string format = Placeholder.Replace(text, m =>
                 {
                     int index = names.IndexOf(m.Groups[1].Value);
@@ -195,6 +195,17 @@ public sealed class Loc : INotifyPropertyChanged
     }
 
     private sealed record Template(string Format);
+
+    /// <summary>An English string's placeholder names, in the order the arguments fill them: the order they first come.</summary>
+    private static List<string> SourceNames(Entry source)
+    {
+        var names = PlaceholderNames(source.Text ?? source.Forms?.GetValueOrDefault("other") ?? "");
+        if (source.Forms is { } forms)
+            foreach (string form in forms.Values)
+                foreach (string name in PlaceholderNames(form))
+                    if (!names.Contains(name)) names.Add(name);
+        return names;
+    }
 
     /// <summary>{name}, {name:N0} or {name,-8}, not {{ or }}.</summary>
     private static readonly Regex Placeholder = new(@"(?<!\{)\{([A-Za-z_][A-Za-z0-9_]*)((?:,-?\d+)?(?::[^{}]*)?)\}(?!\})", RegexOptions.Compiled);
@@ -357,8 +368,8 @@ public static class L
 {
     /// <summary>
     /// The string for <paramref name="key"/> in the language shown, its placeholders filled from
-    /// <paramref name="args"/> in the order the English string names them. For a plural string the first argument picks
-    /// the form.
+    /// <paramref name="args"/> in the order the English string names them. For a plural string the {count} argument picks
+    /// the form, or else the first number given (which can come after the rest without being shown).
     /// </summary>
     public static string T(string key, params object?[] args) => Loc.Instance.Get(key, args);
 }
