@@ -36,6 +36,8 @@
   <!-- WitcherScript grammar from WebSpam's witcherscript-vscode (MIT), used as-is -->
   <ItemGroup>
     <EmbeddedResource Include="Highlighting\witcherscript.tmLanguage.json" />
+    <!-- the app's own text, a table per language (LOCALISATION.md says how they're written) -->
+    <EmbeddedResource Include="Localisation\Strings\*.json" LogicalName="Strings/%(Filename)%(Extension)" />
     <!-- the guide's pages and screenshots (Help\Pages\README.md says how pages are written) -->
     <EmbeddedResource Include="Help\Pages\**\*.md" LogicalName="HelpPages/%(RecursiveDir)%(Filename)%(Extension)" />
     <EmbeddedResource Include="Help\Images\*.jpg;Help\Images\*.png" LogicalName="HelpImages/%(Filename)%(Extension)" />

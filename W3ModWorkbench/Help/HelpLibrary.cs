@@ -26,6 +26,12 @@ public sealed class HelpPage
     public int Order { get; init; }
     public required string Body { get; init; }
 
+    /// <summary>The page's English title, which [[links]] in every language may use; the same as <see cref="Title"/> in English.</summary>
+    public required string EnglishTitle { get; init; }
+
+    /// <summary>The language the page is in: the app's when it's translated, else en.</summary>
+    public string Language { get; init; } = "en";
+
     /// <summary>Windows this page is about, by class name: F1 in one of them opens this page.</summary>
     public IReadOnlyList<string> Windows { get; init; } = [];
 
@@ -46,66 +52,113 @@ public sealed record HelpHit(HelpPage Page, int Score, int Count, string Snippet
 /// The help pages, read from the Markdown files built into the app (Help\Pages\&lt;category folder&gt;\&lt;page&gt;.md), and
 /// the pictures they show (Help\Images). A category folder is named "NN Title" for its place, and its _category.md has
 /// its icon and summary; a page starts with a header block between --- lines. Help\Pages\README.md has the markup.
+/// <para>
+/// A translation is the same file under a folder named for its language (Help\Pages\de\05 Scripting\10 Script Bench.md).
+/// The pages are those of the language the app is in, page by page, with English for any not translated yet; what a
+/// translation's header leaves out (icon, order, windows) is the English page's.
+/// </para>
 /// </summary>
 public static class HelpLibrary
 {
     private const string PagePrefix = "HelpPages/", ImagePrefix = "HelpImages/";
 
-    private static readonly Lazy<IReadOnlyList<HelpCategory>> Loaded = new(Load);
+    /// <summary>The pages read, by language.</summary>
+    private static readonly Dictionary<string, IReadOnlyList<HelpCategory>> Loaded = new(StringComparer.OrdinalIgnoreCase);
 
-    public static IReadOnlyList<HelpCategory> Categories => Loaded.Value;
+    /// <summary>The categories and their pages in the language the app is in.</summary>
+    public static IReadOnlyList<HelpCategory> Categories
+    {
+        get
+        {
+            string language = Localisation.Loc.Instance.Language;
+            lock (Loaded)
+            {
+                if (!Loaded.TryGetValue(language, out var categories)) Loaded[language] = categories = Load(language);
+                return categories;
+            }
+        }
+    }
 
     public static IEnumerable<HelpPage> Pages => Categories.SelectMany(c => c.Pages);
 
+    /// <summary>A page by its title in the language shown, or its English title (as links may name it).</summary>
     public static HelpPage? Find(string title) =>
-        Pages.FirstOrDefault(p => p.Title.Equals(title, StringComparison.OrdinalIgnoreCase));
+        Pages.FirstOrDefault(p => p.Title.Equals(title, StringComparison.OrdinalIgnoreCase))
+        ?? Pages.FirstOrDefault(p => p.EnglishTitle.Equals(title, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>The page about a window, by its class name (MeshWindow), for F1.</summary>
     public static HelpPage? ForWindow(string windowClass) =>
         Pages.FirstOrDefault(p => p.Windows.Contains(windowClass, StringComparer.Ordinal));
 
-    private static IReadOnlyList<HelpCategory> Load()
+    /// <summary>
+    /// The files under Help\Pages by their path there (05 Scripting/10 Script Bench.md): the English ones, in numbered
+    /// category folders, or a language's, under the folder named for it.
+    /// </summary>
+    private static Dictionary<string, (Dictionary<string, string> Head, string Body)> Read(string? language)
     {
         var assembly = Assembly.GetExecutingAssembly();
-        var categories = new Dictionary<string, HelpCategory>(StringComparer.OrdinalIgnoreCase);
-        var pages = new List<(string Folder, Dictionary<string, string> Head, string Body)>();
-        foreach (string name in assembly.GetManifestResourceNames().Where(n => n.StartsWith(PagePrefix, StringComparison.Ordinal)))
+        var files = new Dictionary<string, (Dictionary<string, string>, string)>(StringComparer.OrdinalIgnoreCase);
+        string prefix = language is null ? PagePrefix : PagePrefix + language + "/";
+        foreach (string name in assembly.GetManifestResourceNames())
         {
-            string path = name[PagePrefix.Length..].Replace('\\', '/');
+            string resource = name.Replace('\\', '/');
+            if (!resource.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) continue;
+            string path = resource[prefix.Length..];
             string folder = Path.GetDirectoryName(path)?.Replace('\\', '/') ?? "";
             if (folder.Length == 0) continue; // README.md and the like, for whoever writes the pages
+            if (language is null && !char.IsDigit(folder[0])) continue; // a language's folder: its translations
             using var stream = assembly.GetManifestResourceStream(name)!;
             using var reader = new StreamReader(stream, Encoding.UTF8);
-            var (head, body) = Split(reader.ReadToEnd());
+            files[path] = Split(reader.ReadToEnd());
+        }
+        return files;
+    }
+
+    private static IReadOnlyList<HelpCategory> Load(string language)
+    {
+        var english = Read(null);
+        var translated = language.Equals(Localisation.Loc.English, StringComparison.OrdinalIgnoreCase) ? [] : Read(language);
+        var categories = new Dictionary<string, HelpCategory>(StringComparer.OrdinalIgnoreCase);
+        var pages = new List<(string Folder, Dictionary<string, string> Head, string Body, Dictionary<string, string> English, bool Translated)>();
+        foreach (var (path, (englishHead, englishBody)) in english)
+        {
+            string folder = Path.GetDirectoryName(path)!.Replace('\\', '/');
+            bool isTranslated = translated.TryGetValue(path, out var translation);
+            var (head, body) = isTranslated ? translation : (englishHead, englishBody);
             if (Path.GetFileName(path).Equals("_category.md", StringComparison.OrdinalIgnoreCase))
             {
                 var (order, title) = Numbered(folder);
                 categories[folder] = new HelpCategory
                 {
-                    Title = head.GetValueOrDefault("title") ?? title,
-                    Glyph = Glyph(head.GetValueOrDefault("icon")),
+                    Title = head.GetValueOrDefault("title") ?? englishHead.GetValueOrDefault("title") ?? title,
+                    Glyph = Glyph(head.GetValueOrDefault("icon") ?? englishHead.GetValueOrDefault("icon")),
                     Summary = head.GetValueOrDefault("summary") ?? body.Trim(),
                     Order = order,
                 };
             }
-            else pages.Add((folder, head, body));
+            else pages.Add((folder, head, body, englishHead, isTranslated));
         }
-        foreach (var (folder, head, body) in pages)
+        foreach (var (folder, head, body, englishHead, isTranslated) in pages)
         {
             if (!categories.TryGetValue(folder, out var category))
             {
                 var (order, title) = Numbered(folder);
                 categories[folder] = category = new HelpCategory { Title = title, Glyph = Glyph(null), Order = order };
             }
+            // what a translation leaves out of its header is the English page's
+            string? Field(string key) => head.GetValueOrDefault(key) ?? englishHead.GetValueOrDefault(key);
+            string englishTitle = englishHead.GetValueOrDefault("title") ?? "Untitled";
             category.Pages.Add(new HelpPage
             {
-                Title = head.GetValueOrDefault("title") ?? "Untitled",
-                Glyph = Glyph(head.GetValueOrDefault("icon")),
+                Title = head.GetValueOrDefault("title") ?? englishTitle,
+                EnglishTitle = englishTitle,
+                Language = isTranslated ? language : Localisation.Loc.English,
+                Glyph = Glyph(Field("icon")),
                 Category = category,
-                Summary = head.GetValueOrDefault("summary") ?? "",
-                Keywords = head.GetValueOrDefault("keywords") ?? "",
-                Order = int.TryParse(head.GetValueOrDefault("order"), out int o) ? o : 999,
-                Windows = (head.GetValueOrDefault("windows") ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
+                Summary = Field("summary") ?? "",
+                Keywords = Field("keywords") ?? "",
+                Order = int.TryParse(Field("order"), out int o) ? o : 999,
+                Windows = (Field("windows") ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
                 Body = body,
             });
         }
@@ -142,8 +195,18 @@ public static class HelpLibrary
         return (head, bodyStart < 0 ? "" : text[(bodyStart + 1)..]);
     }
 
-    /// <summary>A picture the pages show, by its file name, or null when the app hasn't got it.</summary>
+    /// <summary>
+    /// A picture the pages show, by its file name, or null when the app hasn't got it. The app's language's own copy
+    /// (settings.de.jpg for settings.jpg) comes first when there is one.
+    /// </summary>
     public static BitmapImage? Image(string file)
+    {
+        string language = Localisation.Loc.Instance.Language;
+        string own = Path.GetFileNameWithoutExtension(file) + "." + language + Path.GetExtension(file);
+        return language != Localisation.Loc.English && LoadImage(own) is { } translated ? translated : LoadImage(file);
+    }
+
+    private static BitmapImage? LoadImage(string file)
     {
         lock (Images)
         {

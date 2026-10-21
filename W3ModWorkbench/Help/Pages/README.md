@@ -76,3 +76,25 @@ want", not "Select the desired entries". Every feature the app has should be on 
 Screenshots go in `Help\Images` as `.jpg` (about 1400 pixels wide), named after what they show
 (`mesh-viewer.jpg`). Take them in the dark theme, of the real app on real game files, with nothing personal in
 them (no user names in paths: use a project in a plain folder). Crop to what the text is about.
+
+## Translated pages
+
+English pages are the source. A translation is the same file at the same path under a folder named for its
+language's tag, the tag its string table has (`de`, `pl`, `pt-BR`):
+
+```
+Help/Pages/05 Scripting/10 Script Bench.md        the English page
+Help/Pages/de/05 Scripting/10 Script Bench.md     its German translation
+Help/Pages/de/05 Scripting/_category.md           the category's name and summary in German
+```
+
+- The guide shows the pages of the app's language (Settings > Language), page by page: a page not translated yet
+  shows in English, so a translation can be done a page at a time.
+- Keep the file and folder names English: they're how a translation finds its page. Translate the header's `title`,
+  `summary` and `keywords`; leave out `icon`, `order` and `windows`, which come from the English page.
+- `[[Links]]` may use the English title or the translated one. Screenshots are shared; a language's own can go in
+  `Help/Images` with its tag before the extension (`settings.de.jpg`), and shows instead of the English one.
+- Search looks through the pages shown, in the language they're shown in.
+- When an English page changes, its translations need the same change: `git log` on the English file shows what.
+
+LOCALISATION.md, at the top of the repository, says how the app's own text is translated.

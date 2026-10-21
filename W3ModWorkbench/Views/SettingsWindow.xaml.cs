@@ -11,6 +11,7 @@ using W3ModWorkbench.Core.Projects;
 using W3ModWorkbench.Core.Scripts;
 using W3ModWorkbench.Core.Strings;
 using W3ModWorkbench.Highlighting;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -26,6 +27,7 @@ public partial class SettingsWindow : Window, IMessageHost
     private readonly string _originalPreset;
     private string _preset;
     private string _language;
+    private string _appLanguage;
     private readonly bool _loaded;
 
     /// <summary>The section shown last, to open on again while the app runs.</summary>
@@ -34,8 +36,8 @@ public partial class SettingsWindow : Window, IMessageHost
     private static readonly double[] FontSizes = [10, 11, 12, 13, 14, 15, 16, 18, 20, 22, 24];
     private static readonly int[] TabWidths = [2, 3, 4, 6, 8];
 
-    /// <summary>The sections: name, icon, page and the words a search would use.</summary>
-    private readonly List<(string Name, string Icon, FrameworkElement Page)> _pages;
+    /// <summary>The sections: their English name (what <see cref="ShowPage"/> takes), the key of the name shown, icon and page.</summary>
+    private readonly List<(string Name, string Key, string Icon, FrameworkElement Page)> _pages;
 
     public SettingsWindow(Settings settings)
     {
@@ -48,20 +50,20 @@ public partial class SettingsWindow : Window, IMessageHost
         Sample.SetResourceReference(BackgroundProperty, "ApplicationBackgroundBrush");
 
         _pages =
-        [
-            ("General", "", GeneralPage),
-            ("Appearance", "", AppearancePage),
-            ("Game and tools", "", GamePage),
-            ("Language", "", LanguagePage),
-            ("Scripts and editors", "", ScriptsPage),
-            ("Viewers", "", ViewersPage),
-            ("Privacy and online", "", PrivacyPage),
-        ];
-        foreach (var (name, icon, _) in _pages)
+        [ // loc-ignore-start: the English names are what ShowPage takes; the names shown are the keys
+            ("General", "Settings.Nav.General", "", GeneralPage),
+            ("Appearance", "Settings.Nav.Appearance", "", AppearancePage),
+            ("Game and tools", "Settings.Nav.Game", "", GamePage),
+            ("Language", "Settings.Nav.Language", "", LanguagePage),
+            ("Scripts and editors", "Settings.Nav.Scripts", "", ScriptsPage),
+            ("Viewers", "Settings.Nav.Viewers", "", ViewersPage),
+            ("Privacy and online", "Settings.Nav.Privacy", "", PrivacyPage),
+        ]; // loc-ignore-end
+        foreach (var (_, key, icon, _) in _pages)
         {
             var row = new StackPanel { Orientation = Orientation.Horizontal };
             row.Children.Add(new TextBlock { Text = icon, FontFamily = (FontFamily)FindResource("IconFont"), FontSize = 14, Width = 22, VerticalAlignment = VerticalAlignment.Center });
-            row.Children.Add(new TextBlock { Text = name, Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center });
+            row.Children.Add(new TextBlock { Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center }.Bind(TextBlock.TextProperty, key));
             Nav.Items.Add(new ListBoxItem { Content = row });
         }
 
@@ -95,6 +97,10 @@ public partial class SettingsWindow : Window, IMessageHost
         UpdateMergerStatus();
 
         // Language
+        _appLanguage = settings.AppLanguage;
+        AddAppLanguage("", L.T("Settings.Language.AppWindows"), L.T("Settings.Language.AppWindowsTip"));
+        foreach (var language in Loc.Available) AddAppLanguage(language.Tag, language.Name, language.EnglishName);
+        UpdateAppLanguageStatus();
         foreach (var language in W3Strings.Languages)
         {
             var button = new RadioButton
@@ -120,14 +126,14 @@ public partial class SettingsWindow : Window, IMessageHost
         (settings.PreviewSplit == "Down" ? SplitDown : SplitRight).IsChecked = true;
         PeekCheck.IsChecked = settings.PeekDefinitions;
         CompleteCheck.IsChecked = settings.SuggestNames;
-        FontSizeBox.ItemsSource = FontSizes.Select(s => $"{s:0} pt").ToList();
+        FontSizeBox.ItemsSource = FontSizes.Select(s => L.T("Settings.Scripts.FontSizeItem", s)).ToList();
         FontSizeBox.SelectedIndex = Nearest(FontSizes, settings.EditorFontSize);
-        TabWidthBox.ItemsSource = TabWidths.Select(w => $"{w} spaces").ToList();
+        TabWidthBox.ItemsSource = TabWidths.Select(w => L.T("Settings.Scripts.TabWidthItem", w)).ToList();
         TabWidthBox.SelectedIndex = Nearest(TabWidths.Select(w => (double)w).ToArray(), settings.EditorTabWidth);
 
         // Viewers
         RedkitPropsCheck.IsChecked = settings.PreferRedkitProperties;
-        RedkitPropsStatus.Text = FileSafety.RedkitInstalled ? "" : "REDkit isn't installed or found, so the viewers show the game's cooked files either way.";
+        RedkitPropsStatus.Text = FileSafety.RedkitInstalled ? "" : L.T("Settings.Viewers.RedkitMissing");
         RedkitPropsStatus.Visibility = RedkitPropsStatus.Text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
         (settings.TextureDetail switch { 512 => Detail512, 2048 => Detail2048, 0 => DetailFull, _ => Detail1024 }).IsChecked = true;
 
@@ -153,7 +159,7 @@ public partial class SettingsWindow : Window, IMessageHost
         SettingsScroller.ScrollToTop();
     }
 
-    /// <summary>Opens on a section by its name: Settings links in the app and the guide go straight to theirs.</summary>
+    /// <summary>Opens on a section by its English name: Settings links in the app and the guide go straight to theirs.</summary>
     public void ShowPage(string name)
     {
         int index = _pages.FindIndex(p => p.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
@@ -208,7 +214,7 @@ public partial class SettingsWindow : Window, IMessageHost
                 Tag = preset.Name,
                 Content = Swatch(preset, dark),
                 IsChecked = preset.Name == _preset,
-                ToolTip = preset.Accent is null ? "Your Windows accent colour and window background" : $"{preset.Name} school colours",
+                ToolTip = preset.Accent is null ? L.T("Settings.Appearance.ThemeWindowsTip") : L.T("Settings.Appearance.ThemeSchoolTip", preset.Name),
             };
             button.Checked += (_, _) => Preset_Checked(preset);
             PresetPanel.Children.Add(button);
@@ -246,14 +252,15 @@ public partial class SettingsWindow : Window, IMessageHost
         };
     }
 
+    /// <summary>The sample's code, the same in every language.</summary>
     private static readonly string[] SampleLines =
-    [
+    [ // loc-ignore-start
         "@wrapMethod(CR4Player) function OnSpawned(data : SEntitySpawnData)",
         "{",
         "    wrappedMethod(data); // keep the original",
         "    theGame.GetGuiManager().ShowNotification(\"Toss a coin\", 3.0);",
         "}",
-    ];
+    ]; // loc-ignore-end
 
     // ---------------------------------------------------------------- general
 
@@ -263,15 +270,15 @@ public partial class SettingsWindow : Window, IMessageHost
     {
         string folder = ProjectsBox.Text.Trim();
         ProjectsStatus.Text = folder.Length == 0
-            ? $"Empty: {DefaultProjects}. New Project still lets you put one anywhere."
-            : Directory.Exists(folder) ? "New Project starts here, and still lets you put one anywhere."
-            : "That folder doesn't exist yet. It's made when the first project goes in it.";
+            ? L.T("Settings.General.ProjectsEmpty", DefaultProjects)
+            : Directory.Exists(folder) ? L.T("Settings.General.ProjectsHere")
+            : L.T("Settings.General.ProjectsMissing");
     }
 
     private void UpdateRecentStatus()
     {
         int count = _settings.RecentPaths.Count + _settings.RecentProjects.Count + _settings.AssetRecent.Count;
-        RecentStatus.Text = count == 0 ? "Nothing in them." : $"{count:N0} remembered: recent files, projects and Asset Browser files.";
+        RecentStatus.Text = count == 0 ? L.T("Settings.General.RecentNone") : L.T("Settings.General.RecentCount", count);
         ClearRecentButton.IsEnabled = count > 0;
     }
 
@@ -287,12 +294,12 @@ public partial class SettingsWindow : Window, IMessageHost
 
     private void BrowseProjects_Click(object sender, RoutedEventArgs e)
     {
-        if (Pick("Choose where new projects go", ProjectsBox.Text.Trim() is { Length: > 0 } now ? now : DefaultProjects) is { } folder) ProjectsBox.Text = folder;
+        if (Pick(L.T("Settings.General.ProjectsPick"), ProjectsBox.Text.Trim() is { Length: > 0 } now ? now : DefaultProjects) is { } folder) ProjectsBox.Text = folder;
     }
 
     private void BrowseOutput_Click(object sender, RoutedEventArgs e)
     {
-        if (Pick("Choose the default output folder", OutputBox.Text) is { } folder) OutputBox.Text = folder;
+        if (Pick(L.T("Settings.General.OutputPick"), OutputBox.Text) is { } folder) OutputBox.Text = folder;
     }
 
     // ---------------------------------------------------------------- game and tools
@@ -304,11 +311,10 @@ public partial class SettingsWindow : Window, IMessageHost
         {
             string? found = GameLocator.Find();
             SetStatus(GameFolderIcon, GameFolderStatus, found is null ? Status.Info : Status.Good,
-                found is null ? "Not set, and the game wasn't found in your Steam or GOG libraries. Set it to read the game's files and scripts."
-                    : $"Not set, so the one found is used: {found}");
+                found is null ? L.T("Settings.Game.GameNotFound") : L.T("Settings.Game.GameFoundUsed", found));
         }
-        else if (GameLocator.IsGameFolder(folder)) SetStatus(GameFolderIcon, GameFolderStatus, Status.Good, "Found the game's files and scripts.");
-        else SetStatus(GameFolderIcon, GameFolderStatus, Status.Warning, "This isn't The Witcher 3 folder. Choose the one that has the bin and content folders.");
+        else if (GameLocator.IsGameFolder(folder)) SetStatus(GameFolderIcon, GameFolderStatus, Status.Good, L.T("Settings.Game.GameFound"));
+        else SetStatus(GameFolderIcon, GameFolderStatus, Status.Warning, L.T("Settings.Game.GameWrongFolder"));
     }
 
     private void UpdateDocumentsStatus()
@@ -318,19 +324,19 @@ public partial class SettingsWindow : Window, IMessageHost
         string[] known = ["input.settings", "user.settings", "dx12user.settings", "mods.settings"];
         var has = Directory.Exists(used) ? known.Where(f => File.Exists(Path.Combine(used, f))).ToList() : [];
         if (has.Count > 0)
-            SetStatus(DocumentsIcon, DocumentsStatus, Status.Good, (folder.Length == 0 ? $"Using {used}. " : "") + $"It has {string.Join(", ", has)}.");
+            SetStatus(DocumentsIcon, DocumentsStatus, Status.Good, (folder.Length == 0 ? L.T("Settings.Game.DocumentsUsing", used) : "") + L.T("Settings.Game.DocumentsHas", string.Join(", ", has)));
         else if (Directory.Exists(used))
-            SetStatus(DocumentsIcon, DocumentsStatus, Status.Info, (folder.Length == 0 ? $"Using {used}. " : "")
-                + "The game hasn't written its settings there yet: start the game once, or choose where it writes them.");
+            SetStatus(DocumentsIcon, DocumentsStatus, Status.Info, (folder.Length == 0 ? L.T("Settings.Game.DocumentsUsing", used) : "")
+                + L.T("Settings.Game.DocumentsNoSettings"));
         else
             SetStatus(DocumentsIcon, DocumentsStatus, folder.Length == 0 ? Status.Info : Status.Warning, folder.Length == 0
-                ? $"{used} doesn't exist yet: the game makes it the first time it runs."
-                : "That folder doesn't exist.");
+                ? L.T("Settings.Game.DocumentsNotYet", used)
+                : L.T("Settings.Game.DocumentsMissing"));
     }
 
     private void BrowseDocuments_Click(object sender, RoutedEventArgs e)
     {
-        if (Pick("Choose the folder the game keeps its settings in", DocumentsBox.Text.Trim() is { Length: > 0 } now ? now : GameDocuments.Default) is { } folder)
+        if (Pick(L.T("Settings.Game.DocumentsPick"), DocumentsBox.Text.Trim() is { Length: > 0 } now ? now : GameDocuments.Default) is { } folder)
             DocumentsBox.Text = folder;
     }
 
@@ -339,17 +345,16 @@ public partial class SettingsWindow : Window, IMessageHost
     private void UpdateMergerStatus()
     {
         string path = MergerBox.Text.Trim().Trim('"');
-        if (path.Length == 0) SetStatus(MergerIcon, MergerStatus, Status.Info, "Not set. The load order analyser still works; it just can't open the merger for you.");
-        else if (File.Exists(path) && path.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) SetStatus(MergerIcon, MergerStatus, Status.Good, $"Found {Path.GetFileName(path)}.");
-        else SetStatus(MergerIcon, MergerStatus, Status.Warning, "That isn't a program. Choose the merger's .exe.");
+        if (path.Length == 0) SetStatus(MergerIcon, MergerStatus, Status.Info, L.T("Settings.Game.MergerNotSet"));
+        else if (File.Exists(path) && path.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) SetStatus(MergerIcon, MergerStatus, Status.Good, L.T("Settings.Game.MergerFound", Path.GetFileName(path)));
+        else SetStatus(MergerIcon, MergerStatus, Status.Warning, L.T("Settings.Game.MergerWrongFile"));
     }
 
     private void DetectMerger_Click(object sender, RoutedEventArgs e)
     {
         if (ScriptMerger.Find(GameFolderBox.Text.Trim().Trim('"')) is { } found) MergerBox.Text = found;
         else
-            _ = ShowMessage("Script Merger wasn't found",
-                "It isn't in the game folder, Documents or Downloads. Use the folder button to pick its .exe yourself.", MessageKind.Info);
+            _ = ShowMessage(L.T("Settings.Game.MergerMissingTitle"), L.T("Settings.Game.MergerMissing"), MessageKind.Info);
     }
 
     private void BrowseMerger_Click(object sender, RoutedEventArgs e)
@@ -357,8 +362,8 @@ public partial class SettingsWindow : Window, IMessageHost
         string current = MergerBox.Text.Trim().Trim('"');
         var dialog = new OpenFileDialog
         {
-            Title = "Choose Script Merger",
-            Filter = "Programs (*.exe)|*.exe",
+            Title = L.T("Settings.Game.MergerPick"),
+            Filter = L.T("Common.ProgramsFilter"),
             InitialDirectory = File.Exists(current) ? Path.GetDirectoryName(current) : "",
         };
         if (dialog.ShowDialog(this) == true) MergerBox.Text = dialog.FileName;
@@ -370,19 +375,19 @@ public partial class SettingsWindow : Window, IMessageHost
         bool builtIn = CompilerChoice.Pick("", GameFolderBox.Text.Trim(), preferBuiltIn: true) is not null;
         if (path.Length == 0)
             SetStatus(WccIcon, WccStatus, Status.Info, builtIn
-                ? "Not set. Compile uses the built-in compiler, which reads the game's scripts."
-                : "Not set, and the game's scripts weren't found, so Compile is off. Scripts can still be edited and saved.");
+                ? L.T("Settings.Game.WccNotSetBuiltIn")
+                : L.T("Settings.Game.WccNotSetNoScripts"));
         else if (ScriptCompiler.IsWccLite(path))
-            SetStatus(WccIcon, WccStatus, Status.Good, "Found wcc_lite and REDkit's game scripts.");
+            SetStatus(WccIcon, WccStatus, Status.Good, L.T("Settings.Game.WccFound"));
         else
             SetStatus(WccIcon, WccStatus, Status.Warning, File.Exists(path) && Path.GetFileName(path).Equals(ScriptCompiler.ExeName, StringComparison.OrdinalIgnoreCase)
-                ? @"That's wcc_lite, but REDkit's r4data\scripts folder isn't two folders up from it, where it's expected."
-                : @"Choose wcc_lite.exe in REDkit's bin\x64_RedKit folder.");
+                ? L.T("Settings.Game.WccNoScripts")
+                : L.T("Settings.Game.WccWrongFile"));
 
         bool wcc = path.Length > 0 && ScriptCompiler.IsWccLite(path);
         CompilerStatus.Text = CompilerBuiltIn.IsChecked == true || !wcc
-            ? builtIn ? "Compile will use the built-in compiler." : "Neither compiler can run: the game's scripts weren't found. Set the game folder under Game and tools."
-            : "Compile will use wcc_lite.";
+            ? builtIn ? L.T("Settings.Scripts.WillUseBuiltIn") : L.T("Settings.Scripts.WillUseNeither")
+            : L.T("Settings.Scripts.WillUseWcc");
     }
 
     private void DetectWcc_Click(object sender, RoutedEventArgs e)
@@ -390,8 +395,7 @@ public partial class SettingsWindow : Window, IMessageHost
         if (ScriptCompiler.Find() is { } found)
             WccBox.Text = found;
         else
-            _ = ShowMessage("REDkit wasn't found",
-                "It isn't in your Steam or GOG libraries. Use the folder button to pick wcc_lite.exe yourself.", MessageKind.Info);
+            _ = ShowMessage(L.T("Settings.Game.WccMissingTitle"), L.T("Settings.Game.WccMissing"), MessageKind.Info);
     }
 
     private void BrowseWcc_Click(object sender, RoutedEventArgs e)
@@ -399,8 +403,8 @@ public partial class SettingsWindow : Window, IMessageHost
         string current = WccBox.Text.Trim().Trim('"');
         var dialog = new OpenFileDialog
         {
-            Title = "Choose REDkit's wcc_lite.exe",
-            Filter = "wcc_lite (wcc_lite.exe)|wcc_lite.exe|Programs (*.exe)|*.exe",
+            Title = L.T("Settings.Game.WccPick"),
+            Filter = L.T("Settings.Game.WccFilter"),
             InitialDirectory = File.Exists(current) ? Path.GetDirectoryName(current) : "",
         };
         if (dialog.ShowDialog(this) == true) WccBox.Text = dialog.FileName;
@@ -411,13 +415,12 @@ public partial class SettingsWindow : Window, IMessageHost
         if (GameLocator.Find() is { } found)
             GameFolderBox.Text = found;
         else
-            _ = ShowMessage("The Witcher 3 wasn't found",
-                "It isn't in your Steam or GOG libraries. Use the folder button to pick it yourself.", MessageKind.Info);
+            _ = ShowMessage(L.T("Settings.Game.GameMissingTitle"), L.T("Settings.Game.GameMissing"), MessageKind.Info);
     }
 
     private void BrowseGame_Click(object sender, RoutedEventArgs e)
     {
-        if (Pick("Choose The Witcher 3 game folder", GameFolderBox.Text) is { } folder) GameFolderBox.Text = folder;
+        if (Pick(L.T("Settings.Game.GamePick"), GameFolderBox.Text) is { } folder) GameFolderBox.Text = folder;
     }
 
     private string? Pick(string title, string current)
@@ -438,8 +441,8 @@ public partial class SettingsWindow : Window, IMessageHost
 
     // ---------------------------------------------------------------- language
 
-    /// <summary>A language's name as its speakers write it, for the list.</summary>
-    private static string LanguageName(string handle) => handle switch
+    /// <summary>A language's name as its speakers write it, for the list: the same in every language of the app.</summary>
+    private static string LanguageName(string handle) => handle switch // loc-ignore-start
     {
         "en" => "English",
         "pl" => "Polski",
@@ -458,7 +461,34 @@ public partial class SettingsWindow : Window, IMessageHost
         "kr" => "한국어",
         "tr" => "Türkçe",
         _ => handle,
-    };
+    }; // loc-ignore-end
+
+    /// <summary>A choice in the app's language list: "" for the Windows setting, else a language's tag.</summary>
+    private void AddAppLanguage(string tag, string name, string tip)
+    {
+        var button = new RadioButton
+        {
+            Style = (Style)FindResource("Segment"), GroupName = "AppLanguage", Content = name,
+            IsChecked = tag.Equals(_appLanguage, StringComparison.OrdinalIgnoreCase), Margin = new Thickness(0, 0, 4, 4), Tag = null,
+            ToolTip = tip,
+        };
+        button.Checked += (_, _) =>
+        {
+            _appLanguage = tag;
+            UpdateAppLanguageStatus();
+        };
+        AppLanguagePanel.Children.Add(button);
+    }
+
+    /// <summary>The language the app will be in, and for the Windows setting, which language Windows shows.</summary>
+    private void UpdateAppLanguageStatus()
+    {
+        string tag = Loc.Resolve(_appLanguage);
+        string name = Loc.Available.FirstOrDefault(l => l.Tag == tag)?.Name ?? tag;
+        AppLanguageStatus.Text = _appLanguage.Length == 0
+            ? L.T("Settings.Language.AppStatusWindows", System.Globalization.CultureInfo.InstalledUICulture.NativeName, name)
+            : L.T("Settings.Language.AppStatus", name);
+    }
 
     /// <summary>Whether the game installed has the language's text and voices.</summary>
     private void UpdateLanguageStatus()
@@ -466,7 +496,7 @@ public partial class SettingsWindow : Window, IMessageHost
         string? game = GameFolderBox.Text.Trim() is { Length: > 0 } set && GameLocator.IsGameFolder(set) ? set : GameLocator.Find();
         if (game is null)
         {
-            LanguageStatus.Text = "The game wasn't found, so it can't be said which languages it has.";
+            LanguageStatus.Text = L.T("Settings.Language.GameNotFound");
             return;
         }
         string content = Path.Combine(game, "content", "content0");
@@ -475,10 +505,10 @@ public partial class SettingsWindow : Window, IMessageHost
         string name = LanguageName(_language);
         LanguageStatus.Text = (text, voices) switch
         {
-            (true, true) => $"Your game has {name} text and voices.",
-            (true, false) => $"Your game has {name} text, and no {name} voices: scenes use the English voices.",
-            (false, true) => $"Your game has {name} voices but not its text: lines show in English.",
-            _ => $"Your game hasn't {name} installed: lines and voices show in English. Steam and GOG install other languages from the game's properties.",
+            (true, true) => L.T("Settings.Language.HasAll", name),
+            (true, false) => L.T("Settings.Language.HasTextOnly", name),
+            (false, true) => L.T("Settings.Language.HasVoicesOnly", name),
+            _ => L.T("Settings.Language.HasNone", name),
         };
     }
 
@@ -495,7 +525,7 @@ public partial class SettingsWindow : Window, IMessageHost
         if (FontSizeBox.SelectedIndex < 0 || TabWidthBox.SelectedIndex < 0) return;
         EditorSample.FontSize = FontSizes[FontSizeBox.SelectedIndex];
         string tab = new(' ', TabWidths[TabWidthBox.SelectedIndex]);
-        EditorSample.Text = $"function OnSpawned(data : SEntitySpawnData)\n{{\n{tab}if (IsAlive())\n{tab}{{\n{tab}{tab}Heal(10);\n{tab}}}\n}}";
+        EditorSample.Text = $"function OnSpawned(data : SEntitySpawnData)\n{{\n{tab}if (IsAlive())\n{tab}{{\n{tab}{tab}Heal(10);\n{tab}}}\n}}"; // loc-ignore: code
     }
 
     // ---------------------------------------------------------------- privacy
@@ -503,10 +533,9 @@ public partial class SettingsWindow : Window, IMessageHost
     private void UpdateEabStatus()
     {
         bool on = _settings.EasyAssetBrowserOn;
-        string since = DateTime.TryParse(_settings.EasyAssetBrowserAgreed, out var when) ? $" since {when:d MMMM yyyy}" : "";
         SetStatus(EabIcon, EabStatus, on ? Status.Good : Status.Info, on
-            ? $"On{since}: the Asset Browser shows its categories and tags."
-            : "Off: the app doesn't go online at all.");
+            ? DateTime.TryParse(_settings.EasyAssetBrowserAgreed, out var when) ? L.T("Settings.Privacy.EabOnSince", when) : L.T("Settings.Privacy.EabOn")
+            : L.T("Settings.Privacy.EabOff"));
         EabOnButton.Visibility = on ? Visibility.Collapsed : Visibility.Visible;
         EabOffButton.Visibility = EabForgetButton.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
     }
@@ -555,6 +584,7 @@ public partial class SettingsWindow : Window, IMessageHost
         _settings.WccLitePath = WccBox.Text.Trim().Trim('"');
         _settings.ScriptMergerPath = MergerBox.Text.Trim().Trim('"');
         _settings.GameLanguage = _language;
+        _settings.AppLanguage = _appLanguage;
         _settings.PreferBuiltInCompiler = CompilerBuiltIn.IsChecked == true;
         _settings.PreviewOpenIn = OpenInWindows.IsChecked == true ? "Windows" : "Tabs";
         _settings.PreviewSplit = SplitDown.IsChecked == true ? "Down" : "Right";
@@ -565,6 +595,7 @@ public partial class SettingsWindow : Window, IMessageHost
         _settings.PreferRedkitProperties = RedkitPropsCheck.IsChecked == true;
         _settings.TextureDetail = Detail512.IsChecked == true ? 512 : Detail2048.IsChecked == true ? 2048 : DetailFull.IsChecked == true ? 0 : 1024;
         _settings.Save();
+        Loc.Instance.Apply(Loc.Resolve(_settings.AppLanguage));
         PreviewWindow.ApplySettings();
         EditorLook.ApplyAll();
         AssetBrowserWindow.SettingsChanged();
@@ -579,10 +610,10 @@ public partial class SettingsWindow : Window, IMessageHost
         string path = Path.Combine(AppContext.BaseDirectory, "THIRD-PARTY-NOTICES.md");
         byte[] text = File.Exists(path)
             ? File.ReadAllBytes(path)
-            : System.Text.Encoding.UTF8.GetBytes("THIRD-PARTY-NOTICES.md is missing from the app folder.\n\n"
+            : System.Text.Encoding.UTF8.GetBytes(L.T("Settings.Privacy.NoticesMissing") + "\n\n" // loc-ignore-start: the projects' own names
                 + "WitcherScript grammar: witcherscript-vscode by webspam (MIT), https://github.com/webspam/witcherscript-vscode\n"
                 + "Built-in compiler: a port of the compiler webspam wrote for Aelto's tw3-cahirb (MIT), https://github.com/Aelto/tw3-cahirb/pull/1\n"
-                + "Code editor: AvalonEdit by AlphaSierraPapa for the SharpDevelop Team (MIT), https://github.com/icsharpcode/AvalonEdit\n");
+                + "Code editor: AvalonEdit by AlphaSierraPapa for the SharpDevelop Team (MIT), https://github.com/icsharpcode/AvalonEdit\n"); // loc-ignore-end
         PreviewWindow.ShowAlone(new PreviewItem("THIRD-PARTY-NOTICES.md", "W3 Mod Workbench", text), owner);
     }
 
@@ -592,9 +623,7 @@ public partial class SettingsWindow : Window, IMessageHost
         string path = Path.Combine(AppContext.BaseDirectory, "PRIVACY.md");
         byte[] text = File.Exists(path)
             ? File.ReadAllBytes(path)
-            : System.Text.Encoding.UTF8.GetBytes("PRIVACY.md is missing from the app folder.\n\n"
-                + "W3 Mod Workbench collects no information about you. It works offline and goes online only for EasyAssetBrowser tags, "
-                + "which are off until you turn them on: it then downloads their lists from GitHub, which sees your IP address as with any download.\n");
+            : System.Text.Encoding.UTF8.GetBytes(L.T("Settings.Privacy.PrivacyMissing") + "\n\n" + L.T("Settings.Privacy.PrivacySummary") + "\n");
         PreviewWindow.ShowAlone(new PreviewItem("PRIVACY.md", "W3 Mod Workbench", text), owner);
     }
 
@@ -606,7 +635,9 @@ public partial class SettingsWindow : Window, IMessageHost
         PreviewWindow.ShowAlone(new PreviewItem("LICENSE", "W3 Mod Workbench", text), owner);
     }
 
-    private const string LicenceText = """
+    /// <summary>The licence is the same in every language: its English is what's legally given.</summary>
+    private const string LicenceText = // loc-ignore-start
+        """
         MIT License
 
         Copyright (c) 2026 Faen90
@@ -628,7 +659,7 @@ public partial class SettingsWindow : Window, IMessageHost
         LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
         OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
         SOFTWARE.
-        """;
+        """; // loc-ignore-end
 
     protected override void OnClosed(EventArgs e)
     {
@@ -637,7 +668,7 @@ public partial class SettingsWindow : Window, IMessageHost
         base.OnClosed(e);
     }
 
-    public Task ShowMessage(string? title, string message, MessageKind kind) => Message.Show(title, message, kind, primary: "OK");
+    public Task ShowMessage(string? title, string message, MessageKind kind) => Message.Show(title, message, kind, primary: L.T("Common.OK"));
 
     private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
     {

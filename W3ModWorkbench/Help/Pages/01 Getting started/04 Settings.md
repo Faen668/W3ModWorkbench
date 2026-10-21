@@ -2,8 +2,8 @@
 title: Settings
 icon: E713
 order: 4
-summary: Where your work goes, the look of the app, where the game and its tools are, the game's language, the code editors and the 3D views.
-keywords: options preferences theme dark light accent game folder documents proton wine wcc_lite compiler merger language font size tab width texture detail redkit privacy online easyassetbrowser projects folder
+summary: Where your work goes, the look of the app, where the game and its tools are, the app's and the game's language, the code editors and the 3D views.
+keywords: options preferences theme dark light accent game folder documents proton wine wcc_lite compiler merger language translation localisation font size tab width texture detail redkit privacy online easyassetbrowser projects folder
 windows: SettingsWindow
 ---
 Open **Settings** from the toolbar, or press {{Ctrl+,}}. Pick a section on the left. Changes to the look show straight away, so you can try them; **Cancel** puts everything back, and **Save** keeps it.
@@ -48,7 +48,13 @@ if (type == EACIT_Potion)
 
 ## Language
 
-The language of the game's text and voices the viewers start in. Each viewer's own language list can still change it while you look.
+Two languages, set apart: the app's own, and the game's.
+
+**The app's language** is the language of the app's windows, menus, messages and this guide. **Windows setting** uses the language Windows shows when the app has it, else English; under the list it says which that is. Most text changes as soon as you **Save**. Text a window has already filled in changes when the window is opened again, or the app restarts. A guide page not translated yet shows in English.
+
+> tip: Want the app in your language? LOCALISATION.md, with the app's source on GitHub, says how to translate it.
+
+**The game's language** is the language of the game's text and voices the viewers start in. Each viewer's own language list can still change it while you look.
 
 | Where | What follows the language |
 |---|---|

@@ -35,6 +35,7 @@ public partial class App : Application
             return;
         }
         ApplyTheme(Settings.Theme, Settings.ThemePreset);
+        Localisation.Loc.Instance.Apply(Localisation.Loc.Resolve(Settings.AppLanguage));
 
         // F1 in any window opens the guide at that window's page (the main window opens it at the start)
         EventManager.RegisterClassHandler(typeof(Window), System.Windows.Input.Keyboard.PreviewKeyDownEvent,

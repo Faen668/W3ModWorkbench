@@ -5,6 +5,10 @@ VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "W3ModWorkbench", "W3ModWorkbench\W3ModWorkbench.csproj", "{14CAF03F-1FD8-4933-B809-C97E83F3B238}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tools", "tools", "{07C2787E-EAC7-C090-1BA3-A61EC2A24D84}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "StringCheck", "tools\StringCheck\StringCheck.csproj", "{629B898F-227D-434F-88A1-C9FA609CD67C}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -27,8 +31,23 @@ Global
 		{14CAF03F-1FD8-4933-B809-C97E83F3B238}.Release|x64.Build.0 = Release|Any CPU
 		{14CAF03F-1FD8-4933-B809-C97E83F3B238}.Release|x86.ActiveCfg = Release|Any CPU
 		{14CAF03F-1FD8-4933-B809-C97E83F3B238}.Release|x86.Build.0 = Release|Any CPU
+		{629B898F-227D-434F-88A1-C9FA609CD67C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{629B898F-227D-434F-88A1-C9FA609CD67C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{629B898F-227D-434F-88A1-C9FA609CD67C}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{629B898F-227D-434F-88A1-C9FA609CD67C}.Debug|x64.Build.0 = Debug|Any CPU
+		{629B898F-227D-434F-88A1-C9FA609CD67C}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{629B898F-227D-434F-88A1-C9FA609CD67C}.Debug|x86.Build.0 = Debug|Any CPU
+		{629B898F-227D-434F-88A1-C9FA609CD67C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{629B898F-227D-434F-88A1-C9FA609CD67C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{629B898F-227D-434F-88A1-C9FA609CD67C}.Release|x64.ActiveCfg = Release|Any CPU
+		{629B898F-227D-434F-88A1-C9FA609CD67C}.Release|x64.Build.0 = Release|Any CPU
+		{629B898F-227D-434F-88A1-C9FA609CD67C}.Release|x86.ActiveCfg = Release|Any CPU
+		{629B898F-227D-434F-88A1-C9FA609CD67C}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{629B898F-227D-434F-88A1-C9FA609CD67C} = {07C2787E-EAC7-C090-1BA3-A61EC2A24D84}
 	EndGlobalSection
 EndGlobal

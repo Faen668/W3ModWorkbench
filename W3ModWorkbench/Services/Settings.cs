@@ -155,6 +155,12 @@ public sealed class Settings
     /// <summary>The language of the game's text and voices the viewers start in: subtitles, lines, strings. A handle such as "en" or "de".</summary>
     public string GameLanguage { get; set; } = "en";
 
+    /// <summary>
+    /// The language of the app's own text and guide, by its tag (de, pt-BR). Empty for the language Windows shows when
+    /// the app has it, else English.
+    /// </summary>
+    public string AppLanguage { get; set; } = "";
+
     /// <summary>The folder the game keeps input.settings, mods.settings and scriptslog.txt in. Empty for Documents\The Witcher 3.</summary>
     public string GameDocumentsFolder { get; set; } = "";
 

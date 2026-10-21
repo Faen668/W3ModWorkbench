@@ -2,7 +2,8 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:W3ModWorkbench"
-        Title="Settings" Icon="pack://application:,,,/W3ModWorkbench;component/Assets/app.ico"
+        xmlns:l="clr-namespace:W3ModWorkbench.Localisation"
+        Title="{l:T Settings.Title}" Icon="pack://application:,,,/W3ModWorkbench;component/Assets/app.ico"
         Width="920" Height="720" MinWidth="680" MinHeight="460"
         WindowStartupLocation="CenterOwner" ResizeMode="CanResizeWithGrip" ShowInTaskbar="False"
         PreviewKeyDown="Window_PreviewKeyDown">
@@ -162,13 +163,13 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="210" />
+            <ColumnDefinition Width="Auto" MinWidth="210" />
             <ColumnDefinition Width="*" />
         </Grid.ColumnDefinitions>
 
         <!-- the sections -->
         <DockPanel Margin="12,16,4,8">
-            <TextBlock DockPanel.Dock="Top" Text="Settings" FontSize="13" Opacity="0.6" Margin="12,0,0,8" />
+            <TextBlock DockPanel.Dock="Top" Text="{l:T Settings.Title}" FontSize="13" Opacity="0.6" Margin="12,0,0,8" />
             <ListBox x:Name="Nav" BorderThickness="0" Background="Transparent" ItemContainerStyle="{StaticResource NavItem}"
                      SelectionChanged="Nav_SelectionChanged" ScrollViewer.HorizontalScrollBarVisibility="Disabled" />
         </DockPanel>
@@ -177,26 +178,26 @@
             <Grid>
                 <!-- General -->
                 <StackPanel x:Name="GeneralPage">
-                    <TextBlock Style="{StaticResource PageTitle}" Text="General" />
-                    <TextBlock Style="{StaticResource PageIntro}" Text="Where your work goes, and what the app does when it starts." />
+                    <TextBlock Style="{StaticResource PageTitle}" Text="{l:T Settings.Nav.General}" />
+                    <TextBlock Style="{StaticResource PageIntro}" Text="{l:T Settings.General.Intro}" />
 
                     <Border Style="{StaticResource Card}">
                         <StackPanel>
-                            <TextBlock Style="{StaticResource SectionTitle}" Text="Projects" />
-                            <TextBlock Text="Where new projects go" Margin="0,4,0,6" />
+                            <TextBlock Style="{StaticResource SectionTitle}" Text="{l:T Settings.General.Projects}" />
+                            <TextBlock Text="{l:T Settings.General.ProjectsFolder}" Margin="0,4,0,6" />
                             <Grid>
                                 <TextBox x:Name="ProjectsBox" Style="{StaticResource PathBox}" />
-                                <Button Style="{StaticResource BrowseButton}" Click="BrowseProjects_Click" ToolTip="Choose a folder">
+                                <Button Style="{StaticResource BrowseButton}" Click="BrowseProjects_Click" ToolTip="{l:T Common.ChooseFolder}">
                                     <TextBlock Style="{StaticResource Icon}" Text="&#xE8DA;" />
                                 </Button>
                             </Grid>
                             <TextBlock x:Name="ProjectsStatus" Style="{StaticResource Hint}" />
-                            <CheckBox x:Name="ReopenProjectCheck" Content="Open the last project again when the app starts" Margin="0,14,0,0" />
+                            <CheckBox x:Name="ReopenProjectCheck" Content="{l:T Settings.General.ReopenProject}" Margin="0,14,0,0" />
                             <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
                                 <Button x:Name="ClearRecentButton" Padding="12,5" Click="ClearRecent_Click">
                                     <StackPanel Orientation="Horizontal">
                                         <TextBlock Style="{StaticResource Icon}" Text="&#xE74D;" />
-                                        <TextBlock Margin="8,0,0,0" Text="Clear the recent lists" />
+                                        <TextBlock Margin="8,0,0,0" Text="{l:T Settings.General.ClearRecent}" />
                                     </StackPanel>
                                 </Button>
                                 <TextBlock x:Name="RecentStatus" Style="{StaticResource Hint}" VerticalAlignment="Center" Margin="12,0,0,0" />
@@ -206,33 +207,33 @@
 
                     <Border Style="{StaticResource Card}">
                         <StackPanel>
-                            <TextBlock Style="{StaticResource SectionTitle}" Text="Extracting" />
-                            <TextBlock Text="Where extracted files go unless you choose" Margin="0,4,0,6" />
+                            <TextBlock Style="{StaticResource SectionTitle}" Text="{l:T Settings.General.Extracting}" />
+                            <TextBlock Text="{l:T Settings.General.OutputFolder}" Margin="0,4,0,6" />
                             <Grid>
                                 <TextBox x:Name="OutputBox" Style="{StaticResource PathBox}" />
-                                <Button Style="{StaticResource BrowseButton}" Click="BrowseOutput_Click" ToolTip="Choose a folder">
+                                <Button Style="{StaticResource BrowseButton}" Click="BrowseOutput_Click" ToolTip="{l:T Common.ChooseFolder}">
                                     <TextBlock Style="{StaticResource Icon}" Text="&#xE8DA;" />
                                 </Button>
                             </Grid>
-                            <CheckBox x:Name="KeepStructureCheck" Content="Keep the game's folders under it" Margin="0,12,0,0" />
-                            <CheckBox x:Name="OpenWhenDoneCheck" Content="Open the folder when extracting finishes" Margin="0,4,0,0" />
-                            <TextBlock Style="{StaticResource Hint}" Text="The extract bar under the file list has these too, with the choices for one extraction (textures as PNG, CR2W as JSON)." />
+                            <CheckBox x:Name="KeepStructureCheck" Content="{l:T Settings.General.KeepStructure}" Margin="0,12,0,0" />
+                            <CheckBox x:Name="OpenWhenDoneCheck" Content="{l:T Settings.General.OpenWhenDone}" Margin="0,4,0,0" />
+                            <TextBlock Style="{StaticResource Hint}" Text="{l:T Settings.General.ExtractHint}" />
                         </StackPanel>
                     </Border>
 
                     <Border Style="{StaticResource Card}">
                         <StackPanel>
-                            <TextBlock Style="{StaticResource SectionTitle}" Text="Files more than one archive has" />
-                            <CheckBox x:Name="AskCopyCheck" Content="Ask which copy to open, when a mod or DLC has its own copy of a game file" Margin="0,4,0,0" />
-                            <TextBlock Style="{StaticResource Hint}" Text="Off, the Asset Browser opens the copy the game loads. The Asset Browser's Ask which copy button is the same choice." />
+                            <TextBlock Style="{StaticResource SectionTitle}" Text="{l:T Settings.General.Copies}" />
+                            <CheckBox x:Name="AskCopyCheck" Content="{l:T Settings.General.AskCopy}" Margin="0,4,0,0" />
+                            <TextBlock Style="{StaticResource Hint}" Text="{l:T Settings.General.AskCopyHint}" />
                         </StackPanel>
                     </Border>
                 </StackPanel>
 
                 <!-- Appearance -->
                 <StackPanel x:Name="AppearancePage" Visibility="Collapsed">
-                    <TextBlock Style="{StaticResource PageTitle}" Text="Appearance" />
-                    <TextBlock Style="{StaticResource PageIntro}" Text="Changes show straight away. Cancel puts them back." />
+                    <TextBlock Style="{StaticResource PageTitle}" Text="{l:T Settings.Nav.Appearance}" />
+                    <TextBlock Style="{StaticResource PageIntro}" Text="{l:T Settings.Appearance.Intro}" />
                     <Border Style="{StaticResource Card}">
                         <StackPanel>
                             <!-- a small preview window in the chosen colours -->
@@ -243,7 +244,7 @@
                                         <Button DockPanel.Dock="Right" Style="{DynamicResource AccentButtonStyle}" Padding="12,3" Focusable="False">
                                             <StackPanel Orientation="Horizontal">
                                                 <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE74E;" FontSize="12" VerticalAlignment="Center" />
-                                                <TextBlock Margin="6,0,0,0" Text="Save as" FontSize="12" />
+                                                <TextBlock Margin="6,0,0,0" Text="{l:T Settings.Appearance.SampleSaveAs}" FontSize="12" />
                                             </StackPanel>
                                         </Button>
                                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
@@ -267,27 +268,27 @@
                                         <ContentControl x:Name="SampleCode" Focusable="False" />
                                     </Border>
                                     <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
-                                        <CheckBox IsChecked="True" Content="Keep folder structure" Focusable="False" />
-                                        <RadioButton IsChecked="True" Content="Tabs" Margin="18,0,0,0" Focusable="False" GroupName="SampleGroup" />
+                                        <CheckBox IsChecked="True" Content="{l:T Settings.Appearance.SampleKeepStructure}" Focusable="False" />
+                                        <RadioButton IsChecked="True" Content="{l:T Settings.Appearance.SampleTabs}" Margin="18,0,0,0" Focusable="False" GroupName="SampleGroup" />
                                     </StackPanel>
                                 </StackPanel>
                             </Border>
 
-                            <TextBlock Text="Mode" Margin="0,16,0,6" />
+                            <TextBlock Text="{l:T Settings.Appearance.Mode}" Margin="0,16,0,6" />
                             <Border Style="{StaticResource SegmentRow}">
                                 <StackPanel Orientation="Horizontal">
                                     <RadioButton x:Name="ThemeSystem" GroupName="Theme" Style="{StaticResource Segment}" Checked="Theme_Checked"
-                                                 Tag="&#xE770;" Content="Windows setting" />
+                                                 Tag="&#xE770;" Content="{l:T Settings.Appearance.ModeSystem}" />
                                     <RadioButton x:Name="ThemeLight" GroupName="Theme" Style="{StaticResource Segment}" Checked="Theme_Checked"
-                                                 Tag="&#xE706;" Content="Light" />
+                                                 Tag="&#xE706;" Content="{l:T Settings.Appearance.ModeLight}" />
                                     <RadioButton x:Name="ThemeDark" GroupName="Theme" Style="{StaticResource Segment}" Checked="Theme_Checked"
-                                                 Tag="&#xE708;" Content="Dark" />
+                                                 Tag="&#xE708;" Content="{l:T Settings.Appearance.ModeDark}" />
                                 </StackPanel>
                             </Border>
 
-                            <TextBlock Text="Theme" Margin="0,16,0,2" />
+                            <TextBlock Text="{l:T Settings.Appearance.Theme}" Margin="0,16,0,2" />
                             <TextBlock Style="{StaticResource Hint}" Margin="0,0,0,10"
-                                       Text="Accent and background colours. Windows uses your Windows accent colour and see-through window background; the others are named after the witcher schools." />
+                                       Text="{l:T Settings.Appearance.ThemeHint}" />
                             <WrapPanel x:Name="PresetPanel" />
                         </StackPanel>
                     </Border>
@@ -295,149 +296,158 @@
 
                 <!-- Game and tools -->
                 <StackPanel x:Name="GamePage" Visibility="Collapsed">
-                    <TextBlock Style="{StaticResource PageTitle}" Text="Game and tools" />
-                    <TextBlock Style="{StaticResource PageIntro}" Text="Where the game, its settings and the other tools are. Each is found by itself when it can be; set one when it isn't, or to use another." />
+                    <TextBlock Style="{StaticResource PageTitle}" Text="{l:T Settings.Nav.Game}" />
+                    <TextBlock Style="{StaticResource PageIntro}" Text="{l:T Settings.Game.Intro}" />
 
                     <Border Style="{StaticResource Card}">
                         <StackPanel>
-                            <TextBlock Style="{StaticResource SectionTitle}" Text="Game folder" />
-                            <TextBlock TextWrapping="Wrap" Text="Where The Witcher 3 is installed: its bundles, scripts, mods and DLC. It's found in your Steam and GOG libraries when this is empty." />
+                            <TextBlock Style="{StaticResource SectionTitle}" Text="{l:T Settings.Game.GameFolder}" />
+                            <TextBlock TextWrapping="Wrap" Text="{l:T Settings.Game.GameFolderAbout}" />
                             <Grid Margin="0,10,0,0">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
                                 <TextBox x:Name="GameFolderBox" Style="{StaticResource PathBox}" />
-                                <Button Style="{StaticResource BrowseButton}" Click="BrowseGame_Click" ToolTip="Choose the game folder">
+                                <Button Style="{StaticResource BrowseButton}" Click="BrowseGame_Click" ToolTip="{l:T Settings.Game.GameFolderPickTip}">
                                     <TextBlock Style="{StaticResource Icon}" Text="&#xE8DA;" />
                                 </Button>
                                 <Button Grid.Column="1" Margin="8,0,0,0" Padding="12,6" Click="DetectGame_Click"
-                                        ToolTip="Look for The Witcher 3 in your Steam and GOG libraries">
+                                        ToolTip="{l:T Settings.Game.GameFolderFindTip}">
                                     <StackPanel Orientation="Horizontal">
                                         <TextBlock Style="{StaticResource Icon}" Text="&#xE721;" />
-                                        <TextBlock Margin="8,0,0,0" Text="Find automatically" />
+                                        <TextBlock Margin="8,0,0,0" Text="{l:T Common.FindAutomatically}" />
                                     </StackPanel>
                                 </Button>
                             </Grid>
-                            <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
-                                <TextBlock x:Name="GameFolderIcon" Style="{StaticResource Icon}" Margin="0,0,8,0" />
+                            <DockPanel Margin="0,8,0,0">
+                                <TextBlock x:Name="GameFolderIcon" DockPanel.Dock="Left" Style="{StaticResource Icon}" VerticalAlignment="Top" Margin="0,2,8,0" />
                                 <TextBlock x:Name="GameFolderStatus" TextWrapping="Wrap" />
-                            </StackPanel>
+                            </DockPanel>
                         </StackPanel>
                     </Border>
 
                     <Border Style="{StaticResource Card}">
                         <StackPanel>
-                            <TextBlock Style="{StaticResource SectionTitle}" Text="The game's own settings folder" />
+                            <TextBlock Style="{StaticResource SectionTitle}" Text="{l:T Settings.Game.Documents}" />
                             <TextBlock TextWrapping="Wrap"
-                                       Text="Where the game keeps input.settings (key bindings), mods.settings (mod priorities) and scriptslog.txt. It's Documents\The Witcher 3 on Windows; set it when your game writes elsewhere, such as under Proton or Wine, or when Documents was moved." />
+                                       Text="{l:T Settings.Game.DocumentsAbout}" />
                             <Grid Margin="0,10,0,0">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
                                 <TextBox x:Name="DocumentsBox" Style="{StaticResource PathBox}" />
-                                <Button Style="{StaticResource BrowseButton}" Click="BrowseDocuments_Click" ToolTip="Choose the folder">
+                                <Button Style="{StaticResource BrowseButton}" Click="BrowseDocuments_Click" ToolTip="{l:T Settings.Game.DocumentsPickTip}">
                                     <TextBlock Style="{StaticResource Icon}" Text="&#xE8DA;" />
                                 </Button>
                                 <Button Grid.Column="1" Margin="8,0,0,0" Padding="12,6" Click="DefaultDocuments_Click"
-                                        ToolTip="Empty the box, for Documents\The Witcher 3">
+                                        ToolTip="{l:T Settings.Game.DocumentsDefaultTip}">
                                     <StackPanel Orientation="Horizontal">
                                         <TextBlock Style="{StaticResource Icon}" Text="&#xE777;" />
-                                        <TextBlock Margin="8,0,0,0" Text="Use the usual one" />
+                                        <TextBlock Margin="8,0,0,0" Text="{l:T Settings.Game.DocumentsDefault}" />
                                     </StackPanel>
                                 </Button>
                             </Grid>
-                            <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
-                                <TextBlock x:Name="DocumentsIcon" Style="{StaticResource Icon}" Margin="0,0,8,0" />
+                            <DockPanel Margin="0,8,0,0">
+                                <TextBlock x:Name="DocumentsIcon" DockPanel.Dock="Left" Style="{StaticResource Icon}" VerticalAlignment="Top" Margin="0,2,8,0" />
                                 <TextBlock x:Name="DocumentsStatus" TextWrapping="Wrap" />
-                            </StackPanel>
+                            </DockPanel>
                         </StackPanel>
                     </Border>
 
                     <Border Style="{StaticResource Card}">
                         <StackPanel>
                             <TextBlock Style="{StaticResource SectionTitle}">
-                                <Run Text="REDkit's wcc_lite" />
-                                <Run Text="(optional)" FontWeight="Normal" FontSize="13" />
+                                <Run Text="{l:T Settings.Game.Wcc}" />
+                                <Run Text="{l:T Common.Optional}" FontWeight="Normal" FontSize="13" />
                             </TextBlock>
                             <TextBlock TextWrapping="Wrap"
-                                       Text="REDkit's own tool, for compiling scripts the way publishing from REDkit does. REDkit's source files, found beside it, also fill in the properties cooking leaves out of the game's files." />
+                                       Text="{l:T Settings.Game.WccAbout}" />
                             <Grid Margin="0,10,0,0">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
                                 <TextBox x:Name="WccBox" Style="{StaticResource PathBox}" />
-                                <Button Style="{StaticResource BrowseButton}" Click="BrowseWcc_Click" ToolTip="Choose wcc_lite.exe">
+                                <Button Style="{StaticResource BrowseButton}" Click="BrowseWcc_Click" ToolTip="{l:T Settings.Game.WccPickTip}">
                                     <TextBlock Style="{StaticResource Icon}" Text="&#xE8DA;" />
                                 </Button>
                                 <Button Grid.Column="1" Margin="8,0,0,0" Padding="12,6" Click="DetectWcc_Click"
-                                        ToolTip="Look for REDkit in your Steam and GOG libraries">
+                                        ToolTip="{l:T Settings.Game.WccFindTip}">
                                     <StackPanel Orientation="Horizontal">
                                         <TextBlock Style="{StaticResource Icon}" Text="&#xE721;" />
-                                        <TextBlock Margin="8,0,0,0" Text="Find automatically" />
+                                        <TextBlock Margin="8,0,0,0" Text="{l:T Common.FindAutomatically}" />
                                     </StackPanel>
                                 </Button>
                             </Grid>
-                            <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
-                                <TextBlock x:Name="WccIcon" Style="{StaticResource Icon}" Margin="0,0,8,0" />
+                            <DockPanel Margin="0,8,0,0">
+                                <TextBlock x:Name="WccIcon" DockPanel.Dock="Left" Style="{StaticResource Icon}" VerticalAlignment="Top" Margin="0,2,8,0" />
                                 <TextBlock x:Name="WccStatus" TextWrapping="Wrap" />
-                            </StackPanel>
+                            </DockPanel>
                             <TextBlock Style="{StaticResource Hint}" Margin="0,10,0,0"
-                                       Text="REDkit is free on Steam and GOG for owners of the game. wcc_lite is in its bin\x64_RedKit folder." />
+                                       Text="{l:T Settings.Game.WccHint}" />
                         </StackPanel>
                     </Border>
 
                     <Border Style="{StaticResource Card}">
                         <StackPanel>
                             <TextBlock Style="{StaticResource SectionTitle}">
-                                <Run Text="Script Merger" />
-                                <Run Text="(optional)" FontWeight="Normal" FontSize="13" />
+                                <Run Text="{l:T Settings.Game.Merger}" />
+                                <Run Text="{l:T Common.Optional}" FontWeight="Normal" FontSize="13" />
                             </TextBlock>
                             <TextBlock TextWrapping="Wrap"
-                                       Text="Script Merger Remastered by relapse12, which merges mods that change the same scripts or files. The load order analyser suggests it for clashes and opens it from a button." />
+                                       Text="{l:T Settings.Game.MergerAbout}" />
                             <Grid Margin="0,10,0,0">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
                                 <TextBox x:Name="MergerBox" Style="{StaticResource PathBox}" />
-                                <Button Style="{StaticResource BrowseButton}" Click="BrowseMerger_Click" ToolTip="Choose the Script Merger program">
+                                <Button Style="{StaticResource BrowseButton}" Click="BrowseMerger_Click" ToolTip="{l:T Settings.Game.MergerPickTip}">
                                     <TextBlock Style="{StaticResource Icon}" Text="&#xE8DA;" />
                                 </Button>
                                 <Button Grid.Column="1" Margin="8,0,0,0" Padding="12,6" Click="DetectMerger_Click"
-                                        ToolTip="Look in the game folder, Documents and Downloads">
+                                        ToolTip="{l:T Settings.Game.MergerFindTip}">
                                     <StackPanel Orientation="Horizontal">
                                         <TextBlock Style="{StaticResource Icon}" Text="&#xE721;" />
-                                        <TextBlock Margin="8,0,0,0" Text="Find automatically" />
+                                        <TextBlock Margin="8,0,0,0" Text="{l:T Common.FindAutomatically}" />
                                     </StackPanel>
                                 </Button>
                             </Grid>
-                            <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
-                                <TextBlock x:Name="MergerIcon" Style="{StaticResource Icon}" Margin="0,0,8,0" />
+                            <DockPanel Margin="0,8,0,0">
+                                <TextBlock x:Name="MergerIcon" DockPanel.Dock="Left" Style="{StaticResource Icon}" VerticalAlignment="Top" Margin="0,2,8,0" />
                                 <TextBlock x:Name="MergerStatus" TextWrapping="Wrap" />
-                            </StackPanel>
+                            </DockPanel>
                             <TextBlock Style="{StaticResource Hint}" Margin="0,10,0,0"
-                                       Text="It's a separate download (nexusmods.com/witcher3/mods/13076). This app only starts it; it doesn't bundle or change it." />
+                                       Text="{l:T Settings.Game.MergerHint}" />
                         </StackPanel>
                     </Border>
                 </StackPanel>
 
                 <!-- Language -->
                 <StackPanel x:Name="LanguagePage" Visibility="Collapsed">
-                    <TextBlock Style="{StaticResource PageTitle}" Text="Language" />
-                    <TextBlock Style="{StaticResource PageIntro}" Text="The language of the game's text and voices the viewers start in. Each viewer's own language list can still change it for a while." />
+                    <TextBlock Style="{StaticResource PageTitle}" Text="{l:T Settings.Nav.Language}" />
+                    <TextBlock Style="{StaticResource PageIntro}" Text="{l:T Settings.Language.Intro}" />
                     <Border Style="{StaticResource Card}">
                         <StackPanel>
-                            <TextBlock Style="{StaticResource SectionTitle}" Text="The game's language" />
+                            <TextBlock Style="{StaticResource SectionTitle}" Text="{l:T Settings.Language.App}" />
+                            <WrapPanel x:Name="AppLanguagePanel" Margin="0,6,0,0" />
+                            <TextBlock x:Name="AppLanguageStatus" Style="{StaticResource Hint}" Margin="0,8,0,0" />
+                            <TextBlock Style="{StaticResource Hint}" Text="{l:T Settings.Language.AppHint}" />
+                        </StackPanel>
+                    </Border>
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource SectionTitle}" Text="{l:T Settings.Language.Game}" />
+                            <TextBlock TextWrapping="Wrap" Text="{l:T Settings.Language.GameIntro}" />
                             <WrapPanel x:Name="LanguagePanel" Margin="0,6,0,0" />
                             <TextBlock x:Name="LanguageStatus" Style="{StaticResource Hint}" Margin="0,8,0,0" />
-                            <TextBlock Style="{StaticResource Label}" Text="Used for" />
+                            <TextBlock Style="{StaticResource Label}" Text="{l:T Settings.Language.UsedFor}" />
                             <TextBlock TextWrapping="Wrap" LineHeight="21">
-                                <Run Text="•  Scenes: their lines and subtitles, and the voices, which are English where a language has none." /><LineBreak />
-                                <Run Text="•  Cutscenes: their lines. Their voices stay English, as the animation and lip sync are timed to them." /><LineBreak />
-                                <Run Text="•  The game strings search, and the strings editor when a file doesn't say its language." />
+                                <Run Text="{l:T Settings.Language.UsedForScenes}" /><LineBreak />
+                                <Run Text="{l:T Settings.Language.UsedForCutscenes}" /><LineBreak />
+                                <Run Text="{l:T Settings.Language.UsedForStrings}" />
                             </TextBlock>
                         </StackPanel>
                     </Border>
@@ -445,32 +455,32 @@
 
                 <!-- Scripts -->
                 <StackPanel x:Name="ScriptsPage" Visibility="Collapsed">
-                    <TextBlock Style="{StaticResource PageTitle}" Text="Scripts and editors" />
-                    <TextBlock Style="{StaticResource PageIntro}" Text="How scripts are compiled, how files open, and how the code editors look and help." />
+                    <TextBlock Style="{StaticResource PageTitle}" Text="{l:T Settings.Nav.Scripts}" />
+                    <TextBlock Style="{StaticResource PageIntro}" Text="{l:T Settings.Scripts.Intro}" />
 
                     <Border Style="{StaticResource Card}">
                         <StackPanel>
-                            <TextBlock Style="{StaticResource SectionTitle}" Text="Compiling" />
-                            <RadioButton x:Name="CompilerAuto" GroupName="Compiler" Content="wcc_lite when it's set, else the built-in compiler" Margin="0,4,0,0" />
-                            <RadioButton x:Name="CompilerBuiltIn" GroupName="Compiler" Content="Always the built-in compiler" Margin="0,4,0,0" />
+                            <TextBlock Style="{StaticResource SectionTitle}" Text="{l:T Settings.Scripts.Compiling}" />
+                            <RadioButton x:Name="CompilerAuto" GroupName="Compiler" Content="{l:T Settings.Scripts.CompilerAuto}" Margin="0,4,0,0" />
+                            <RadioButton x:Name="CompilerBuiltIn" GroupName="Compiler" Content="{l:T Settings.Scripts.CompilerBuiltIn}" Margin="0,4,0,0" />
                             <TextBlock x:Name="CompilerStatus" Style="{StaticResource Hint}" />
                             <TextBlock Style="{StaticResource Hint}"
-                                       Text="The built-in compiler takes a second and needs only the game's scripts. wcc_lite takes about a minute and is the game's own, so use it for a release. Both write the same precompiled.rsblob." />
+                                       Text="{l:T Settings.Scripts.CompilerHint}" />
                         </StackPanel>
                     </Border>
 
                     <Border Style="{StaticResource Card}">
                         <StackPanel>
-                            <TextBlock Style="{StaticResource SectionTitle}" Text="Opening files" />
-                            <RadioButton x:Name="OpenInTabs" GroupName="OpenIn" Content="Tabs in one window" Margin="0,4,0,0" />
-                            <RadioButton x:Name="OpenInWindows" GroupName="OpenIn" Content="A window for each file" Margin="0,4,0,0" />
+                            <TextBlock Style="{StaticResource SectionTitle}" Text="{l:T Settings.Scripts.OpeningFiles}" />
+                            <RadioButton x:Name="OpenInTabs" GroupName="OpenIn" Content="{l:T Settings.Scripts.OpenInTabs}" Margin="0,4,0,0" />
+                            <RadioButton x:Name="OpenInWindows" GroupName="OpenIn" Content="{l:T Settings.Scripts.OpenInWindows}" Margin="0,4,0,0" />
                             <TextBlock Style="{StaticResource Hint}"
-                                       Text="For the files that open in the preview window, such as text and strings. Scripts always open in Script Bench. A file that's open already is brought forward instead of opening twice." />
-                            <TextBlock Style="{StaticResource Label}" Text="Split view (Ctrl+\)" />
+                                       Text="{l:T Settings.Scripts.OpenHint}" />
+                            <TextBlock Style="{StaticResource Label}" Text="{l:T Settings.Scripts.Split}" />
                             <Border Style="{StaticResource SegmentRow}">
                                 <StackPanel Orientation="Horizontal">
-                                    <RadioButton x:Name="SplitRight" GroupName="Split" Style="{StaticResource Segment}" Tag="&#xE89F;" Content="Side by side" />
-                                    <RadioButton x:Name="SplitDown" GroupName="Split" Style="{StaticResource Segment}" Tag="&#xE8A0;" Content="Top and bottom" />
+                                    <RadioButton x:Name="SplitRight" GroupName="Split" Style="{StaticResource Segment}" Tag="&#xE89F;" Content="{l:T Settings.Scripts.SplitRight}" />
+                                    <RadioButton x:Name="SplitDown" GroupName="Split" Style="{StaticResource Segment}" Tag="&#xE8A0;" Content="{l:T Settings.Scripts.SplitDown}" />
                                 </StackPanel>
                             </Border>
                         </StackPanel>
@@ -478,7 +488,7 @@
 
                     <Border Style="{StaticResource Card}">
                         <StackPanel>
-                            <TextBlock Style="{StaticResource SectionTitle}" Text="The code editors" />
+                            <TextBlock Style="{StaticResource SectionTitle}" Text="{l:T Settings.Scripts.Editors}" />
                             <Grid Margin="0,4,0,0">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" />
@@ -486,90 +496,90 @@
                                     <ColumnDefinition Width="Auto" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Text="Font size" VerticalAlignment="Center" Margin="0,0,10,0" />
+                                <TextBlock Text="{l:T Settings.Scripts.FontSize}" VerticalAlignment="Center" Margin="0,0,10,0" />
                                 <ComboBox x:Name="FontSizeBox" Grid.Column="1" Width="90" SelectionChanged="EditorLook_Changed" />
-                                <TextBlock Grid.Column="2" Text="Tab width" VerticalAlignment="Center" Margin="24,0,10,0" />
+                                <TextBlock Grid.Column="2" Text="{l:T Settings.Scripts.TabWidth}" VerticalAlignment="Center" Margin="24,0,10,0" />
                                 <ComboBox x:Name="TabWidthBox" Grid.Column="3" Width="120" SelectionChanged="EditorLook_Changed" />
                             </Grid>
                             <Border CornerRadius="6" BorderThickness="1" Padding="10,8" Margin="0,12,0,0"
                                     Background="{DynamicResource SubtleFillColorSecondaryBrush}" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}">
                                 <TextBlock x:Name="EditorSample" FontFamily="Cascadia Mono, Consolas, Courier New" xml:space="preserve" />
                             </Border>
-                            <TextBlock Style="{StaticResource Hint}" Text="For scripts, XML and stubs. The game's own scripts are indented with tabs, so the tab width is how far in their code sits. JSON keeps its two spaces." />
-                            <CheckBox x:Name="PeekCheck" Content="Show a name's declaration when the mouse rests on it in a script" Margin="0,14,0,0" />
-                            <CheckBox x:Name="CompleteCheck" Content="Suggest names while typing in a script (Ctrl+Space suggests them any time)" Margin="0,6,0,0" />
+                            <TextBlock Style="{StaticResource Hint}" Text="{l:T Settings.Scripts.EditorsHint}" />
+                            <CheckBox x:Name="PeekCheck" Content="{l:T Settings.Scripts.Peek}" Margin="0,14,0,0" />
+                            <CheckBox x:Name="CompleteCheck" Content="{l:T Settings.Scripts.Complete}" Margin="0,6,0,0" />
                         </StackPanel>
                     </Border>
                 </StackPanel>
 
                 <!-- Viewers -->
                 <StackPanel x:Name="ViewersPage" Visibility="Collapsed">
-                    <TextBlock Style="{StaticResource PageTitle}" Text="Viewers" />
-                    <TextBlock Style="{StaticResource PageIntro}" Text="What the viewers read, and how much detail the 3D views load." />
+                    <TextBlock Style="{StaticResource PageTitle}" Text="{l:T Settings.Nav.Viewers}" />
+                    <TextBlock Style="{StaticResource PageIntro}" Text="{l:T Settings.Viewers.Intro}" />
 
                     <Border Style="{StaticResource Card}">
                         <StackPanel>
-                            <TextBlock Style="{StaticResource SectionTitle}" Text="Properties of the game's files" />
-                            <CheckBox x:Name="RedkitPropsCheck" Content="Read them from REDkit's source files when REDkit has one" Margin="0,4,0,0" />
+                            <TextBlock Style="{StaticResource SectionTitle}" Text="{l:T Settings.Viewers.Properties}" />
+                            <CheckBox x:Name="RedkitPropsCheck" Content="{l:T Settings.Viewers.RedkitProps}" Margin="0,4,0,0" />
                             <TextBlock Style="{StaticResource Hint}"
-                                       Text="Cooking leaves out what the game doesn't need to run, such as defaults and editor notes, which REDkit's source copies keep. Off, the viewers show the game's cooked file only, exactly as the game reads it. A mod's or your project's files always show their own." />
+                                       Text="{l:T Settings.Viewers.RedkitPropsHint}" />
                             <TextBlock x:Name="RedkitPropsStatus" Style="{StaticResource Hint}" />
                         </StackPanel>
                     </Border>
 
                     <Border Style="{StaticResource Card}">
                         <StackPanel>
-                            <TextBlock Style="{StaticResource SectionTitle}" Text="Texture detail in the 3D views" />
+                            <TextBlock Style="{StaticResource SectionTitle}" Text="{l:T Settings.Viewers.TextureDetail}" />
                             <Border Style="{StaticResource SegmentRow}" Margin="0,4,0,0">
                                 <StackPanel Orientation="Horizontal">
-                                    <RadioButton x:Name="Detail512" GroupName="Detail" Style="{StaticResource Segment}" Content="Low (512)" />
-                                    <RadioButton x:Name="Detail1024" GroupName="Detail" Style="{StaticResource Segment}" Content="Medium (1024)" />
-                                    <RadioButton x:Name="Detail2048" GroupName="Detail" Style="{StaticResource Segment}" Content="High (2048)" />
-                                    <RadioButton x:Name="DetailFull" GroupName="Detail" Style="{StaticResource Segment}" Content="Full" />
+                                    <RadioButton x:Name="Detail512" GroupName="Detail" Style="{StaticResource Segment}" Content="{l:T Settings.Viewers.DetailLow}" />
+                                    <RadioButton x:Name="Detail1024" GroupName="Detail" Style="{StaticResource Segment}" Content="{l:T Settings.Viewers.DetailMedium}" />
+                                    <RadioButton x:Name="Detail2048" GroupName="Detail" Style="{StaticResource Segment}" Content="{l:T Settings.Viewers.DetailHigh}" />
+                                    <RadioButton x:Name="DetailFull" GroupName="Detail" Style="{StaticResource Segment}" Content="{l:T Settings.Viewers.DetailFull}" />
                                 </StackPanel>
                             </Border>
                             <TextBlock Style="{StaticResource Hint}"
-                                       Text="The largest a texture is read for entities, scenes, cutscenes, rigs and animations. Higher is sharper close up but slower to load, and a scene with many actors uses much more memory. Medium suits most. Viewers open already keep what they've read; it applies to those opened next." />
+                                       Text="{l:T Settings.Viewers.TextureDetailHint}" />
                         </StackPanel>
                     </Border>
                 </StackPanel>
 
                 <!-- Privacy -->
                 <StackPanel x:Name="PrivacyPage" Visibility="Collapsed">
-                    <TextBlock Style="{StaticResource PageTitle}" Text="Privacy and online" />
-                    <TextBlock Style="{StaticResource PageIntro}" Text="The app works offline and collects nothing about you. This is the one thing that can go online, and only when you turn it on." />
+                    <TextBlock Style="{StaticResource PageTitle}" Text="{l:T Settings.Nav.Privacy}" />
+                    <TextBlock Style="{StaticResource PageIntro}" Text="{l:T Settings.Privacy.Intro}" />
 
                     <Border Style="{StaticResource Card}">
                         <StackPanel>
-                            <TextBlock Style="{StaticResource SectionTitle}" Text="EasyAssetBrowser tags" />
+                            <TextBlock Style="{StaticResource SectionTitle}" Text="{l:T Settings.Privacy.Eab}" />
                             <TextBlock TextWrapping="Wrap"
-                                       Text="EasyAssetBrowser's community categories and tags for the game's files, shown in the Asset Browser. They're downloaded from its GitHub repository about once a day, which GitHub sees as any download. Nothing is sent." />
-                            <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
-                                <TextBlock x:Name="EabIcon" Style="{StaticResource Icon}" Margin="0,0,8,0" />
+                                       Text="{l:T Settings.Privacy.EabAbout}" />
+                            <DockPanel Margin="0,10,0,0">
+                                <TextBlock x:Name="EabIcon" DockPanel.Dock="Left" Style="{StaticResource Icon}" VerticalAlignment="Top" Margin="0,2,8,0" />
                                 <TextBlock x:Name="EabStatus" TextWrapping="Wrap" />
-                            </StackPanel>
+                            </DockPanel>
                             <WrapPanel Margin="0,12,0,0">
                                 <Button x:Name="EabOnButton" Padding="12,5" Margin="0,0,8,0" Click="EabOn_Click">
                                     <StackPanel Orientation="Horizontal">
                                         <TextBlock Style="{StaticResource Icon}" Text="&#xE774;" />
-                                        <TextBlock Margin="8,0,0,0" Text="Turn on…" />
+                                        <TextBlock Margin="8,0,0,0" Text="{l:T Settings.Privacy.EabTurnOn}" />
                                     </StackPanel>
                                 </Button>
-                                <Button x:Name="EabOffButton" Padding="12,5" Margin="0,0,8,0" Click="EabOff_Click" Content="Turn off" />
-                                <Button x:Name="EabForgetButton" Padding="12,5" Click="EabForget_Click" Content="Turn off and delete what it downloaded" />
+                                <Button x:Name="EabOffButton" Padding="12,5" Margin="0,0,8,0" Click="EabOff_Click" Content="{l:T Settings.Privacy.EabTurnOff}" />
+                                <Button x:Name="EabForgetButton" Padding="12,5" Click="EabForget_Click" Content="{l:T Settings.Privacy.EabForget}" />
                             </WrapPanel>
                         </StackPanel>
                     </Border>
 
                     <Border Style="{StaticResource Card}">
                         <StackPanel>
-                            <TextBlock Style="{StaticResource SectionTitle}" Text="Read more" />
+                            <TextBlock Style="{StaticResource SectionTitle}" Text="{l:T Settings.Privacy.ReadMore}" />
                             <WrapPanel Margin="0,4,0,0">
-                                <Button Padding="12,5" Margin="0,0,8,0" Click="Privacy_Click" Content="Privacy" />
-                                <Button Padding="12,5" Margin="0,0,8,0" Click="Licence_Click" Content="Licence" />
-                                <Button Padding="12,5" Click="Notices_Click" Content="Third-party notices" />
+                                <Button Padding="12,5" Margin="0,0,8,0" Click="Privacy_Click" Content="{l:T Settings.Privacy.Privacy}" />
+                                <Button Padding="12,5" Margin="0,0,8,0" Click="Licence_Click" Content="{l:T Settings.Privacy.Licence}" />
+                                <Button Padding="12,5" Click="Notices_Click" Content="{l:T Settings.Privacy.Notices}" />
                             </WrapPanel>
-                            <TextBlock Style="{StaticResource Hint}" Text="Your settings are kept in %AppData%\W3ModWorkbench\settings.json, on this computer only." />
+                            <TextBlock Style="{StaticResource Hint}" Text="{l:T Settings.Privacy.SettingsFile}" />
                         </StackPanel>
                     </Border>
                 </StackPanel>
@@ -578,15 +588,15 @@
 
         <Border Grid.Row="1" Grid.ColumnSpan="2" Padding="18,12" BorderThickness="0,1,0,0" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}">
             <DockPanel>
-                <Button DockPanel.Dock="Left" Padding="12,6" Click="Help_Click" ToolTip="What each setting does (F1)">
+                <Button DockPanel.Dock="Left" Padding="12,6" Click="Help_Click" ToolTip="{l:T Settings.HelpTip}">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Style="{StaticResource Icon}" Text="&#xE897;" />
-                        <TextBlock Margin="8,0,0,0" Text="Help" />
+                        <TextBlock Margin="8,0,0,0" Text="{l:T Common.Help}" />
                     </StackPanel>
                 </Button>
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                    <Button Content="Cancel" Padding="18,6" Click="Cancel_Click" IsCancel="True" />
-                    <Button Content="Save" Padding="22,6" Margin="8,0,0,0" Click="Save_Click" IsDefault="True"
+                    <Button Content="{l:T Common.Cancel}" Padding="18,6" Click="Cancel_Click" IsCancel="True" />
+                    <Button Content="{l:T Common.Save}" Padding="22,6" Margin="8,0,0,0" Click="Save_Click" IsDefault="True"
                             Style="{DynamicResource AccentButtonStyle}" />
                 </StackPanel>
             </DockPanel>
