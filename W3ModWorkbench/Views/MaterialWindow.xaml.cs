@@ -44,6 +44,11 @@ public partial class MaterialWindow : Window, IMessageHost
     private List<(MeshFile Mesh, Matrix4x4 Place)> _previewParts = [];
     private HashSet<(int Part, int Material)> _ours = [];
     private List<string> _users = [], _entities = [];
+
+    // where the index found each user (a mod's or a DLC's bundle, REDkit's r4data), and the browser that indexed them,
+    // to read one the game's own bundles haven't got
+    private readonly Dictionary<string, ReferenceSource> _sources = new(StringComparer.OrdinalIgnoreCase);
+    private AssetBrowserWindow? _browser;
     private List<string>? _allModels;
     private Shape? _shown;
     private CancellationTokenSource? _shapeLoad;
@@ -70,10 +75,10 @@ public partial class MaterialWindow : Window, IMessageHost
 
     private sealed record ChainItem(string Name, string Detail, string Count, string Path, bool CanOpen);
 
-    private sealed record UserRow(string Path)
+    private sealed record UserRow(string Path, string? Archive = null)
     {
         public string Name => System.IO.Path.GetFileName(Path);
-        public string Folder => System.IO.Path.GetDirectoryName(Path) ?? "";
+        public string Folder => (System.IO.Path.GetDirectoryName(Path) ?? "") + (Archive is { } a ? $"   (in {a})" : "");
         public string Kind => FileKinds.Of(Path)?.Name ?? System.IO.Path.GetExtension(Path);
     }
 
@@ -269,6 +274,20 @@ public partial class MaterialWindow : Window, IMessageHost
         }
     }
 
+    /// <summary>
+    /// A file's bytes: from the project, the archives open or the game, else from the mod's or DLC's archive the index
+    /// found it in. Null when none has it. Reads from disk, so it belongs off the UI thread.
+    /// </summary>
+    private byte[]? ReadAnywhere(string path)
+    {
+        if (_locator.ReadFile(path) is { } data) return data;
+        if (!_sources.TryGetValue(path, out var source) || _browser?.Dispatcher.Invoke(() => _browser.ItemFor(source)) is not { } item) return null;
+        var entry = item.Entry;
+        if (!entry.Archive.ReadsFromDisk) return entry.Read(null);
+        using var stream = new FileStream(entry.Archive.FilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        return entry.Read(stream);
+    }
+
     /// <summary>The meshes a model is drawn with: a mesh alone, or an entity's in its default appearance, dyed as the game dyes them.</summary>
     private async Task<(List<(MeshFile Mesh, Matrix4x4 Place)> Parts, List<(MeshFile Mesh, (ColorShift? First, ColorShift? Second)? Coloring)> Coloured)?> ReadModelAsync(string path, CancellationToken token)
     {
@@ -276,7 +295,7 @@ public partial class MaterialWindow : Window, IMessageHost
         {
             var entity = await Task.Run(() =>
             {
-                var read = Core.Entities.EntityFile.Read(_locator.ReadFile(path) ?? throw new FileNotFoundException($"{path} isn't in the game's files or the archives open."));
+                var read = Core.Entities.EntityFile.Read(ReadAnywhere(path) ?? throw new FileNotFoundException($"{path} isn't in the game's files or the archives open."));
                 read.FindOrigins(_locator.ReadFile);
                 return read;
             }, token);
@@ -287,7 +306,7 @@ public partial class MaterialWindow : Window, IMessageHost
         }
         var mesh = await Task.Run(() =>
         {
-            if (_locator.ReadFile(path) is not { } data) return null;
+            if (ReadAnywhere(path) is not { } data) return null;
             var archive = _locator.Find(path)?.Archive;
             return MeshFile.Read(data, n => _locator.ReadBuffer(path, n, archive));
         }, token);
@@ -449,11 +468,14 @@ public partial class MaterialWindow : Window, IMessageHost
             try
             {
                 var index = await browser.ReferencesAsync(false);
+                _browser = browser;
+                foreach (var source in index.UsedBy(self)) _sources.TryAdd(source.Path, source);
                 users = [.. index.UsedBy(self).Select(u => u.Path).Distinct(StringComparer.OrdinalIgnoreCase)];
                 // the entities that are drawn with those meshes
-                entities = [.. users.Where(u => u.EndsWith(".w2mesh", StringComparison.OrdinalIgnoreCase)).Take(60)
-                    .SelectMany(m => index.UsedBy(m).Select(u => u.Path)).Where(u => u.EndsWith(".w2ent", StringComparison.OrdinalIgnoreCase))
-                    .Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase)];
+                var drawnWith = users.Where(u => u.EndsWith(".w2mesh", StringComparison.OrdinalIgnoreCase)).Take(60)
+                    .SelectMany(m => index.UsedBy(m)).Where(u => u.Path.EndsWith(".w2ent", StringComparison.OrdinalIgnoreCase)).ToList();
+                foreach (var source in drawnWith) _sources.TryAdd(source.Path, source);
+                entities = [.. drawnWith.Select(u => u.Path).Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase)];
                 everywhere = true;
             }
             catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or InvalidOperationException) { }
@@ -481,7 +503,7 @@ public partial class MaterialWindow : Window, IMessageHost
         }
         _users = [.. users.Order(StringComparer.OrdinalIgnoreCase)];
         _entities = entities;
-        UsedByGrid.ItemsSource = _users.Concat(_entities).Select(u => new UserRow(u)).ToList();
+        UsedByGrid.ItemsSource = _users.Concat(_entities).Select(u => new UserRow(u, ArchiveOf(u))).ToList();
         UsedByTab.Header = $"Used by ({_users.Count + _entities.Count:N0})";
         UsedByNote.Text = (users.Count == 0 ? "Nothing was found that uses it" : $"{Format.Count(users.Count, "file")} that use it")
             + (entities.Count > 0 ? $", and {Format.Count(entities.Count, "entity", "entities")} drawn with those meshes" : "")
@@ -492,14 +514,40 @@ public partial class MaterialWindow : Window, IMessageHost
 
     private UserRow? PickedUser => UsedByGrid.SelectedItem as UserRow;
 
+    /// <summary>The archive a user is in, when it isn't one of the game's own bundles (a mod's, a DLC's, REDkit's): its name.</summary>
+    private string? ArchiveOf(string path)
+    {
+        if (!_sources.TryGetValue(path, out var source)) return null;
+        string game = GameLocator.Resolve(null) ?? "";
+        string content0 = Path.Combine(game, "content", "content0");
+        return game.Length > 0 && source.ArchivePath.StartsWith(content0, StringComparison.OrdinalIgnoreCase) ? null
+            : source.ArchivePath.StartsWith(game, StringComparison.OrdinalIgnoreCase) && game.Length > 0 ? Path.GetRelativePath(game, source.ArchivePath)
+            : Path.GetFileName(source.ArchivePath.TrimEnd('\\', '/'));
+    }
+
+    /// <summary>
+    /// Opens a file that uses the material: from the game, or, for one only a mod or a DLC has (the index looks in those
+    /// too), as the Asset Browser opens it from its archive.
+    /// </summary>
+    private async Task OpenUserAsync(string path)
+    {
+        bool inGame = await Task.Run(() => _locator.Find(path) is not null || _locator.ReadFile(path) is not null);
+        if (!inGame && _sources.TryGetValue(path, out var source) && _browser?.ItemFor(source) is { } item)
+        {
+            _browser.OpenFromElsewhere(item);
+            return;
+        }
+        await DataViewers.OpenLinkAsync(path, _locator, this, this);
+    }
+
     private void UsedByGrid_MouseDoubleClick(object sender, MouseButtonEventArgs e)
     {
-        if (PickedUser is { } user) _ = DataViewers.OpenLinkAsync(user.Path, _locator, this, this);
+        if (PickedUser is { } user) _ = OpenUserAsync(user.Path);
     }
 
     private void OpenUser_Click(object sender, RoutedEventArgs e)
     {
-        if (PickedUser is { } user) _ = DataViewers.OpenLinkAsync(user.Path, _locator, this, this);
+        if (PickedUser is { } user) _ = OpenUserAsync(user.Path);
     }
 
     private void PreviewOnUser_Click(object sender, RoutedEventArgs e)
