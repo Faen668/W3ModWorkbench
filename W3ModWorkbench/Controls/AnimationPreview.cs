@@ -42,6 +42,7 @@ public sealed class AnimationPreview : Grid
     private float _time, _playedFrom, _speed = 1;
     private bool _playing, _scrubbing;
     private (Vector3 Min, Vector3 Max)? _travel;
+    private float _fit;
     private double _nextDraw;
     private CancellationTokenSource? _load;
     private int _animationVersion;
@@ -248,10 +249,11 @@ public sealed class AnimationPreview : Grid
         }
         Message = "";
         _clip = clip.Clip;
-        _placing = Placing(_clip, posing);
+        _fit = Fit(_clip, posing.Rig);
+        _placing = Placing(_clip, posing, _fit);
         _scrub.Maximum = Math.Max(0.01, _clip.Duration);
         _scrub.IsEnabled = _play.IsEnabled = true;
-        _travel = Travel(_clip, posing, _placing);
+        _travel = Travel(_clip, posing, _placing, _fit);
         SetTime(0);
         // each animation frames the actor over all of its moves, from the angle the view is at
         Frame();
@@ -282,7 +284,7 @@ public sealed class AnimationPreview : Grid
     /// A box round the actor's bones over the whole of an animation, sampled through it, as an attack lunges and a walk
     /// travels; null when the rig has too few bones to tell.
     /// </summary>
-    private static (Vector3 Min, Vector3 Max)? Travel(AnimationClip clip, Posing posing, Matrix4x4 placing)
+    private static (Vector3 Min, Vector3 Max)? Travel(AnimationClip clip, Posing posing, Matrix4x4 placing, float fit)
     {
         var rig = posing.Rig;
         if (rig.Count < 2) return null;
@@ -295,9 +297,7 @@ public sealed class AnimationPreview : Grid
         const int samples = 12;
         for (int s = 0; s <= samples; s++)
         {
-            rig.Pose.CopyTo(pose, 0);
-            clip.Sample(clip.Duration * s / samples, pose);
-            KeepRoot(rig, pose);
+            Sample(clip, rig, clip.Duration * s / samples, pose, fit);
             rig.ToModel(pose, model);
             var middle = Vector3.Transform(model[pelvis].Translation, placing);
             foreach (var bone in model)
@@ -312,6 +312,42 @@ public sealed class AnimationPreview : Grid
         return min.X <= max.X ? (min, max) : null;
     }
 
+    /// <summary>
+    /// How much bigger the skeleton an animation was made for is than the rig it plays on, as a man's animation is than a
+    /// child: the bones' lengths in its first frame over the rig's. 0 when they're the same build, to play it as it is.
+    /// </summary>
+    private static float Fit(AnimationClip clip, Skeleton rig)
+    {
+        var pose = rig.Pose.ToArray();
+        clip.Sample(0, pose);
+        var ratios = new List<float>();
+        for (int i = 1; i < rig.Count; i++)
+        {
+            float rest = rig.Pose[i].Position.Length();
+            if (rest > 0.05f) ratios.Add(pose[i].Position.Length() / rest);
+        }
+        if (ratios.Count < 5) return 0;
+        ratios.Sort();
+        float ratio = ratios[ratios.Count / 2];
+        return Math.Abs(ratio - 1) > 0.06f ? ratio : 0;
+    }
+
+    /// <summary>
+    /// The pose at a time of an animation. Played on a rig of another build (<paramref name="fit"/> not 0), the bones keep
+    /// the rig's own lengths and take only the animation's turns, the hips' moves scaled to the rig's size, so a man's
+    /// animation doesn't stretch a child to a man's bones.
+    /// </summary>
+    private static void Sample(AnimationClip clip, Skeleton rig, float time, BoneTransform[] pose, float fit)
+    {
+        rig.Pose.CopyTo(pose, 0);
+        clip.Sample(time, pose);
+        KeepRoot(rig, pose);
+        if (fit == 0) return;
+        int pelvis = Array.FindIndex(rig.Names, n => n.Equals("pelvis", StringComparison.OrdinalIgnoreCase));
+        for (int i = 1; i < rig.Count; i++)
+            pose[i] = pose[i] with { Position = i == pelvis ? pose[i].Position / fit : rig.Pose[i].Position, Scale = rig.Pose[i].Scale };
+    }
+
     /// <summary>Leaves the rig's root where it stands, as the game places a character's root itself.</summary>
     private static void KeepRoot(Skeleton rig, BoneTransform[] pose)
     {
@@ -319,14 +355,13 @@ public sealed class AnimationPreview : Grid
     }
 
     /// <summary>Brings the animation's actor back over where the entity stands, facing its way, as the entity viewer does.</summary>
-    private static Matrix4x4 Placing(AnimationClip clip, Posing posing)
+    private static Matrix4x4 Placing(AnimationClip clip, Posing posing, float fit)
     {
         var rig = posing.Rig;
         int pelvis = Array.FindIndex(rig.Names, n => n.Equals("pelvis", StringComparison.OrdinalIgnoreCase));
         if (pelvis < 0) pelvis = rig.Count > 1 ? 1 : 0;
-        var pose = rig.Pose.ToArray();
-        clip.Sample(0, pose);
-        KeepRoot(rig, pose);
+        var pose = new BoneTransform[rig.Count];
+        Sample(clip, rig, 0, pose, fit);
         var model = new Matrix4x4[rig.Count];
         rig.ToModel(pose, model);
         var rest = posing.Rest[pelvis];
@@ -343,9 +378,7 @@ public sealed class AnimationPreview : Grid
         if (_clip is not { } clip || _posing is not { } posing) return;
         _time = time = Math.Clamp(time, 0, clip.Duration);
         if (_pose.Length != posing.Rig.Count) _pose = new BoneTransform[posing.Rig.Count];
-        posing.Rig.Pose.CopyTo(_pose, 0);
-        clip.Sample(time, _pose);
-        KeepRoot(posing.Rig, _pose);
+        Sample(clip, posing.Rig, time, _pose, _fit);
         var model = new Matrix4x4[posing.Rig.Count];
         posing.Rig.ToModel(_pose, model);
         for (int i = 0; i < model.Length; i++) model[i] *= _placing;

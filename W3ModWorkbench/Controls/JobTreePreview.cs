@@ -24,6 +24,7 @@ public sealed class JobTreePreview : Grid, ITreePreview
     private List<(string Category, string Animset)> _categories = [];
     private List<string> _names = [];
     private string? _animset, _entity;
+    private (string Set, string Animation)? _played;
     private bool _entityPicked, _syncing;
 
     private static readonly string[] EntityNames = ["Man", "Woman", "Child", "Dwarf"];
@@ -73,7 +74,7 @@ public sealed class JobTreePreview : Grid, ITreePreview
         _animations.SelectionChanged += (_, _) =>
         {
             if (_syncing || _animations.SelectedItem is not string name || _animset is null) return;
-            _ = _preview.PlayAsync(_animset, name);
+            _ = PlayAsync(_animset, name);
         };
         Loaded += async (_, _) =>
         {
@@ -140,7 +141,7 @@ public sealed class JobTreePreview : Grid, ITreePreview
         _syncing = false;
         if (_names.Contains(anim))
         {
-            await _preview.PlayAsync(set, anim);
+            await PlayAsync(set, anim);
             return;
         }
         // not in its category's set (the game's copy may leave it out): the other categories' sets are looked in
@@ -156,7 +157,7 @@ public sealed class JobTreePreview : Grid, ITreePreview
             _preview.Message = $"{anim} isn't in {Path.GetFileName(set)}, nor another job category's set.";
             return;
         }
-        if (await _preview.PlayAsync(other, anim)) _setText.Text = $"{set}\n{anim} is in {other}";
+        if (await PlayAsync(other, anim)) _setText.Text = $"{set}\n{anim} is in {other}";
     }
 
     private async Task ShowEntityAsync(string entity)
@@ -164,7 +165,14 @@ public sealed class JobTreePreview : Grid, ITreePreview
         _entity = entity;
         await _preview.LoadEntityAsync(entity, _locator);
         // what was playing plays on the new character
-        if (_animations.SelectedItem is string name && _animset is not null) await _preview.PlayAsync(_animset, name);
+        if (_played is var (set, name)) await _preview.PlayAsync(set, name);
+    }
+
+    /// <summary>Plays an animation, kept to play again on another character picked.</summary>
+    private Task<bool> PlayAsync(string set, string animation)
+    {
+        _played = (set, animation);
+        return _preview.PlayAsync(set, animation);
     }
 
     private void ShowNames()
