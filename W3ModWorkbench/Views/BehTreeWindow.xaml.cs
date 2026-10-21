@@ -142,21 +142,7 @@ public partial class BehTreeWindow : Window, IMessageHost
     }
 
     /// <summary>A file a property refers to: another tree opens here; anything else has its path copied.</summary>
-    private async void Properties_LinkClicked(object? sender, string path)
-    {
-        if (!CanShow(path))
-        {
-            Copy(path, $"There's no viewer for {FileKinds.Of(path)?.Name.ToLowerInvariant() ?? "this kind of"} files here, so its path is copied:\n{path}");
-            return;
-        }
-        var data = await Task.Run(() => _locator.ReadFile(path));
-        if (data is null)
-        {
-            _ = Message.Show("Not found", $"{path} isn't in the game's files or the archives open.", MessageKind.Warning, primary: "OK");
-            return;
-        }
-        Open(path, _locator.Find(path)?.Archive.Name ?? "", data, _locator, this);
-    }
+    private void Properties_LinkClicked(object? sender, string path) => _ = DataViewers.OpenLinkAsync(path, _locator, this, this);
 
     // ---------------------------------------------------------------- finding and folding
 

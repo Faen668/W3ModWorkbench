@@ -40,6 +40,12 @@ public sealed class BehTreeNode
     public string? Comment { get; init; }
     /// <summary>A script node's task, the script class it runs, with its settings.</summary>
     public RedObject? Task { get; init; }
+    /// <summary>The node's own colour (ARGB), for a tree of another kind than a behaviour tree; else its kind's.</summary>
+    public uint? Tint { get; init; }
+    /// <summary>What kind of node it is in words, for a tree of another kind; else its kind's name.</summary>
+    public string? KindText { get; init; }
+    /// <summary>A short label over the node, saying why its parent goes to it (a branch's condition, a time of day).</summary>
+    public string? Label { get; set; }
     public List<BehTreeNode> Children { get; } = [];
     /// <summary>Which of the node's properties each child is in (child, children, child1, mountHorseChild…), in the same order.</summary>
     public List<string> ChildLinks { get; } = [];

@@ -33,6 +33,7 @@ public sealed class BehTreeGraph : FrameworkElement
     public static readonly DependencyProperty LineBrushProperty = Brush(nameof(LineBrush));
     public static readonly DependencyProperty NodeBrushProperty = Brush(nameof(NodeBrush));
     public static readonly DependencyProperty AccentBrushProperty = Brush(nameof(AccentBrush));
+    public static readonly DependencyProperty BackBrushProperty = Brush(nameof(BackBrush));
 
     private static DependencyProperty Brush(string name) =>
         DependencyProperty.Register(name, typeof(Brush), typeof(BehTreeGraph), new FrameworkPropertyMetadata(Brushes.Gray, FrameworkPropertyMetadataOptions.AffectsRender));
@@ -41,6 +42,8 @@ public sealed class BehTreeGraph : FrameworkElement
     public Brush LineBrush { get => (Brush)GetValue(LineBrushProperty); set => SetValue(LineBrushProperty, value); }
     public Brush NodeBrush { get => (Brush)GetValue(NodeBrushProperty); set => SetValue(NodeBrushProperty, value); }
     public Brush AccentBrush { get => (Brush)GetValue(AccentBrushProperty); set => SetValue(AccentBrushProperty, value); }
+    /// <summary>What a label over a node is drawn on.</summary>
+    public Brush BackBrush { get => (Brush)GetValue(BackBrushProperty); set => SetValue(BackBrushProperty, value); }
 
     /// <summary>Raised when a node is clicked, with it, or null for a click on nothing.</summary>
     public event EventHandler<BehTreeNode?>? NodeClicked;
@@ -51,6 +54,7 @@ public sealed class BehTreeGraph : FrameworkElement
         SetResourceReference(LineBrushProperty, "TextFillColorTertiaryBrush");
         SetResourceReference(NodeBrushProperty, "SubtleFillColorSecondaryBrush");
         SetResourceReference(AccentBrushProperty, "AccentFillColorDefaultBrush");
+        SetResourceReference(BackBrushProperty, "SolidBackgroundFillColorBaseBrush");
         ClipToBounds = true;
         Focusable = true;
         SizeChanged += (_, e) => { if (e.PreviousSize.Width == 0) FitToView(); };
@@ -63,6 +67,12 @@ public sealed class BehTreeGraph : FrameworkElement
     }
 
     /// <summary>The colour of each kind of node, also used for the legend.</summary>
+    public static Color ColorOf(BehTreeNode node) =>
+        node.Tint is uint t ? Color.FromArgb((byte)(t >> 24), (byte)(t >> 16), (byte)(t >> 8), (byte)t) : ColorOf(node.Kind);
+
+    /// <summary>A node's kind in words: its own, or its kind's.</summary>
+    public static string KindOf(BehTreeNode node) => node.KindText ?? Kind(node.Kind);
+
     public static Color ColorOf(BehTreeNodeKind kind) => kind switch
     {
         BehTreeNodeKind.Composite => Color.FromRgb(0x2E, 0xB6, 0x7D),
@@ -209,7 +219,7 @@ public sealed class BehTreeGraph : FrameworkElement
         {
             var box = OnScreen(rect);
             if (!view.IntersectsWith(box)) continue;
-            var color = new SolidColorBrush(ColorOf(node.Kind));
+            var color = new SolidColorBrush(ColorOf(node));
             color.Freeze();
             bool selected = ReferenceEquals(node, _selected), match = _matches.Contains(node);
             var border = new Pen(selected || match ? AccentBrush : ReferenceEquals(node, _hover) ? TextBrush : color, selected ? 2.6 : match ? 2 : 1.1);
@@ -222,7 +232,7 @@ public sealed class BehTreeGraph : FrameworkElement
                 var title = new FormattedText(node.Title, CultureInfo.CurrentCulture, FlowDirection.LeftToRight, bold, 12 * _scale, TextBrush, dip)
                 { MaxTextWidth = Math.Max(1, box.Width - (10 + right) * _scale), MaxLineCount = 1, Trimming = TextTrimming.CharacterEllipsis };
                 dc.DrawText(title, new Point(box.X + 10 * _scale, box.Y + 7 * _scale));
-                string detail = node.Detail.Length > 0 ? node.Detail : node.Comment ?? Kind(node.Kind);
+                string detail = node.Detail.Length > 0 ? node.Detail : node.Comment ?? KindOf(node);
                 var second = new FormattedText(detail, CultureInfo.CurrentCulture, FlowDirection.LeftToRight, plain, 10.5 * _scale, LineBrush, dip)
                 { MaxTextWidth = Math.Max(1, box.Width - 20 * _scale), MaxLineCount = 1, Trimming = TextTrimming.CharacterEllipsis };
                 dc.DrawText(second, new Point(box.X + 10 * _scale, box.Y + 26 * _scale));
@@ -232,6 +242,17 @@ public sealed class BehTreeGraph : FrameworkElement
                     { MaxTextWidth = 60 * _scale, MaxLineCount = 1, Trimming = TextTrimming.CharacterEllipsis };
                     dc.DrawText(tag, new Point(box.Right - tag.Width - 8 * _scale, box.Y + 8 * _scale));
                 }
+            }
+            // the label over it, saying why its parent goes to it
+            if (node.Label is { Length: > 0 } label && _scale >= 0.3)
+            {
+                var text = new FormattedText(label, CultureInfo.CurrentCulture, FlowDirection.LeftToRight, bold, 11.5 * _scale, color, dip)
+                { MaxTextWidth = Math.Max(1, box.Width), MaxLineCount = 1, Trimming = TextTrimming.CharacterEllipsis };
+                var at = new Point(box.X + box.Width / 2 - text.Width / 2, box.Y - text.Height - 4 * _scale);
+                // on a backing of its own, so the line from the parent doesn't run through it
+                var back = new Rect(at.X - 5 * _scale, at.Y - 1 * _scale, text.Width + 10 * _scale, text.Height + 2 * _scale);
+                dc.DrawRoundedRectangle(BackBrush, new Pen(color, 0.8), back, 4 * _scale, 4 * _scale);
+                dc.DrawText(text, at);
             }
             // a folded branch says how much is folded under it
             if (_folded.Contains(node))
@@ -312,7 +333,7 @@ public sealed class BehTreeGraph : FrameworkElement
         if (ReferenceEquals(at, _hover)) return;
         _hover = at;
         Cursor = at is null ? null : Cursors.Hand;
-        ToolTip = at is null ? null : $"{at.Title}\n{at.Object.ClassName}" + (at.Task is { } task ? $"\ntask {task.ClassName}" : "")
+        ToolTip = at is null ? null : $"{at.Title}\n{KindOf(at)} · {at.Object.ClassName}" + (at.Task is { } task ? $"\ntask {task.ClassName}" : "")
             + (at.Priority is { } p ? $"\npriority {p}" : "") + (at.Comment is { } c ? $"\n{c}" : "")
             + (at.Children.Count > 0 ? $"\n{at.Children.Count} under it; double-click to fold or open" : "");
         InvalidateVisual();

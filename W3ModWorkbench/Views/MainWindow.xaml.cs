@@ -231,6 +231,8 @@ public partial class MainWindow : Window, IMessageHost
         foreach (string path in entities) EntityWindow.OpenFile(path, new ResourceLocator(OpenArchives(), null, GameLocator.Resolve(null), ProjectFiles), this);
         foreach (string path in paths.Where(p => File.Exists(p) && BehTreeWindow.CanShow(p)))
             BehTreeWindow.OpenFile(path, new ResourceLocator(OpenArchives(), null, GameLocator.Resolve(null), ProjectFiles), this);
+        foreach (string path in paths.Where(p => File.Exists(p) && DataViewers.CanShow(p)))
+            DataViewers.OpenFile(path, new ResourceLocator(OpenArchives(), null, GameLocator.Resolve(null), ProjectFiles), this);
         paths = [.. paths.Except(entities)];
         if ((strings.Count > 0 || xml.Count > 0 || meshes.Count > 0 || cutscenes.Count > 0 || scenes.Count > 0 || entities.Count > 0) && !paths.Any()) return;
 
@@ -843,6 +845,7 @@ public partial class MainWindow : Window, IMessageHost
         else if (SceneWindow.CanShow(path)) SceneWindow.OpenFile(path, new ResourceLocator(OpenArchives(), null, GameLocator.Resolve(null), ProjectFiles), this);
         else if (EntityWindow.CanShow(path)) EntityWindow.OpenFile(path, new ResourceLocator(OpenArchives(), null, GameLocator.Resolve(null), ProjectFiles), this);
         else if (BehTreeWindow.CanShow(path)) BehTreeWindow.OpenFile(path, new ResourceLocator(OpenArchives(), null, GameLocator.Resolve(null), ProjectFiles), this);
+        else if (DataViewers.CanShow(path)) DataViewers.OpenFile(path, new ResourceLocator(OpenArchives(), null, GameLocator.Resolve(null), ProjectFiles), this);
         else if (XmlWindow.CanOpen(path)) XmlWindow.Open(path, this);
         else if (JsonWindow.CanOpen(path)) JsonWindow.Open(path, this);
         else if (PropertiesWindow.CanShow(path)) PropertiesWindow.OpenFile(path, new ResourceLocator(OpenArchives(), null, GameLocator.Resolve(null), ProjectFiles), this);
@@ -1078,6 +1081,8 @@ public partial class MainWindow : Window, IMessageHost
             _ = OpenEntityAsync(item);
         else if (BehTreeWindow.CanShow(item.Name))
             _ = OpenBehTreeAsync(item);
+        else if (DataViewers.CanShow(item.Name))
+            _ = OpenDataViewerAsync(item);
         else if (item.Entry is LooseScriptEntry { IsScript: false } && XmlWindow.CanOpen(item.Name))
             _ = OpenXmlAsync(item);
         else if (item.Entry is LooseScriptEntry { IsScript: false } && JsonWindow.CanOpen(item.Name))
@@ -1159,6 +1164,26 @@ public partial class MainWindow : Window, IMessageHost
             var entry = item.Entry;
             byte[] data = await ReadAsync(entry);
             EntityWindow.Open(entry.Path, item.BundleName, data, LocatorFor(entry), this, entry.Archive);
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
+        {
+            ShowError($"{item.Name} could not be read.\n\n{ex.Message}");
+        }
+    }
+
+    /// <summary>Shows a spawn tree, steering graph or another of the smaller kinds of file in its viewer.</summary>
+    private async Task OpenDataViewerAsync(EntryItem item)
+    {
+        if (item.Entry is LooseScriptEntry loose)
+        {
+            DataViewers.OpenFile(loose.FullPath, LocatorFor(item.Entry), this);
+            return;
+        }
+        try
+        {
+            var entry = item.Entry;
+            byte[] data = await ReadAsync(entry);
+            DataViewers.Open(entry.Path, item.BundleName, data, LocatorFor(entry), this, entry.Archive);
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
         {
@@ -1295,13 +1320,14 @@ public partial class MainWindow : Window, IMessageHost
 
     private void GridPreview_Click(object sender, RoutedEventArgs e)
     {
-        if (Highlighted().FirstOrDefault(i => i.IsPreviewable || i.Entry is StringsEntry or TextureEntry || IsTextureHeader(i) || TextureWindow.CanShow(i.Name) || MeshWindow.CanShow(i.Name) || CutsceneWindow.CanShow(i.Name) || SceneWindow.CanShow(i.Name) || EntityWindow.CanShow(i.Name) || BehTreeWindow.CanShow(i.Name) || PropertiesWindow.CanShow(i.Name)) is not { } item) return;
+        if (Highlighted().FirstOrDefault(i => i.IsPreviewable || i.Entry is StringsEntry or TextureEntry || IsTextureHeader(i) || TextureWindow.CanShow(i.Name) || MeshWindow.CanShow(i.Name) || CutsceneWindow.CanShow(i.Name) || SceneWindow.CanShow(i.Name) || EntityWindow.CanShow(i.Name) || BehTreeWindow.CanShow(i.Name) || DataViewers.CanShow(i.Name) || PropertiesWindow.CanShow(i.Name)) is not { } item) return;
         if (item.Entry is StringsEntry strings) StringsWindow.Open(strings.FullPath, this);
         else if (MeshWindow.CanShow(item.Name)) _ = OpenMeshAsync(item);
         else if (CutsceneWindow.CanShow(item.Name)) _ = OpenCutsceneAsync(item);
         else if (SceneWindow.CanShow(item.Name)) _ = OpenSceneAsync(item);
         else if (EntityWindow.CanShow(item.Name)) _ = OpenEntityAsync(item);
         else if (BehTreeWindow.CanShow(item.Name)) _ = OpenBehTreeAsync(item);
+        else if (DataViewers.CanShow(item.Name)) _ = OpenDataViewerAsync(item);
         else if (item.Entry is TextureEntry texture) OpenTexture(texture);
         else if (IsTextureHeader(item)) _ = OpenTextureHeaderAsync(item);
         else if (TextureWindow.CanShow(item.Name)) _ = OpenPictureAsync(item);

@@ -433,6 +433,16 @@ Click a node to see every property it has on the right, under the class that bri
 Every behaviour tree in the game reads (390, base game and DLC).
 """),
 
+        new(Basics, "Spawn trees and steering", "\uE81E", """
+Double-click a `.spawntree` or a `.w2steer`, or select it and press **Enter**, to open it in its viewer. One a property refers to opens from the other viewers too, and a file on disk opens from **Open files** or by dropping it on the window.
+
+A **spawn tree** is what spawns a community's or an encounter's creatures: from its root, branches that run all their children (**parallel**), one at random, or only when facts are as they say (**condition**, which says each fact it tests), and entries that spawn at times of day, down to the **spawn entries** themselves (how many of which creature, and where), **parties** and the **work smart AI entries** a generator makes. **Initializers** set up what's spawned under them: where it guards, its AI, its attitude, the action points it works at. Under the tree are the **creature definitions** the entries spawn by name: each one's entity template, how many may be spawned in all and at once, and its forced appearance and tags.
+
+A **steering graph** is how an NPC moves towards its goal: **groups** run all their children, a **condition** runs its first child when its test passes and its second when it doesn't (marked **(0) true** and **(1) false**), and **tasks** are each one steering rule (keep away from walls, strafe round the target, keep a distance). Each node says its task or test and its main settings.
+
+Both are drawn as the behaviour tree viewer draws a tree, from the root down, coloured by kind (the colours are listed under it), with a label over a node saying why its parent goes to it: a node's comment (a time of day, a quest fact), or its place among its parent's children. Drag to move, use the wheel to zoom, double-click a node to fold its branch, and **Find** (**Ctrl+F**) marks the nodes whose name, class, comment or settings have the words. Click a node to see its properties on the right (a steering task's or test's under it), and the button by **Fit** to see the file's own. Every one of REDkit's spawn trees and steering graphs reads (558).
+"""),
+
         new(Basics, "Scenes", "", """
 Double-click a `.w2scene`, or select it and press **Enter**, to open it in the scene viewer. The preview pane shows it too: how many parts, lines and choices it has, how it starts with its lines in words, who's in it, the cutscenes it plays, and the facts and scripts it uses. A scene file on disk opens from **Open files** or by dropping it on the window.
 

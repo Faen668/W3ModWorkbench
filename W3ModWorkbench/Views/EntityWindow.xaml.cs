@@ -1052,7 +1052,7 @@ public partial class EntityWindow : Window, IMessageHost
     /// </summary>
     private async Task OpenLinkAsync(string path)
     {
-        bool viewable = MeshWindow.CanShow(path) || CutsceneWindow.CanShow(path) || SceneWindow.CanShow(path) || CanShow(path) || BehTreeWindow.CanShow(path) || XmlWindow.CanOpen(path) || TextureWindow.CanShow(path);
+        bool viewable = MeshWindow.CanShow(path) || CutsceneWindow.CanShow(path) || SceneWindow.CanShow(path) || CanShow(path) || BehTreeWindow.CanShow(path) || XmlWindow.CanOpen(path) || TextureWindow.CanShow(path) || DataViewers.CanShow(path);
         if (!viewable)
         {
             string kind = FileKinds.Of(path)?.Name.ToLowerInvariant() ?? "this kind of";
@@ -1077,7 +1077,8 @@ public partial class EntityWindow : Window, IMessageHost
         }
         string source = entry is null ? "project" : entry.Archive.Name;
         string name = Path.GetFileName(path);
-        if (MeshWindow.CanShow(path)) MeshWindow.Open(path, source, data, entry?.Archive, _locator, this);
+        if (DataViewers.CanShow(path)) DataViewers.Open(path, source, data, _locator, this, entry?.Archive);
+        else if (MeshWindow.CanShow(path)) MeshWindow.Open(path, source, data, entry?.Archive, _locator, this);
         else if (CutsceneWindow.CanShow(path)) CutsceneWindow.Open(path, source, data, _locator, this, entry?.Archive);
         else if (SceneWindow.CanShow(path)) SceneWindow.Open(path, source, data, _locator, this, entry?.Archive);
         else if (CanShow(path)) Open(path, source, data, _locator, this, entry?.Archive);
