@@ -51,6 +51,8 @@ public partial class AssetBrowserWindow : Window
         InitializeComponent();
         _main = main;
         AskToggle.IsChecked = _settings.AskWhichCopy;
+        RegexToggle.IsChecked = _settings.AssetSearchRegex;
+        ApplySearchHints();
         _searchTimer.Tick += (_, _) =>
         {
             _searchTimer.Stop();
@@ -114,6 +116,8 @@ public partial class AssetBrowserWindow : Window
                 read = await Task.Run(() => ReadMods(game, archive, report, token), token);
                 report.Step("Finding every copy of each file");
                 _copies = await Task.Run(() => IndexCopies(read.Order), token);
+                report.Step("Finding which part of the game each file is from");
+                _sourceOf = await Task.Run(() => ReadSources(game, archive, _copies), token);
                 return files;
             });
             if (root is null)
@@ -211,15 +215,19 @@ public partial class AssetBrowserWindow : Window
     {
         if (_root is null) return;
         var folder = FolderTree.SelectedItem as FolderNode ?? _root;
+        if (!ReadRegexes()) return;
         List<EntryItem> scope = [.. folder.AllFiles()];
-        var result = FileFilterResult.Apply(scope, SearchBox.Text, _typeFilter, _classFilter);
+        // the part of the game, folder and regular expressions first; the search box is one of those when it's a regex
+        var extra = ExtraFilter();
+        var result = FileFilterResult.Apply(extra is null ? scope : [.. scope.Where(extra)], RegexMode ? "" : SearchBox.Text, _typeFilter, _classFilter);
         FillChoices(result);
         _shown = result.Shown;
         BindFiles();
         NoMatchesText.Text = result.NoMatches(_typeFilter, _classFilter);
         NoMatchesText.Visibility = _shown.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         string where = folder == _root ? "the game's files" : folder == _mods ? "the installed mods" : folder == _modDlc ? "the mods installed as DLC" : folder.FullPath;
-        StatusText.Text = $"{_shown.Count:N0} of {scope.Count:N0} files in {where}" + (result.Describe.Length > 0 ? $" match {result.Describe}" : "")
+        string describe = string.Join(" and ", DescribeExtra().Concat(result.Describe.Length > 0 ? [result.Describe] : []));
+        StatusText.Text = $"{_shown.Count:N0} of {scope.Count:N0} files in {where}" + (describe.Length > 0 ? $" match {describe}" : "")
             + $"   ·   {_root.Archive.Name}   ·   Double-click to open; what it loads comes from its own mod, then the game.";
         QueuePreview();
     }
@@ -374,6 +382,7 @@ public partial class AssetBrowserWindow : Window
                 AskToggle.IsChecked = false;
             }
         }
+        RememberOpened(item.Path);
         _main.Act(FileAction.Open, [open]);
     }
 
@@ -433,9 +442,9 @@ public partial class AssetBrowserWindow : Window
             TogglePreviewPane();
             e.Handled = true;
         }
-        else if (e.Key == Key.Escape && SearchBox.IsKeyboardFocused && SearchBox.Text.Length > 0)
+        else if (e.Key == Key.Escape && Keyboard.FocusedElement is TextBox { Text.Length: > 0 } box && (box == SearchBox || box == FolderBox))
         {
-            SearchBox.Clear();
+            box.Clear();
             e.Handled = true;
         }
         else if (e.Key == Key.Enter && FilesFocused && Highlighted().FirstOrDefault() is { } item)
@@ -561,8 +570,10 @@ public partial class AssetBrowserWindow : Window
             node = child;
         }
         SearchBox.Clear();
+        FolderBox.Clear();
         _classFilter = null;
         _typeFilter = null;
+        if (_hiddenSources.Count > 0) SetHiddenSources([]);
         for (var up = node.Parent; up is not null; up = up.Parent) up.IsExpanded = true;
         // the tree makes the items of folders just expanded when it next lays out; select once they're there
         await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.Loaded);

@@ -68,8 +68,9 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <!-- search, class filter, bookmarks, and whether to ask which copy to open -->
-        <DockPanel Margin="0,0,0,10" LastChildFill="True">
+        <!-- search, class filter, bookmarks, and whether to ask which copy to open; then the folder, regex and part of the game -->
+        <StackPanel Margin="0,0,0,10">
+        <DockPanel LastChildFill="True">
             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
                 <!-- search, then file type, then class, as in the main window -->
                 <TextBlock Text="File type" VerticalAlignment="Center" Margin="12,0,8,0" Opacity="0.7" />
@@ -114,6 +115,12 @@
                         <TextBlock Style="{StaticResource IconText}" Text="&#xE70D;" FontSize="9" Margin="6,2,0,0" />
                     </StackPanel>
                 </Button>
+                <Button x:Name="RecentButton" Margin="4,0,0,0" Padding="8,6" Click="Recent_Click" ToolTip="Go to a file you opened from here recently">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Style="{StaticResource IconText}" Text="&#xE81C;" Margin="0,1,0,0" />
+                        <TextBlock Style="{StaticResource IconText}" Text="&#xE70D;" FontSize="9" Margin="6,2,0,0" />
+                    </StackPanel>
+                </Button>
                 <ToggleButton x:Name="AskToggle" Margin="8,0,0,0" Padding="10,6" Click="Ask_Click"
                               ToolTip="When a file is in more than one place (a mod, a DLC, the game), ask which copy to open">
                     <StackPanel Orientation="Horizontal">
@@ -130,6 +137,26 @@
                            VerticalAlignment="Center" Opacity="0.5" IsHitTestVisible="False" />
             </Grid>
         </DockPanel>
+        <DockPanel Margin="0,8,0,0" LastChildFill="False">
+            <Grid Width="360">
+                <TextBox x:Name="FolderBox" VerticalContentAlignment="Center" Padding="34,6,10,6" TextChanged="FolderBox_TextChanged" />
+                <TextBlock Style="{StaticResource IconText}" Text="&#xE8B7;" Margin="12,0,0,0" Opacity="0.6" IsHitTestVisible="False" HorizontalAlignment="Left" />
+                <TextBlock x:Name="FolderPlaceholder" Text="Folder" Margin="36,0,0,0" VerticalAlignment="Center" Opacity="0.5" IsHitTestVisible="False" />
+            </Grid>
+            <ToggleButton x:Name="RegexToggle" Margin="8,0,0,0" Padding="10,6" Click="Regex_Click"
+                          ToolTip="Read the search as a regular expression for the file's name, and the folder box as one for its folder">
+                <TextBlock Text="Regex" />
+            </ToggleButton>
+            <Button x:Name="SourcesButton" Margin="8,0,0,0" Click="Sources_Click"
+                    ToolTip="Show only some parts of the game: the base game, Hearts of Stone, Blood and Wine, each free DLC">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Style="{StaticResource IconText}" Text="&#xE71C;" Margin="0,1,0,0" />
+                    <TextBlock x:Name="SourcesText" Margin="8,0,0,0" Text="Whole game" />
+                    <TextBlock Style="{StaticResource IconText}" Text="&#xE70D;" FontSize="9" Margin="8,2,0,0" />
+                </StackPanel>
+            </Button>
+        </DockPanel>
+        </StackPanel>
 
         <Grid Grid.Row="1">
             <Grid.ColumnDefinitions>
