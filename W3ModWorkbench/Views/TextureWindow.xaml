@@ -58,7 +58,7 @@
                 <RadioButton x:Name="ChannelB" Style="{StaticResource Segment}" GroupName="Channel" Content="B" Checked="Channel_Checked" />
                 <RadioButton x:Name="ChannelA" Style="{StaticResource Segment}" GroupName="Channel" Content="A" Checked="Channel_Checked" ToolTip="{l:T TextureWindow.AlphaChannelGrey}" />
                 <TextBlock Text="{l:T TextureWindow.Mip}" VerticalAlignment="Center" Margin="18,0,8,0" Opacity="0.7" />
-                <ComboBox x:Name="MipBox" Width="150" SelectionChanged="Mip_SelectionChanged" />
+                <ComboBox x:Name="MipBox" MinWidth="150" SelectionChanged="Mip_SelectionChanged" />
                 <TextBlock x:Name="SliceLabel" Text="{l:T TextureWindow.Slice}" VerticalAlignment="Center" Margin="14,0,8,0" Opacity="0.7" Visibility="Collapsed" />
                 <ComboBox x:Name="SliceBox" Width="110" SelectionChanged="Mip_SelectionChanged" Visibility="Collapsed" />
                 <RadioButton x:Name="View2D" Style="{StaticResource Segment}" GroupName="View" Margin="18,0,2,0" Content="{l:T TextureWindow.D}" IsChecked="True" Checked="View_Checked" ToolTip="{l:T TextureWindow.TexturePicture}" />

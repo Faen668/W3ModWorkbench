@@ -63,7 +63,7 @@
         <DockPanel Grid.Row="0" Margin="14,12,14,10" LastChildFill="False">
             <StackPanel Orientation="Horizontal" DockPanel.Dock="Left">
                 <TextBlock Text="{l:T MeshWindow.LOD}" VerticalAlignment="Center" Margin="0,0,8,0" Opacity="0.7" />
-                <ComboBox x:Name="LodBox" Width="190" SelectionChanged="Lod_SelectionChanged" ToolTip="{l:T MeshWindow.LevelDetailShownMost}" />
+                <ComboBox x:Name="LodBox" MinWidth="190" SelectionChanged="Lod_SelectionChanged" ToolTip="{l:T MeshWindow.LevelDetailShownMost}" />
                 <ToggleButton x:Name="TexturedToggle" Margin="14,0,0,0" Padding="12,5" Content="{l:T Common.Textures}" IsChecked="True" Click="Textured_Click" ToolTip="{l:T MeshWindow.ShowMaterialsColourTextures}" />
                 <ToggleButton x:Name="WireToggle" Margin="6,0,0,0" Padding="12,5" Content="{l:T Common.Wireframe}" Click="Wire_Click" ToolTip="{l:T MeshWindow.DrawTrianglesEdgesOver}" />
                 <ToggleButton x:Name="FloorToggle" Margin="6,0,0,0" Padding="12,5" Content="{l:T MeshWindow.Floor}" Click="Floor_Click" ToolTip="{l:T MeshWindow.GridGroundUnderMesh}" />

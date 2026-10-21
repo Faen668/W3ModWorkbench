@@ -264,7 +264,8 @@
                                    Text="{l:T SceneWindow.SearchLinesSpeakersSections}" />
                     </Grid>
                 </DockPanel>
-                <DockPanel Grid.Row="0" Grid.Column="2" Margin="0,0,0,8" LastChildFill="True">
+                <!-- wraps, so the language list goes under the buttons when they leave it no room -->
+                <WrapPanel Grid.Row="0" Grid.Column="2" Margin="0,0,0,8">
                     <Button x:Name="ReadButton" DockPanel.Dock="Left" Padding="12,5" Click="Read_Click"
                             ToolTip="{l:T SceneWindow.PlayVoicesPartPicked}">
                         <StackPanel Orientation="Horizontal">
@@ -278,9 +279,11 @@
                             <TextBlock Margin="8,0,0,0" Text="{l:T SceneWindow.Pauses}" />
                         </StackPanel>
                     </ToggleButton>
-                    <TextBlock Text="{l:T Common.Language}" DockPanel.Dock="Left" VerticalAlignment="Center" Margin="14,0,8,0" Opacity="0.7" />
-                    <ComboBox x:Name="LanguageBox" MinWidth="70" SelectionChanged="LanguageBox_SelectionChanged" ToolTip="{l:T SceneWindow.LanguageLinesShown}" />
-                </DockPanel>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="{l:T Common.Language}" VerticalAlignment="Center" Margin="14,0,8,0" Opacity="0.7" />
+                        <ComboBox x:Name="LanguageBox" MinWidth="70" SelectionChanged="LanguageBox_SelectionChanged" ToolTip="{l:T SceneWindow.LanguageLinesShown}" />
+                    </StackPanel>
+                </WrapPanel>
                 <Grid Grid.Row="1" Grid.Column="0">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="*" MinHeight="160" />

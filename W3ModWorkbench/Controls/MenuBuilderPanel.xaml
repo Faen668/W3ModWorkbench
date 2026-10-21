@@ -98,7 +98,7 @@
                         <TextBlock Style="{StaticResource IconText}" Text="&#xE74B;" />
                     </Button>
                 </StackPanel>
-                <TextBlock Text="{l:T MenuBuilderPanel.Pages}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                <TextBlock Text="{l:T MenuBuilderPanel.Pages}" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
             </DockPanel>
             <Border Grid.Row="1" Style="{StaticResource Card}" ClipToBounds="True">
                 <ListBox x:Name="GroupList" BorderThickness="0" Background="Transparent" Padding="0,0,14,0" SelectionChanged="GroupList_SelectionChanged">
@@ -125,7 +125,7 @@
                         <TextBlock Style="{StaticResource IconText}" Text="&#xE74B;" />
                     </Button>
                 </StackPanel>
-                <TextBlock Text="{l:T Common.Settings}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                <TextBlock Text="{l:T Common.Settings}" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
             </DockPanel>
             <Border Grid.Row="3" Style="{StaticResource Card}" ClipToBounds="True">
                 <ListBox x:Name="VarList" BorderThickness="0" Background="Transparent" Padding="0,0,14,0" SelectionChanged="VarList_SelectionChanged">
@@ -296,7 +296,7 @@
                                 <TextBlock Style="{StaticResource IconText}" Text="&#xE74D;" />
                             </Button>
                         </StackPanel>
-                        <TextBlock x:Name="PresetsTitle" Text="{l:T MenuBuilderPanel.PresetsPage}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                        <TextBlock x:Name="PresetsTitle" Text="{l:T MenuBuilderPanel.PresetsPage}" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
                     </DockPanel>
                     <Border Grid.Row="1" Style="{StaticResource Card}" ClipToBounds="True">
                         <DataGrid x:Name="PresetGrid" AutoGenerateColumns="False" CanUserAddRows="False" HeadersVisibility="Column" GridLinesVisibility="None"
@@ -322,7 +322,7 @@
                                 <TextBlock Style="{StaticResource IconText}" Text="&#xE74D;" />
                             </Button>
                         </StackPanel>
-                        <TextBlock x:Name="EntriesTitle" Text="{l:T MenuBuilderPanel.Values}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                        <TextBlock x:Name="EntriesTitle" Text="{l:T MenuBuilderPanel.Values}" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
                     </DockPanel>
                     <Border Grid.Row="3" Style="{StaticResource Card}" ClipToBounds="True">
                         <DataGrid x:Name="EntryGrid" AutoGenerateColumns="False" CanUserAddRows="False" HeadersVisibility="Column" GridLinesVisibility="None"
