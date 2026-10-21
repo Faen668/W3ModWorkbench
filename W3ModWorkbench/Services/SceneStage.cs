@@ -363,9 +363,18 @@ public static class SceneStage
                 notes.Add($"{name} isn't drawn: none of the dialog sets the sections play in has a place for them.");
                 continue;
             }
-            if ((definition["entityTemplate"] is RedHandle h ? scene.File.Import(h)?.Path : null) is not { } template || locator.ReadFile(template) is not { } data)
+            string? template = definition["entityTemplate"] is RedHandle h ? scene.File.Import(h)?.Path : null;
+            if (template is null && TemplateForVoiceTag(name, locator) is { } found)
             {
-                notes.Add($"{name} isn't drawn: its entity template wasn't found.");
+                // a chat names only its speakers' voice tags: the game finds whoever has them nearby
+                template = found;
+                notes.Add($"{name} has no entity in the scene, as the game finds whoever has its voice tag nearby: shown as {Path.GetFileName(found)}, which has it.");
+            }
+            if (template is null || locator.ReadFile(template) is not { } data)
+            {
+                notes.Add(template is null
+                    ? $"{name} isn't drawn: the scene gives it no entity, and no community entity has its voice tag."
+                    : $"{name} isn't drawn: its entity template wasn't found.");
                 continue;
             }
             EntityFile entity;
@@ -414,6 +423,16 @@ public static class SceneStage
             var faceClips = face is null ? new Dictionary<string, AnimationClip>(StringComparer.OrdinalIgnoreCase)
                 : Clips(animationSets.Where(IsFaceSet).ToList(), faceNames, null, locator, sets, token);
             var notFound = bodyNames.Where(n => !clips.ContainsKey(n)).ToList();
+            // an idle its sets don't have (an adult's, on a child's or a woman's skeleton): stand in its own standing idle
+            if (notFound.Any(n => n.Contains("idle", StringComparison.OrdinalIgnoreCase))
+                && StandingIdle(animationSets.Where(p => !IsFaceSet(p)).ToList(), locator, sets) is { } own
+                && Clips(animationSets.Where(p => !IsFaceSet(p)).ToList(), [own], rig, locator, sets, token).GetValueOrDefault(own) is { } ownClip)
+            {
+                var stood = notFound.Where(n => n.Contains("idle", StringComparison.OrdinalIgnoreCase)).ToList();
+                foreach (string idle in stood) clips[idle] = ownClip;
+                notFound = [.. notFound.Except(stood)];
+                notes.Add($"{name} stands in {own} from its own animation sets, as they haven't {string.Join(", ", stood)}.");
+            }
             if (notFound.Count > 0) notes.Add($"{name}: {Format.Count(notFound.Count, "animation")} not found in its animation sets ({string.Join(", ", notFound.Take(3))}{(notFound.Count > 3 ? "…" : "")}).");
             cast.Add(new StageActor
             {
@@ -801,6 +820,70 @@ public static class SceneStage
         Walk(template, 0);
         return found.Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(p => Path.GetFileName(p).Contains("dialog", StringComparison.OrdinalIgnoreCase) ? 0 : 1).ToList();
+    }
+
+    /// <summary>
+    /// A standing idle in some animation sets, for an actor whose sets haven't the idle a scene asks for: from the dialog
+    /// sets first, the neutral standing one when there is one, else another standing idle, but not one that sits, lies,
+    /// kneels or leans. Null when there's none.
+    /// </summary>
+    public static string? StandingIdle(List<string> setPaths, ResourceLocator locator, Dictionary<string, Cr2wFile?> sets)
+    {
+        static bool Has(string text, params string[] words) => words.Any(w => text.Contains(w, StringComparison.OrdinalIgnoreCase));
+        string[] notStanding = ["sit", "lying", "lie_", "kneel", "lean", "lookat", "additive", "mimic", "ground", "table", "horse", "boat"];
+        var candidates = setPaths.Where(p => !Has(Path.GetFileNameWithoutExtension(p), notStanding))
+            .OrderBy(p => Has(Path.GetFileName(p), "dialog_standing") ? 0 : Has(Path.GetFileName(p), "dialog") ? 1 : 2).Take(6);
+        foreach (string path in candidates)
+        {
+            if (!sets.TryGetValue(path, out var set))
+            {
+                try { set = locator.ReadFile(path) is { } data ? Cr2wFile.Read(data) : null; }
+                catch (InvalidDataException) { set = null; }
+                sets[path] = set;
+            }
+            if (set is null) continue;
+            var names = set.Exports.Where(x => x.ClassName == "CSkeletalAnimation").Select(x => set.Object(x.Index)["name"] as string)
+                .OfType<string>().Where(n => Has(n, "idle") && !Has(n, notStanding)).ToList();
+            var name = names.FirstOrDefault(n => Has(n, "standing_determined_idle")) ?? names.FirstOrDefault(n => Has(n, "standing")) ?? names.FirstOrDefault();
+            if (name is not null) return name;
+        }
+        return null;
+    }
+
+    private static readonly Lock VoiceTagGate = new();
+    private static List<string>? _communityEntities;
+    private static readonly Dictionary<string, string?> VoiceTagTemplates = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// An entity to stand in for a scene actor the scene gives only a voice tag: a community entity whose file names the
+    /// tag (it maps it to an appearance), the one named after the tag first (toussaint_peasant_man for TOUSSAINT PEASANT
+    /// MAN 04). Null when none does. Reads every community entity the first time, so it belongs off the UI thread.
+    /// </summary>
+    public static string? TemplateForVoiceTag(string voiceTag, ResourceLocator locator)
+    {
+        lock (VoiceTagGate)
+        {
+            if (VoiceTagTemplates.TryGetValue(voiceTag, out var known)) return known;
+            _communityEntities ??= [.. locator.AllPaths(".w2ent").Where(p => p.Contains("community", StringComparison.OrdinalIgnoreCase))];
+            byte[] needle = System.Text.Encoding.UTF8.GetBytes(voiceTag);
+            var having = new System.Collections.Concurrent.ConcurrentBag<string>();
+            Parallel.ForEach(_communityEntities, path =>
+            {
+                try
+                {
+                    if (locator.ReadFile(path) is { } data && data.AsSpan().IndexOf(needle) >= 0) having.Add(path);
+                }
+                catch (Exception ex) when (ex is IOException or InvalidDataException)
+                {
+                    // one that can't be read isn't the one
+                }
+            });
+            // the tag without its number, as a file name: TOUSSAINT PEASANT MAN 04 is toussaint_peasant_man
+            string stem = System.Text.RegularExpressions.Regex.Replace(voiceTag.Trim(), @"\s*\d+$", "").Replace(' ', '_');
+            var best = having.OrderBy(p => Path.GetFileNameWithoutExtension(p).Equals(stem, StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+                .ThenBy(p => Path.GetFileNameWithoutExtension(p).Length).ThenBy(p => p, StringComparer.OrdinalIgnoreCase).FirstOrDefault();
+            return VoiceTagTemplates[voiceTag] = best;
+        }
     }
 
     /// <summary>Reads the animations named from the sets, stopping once all are found. One made for a bigger rig is left out.</summary>

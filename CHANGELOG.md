@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Scene actors without the idle or the entity a scene expects**: an actor whose animation sets haven't the idle the scene stands it in (an adult's idle on a child's or a woman's skeleton) stands in a standing idle of its own instead of T-posing. An actor the scene gives only a voice tag (chats that play on whoever is nearby) is drawn as the community entity that has that voice tag, the one named after it first. Notes say which stood in.
 - **The player's entity shows Geralt**: `player.w2ent` and `geralt_player.w2ent` are only a neck seam, as the game dresses him in what's equipped. The entity window now offers **Geralt, dressed (Workbench)** and starts on it: his head, starting armour and both swords, as the scene and cutscene previews dress him. A note on the view says it's put together by the app, not an appearance in the game's files.
 - **Scenes without dialog sets play in the preview**: community chats and other scenes the game plays wherever their actors already stand (which REDkit shows empty) now stand their actors in a ring facing each other, with a note saying so, instead of "None of the scene's actors could be put together". An actor left out now always says why.
 - **An actor's template opens in the scene's appearance**: clicking a template in a scene's Definitions or a cutscene's actors opens the entity in the appearance that scene or cutscene shows it in (its appearance filter or the cutscene's appearance, else the one the entity gives its voice tag), not the template's default, and the entity window says so.
