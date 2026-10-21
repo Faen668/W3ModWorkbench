@@ -1646,7 +1646,7 @@ public partial class MainWindow : Window, IMessageHost
         menu.IsOpen = true;
     }
 
-    /// <summary>The archives open in the main window, for script lookups and for Find in files.</summary>
+    /// <summary>The archives open in the main window, for script lookups.</summary>
     /// <summary>The archives open in the tree; the asset browser's game files count as the bundles and caches they're from.</summary>
     public IEnumerable<IArchive> OpenArchives() => _roots.SelectMany(r => r.Archive is GameFilesArchive game ? game.Parts : [r.Archive])
         // and those of files another window is acting on, so a mesh copied from the asset browser brings its buffers
@@ -1965,11 +1965,6 @@ public partial class MainWindow : Window, IMessageHost
         else if (ctrl && e.Key == Key.OemComma)
         {
             Settings_Click(sender, e);
-            e.Handled = true;
-        }
-        else if (Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && e.Key == Key.F)
-        {
-            PreviewWindow.FindInBench(this);
             e.Handled = true;
         }
         else if (Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && e.Key == Key.G)

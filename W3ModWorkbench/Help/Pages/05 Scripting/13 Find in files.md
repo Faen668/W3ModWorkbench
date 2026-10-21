@@ -6,7 +6,7 @@ summary: Search the text of every script: your mod, the game's, the installed mo
 keywords: find in files search text grep regex folder scripts look in filter
 windows: PreviewWindow:bench
 ---
-Find in files lives in [[Script Bench]]: press {{Ctrl+Shift+F}} there. The same keys in the main window open Script Bench at it. Nothing needs to be open first. Text you've selected in a script fills the box.
+Find in files lives in [[Script Bench]]: press {{Ctrl+Shift+F}} there, or use the search button in its toolbar. Nothing needs to be open first. Text you've selected in a script fills the box.
 
 ![Every use of GetItemPrice, in your mod, the game and the installed mods](find-in-files.jpg)
 

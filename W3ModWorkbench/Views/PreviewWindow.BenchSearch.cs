@@ -25,14 +25,6 @@ public partial class PreviewWindow
 
     private bool _benchFindReady;
 
-    /// <summary>Opens Script Bench at its find box: Find in files in the main window.</summary>
-    public static void FindInBench(MainWindow main)
-    {
-        if (BenchFor(main) is not { } bench) return;
-        bench.BringForward();
-        bench.FindInFiles();
-    }
-
     /// <summary>The options last used, read once, and kept again when the bench closes.</summary>
     private void SetUpBenchFind()
     {
