@@ -27,7 +27,7 @@ The main window is where you open things and look around in them. It works a lot
 - **Open files** ({{Ctrl+O}}) and **Open folder**: see [[Opening files and folders]]. The clock button beside them lists what you opened lately.
 - **Project** (it shows your project's name when one is open): make, open and build your mod. See [[Projects]].
 - **Close all** closes everything that's open.
-- **Tools**: the [[The Asset Browser|Asset Browser]], [[Find in files]], [[Script Bench]] and the other tools, each with its own page in this guide.
+- **Tools**: the [[The Asset Browser|Asset Browser]], [[Script Bench]] (with [[Find in files]]) and the other tools, each with its own page in this guide.
 - **View**: the list as **Details** or **thumbnails**, and the preview pane on or off.
 - **Settings** ({{Ctrl+,}}), **Help** ({{F1}}), and the **ⓘ** button for the version, licence and credits.
 

@@ -16,7 +16,7 @@ keywords: keys hotkeys shortcuts keyboard
 | {{Ctrl+Shift+E}} | Script Bench |
 | {{Ctrl+Shift+B}} | build your mod |
 | {{Ctrl+Shift+N}} / {{Ctrl+Shift+O}} | new project / open a project |
-| {{Ctrl+Shift+F}} | find in files |
+| {{Ctrl+Shift+F}} | find in files, in Script Bench |
 | {{Ctrl+Shift+G}} | search the game's strings |
 | {{Ctrl+Shift+W}} | stub generator |
 | {{Ctrl+Shift+I}} | source inspector |
