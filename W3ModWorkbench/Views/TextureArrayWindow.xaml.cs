@@ -10,6 +10,7 @@ using W3ModWorkbench.Core.Cr2w;
 using W3ModWorkbench.Core.Projects;
 using W3ModWorkbench.Core.Textures;
 using W3ModWorkbench.ViewModels;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -39,9 +40,9 @@ public partial class TextureArrayWindow : Window, IMessageHost
         _entry = entry;
         _resource = resource;
         var info = entry.Info;
-        Title = $"{Path.GetFileName(entry.Path)} - Texture array";
-        SlotsText.Text = $"Slots used: {info.Slices}";
-        InfoText.Text = $"{entry.Path}   ·   {entry.FormatText}   ·   {Format.Bytes(info.UnpackedSize)} unpacked, {Format.Bytes(info.PackedSize)} in the cache";
+        Title = L.T("TextureArrayWindow.TextureArray2", Path.GetFileName(entry.Path));
+        SlotsText.Text = L.T("TextureArrayWindow.SlotsUsed", info.Slices);
+        InfoText.Text = L.T("TextureArrayWindow.UnpackedCache", entry.Path, entry.FormatText, Format.Bytes(info.UnpackedSize), Format.Bytes(info.PackedSize));
         ShowProperties(null);
         Loaded += async (_, _) => await LoadAsync();
     }
@@ -52,7 +53,7 @@ public partial class TextureArrayWindow : Window, IMessageHost
 
     private void Properties_LinkClicked(object? sender, string path) => TextureWindow.OpenLink(this, Message, _locator, path);
 
-    public Task ShowMessage(string? title, string message, MessageKind kind) => Message.Show(title, message, kind, primary: "OK");
+    public Task ShowMessage(string? title, string message, MessageKind kind) => Message.Show(title, message, kind, primary: L.T("Common.OK"));
 
     private async Task LoadAsync()
     {
@@ -81,18 +82,18 @@ public partial class TextureArrayWindow : Window, IMessageHost
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
         {
-            BusyText.Text = "The textures could not be read.";
-            await ShowMessage("The texture array could not be read", ex.Message, MessageKind.Warning);
+            BusyText.Text = L.T("TextureArrayWindow.TexturesCouldNotRead");
+            await ShowMessage(L.T("TextureArrayWindow.TextureArrayCouldNot"), ex.Message, MessageKind.Warning);
             return;
         }
         Slices.ItemsSource = items;
         bool known = info.Format != TextureFormat.Unknown;
         SavePngsButton.IsEnabled = SaveDdsButton.IsEnabled = known;
-        if (!known) BusyText.Text = $"Texture format {info.RawFormat} can't be shown yet.";
+        if (!known) BusyText.Text = L.T("TextureArrayWindow.TextureFormatCantShown", info.RawFormat);
         Slices.SelectedIndex = 0;
         Slices.Focus();
         var (file, source, redkitPath) = await readResource;
-        SourceNoteBar.Show(source, redkitPath, "texture array");
+        SourceNoteBar.Show(source, redkitPath, L.T("TextureArrayWindow.TextureArray3"));
         ShowProperties(file);
     }
 
@@ -100,7 +101,7 @@ public partial class TextureArrayWindow : Window, IMessageHost
     private void ShowProperties(Cr2wFile? resource)
     {
         var rows = new List<PropertyRow>();
-        var heading = PropertyRow.Child(rows, new PropertyRow("Texture array", "", "", 0, null, heading: true), null);
+        var heading = PropertyRow.Child(rows, new PropertyRow(L.T("TextureArrayWindow.TextureArray"), "", "", 0, null, heading: true), null);
         foreach (var (name, value) in TextureWindow.CacheFacts(_entry)) PropertyRow.Child(rows, new PropertyRow(name, "", value, 1, null), heading);
         if (resource is not null && resource.Exports.Count > 0) rows.AddRange(PropertyRow.Of(resource.Object(0), resource));
         Properties.Show(rows);
@@ -164,7 +165,7 @@ public partial class TextureArrayWindow : Window, IMessageHost
     private void SavePngs_Click(object sender, RoutedEventArgs e)
     {
         if (_pixels is null) return;
-        var dialog = new OpenFolderDialog { Title = "Save every texture in the array as a PNG, into this folder" };
+        var dialog = new OpenFolderDialog { Title = L.T("TextureArrayWindow.SaveEveryTextureArray2") };
         if (dialog.ShowDialog(this) != true) return;
         try
         {
@@ -178,18 +179,18 @@ public partial class TextureArrayWindow : Window, IMessageHost
                 using var stream = File.Create(file);
                 encoder.Save(stream);
             }
-            _ = Message.Show(null, $"Saved {_entry.Info.Slices} textures to {dialog.FolderName}.", MessageKind.Info, autoClose: true);
+            _ = Message.Show(null, L.T("TextureArrayWindow.SavedTextures", _entry.Info.Slices, dialog.FolderName), MessageKind.Info, autoClose: true);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            _ = ShowMessage("The textures could not be saved", ex.Message, MessageKind.Warning);
+            _ = ShowMessage(L.T("TextureArrayWindow.TexturesCouldNotSaved"), ex.Message, MessageKind.Warning);
         }
     }
 
     private void SaveDds_Click(object sender, RoutedEventArgs e)
     {
         if (_pixels is null) return;
-        var dialog = new SaveFileDialog { Title = "Save the texture array", FileName = BaseName + ".dds", Filter = "DirectDraw Surface (*.dds)|*.dds" };
+        var dialog = new SaveFileDialog { Title = L.T("TextureArrayWindow.SaveTextureArray"), FileName = BaseName + ".dds", Filter = L.T("TextureArrayWindow.DirectDrawSurfaceDdsDds") };
         if (dialog.ShowDialog(this) != true) return;
         try
         {
@@ -198,7 +199,7 @@ public partial class TextureArrayWindow : Window, IMessageHost
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException or InvalidDataException)
         {
-            _ = ShowMessage("The texture array could not be saved", ex.Message, MessageKind.Warning);
+            _ = ShowMessage(L.T("TextureArrayWindow.TextureArrayCouldNot2"), ex.Message, MessageKind.Warning);
         }
     }
 }

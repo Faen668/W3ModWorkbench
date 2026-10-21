@@ -7,6 +7,7 @@ using W3ModWorkbench.Core;
 using W3ModWorkbench.Core.BehTrees;
 using W3ModWorkbench.Core.Cr2w;
 using W3ModWorkbench.ViewModels;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -37,7 +38,7 @@ public partial class BehTreeWindow : Window, IMessageHost
         _source = source;
         _readData = readData;
         _locator = locator;
-        Title = $"{Path.GetFileName(path)} - Behaviour tree";
+        Title = L.T("BehTreeWindow.BehaviourTree2", Path.GetFileName(path));
         InfoText.Text = $"{path}   ·   {source}";
         Legend.ItemsSource = Enum.GetValues<BehTreeNodeKind>().Select(k =>
         {
@@ -45,7 +46,7 @@ public partial class BehTreeWindow : Window, IMessageHost
             brush.Freeze();
             return new { Name = BehTreeGraph.Kind(k), Brush = brush };
         }).ToList();
-        FoldBox.ItemsSource = new[] { "Open every branch" }.Concat(Enumerable.Range(1, 8).Select(d => $"Fold below level {d}")).ToList();
+        FoldBox.ItemsSource = new[] { L.T("Common.OpenEveryBranch") }.Concat(Enumerable.Range(1, 8).Select(d => L.T("BehTreeWindow.FoldBelowLevel", d))).ToList();
         Loaded += async (_, _) => await LoadAsync();
     }
 
@@ -60,7 +61,7 @@ public partial class BehTreeWindow : Window, IMessageHost
     public static void OpenFile(string file, ResourceLocator locator, Window owner) =>
         new BehTreeWindow(Path.GetFileName(file), file, () => File.ReadAllBytes(file), locator, file).Standalone(owner).Show();
 
-    public Task ShowMessage(string? title, string message, MessageKind kind) => Message.Show(title, message, kind, primary: "OK");
+    public Task ShowMessage(string? title, string message, MessageKind kind) => Message.Show(title, message, kind, primary: L.T("Common.OK"));
 
     private async Task LoadAsync()
     {
@@ -70,21 +71,21 @@ public partial class BehTreeWindow : Window, IMessageHost
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or NotSupportedException)
         {
-            BusyText.Text = "The behaviour tree could not be read.\n\n" + ex.Message;
+            BusyText.Text = L.T("BehTreeWindow.BehaviourTreeCouldNot", ex.Message);
             return;
         }
         BusyText.Visibility = Visibility.Collapsed;
         Body.Visibility = Visibility.Visible;
         if (_tree.Root is null)
         {
-            NodeTitle.Text = "This tree is empty: it has no root node.";
+            NodeTitle.Text = L.T("BehTreeWindow.TreeEmptyHasNo");
             return;
         }
         Graph.Show(_tree.Root);
         _ = LoadRedkitAsync();
         FoldBox.SelectedIndex = 0;
         var tasks = _tree.Root.All().Count(n => n.Task is not null);
-        InfoText.Text = $"{_path}   ·   {_source}   ·   CR2W {_tree.File.Version}, {Format.Count(_tree.NodeCount, "node")}, {Format.Count(tasks, "script task")}";
+        InfoText.Text = L.T("BehTreeWindow.CR2W", _path, _source, _tree.File.Version, L.T("Count.Node", _tree.NodeCount), L.T("Count.ScriptTask", tasks));
         ShowNode(_tree.Root);
         Graph.Selected = _tree.Root;
     }
@@ -102,9 +103,9 @@ public partial class BehTreeWindow : Window, IMessageHost
         _shown = node;
         NodeTitle.Text = node.Title;
         var said = new List<string> { BehTreeGraph.Kind(node.Kind), node.Object.ClassName };
-        if (node.Task is { } task) said.Add($"runs {task.ClassName}");
-        if (node.Priority is { } priority) said.Add($"priority {priority}");
-        if (node.Children.Count > 0) said.Add(Format.Count(node.Children.Count, "child", "children"));
+        if (node.Task is { } task) said.Add(L.T("BehTreeWindow.Runs", task.ClassName));
+        if (node.Priority is { } priority) said.Add(L.T("BehTreeWindow.Priority", priority));
+        if (node.Children.Count > 0) said.Add(L.T("Count.Child", node.Children.Count));
         if (node.Detail.Length > 0 && node.Task is null) said.Add(node.Detail);
         NodeDetail.Text = string.Join("  ·  ", said);
         NodeComment.Text = node.Comment ?? "";
@@ -113,7 +114,7 @@ public partial class BehTreeWindow : Window, IMessageHost
         if (node.Task is { } t)
         {
             // the task is a script class, which the engine's own list of classes hasn't got, so it's headed here
-            rows.Add(new PropertyRow($"Task: {t.ClassName}", "", "", 0, null, heading: true));
+            rows.Add(new PropertyRow(L.T("BehTreeWindow.Task", t.ClassName), "", "", 0, null, heading: true));
             rows.AddRange(Rows(t, []));
         }
         Properties.Show(rows);
@@ -131,7 +132,7 @@ public partial class BehTreeWindow : Window, IMessageHost
         var (path, origin) = (_path, _origin);
         var from = await Task.Run(() => RedkitSource.For(path, origin));
         _redkit = from.Redkit;
-        SourceNoteBar.Show(from.Source, from.RedkitPath ?? origin, "behaviour tree");
+        SourceNoteBar.Show(from.Source, from.RedkitPath ?? origin, L.T("BehTreeWindow.BehaviourTree3"));
         if (_shown is { } node) ShowNode(node);
     }
 
@@ -153,7 +154,7 @@ public partial class BehTreeWindow : Window, IMessageHost
         _matches = text.Length < 2 || _tree?.Root is null ? [] : _tree.Root.All().Where(n => Matches(n, text)).ToList();
         _match = -1;
         Graph.Highlight(_matches);
-        MatchText.Text = text.Length < 2 ? "" : _matches.Count == 0 ? "none" : Format.Count(_matches.Count, "node");
+        MatchText.Text = text.Length < 2 ? "" : _matches.Count == 0 ? L.T("Common.None") : L.T("Count.Node", _matches.Count);
         if (_matches.Count > 0) NextMatch();
     }
 
@@ -177,7 +178,7 @@ public partial class BehTreeWindow : Window, IMessageHost
         var node = _matches[_match];
         Graph.Reveal(node);
         ShowNode(node);
-        MatchText.Text = $"{_match + 1} of {_matches.Count:N0}";
+        MatchText.Text = L.T("BehTreeWindow.Of", _match + 1, _matches.Count);
     }
 
     private void FoldBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -195,7 +196,7 @@ public partial class BehTreeWindow : Window, IMessageHost
         try
         {
             Clipboard.SetText(text);
-            _ = Message.Show(null, message ?? $"Copied {text}", MessageKind.Info, primary: message is null ? null : "OK", autoClose: message is null);
+            _ = Message.Show(null, message ?? L.T("BehTreeWindow.Copied", text), MessageKind.Info, primary: message is null ? null : L.T("Common.OK"), autoClose: message is null);
         }
         catch (System.Runtime.InteropServices.COMException)
         {

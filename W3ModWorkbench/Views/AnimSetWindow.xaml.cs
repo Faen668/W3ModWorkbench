@@ -7,6 +7,7 @@ using W3ModWorkbench.Core.Animation;
 using W3ModWorkbench.Core.Cr2w;
 using W3ModWorkbench.Core.Trees;
 using W3ModWorkbench.ViewModels;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -36,8 +37,8 @@ public partial class AnimSetWindow : Window, IMessageHost
     private static readonly (string Name, string Path)[] People =
     [
         ("Geralt", @"characters\player_entities\geralt\geralt_player.w2ent"),
-        ("Man", JobTreeFile.PreviewEntities[0]), ("Woman", JobTreeFile.PreviewEntities[1]),
-        ("Child", JobTreeFile.PreviewEntities[2]), ("Dwarf", JobTreeFile.PreviewEntities[3]),
+        (L.T("AnimSetWindow.Man"), JobTreeFile.PreviewEntities[0]), (L.T("AnimSetWindow.Woman"), JobTreeFile.PreviewEntities[1]),
+        (L.T("AnimSetWindow.Child"), JobTreeFile.PreviewEntities[2]), (L.T("AnimSetWindow.Dwarf"), JobTreeFile.PreviewEntities[3]),
     ];
 
     private sealed record AnimationItem(AnimSetAnimation Animation, int Events)
@@ -65,7 +66,7 @@ public partial class AnimSetWindow : Window, IMessageHost
         _origin = origin;
         _archive = archive;
         _diskFile = diskFile;
-        Title = $"{Path.GetFileName(path)} - Animation set";
+        Title = L.T("AnimSetWindow.AnimationSet", Path.GetFileName(path));
         InfoText.Text = $"{path}   ·   {source}";
         Preview.TimeChanged += (_, time) =>
         {
@@ -85,7 +86,7 @@ public partial class AnimSetWindow : Window, IMessageHost
     public static void OpenFile(string file, ResourceLocator locator, Window owner) =>
         new AnimSetWindow(Path.GetFileName(file), file, () => File.ReadAllBytes(file), locator, file, diskFile: file).Standalone(owner).Show();
 
-    public Task ShowMessage(string? title, string message, MessageKind kind) => Message.Show(title, message, kind, primary: "OK");
+    public Task ShowMessage(string? title, string message, MessageKind kind) => Message.Show(title, message, kind, primary: L.T("Common.OK"));
 
     private async Task LoadAsync()
     {
@@ -95,7 +96,7 @@ public partial class AnimSetWindow : Window, IMessageHost
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or NotSupportedException)
         {
-            BusyText.Text = "The animation set could not be read.\n\n" + ex.Message;
+            BusyText.Text = L.T("AnimSetWindow.AnimationSetCouldNot", ex.Message);
             return;
         }
         var set = _set;
@@ -103,11 +104,10 @@ public partial class AnimSetWindow : Window, IMessageHost
         Preview.UseSet(_path, set.File, n => _diskFile is { } disk && File.Exists($"{disk}.{n}.buffer") ? File.ReadAllBytes($"{disk}.{n}.buffer") : _locator.ReadBuffer(_path, n, _archive));
         BusyText.Visibility = Visibility.Collapsed;
         Body.Visibility = Visibility.Visible;
-        AnimationsTab.Header = $"Animations ({set.Animations.Count:N0})";
+        AnimationsTab.Header = L.T("AnimSetWindow.Animations", set.Animations.Count);
         int events = set.Animations.Sum(a => a.Events.Count);
-        InfoText.Text = $"{_path}   ·   {_source}   ·   CR2W {set.File.Version}, {Format.Count(set.Animations.Count, "animation")}, {Format.Count(events, "event")}"
-            + $", {set.Animations.Sum(a => a.Duration):0.#} s in all";
-        SetNote.Text = "Reading the events files it names…";
+        InfoText.Text = L.T("AnimSetWindow.CR2WAll", _path, _source, set.File.Version, L.T("Count.Animation", set.Animations.Count), L.T("Count.Event", events), set.Animations.Sum(a => a.Duration));
+        SetNote.Text = L.T("AnimSetWindow.ReadingEventsFilesNames");
         ShowAnimations();
         ShowBlendChoices();
         FileProperties.Show(PropertyRow.Of(set.Resource, set.File));
@@ -170,21 +170,20 @@ public partial class AnimSetWindow : Window, IMessageHost
     private sealed record SetItem(string Path, bool This)
     {
         public FontWeight Weight => This ? FontWeights.SemiBold : FontWeights.Normal;
-        public string Note => This ? "this set" : "";
+        public string Note => This ? L.T("AnimSetWindow.Set") : "";
     }
 
     /// <summary>The animation sets the character plays from, as REDkit's Entity AnimSets tab lists them, this one marked.</summary>
     private void ShowEntitySets()
     {
-        string who = EntityBox.SelectedIndex >= 0 ? _entities[EntityBox.SelectedIndex].Name : "The character";
+        string who = EntityBox.SelectedIndex >= 0 ? _entities[EntityBox.SelectedIndex].Name : L.T("AnimSetWindow.Character");
         var sets = Preview.EntityAnimsets;
         string own = GamePath();
         bool has = sets.Any(s => s.Equals(own, StringComparison.OrdinalIgnoreCase));
-        EntitySetsTab.Header = $"Character's sets ({sets.Count:N0})";
-        EntitySetsTitle.Text = $"The animation sets {who} plays from";
-        EntitySetsNote.Text = sets.Count == 0 ? $"{who}'s templates name no animation sets; its behaviours bring theirs."
-            : (has ? "This set is one of them." : "This set isn't one of them: in the game the character plays its animations only when a behaviour or a scene brings it.")
-              + " Double-click one to open it.";
+        EntitySetsTab.Header = L.T("AnimSetWindow.CharactersSets2", sets.Count);
+        EntitySetsTitle.Text = L.T("AnimSetWindow.AnimationSetsPlays", who);
+        EntitySetsNote.Text = sets.Count == 0 ? L.T("AnimSetWindow.TemplatesNameNoAnimation", who)
+            : L.T("AnimSetWindow.DoubleClickOneOpen", (has ? L.T("AnimSetWindow.SetOneThem") : L.T("AnimSetWindow.SetIsntOneThem")));
         EntitySetsList.ItemsSource = sets.Select(s => new SetItem(s, s.Equals(own, StringComparison.OrdinalIgnoreCase))).ToList();
     }
 
@@ -225,7 +224,9 @@ public partial class AnimSetWindow : Window, IMessageHost
         if (EntitySetsList.SelectedItem is SetItem item) Copy(item.Path);
     }
 
-    private const string NoBlend = "(no blending)", RestPose = "(the pose it rests in)";
+    private static string NoBlend => L.T("AnimSetWindow.NoBlend");
+    private static string NoTrace => L.T("EntityWindow.None");
+    private static string RestPose => L.T("AnimSetWindow.RestPose");
 
     /// <summary>
     /// What the animations blend from: the set's idle when it has one, as a character stands in it before it acts, at
@@ -258,9 +259,9 @@ public partial class AnimSetWindow : Window, IMessageHost
         BlendInBox.IsEnabled = BlendOutBox.IsEnabled = blend;
         Preview.BlendIn = blend ? Seconds(BlendInBox) ?? 0.2f : 0;
         Preview.BlendOut = blend ? Seconds(BlendOutBox) ?? 0.2f : 0;
-        bool fromAnimation = choice is not (NoBlend or RestPose);
+        bool fromAnimation = choice != NoBlend && choice != RestPose;
         if (!await Preview.BlendFromAsync(fromAnimation ? _path : null, fromAnimation ? choice : null))
-            Preview.Message = $"{choice} can't be blended from: it's for another skeleton or can't be read.";
+            Preview.Message = L.T("AnimSetWindow.CantBlendedAnotherSkeleton", choice);
     }
 
     private void BlendBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -294,7 +295,7 @@ public partial class AnimSetWindow : Window, IMessageHost
         BlendFromMenu.IsEnabled = AnimationGrid.SelectedItem is AnimationItem;
         int files = _set?.EventFiles.Count ?? 0;
         OpenEventsMenu.IsEnabled = files > 0;
-        OpenEventsMenu.Header = files == 1 ? $"Open {Path.GetFileName(_set!.EventFiles[0])}" : "Open the events files";
+        OpenEventsMenu.Header = files == 1 ? L.T("AnimSetWindow.Open", Path.GetFileName(_set!.EventFiles[0])) : L.T("AnimSetWindow.OpenEventsFiles");
     }
 
     private void CopyName_Click(object sender, RoutedEventArgs e)
@@ -321,8 +322,8 @@ public partial class AnimSetWindow : Window, IMessageHost
         var names = Preview.Rig?.Names ?? [];
         string? traced = TraceBox.SelectedItem as string;
         _syncing = true;
-        TraceBox.ItemsSource = new[] { "(none)" }.Concat(names).ToList();
-        TraceBox.SelectedItem = traced is not null && names.Contains(traced) ? traced : "(none)";
+        TraceBox.ItemsSource = new[] { NoTrace }.Concat(names).ToList();
+        TraceBox.SelectedItem = traced is not null && names.Contains(traced) ? traced : NoTrace;
         _syncing = false;
     }
 
@@ -350,8 +351,8 @@ public partial class AnimSetWindow : Window, IMessageHost
             return events;
         });
         foreach (var (o, f) in owners) _eventFiles[o] = f;
-        SetNote.Text = files.Count == 0 ? "The set names no events files; its events are its own."
-            : $"Events from the set and {string.Join(", ", files.Select(Path.GetFileName))} ({Format.Count(_outside.Count, "event")})";
+        SetNote.Text = files.Count == 0 ? L.T("AnimSetWindow.SetNamesNoEvents")
+            : L.T("AnimSetWindow.EventsSet", string.Join(", ", files.Select(Path.GetFileName)), L.T("Count.Event", _outside.Count));
         ShowAnimations();
         if (_animation is { } shown) ShowEvents(shown);
     }
@@ -384,8 +385,8 @@ public partial class AnimSetWindow : Window, IMessageHost
         _animation = animation;
         var a = animation;
         AnimationTitle.Text = a.Name;
-        AnimationDetail.Text = $"{a.Duration:0.000} s  ·  {a.Frames:N0} frames at {a.FramesPerSecond:0.#} a second  ·  {Format.Count(a.Bones, "bone")} moved  ·  {a.BufferKind}"
-            + (a.SourceSize > 0 ? $", {Format.Bytes(a.KeptSize)} in the file of {Format.Bytes(a.SourceSize)} before compressing" : "");
+        AnimationDetail.Text = L.T("AnimSetWindow.AnimationDetail", a.Duration, a.Frames, a.FramesPerSecond, L.T("Count.Bone", a.Bones), a.BufferKind)
+            + (a.SourceSize > 0 ? L.T("AnimSetWindow.KeptSize", Format.Bytes(a.KeptSize), Format.Bytes(a.SourceSize)) : "");
         // REDkit's copy, when it has the animation, for what cooking left out
         var own = a.Animation;
         var file = _set!.File;
@@ -393,7 +394,7 @@ public partial class AnimSetWindow : Window, IMessageHost
             (own, file) = (redkit.Object(kept.Index), redkit);
         AnimationProperties.Show(own is null ? [] : PropertyRow.Of(own, file));
         var (distance, turn) = a.Travel;
-        MotionEnd.Text = a.Motion is null ? "none: the animation doesn't move the character" : $"{Motion(a.Duration)}   ({distance:0.00} m over the ground, turned {turn:0.#}°)";
+        MotionEnd.Text = a.Motion is null ? L.T("AnimSetWindow.NoneAnimationDoesntMove") : L.T("AnimSetWindow.MOverGroundTurned", Motion(a.Duration), distance, turn);
         ShowMotionAt(0);
         ShowEvents(a);
         if (await Preview.PlayAsync(_path, a.Name)) Timeline.Duration = Preview.Duration;
@@ -403,8 +404,7 @@ public partial class AnimSetWindow : Window, IMessageHost
     {
         var events = EventsOf(animation);
         Timeline.Show(events, animation.Duration);
-        TimelineTitle.Text = $"{animation.Name}: {Format.Count(events.Count, "event")} on {Format.Count(events.Select(e => e.Track).Distinct().Count(), "track")}"
-            + "; click an event for its properties, double-click a sound to hear it, click the ruler to go to a moment, the wheel to zoom";
+        TimelineTitle.Text = L.T("AnimSetWindow.ClickEventPropertiesDouble", animation.Name, L.T("Count.Event", events.Count), L.T("Count.Track", events.Select(e => e.Track).Distinct().Count()));
     }
 
     /// <summary>Where the motion extraction has the character at a time: its move and its turn.</summary>
@@ -412,16 +412,16 @@ public partial class AnimSetWindow : Window, IMessageHost
     {
         if (_animation?.Motion is not { } motion) return "";
         var (p, yaw) = motion.At(time);
-        return $"translation {p.X,6:0.00}; {p.Y,6:0.00}; {p.Z,6:0.00}   rotation {yaw * 180 / MathF.PI,7:0.0}°";
+        return L.T("AnimSetWindow.TranslationRotation", p.X, p.Y, p.Z, yaw * 180 / MathF.PI);
     }
 
     private void ShowMotionAt(float time)
     {
         if (_animation is not { } a) return;
-        MotionNow.Text = a.Motion is null ? "" : $"{Motion(time)}   at {time:0.00} s";
+        MotionNow.Text = a.Motion is null ? "" : L.T("AnimSetWindow.AtS", Motion(time), time);
         var (distance, turn) = a.Travel;
-        MotionText.Text = a.Motion is null ? $"{a.Name} doesn't move the character as a whole."
-            : $"{a.Name} moves the character {distance:0.00} m and turns it {turn:0.#}° by its end; the character stays in place here, as the game moves it along that.";
+        MotionText.Text = a.Motion is null ? L.T("AnimSetWindow.DoesntMoveCharacterWhole", a.Name)
+            : L.T("AnimSetWindow.MovesCharacterMTurns", a.Name, distance, turn);
     }
 
     private void EntityBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -439,7 +439,7 @@ public partial class AnimSetWindow : Window, IMessageHost
     private void TraceBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_syncing) return;
-        Preview.TracedBone = TraceBox.SelectedItem is string bone && bone != "(none)" ? bone : null;
+        Preview.TracedBone = TraceBox.SelectedItem is string bone && TraceBox.SelectedIndex > 0 ? bone : null;
     }
 
     private void Timeline_EventClicked(object? sender, AnimEvent ev)
@@ -448,8 +448,8 @@ public partial class AnimSetWindow : Window, IMessageHost
         Preview.SetTime(ev.Start);
         EventTitle.Text = ev.Label;
         var from = _eventFiles.TryGetValue(ev.Object, out var outside) ? outside : ((Cr2wFile, string)?)null;
-        EventDetail.Text = $"{ev.Object.ClassName}  ·  track {ev.Track}  ·  at {ev.Start:0.000} s" + (ev.Duration > 0 ? $" for {ev.Duration:0.000} s" : "") + $"  ·  {ev.Animation}"
-            + (from is { } f ? $"  ·  from {f.Item2}" : "  ·  kept in the set");
+        EventDetail.Text = L.T("AnimSetWindow.EventDetail", ev.Object.ClassName, ev.Track, ev.Start) + (ev.Duration > 0 ? L.T("EventTimeline.EventFor", ev.Duration) : "") + $"  ·  {ev.Animation}"
+            + (from is { } f ? L.T("AnimSetWindow.EventFrom", f.Item2) : L.T("AnimSetWindow.KeptInSet"));
         EventProperties.Show(PropertyRow.Of(ev.Object, from?.Item1 ?? _set!.File));
         Tabs.SelectedItem = EventTab;
     }
@@ -474,7 +474,7 @@ public partial class AnimSetWindow : Window, IMessageHost
         var from = await Task.Run(() => RedkitSource.For(path, origin));
         _redkit = from.Redkit;
         if (from.Redkit?.First("CSkeletalAnimationSet") is { } own) FileProperties.Show(PropertyRow.Of(own, from.Redkit));
-        SourceNoteBar.Show(from.Source, from.RedkitPath ?? origin, "animation set");
+        SourceNoteBar.Show(from.Source, from.RedkitPath ?? origin, L.T("AnimSetWindow.AnimationSet2"));
         if (_animation is { } shown && _redkit is not null) _ = PlayAsync(shown);
     }
 

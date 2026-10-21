@@ -14,6 +14,7 @@ using W3ModWorkbench.Core.Cr2w;
 using W3ModWorkbench.Core.Meshes;
 using W3ModWorkbench.Core.Projects;
 using W3ModWorkbench.ViewModels;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -78,15 +79,15 @@ public partial class MaterialWindow : Window, IMessageHost
     private sealed record UserRow(string Path, string? Archive = null)
     {
         public string Name => System.IO.Path.GetFileName(Path);
-        public string Folder => (System.IO.Path.GetDirectoryName(Path) ?? "") + (Archive is { } a ? $"   (in {a})" : "");
+        public string Folder => (System.IO.Path.GetDirectoryName(Path) ?? "") + (Archive is { } a ? L.T("MaterialWindow.In", a) : "");
         public string Kind => FileKinds.Of(Path)?.Name ?? System.IO.Path.GetExtension(Path);
     }
 
     // shapes the game itself has, so the preview needs nothing but the game
     private static readonly Shape[] Shapes =
     [
-        new("Sphere", @"engine\reference_level\level_assets\tags\materials\sphere.w2mesh", ShapeKind.Shape),
-        new("Box", @"engine\meshes\editor\box.w2mesh", ShapeKind.Shape),
+        new(L.T("MaterialWindow.Sphere"), @"engine\reference_level\level_assets\tags\materials\sphere.w2mesh", ShapeKind.Shape),
+        new(L.T("MaterialWindow.Box"), @"engine\meshes\editor\box.w2mesh", ShapeKind.Shape),
     ];
 
     private MaterialWindow(string path, string source, Func<byte[]> readData, ResourceLocator locator, string? origin, IArchive? archive, string? diskFile)
@@ -99,7 +100,7 @@ public partial class MaterialWindow : Window, IMessageHost
         _origin = origin;
         _archive = archive;
         _diskFile = diskFile;
-        Title = $"{Path.GetFileName(path)} - Material";
+        Title = L.T("MaterialWindow.Material2", Path.GetFileName(path));
         InfoText.Text = $"{path}   ·   {source}";
         View.StartFrom(35, 20);
         _spin.Tick += (_, _) => View.Orbit(0.6);
@@ -122,7 +123,7 @@ public partial class MaterialWindow : Window, IMessageHost
     public static void OpenFile(string file, ResourceLocator locator, Window owner) =>
         new MaterialWindow(Path.GetFileName(file), file, () => File.ReadAllBytes(file), locator, file, null, file).Standalone(owner).Show();
 
-    public Task ShowMessage(string? title, string message, MessageKind kind) => Message.Show(title, message, kind, primary: "OK");
+    public Task ShowMessage(string? title, string message, MessageKind kind) => Message.Show(title, message, kind, primary: L.T("Common.OK"));
 
     private bool IsGraph => _path.EndsWith(".w2mg", StringComparison.OrdinalIgnoreCase);
 
@@ -160,7 +161,7 @@ public partial class MaterialWindow : Window, IMessageHost
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or NotSupportedException)
         {
-            BusyText.Text = "The material could not be read.\n\n" + ex.Message;
+            BusyText.Text = L.T("MaterialWindow.MaterialCouldNotRead", ex.Message);
             return;
         }
         var m = _material;
@@ -169,13 +170,13 @@ public partial class MaterialWindow : Window, IMessageHost
         BusyText.Visibility = Visibility.Collapsed;
         Body.Visibility = Visibility.Visible;
         TitleText.Text = Path.GetFileName(_path);
-        string kind = IsGraph ? "Shader graph" : "Material instance";
-        string based = m.BasePath is { } b && !IsGraph ? $"  ·  based on {Path.GetFileName(b)}" : "";
-        DetailText.Text = $"{kind}  ·  shader {m.Shader}{based}  ·  "
-            + (IsGraph ? $"{Format.Count(m.Inherited.Count, "parameter")} it declares, with their defaults"
-                       : $"{Format.Count(m.Own.Count, "parameter")} set here, {m.Inherited.Count:N0} from its bases and the shader");
-        InfoText.Text = $"{_path}   ·   {_source}   ·   CR2W {_file!.Version}";
-        SaveButton.ToolTip = IsGraph ? "A shader graph isn't changed: save the changes as a new material based on it" : SaveButton.ToolTip;
+        string kind = IsGraph ? L.T("MaterialWindow.ShaderGraph") : L.T("MaterialWindow.MaterialInstance");
+        string based = m.BasePath is { } b && !IsGraph ? L.T("MaterialWindow.Based2", Path.GetFileName(b)) : "";
+        DetailText.Text = L.T("MaterialWindow.Detail", kind, m.Shader, based)
+            + (IsGraph ? L.T("MaterialWindow.GraphParameters", L.T("Count.Parameter", m.Inherited.Count))
+                       : L.T("MaterialWindow.OwnParameters", L.T("Count.Parameter", m.Own.Count), m.Inherited.Count));
+        InfoText.Text = L.T("MaterialWindow.CR2W", _path, _source, _file!.Version);
+        SaveButton.ToolTip = IsGraph ? L.T("MaterialWindow.ShaderGraphIsntChanged") : SaveButton.ToolTip;
         ShowRows();
         ShowChain();
         var resource = _file.First(IsGraph ? "CMaterialGraph" : "CMaterialInstance");
@@ -194,23 +195,22 @@ public partial class MaterialWindow : Window, IMessageHost
         _rows = [.. _own.Select(p => new MaterialValueRow(p, true, InBase(p.Name), ParameterChanged).WithRange())
             .Concat(inherited.Where(i => !_own.Any(o => o.Name.Equals(i.Name, StringComparison.OrdinalIgnoreCase)))
                 .Select(p => new MaterialValueRow(p, false, true, ParameterChanged).WithRange()))
-            .OrderBy(r => GroupOrder(r.Group)).ThenBy(r => r.IsOwn ? 0 : 1)];
+            .OrderBy(r => r.GroupOrder).ThenBy(r => r.IsOwn ? 0 : 1)];
         _view = new ListCollectionView(_rows) { Filter = Shown };
         _view.GroupDescriptions.Add(new PropertyGroupDescription(nameof(MaterialValueRow.Group)));
         ParameterList.ItemsSource = _view;
-        ParametersTab.Header = $"Parameters ({_rows.Count:N0})";
+        ParametersTab.Header = L.T("MaterialWindow.Parameters2", _rows.Count);
         UpdateNote();
         foreach (var row in _rows) _ = ThumbnailAsync(row);
     }
 
-    private static int GroupOrder(string group) => group switch { "Textures" => 0, "Colours" => 1, "Numbers" => 2, "Vectors" => 3, _ => 4 };
 
     private void UpdateNote()
     {
         int own = _rows.Count(r => r.IsOwn);
         ParametersNote.Text = IsGraph
-            ? "The parameters the shader declares, with their defaults. Change any to make a new material based on it (Save as new material)."
-            : $"{own:N0} set by this material (in bold), the rest from its bases and the shader. Change any to set it here; the preview follows.";
+            ? L.T("MaterialWindow.ParametersShaderDeclaresTheir")
+            : L.T("MaterialWindow.SetMaterialBoldRest", own);
     }
 
     private bool Shown(object item)
@@ -240,18 +240,18 @@ public partial class MaterialWindow : Window, IMessageHost
         var m = _material!;
         var items = new List<ChainItem>
         {
-            new(Path.GetFileName(_path), IsGraph ? "This shader graph" : "This material", Format.Count(_own.Count, "parameter") + (IsGraph ? "" : " set here"), _path, false),
+            new(Path.GetFileName(_path), IsGraph ? L.T("MaterialWindow.ShaderGraph2") : L.T("MaterialWindow.Material3"), L.T("Count.Parameter", _own.Count) + (IsGraph ? "" : L.T("MaterialWindow.SetHere")), _path, false),
         };
         foreach (var basePath in m.Bases)
         {
             string name = Path.GetFileName(basePath);
             int gives = m.Inherited.Count(p => p.From.Equals(name, StringComparison.OrdinalIgnoreCase));
             bool graph = basePath.EndsWith(".w2mg", StringComparison.OrdinalIgnoreCase);
-            items.Add(new(name, (graph ? "Shader graph: declares every parameter and its default" : "Material instance") + $"  ·  {basePath}",
-                $"gives {gives:N0}", basePath, true));
+            items.Add(new(name, (graph ? L.T("MaterialWindow.ShaderGraphDeclaresEvery") : L.T("MaterialWindow.MaterialInstance")) + $"  ·  {basePath}",
+                L.T("MaterialWindow.Gives", gives), basePath, true));
         }
         ChainList.ItemsSource = items;
-        ChainTab.Header = $"Based on ({m.Bases.Count:N0})";
+        ChainTab.Header = L.T("MaterialWindow.Based3", m.Bases.Count);
     }
 
     /// <summary>Says where the material's properties come from.</summary>
@@ -260,7 +260,7 @@ public partial class MaterialWindow : Window, IMessageHost
         var (path, origin) = (GamePath, _origin);
         var from = await Task.Run(() => RedkitSource.For(path, origin));
         if (from.Redkit?.First(IsGraph ? "CMaterialGraph" : "CMaterialInstance") is { } own) FileProperties.Show(PropertyRow.Of(own, from.Redkit));
-        SourceNoteBar.Show(from.Source, from.RedkitPath ?? origin, IsGraph ? "shader graph" : "material");
+        SourceNoteBar.Show(from.Source, from.RedkitPath ?? origin, IsGraph ? L.T("MaterialWindow.ShaderGraph3") : L.T("MaterialWindow.Material4"));
     }
 
     // ---------------------------------------------------------------- the preview
@@ -295,7 +295,7 @@ public partial class MaterialWindow : Window, IMessageHost
         {
             var entity = await Task.Run(() =>
             {
-                var read = Core.Entities.EntityFile.Read(ReadAnywhere(path) ?? throw new FileNotFoundException($"{path} isn't in the game's files or the archives open."));
+                var read = Core.Entities.EntityFile.Read(ReadAnywhere(path) ?? throw new FileNotFoundException(L.T("MaterialWindow.IsntGamesFilesArchives", path)));
                 read.FindOrigins(_locator.ReadFile);
                 return read;
             }, token);
@@ -329,14 +329,14 @@ public partial class MaterialWindow : Window, IMessageHost
         var token = (_shapeLoad = new CancellationTokenSource()).Token;
         int version = ++_previewVersion;
         ViewMessage.Visibility = Visibility.Collapsed;
-        PreviewNote.Text = $"Reading {Path.GetFileName(shape.Path)}…";
+        PreviewNote.Text = L.T("MaterialWindow.Reading", Path.GetFileName(shape.Path));
         List<(MeshFile Mesh, Matrix4x4 Place)> parts;
         List<(MeshFile Mesh, (ColorShift? First, ColorShift? Second)? Coloring)> coloured;
         try
         {
             if (await ReadModelAsync(shape.Path, token) is not { } model)
             {
-                ViewMessage.Text = $"{Path.GetFileName(shape.Path)} isn't in the game's files or the archives open.";
+                ViewMessage.Text = L.T("MaterialWindow.IsntGamesFilesArchives2", Path.GetFileName(shape.Path));
                 ViewMessage.Visibility = Visibility.Visible;
                 return;
             }
@@ -348,13 +348,13 @@ public partial class MaterialWindow : Window, IMessageHost
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or NotSupportedException)
         {
-            PreviewNote.Text = $"{Path.GetFileName(shape.Path)} could not be read: {ex.Message}";
+            PreviewNote.Text = L.T("MaterialWindow.CouldNotRead", Path.GetFileName(shape.Path), ex.Message);
             return;
         }
         if (version != _previewVersion) return;
         if (parts.Count == 0)
         {
-            ViewMessage.Text = $"{Path.GetFileName(shape.Path)} has no meshes to draw.";
+            ViewMessage.Text = L.T("MaterialWindow.HasNoMeshesDraw", Path.GetFileName(shape.Path));
             ViewMessage.Visibility = Visibility.Visible;
             return;
         }
@@ -366,12 +366,12 @@ public partial class MaterialWindow : Window, IMessageHost
         _ours = everywhere ? [.. parts.SelectMany((part, p) => Enumerable.Range(0, part.Mesh.Materials.Count).Select(i => (p, i)))] : uses;
         _previewParts = parts;
         string name = Path.GetFileName(shape.Path);
-        PreviewNote.Text = shape.Kind == ShapeKind.Shape ? $"On the game's {shape.Label.ToLowerInvariant()}, as the game draws the material. Drag to turn it, the wheel to zoom."
-            : everywhere ? $"On {name}, which doesn't use it: the material on everything. Drag to turn it, the wheel to zoom."
-            : $"On {name}: the material where it's used ({Format.Count(uses.Count, "of its materials", "of its materials")}), the rest in their own. Drag to turn it, the wheel to zoom.";
+        PreviewNote.Text = shape.Kind == ShapeKind.Shape ? L.T("MaterialWindow.GamesGameDrawsMaterial", shape.Label.ToLowerInvariant())
+            : everywhere ? L.T("MaterialWindow.WhichDoesntUseMaterial", name)
+            : L.T("MaterialWindow.MaterialWhereUsedRest", name, L.T("Count.Materials", uses.Count));
         // the model's own materials first, as the game draws them, then this one over them where it goes
         string note = PreviewNote.Text;
-        var progress = new Progress<(int Done, int Total)>(n => { if (version == _previewVersion && n.Total > 0) PreviewNote.Text = $"Loading textures, {n.Done} of {n.Total}…"; });
+        var progress = new Progress<(int Done, int Total)>(n => { if (version == _previewVersion && n.Total > 0) PreviewNote.Text = L.T("MaterialWindow.LoadingTextures", n.Done, n.Total); });
         var textures = shape.Kind == ShapeKind.Shape ? [] : await StageTextures.LoadAsync(coloured, _locator, Texture, progress, token);
         if (version != _previewVersion) return;
         View.ShowParts(parts, textures);
@@ -402,10 +402,10 @@ public partial class MaterialWindow : Window, IMessageHost
     /// <summary>The shapes to preview on: the game's sphere and box, picking any model, then the meshes and entities that use the material.</summary>
     private void ShowShapes(Shape? select = null)
     {
-        var items = new List<Shape>(Shapes) { new("View on model…", "", ShapeKind.Pick) };
+        var items = new List<Shape>(Shapes) { new(L.T("MaterialWindow.ViewModel"), "", ShapeKind.Pick) };
         items.AddRange(_users.Where(u => u.EndsWith(".w2mesh", StringComparison.OrdinalIgnoreCase)).Take(60)
-            .Select(u => new Shape($"Mesh: {Path.GetFileNameWithoutExtension(u)}", u, ShapeKind.Model)));
-        items.AddRange(_entities.Take(60).Select(u => new Shape($"Entity: {Path.GetFileNameWithoutExtension(u)}", u, ShapeKind.Model)));
+            .Select(u => new Shape(L.T("MaterialWindow.Mesh", Path.GetFileNameWithoutExtension(u)), u, ShapeKind.Model)));
+        items.AddRange(_entities.Take(60).Select(u => new Shape(L.T("MaterialWindow.Entity", Path.GetFileNameWithoutExtension(u)), u, ShapeKind.Model)));
         if (select is not null && !items.Contains(select)) items.Add(select);
         _syncing = true;
         var selected = select ?? ShapeBox.SelectedItem as Shape;
@@ -419,11 +419,11 @@ public partial class MaterialWindow : Window, IMessageHost
     {
         // back to what was shown in the list while the pick is open
         ShowShapes(_shown);
-        PreviewNote.Text = "Listing the models…";
+        PreviewNote.Text = L.T("MaterialWindow.ListingModels");
         _allModels ??= await Task.Run(() => _locator.AllPaths(".w2mesh").Concat(_locator.AllPaths(".w2ent")).ToList());
         PreviewNote.Text = "";
         var users = _users.Concat(_entities).ToList();
-        Picker.Show("A mesh or an entity to see the material on: type part of its path", query =>
+        Picker.Show(L.T("MaterialWindow.MeshEntitySeeMaterial"), query =>
         {
             var words = query.Split(' ', StringSplitOptions.RemoveEmptyEntries);
             IEnumerable<string> found = words.Length == 0 ? users
@@ -433,11 +433,11 @@ public partial class MaterialWindow : Window, IMessageHost
         }, chosen =>
         {
             if (chosen.Tag is not string path) return;
-            var shape = new Shape($"{(path.EndsWith(".w2ent", StringComparison.OrdinalIgnoreCase) ? "Entity" : "Mesh")}: {Path.GetFileNameWithoutExtension(path)}", path, ShapeKind.Model);
+            var shape = new Shape($"{(path.EndsWith(".w2ent", StringComparison.OrdinalIgnoreCase) ? L.T("MaterialWindow.Entity2") : L.T("MaterialWindow.Mesh2"))}: {Path.GetFileNameWithoutExtension(path)}", path, ShapeKind.Model);
             _shown = shape;
             ShowShapes(shape);
             _ = ShowShapeAsync(shape);
-        }, "With nothing typed, the meshes and entities that use the material. A model that doesn't use it has it on everything.");
+        }, L.T("MaterialWindow.NothingTypedMeshesEntities"));
     }
 
     private void ShapeBox_DropDownOpened(object? sender, EventArgs e) => ShowShapes();
@@ -459,7 +459,7 @@ public partial class MaterialWindow : Window, IMessageHost
     private async Task FindUsersAsync()
     {
         string self = GamePath;
-        UsedByNote.Text = "Looking for the files that use it…";
+        UsedByNote.Text = L.T("MaterialWindow.LookingFilesUse");
         var users = new List<string>();
         var entities = new List<string>();
         bool everywhere = false;
@@ -504,11 +504,11 @@ public partial class MaterialWindow : Window, IMessageHost
         _users = [.. users.Order(StringComparer.OrdinalIgnoreCase)];
         _entities = entities;
         UsedByGrid.ItemsSource = _users.Concat(_entities).Select(u => new UserRow(u, ArchiveOf(u))).ToList();
-        UsedByTab.Header = $"Used by ({_users.Count + _entities.Count:N0})";
-        UsedByNote.Text = (users.Count == 0 ? "Nothing was found that uses it" : $"{Format.Count(users.Count, "file")} that use it")
-            + (entities.Count > 0 ? $", and {Format.Count(entities.Count, "entity", "entities")} drawn with those meshes" : "")
-            + (everywhere ? ", from the Asset Browser's index of the whole game." : ", among the meshes and materials in the folders round it (open the Asset Browser to look through the whole game, entities too).")
-            + (users.Count > 0 ? " Double-click one to open it, or pick a mesh or an entity in Preview on to see the material on it." : "");
+        UsedByTab.Header = L.T("MaterialWindow.Used2", _users.Count + _entities.Count);
+        UsedByNote.Text = (users.Count == 0 ? L.T("MaterialWindow.NothingFoundUses") : L.T("MaterialWindow.Use", L.T("Count.File", users.Count)))
+            + (entities.Count > 0 ? L.T("MaterialWindow.DrawnThoseMeshes", L.T("Count.Entity", entities.Count)) : "")
+            + (everywhere ? L.T("MaterialWindow.AssetBrowsersIndexWhole") : L.T("MaterialWindow.AmongMeshesMaterialsFolders"))
+            + (users.Count > 0 ? L.T("MaterialWindow.DoubleClickOneOpen") : "");
         ShowShapes();
     }
 
@@ -555,10 +555,10 @@ public partial class MaterialWindow : Window, IMessageHost
         if (PickedUser is not { } user) return;
         if (!user.Path.EndsWith(".w2mesh", StringComparison.OrdinalIgnoreCase) && !user.Path.EndsWith(".w2ent", StringComparison.OrdinalIgnoreCase))
         {
-            _ = ShowMessage(null, "Only a mesh or an entity can be previewed on: this is another material based on this one.", MessageKind.Info);
+            _ = ShowMessage(null, L.T("MaterialWindow.OnlyMeshEntityCan"), MessageKind.Info);
             return;
         }
-        var shape = new Shape($"{(user.Path.EndsWith(".w2ent", StringComparison.OrdinalIgnoreCase) ? "Entity" : "Mesh")}: {Path.GetFileNameWithoutExtension(user.Path)}", user.Path, ShapeKind.Model);
+        var shape = new Shape($"{(user.Path.EndsWith(".w2ent", StringComparison.OrdinalIgnoreCase) ? L.T("MaterialWindow.Entity2") : L.T("MaterialWindow.Mesh2"))}: {Path.GetFileNameWithoutExtension(user.Path)}", user.Path, ShapeKind.Model);
         _shown = shape;
         ShowShapes(shape);
         _ = ShowShapeAsync(shape);
@@ -610,7 +610,7 @@ public partial class MaterialWindow : Window, IMessageHost
         bool changed = IsChanged;
         SaveButton.IsEnabled = changed && !IsGraph;
         RevertButton.IsEnabled = changed;
-        Title = $"{(changed ? "• " : "")}{Path.GetFileName(_path)} - Material";
+        Title = L.T("MaterialWindow.Material5", (changed ? "• " : ""), Path.GetFileName(_path));
         UpdateNote();
         _relook.Stop();
         _relook.Start();
@@ -640,13 +640,13 @@ public partial class MaterialWindow : Window, IMessageHost
     private async void PickTexture_Click(object sender, RoutedEventArgs e)
     {
         if ((sender as FrameworkElement)?.Tag is not MaterialValueRow row) return;
-        PreviewNote.Text = "Listing the textures…";
+        PreviewNote.Text = L.T("MaterialWindow.ListingTextures");
         _allTextures ??= await Task.Run(() => _locator.AllPaths(".xbm"));
         PreviewNote.Text = "";
         var near = new[] { Path.GetDirectoryName(GamePath) ?? "" }
             .Concat(_rows.Select(r => r.TexturePath).OfType<string>().Select(p => Path.GetDirectoryName(p) ?? ""))
             .Where(f => f.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-        Picker.Show($"{row.Name}: type part of a texture's path", query =>
+        Picker.Show(L.T("MaterialWindow.TypePartTexturesPath", row.Name), query =>
         {
             var words = query.Split(' ', StringSplitOptions.RemoveEmptyEntries);
             IEnumerable<string> found = words.Length == 0
@@ -657,7 +657,7 @@ public partial class MaterialWindow : Window, IMessageHost
         }, chosen =>
         {
             if (chosen.Tag is string path) ParameterChanged(row, new TextureRef(path));
-        }, "With nothing typed, the textures beside the material and those it uses.");
+        }, L.T("MaterialWindow.NothingTypedTexturesBeside"));
     }
 
     private void OpenTexture_Click(object sender, RoutedEventArgs e)
@@ -684,7 +684,7 @@ public partial class MaterialWindow : Window, IMessageHost
 
     private async Task<WorkbenchProject?> ProjectAsync() =>
         Application.Current.MainWindow is MainWindow main
-            ? await main.EnsureProjectAsync("Changes are saved into a mod's project: each file at its game path in the project's workspace, which Build packs into the mod, so the mod uses it in place of the game's. The files they came from are never changed.", Message)
+            ? await main.EnsureProjectAsync(L.T("MaterialWindow.ChangesSavedIntoMods"), Message)
             : ProjectWorkspace.Current;
 
     /// <summary>Saves the changes at the material's own game path in the project, so every mesh that uses it changes in the mod.</summary>
@@ -704,13 +704,13 @@ public partial class MaterialWindow : Window, IMessageHost
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or NotSupportedException)
         {
-            await ShowMessage("The changes could not be saved", ex.Message, MessageKind.Warning);
+            await ShowMessage(L.T("MaterialWindow.ChangesCouldNotSaved"), ex.Message, MessageKind.Warning);
             return false;
         }
         _savedOwn = [.. _own];
         Changed();
         await RefreshProjectAsync(project);
-        await ShowMessage($"Saved to {project.Name}", $"{gamePath}\n\nin {project.WorkspacePath}, which Build packs into the mod's bundle: every mesh that uses it changes in the mod.", MessageKind.Info);
+        await ShowMessage(L.T("MaterialWindow.Saved", project.Name), L.T("MaterialWindow.WhichBuildPacksInto", gamePath, project.WorkspacePath), MessageKind.Info);
         return true;
     }
 
@@ -725,16 +725,16 @@ public partial class MaterialWindow : Window, IMessageHost
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { folder = project.Root; }
         var dialog = new SaveFileDialog
         {
-            Title = "Save as a new material in the project",
+            Title = L.T("MaterialWindow.SaveNewMaterialProject"),
             InitialDirectory = folder,
             FileName = $"{Path.GetFileNameWithoutExtension(_path)}_new.w2mi",
-            Filter = "Material instance (*.w2mi)|*.w2mi",
+            Filter = L.T("MaterialWindow.MaterialInstanceW2miW2mi"),
         };
         if (dialog.ShowDialog(this) != true) return;
         if (project.GamePathOf(dialog.FileName) is not { } gamePath)
         {
-            await ShowMessage("Pick a place in the project's workspace",
-                $"A material goes in the project's workspace, {project.WorkspacePath}, where its place under the folder is its game path.", MessageKind.Warning);
+            await ShowMessage(L.T("MaterialWindow.PickPlaceProjectsWorkspace"),
+                L.T("MaterialWindow.MaterialGoesProjectsWorkspace", project.WorkspacePath), MessageKind.Warning);
             return;
         }
         try
@@ -748,11 +748,11 @@ public partial class MaterialWindow : Window, IMessageHost
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or NotSupportedException)
         {
-            await ShowMessage("The material could not be saved", ex.Message, MessageKind.Warning);
+            await ShowMessage(L.T("MaterialWindow.MaterialCouldNotSaved"), ex.Message, MessageKind.Warning);
             return;
         }
         await RefreshProjectAsync(project);
-        await ShowMessage($"Saved to {project.Name}", $"{gamePath}\n\nA new material, which meshes can be pointed at (the mesh viewer's Other material…).", MessageKind.Info);
+        await ShowMessage(L.T("MaterialWindow.Saved", project.Name), L.T("MaterialWindow.NewMaterialWhichMeshes", gamePath), MessageKind.Info);
     }
 
     /// <summary>Lists the project's game files in the tree, adding the workspace to the project the first time.</summary>
@@ -769,8 +769,8 @@ public partial class MaterialWindow : Window, IMessageHost
     {
         if (_closeAsked || !IsChanged || IsGraph) return;
         e.Cancel = true;
-        var choice = await Message.Ask("Save the changes?", "The material has changes that aren't saved into the project.",
-            MessageKind.Question, "Save to project", "Leave them");
+        var choice = await Message.Ask(L.T("Common.SaveChanges"), L.T("MaterialWindow.MaterialHasChangesArent"),
+            MessageKind.Question, L.T("Common.SaveProject"), L.T("MaterialWindow.LeaveThem"));
         if (choice == MessageChoice.Cancel) return;
         if (choice == MessageChoice.Primary && !await SaveAsync()) return;
         _closeAsked = true;

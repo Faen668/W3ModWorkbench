@@ -10,6 +10,7 @@ using W3ModWorkbench.Core.Cr2w;
 using W3ModWorkbench.Core.Meshes;
 using W3ModWorkbench.Core.Projects;
 using W3ModWorkbench.ViewModels;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -48,7 +49,7 @@ public partial class MeshWindow : Window, IMessageHost
         _readData = readData;
         _readBuffer = readBuffer;
         _locator = locator;
-        Title = $"{Path.GetFileName(path)} - Mesh";
+        Title = L.T("MeshWindow.Mesh2", Path.GetFileName(path));
         InfoText.Text = $"{path}   ·   {source}";
         FloorToggle.IsChecked = View.ShowFloor = App.Settings.ShowMeshFloor;
         InfoItem.IsChecked = App.Settings.ShowMeshInfo;
@@ -96,7 +97,7 @@ public partial class MeshWindow : Window, IMessageHost
         return Path.GetFileName(file);
     }
 
-    public Task ShowMessage(string? title, string message, MessageKind kind) => Message.Show(title, message, kind, primary: "OK");
+    public Task ShowMessage(string? title, string message, MessageKind kind) => Message.Show(title, message, kind, primary: L.T("Common.OK"));
 
     private async Task LoadAsync()
     {
@@ -111,12 +112,12 @@ public partial class MeshWindow : Window, IMessageHost
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or NotSupportedException)
         {
-            BusyText.Text = "The mesh could not be shown.\n\n" + ex.Message;
+            BusyText.Text = L.T("MeshWindow.MeshCouldNotShown", ex.Message);
             return;
         }
         if (_mesh.Chunks.Count == 0)
         {
-            BusyText.Text = "This mesh has nothing to draw.";
+            BusyText.Text = L.T("MeshWindow.MeshHasNothingDraw");
             return;
         }
         BusyText.Visibility = Visibility.Collapsed;
@@ -126,8 +127,8 @@ public partial class MeshWindow : Window, IMessageHost
         for (int lod = 0; lod < _mesh.LodCount; lod++)
         {
             var drawn = MeshView.Drawn(_mesh, lod).ToList();
-            string distance = lod < _mesh.LodDistances.Count && lod > 0 ? $", from {_mesh.LodDistances[lod]:0.#} m" : "";
-            LodBox.Items.Add($"{lod}  ·  {drawn.Sum(c => c.Triangles):N0} triangles{distance}");
+            string distance = lod < _mesh.LodDistances.Count && lod > 0 ? L.T("MeshWindow.M", _mesh.LodDistances[lod]) : "";
+            LodBox.Items.Add(L.T("MeshWindow.Triangles", lod, drawn.Sum(c => c.Triangles), distance));
         }
         LodBox.SelectedIndex = 0;
         LodBox.IsEnabled = _mesh.LodCount > 1;
@@ -135,12 +136,12 @@ public partial class MeshWindow : Window, IMessageHost
         // a mesh can name more materials than it has, and chunks can share one
         for (int i = 0; i < Math.Max(materials.Count, _mesh.Chunks.Max(c => c.Material) + 1); i++)
         {
-            var material = i < materials.Count ? materials[i] : new MeshMaterial { Source = "missing from the mesh", Bases = [] };
+            var material = i < materials.Count ? materials[i] : new MeshMaterial { Source = L.T("MeshWindow.MissingMesh"), Bases = [] };
             _materials.Add(new MeshMaterialItem(i, material, item => { _ = ApplyAsync(item); UpdateSave(); }));
         }
         MaterialList.ItemsSource = _materials;
         ShowChunks();
-        InfoText.Text = $"{_path}   ·   {_source}   ·   CR2W {_mesh.File.Version}, {_mesh.Chunks.Count} chunks, {_mesh.LodCount} LOD{(_mesh.LodCount == 1 ? "" : "s")}, {materials.Count} material{(materials.Count == 1 ? "" : "s")}";
+        InfoText.Text = L.T("MeshWindow.Info", _path, _source, _mesh.File.Version, _mesh.Chunks.Count, L.T("Count.Lod", _mesh.LodCount), L.T("MeshWindow.MaterialCount", materials.Count));
         ExportButton.IsEnabled = true;
         Properties.Show(PropertyRow.Of(_mesh.Mesh, _mesh.File, leaveOut: ["cookedData"]));
         _ = ShowRedkitPropertiesAsync();
@@ -170,10 +171,10 @@ public partial class MeshWindow : Window, IMessageHost
         if (choice?.Path is not { } path)
         {
             View.SetTexture(item.Index, null);
-            item.Status = item.Current.Diffuse is null ? "No colour texture found for this material." : "Shown in plain grey.";
+            item.Status = item.Current.Diffuse is null ? L.T("MeshWindow.NoColourTextureFound") : L.T("MeshWindow.ShownPlainGrey");
             return;
         }
-        item.Status = "Reading the texture…";
+        item.Status = L.T("MeshWindow.ReadingTexture");
         if (!_textures.TryGetValue(path, out var task))
             _textures[path] = task = Task.Run(() => MeshTextures.Load(_locator, path, TextureSize));
         var picture = await task;
@@ -192,7 +193,7 @@ public partial class MeshWindow : Window, IMessageHost
         if (!ReferenceEquals(item.Selected, choice)) return; // another was picked meanwhile
         View.SetTexture(item.Index, picture, look);
         item.Status = picture is not null ? await Task.Run(() => MeshTextures.Describe(_locator, path))
-            : "Its pixels weren't found in a texture cache (open the mod's texture.cache, or the game's), or its format can't be read.";
+            : L.T("MeshWindow.PixelsWerentFoundTexture");
     }
 
     // ---------------------------------------------------------------- toolbar
@@ -252,16 +253,16 @@ public partial class MeshWindow : Window, IMessageHost
         var size = View.Size();
         var lines = new List<string>
         {
-            $"Triangles  {triangles,10:N0}",
-            $"Vertices   {vertices,10:N0}",
-            $"Chunks     {chunks,10:N0}",
-            $"LOD        {View.Lod,10}" + (_mesh.LodCount > 1 ? $" of {_mesh.LodCount}" : ""),
-            $"Size  {size.X:0.00} x {size.Y:0.00} x {size.Z:0.00} m",
-            $"Mesh data  {Megabytes(MeshBytes(_mesh)),7} MB",
+            L.T("MeshWindow.Triangles2", triangles),
+            L.T("MeshWindow.Vertices", vertices),
+            L.T("MeshWindow.Chunks2", chunks),
+            L.T("MeshWindow.LodLine", View.Lod) + (_mesh.LodCount > 1 ? L.T("MeshWindow.LodOf", _mesh.LodCount) : ""),
+            L.T("MeshWindow.SizeXXM", size.X, size.Y, size.Z),
+            L.T("MeshWindow.MeshDataMB", Megabytes(MeshBytes(_mesh))),
         };
-        if (_textureCount > 0) lines.Add($"Textures   {Megabytes(_textureBytes),7} MB in {_textureCount}");
-        if (_mesh.BoneNames.Length > 0) lines.Add($"Bones      {_mesh.BoneNames.Length,10}");
-        if (_collision is { } c) lines.Add($"Collision  {c.Count,10} shape{(c.Count == 1 ? "" : "s")}");
+        if (_textureCount > 0) lines.Add(L.T("MeshWindow.TexturesMB", Megabytes(_textureBytes), _textureCount));
+        if (_mesh.BoneNames.Length > 0) lines.Add(L.T("MeshWindow.Bones", _mesh.BoneNames.Length));
+        if (_collision is { } c) lines.Add(L.T("MeshWindow.CollisionShapes", c.Count));
         InfoOverlay.Text = string.Join("\n", lines);
     }
 
@@ -284,7 +285,7 @@ public partial class MeshWindow : Window, IMessageHost
         var from = await Task.Run(() => RedkitSource.For(path, origin));
         if (from.Redkit is { } redkit && RedkitSource.Match(redkit, mesh.Mesh, mesh.File) is { } own)
             Properties.Show(PropertyRow.Of(own, redkit, leaveOut: ["cookedData"]));
-        SourceNoteBar.Show(from.Source, from.RedkitPath ?? origin, "mesh");
+        SourceNoteBar.Show(from.Source, from.RedkitPath ?? origin, L.T("MeshWindow.Mesh3"));
     }
 
     private void PropertySearch_TextChanged(object sender, TextChangedEventArgs e)
@@ -301,9 +302,9 @@ public partial class MeshWindow : Window, IMessageHost
         for (int lod = 0; lod < _mesh.LodCount; lod++)
         {
             var chunks = MeshView.Drawn(_mesh, lod).ToList();
-            string from = lod < _mesh.LodDistances.Count ? $"drawn from {_mesh.LodDistances[lod]:0.##} m" : "";
-            LodPanel.Children.Add(Heading($"LOD {lod}", $"{from}  ·  {Format.Count(chunks.Count, "chunk")}, {chunks.Sum(c => c.Positions.Length):N0} vertices, {chunks.Sum(c => c.Triangles):N0} triangles"));
-            LodPanel.Children.Add(Table(["Chunk", "Material", "Vertices", "Indices", "Vertices a triangle"],
+            string from = lod < _mesh.LodDistances.Count ? L.T("MeshWindow.DrawnM", _mesh.LodDistances[lod]) : "";
+            LodPanel.Children.Add(Heading(L.T("MeshWindow.LOD2", lod), L.T("MeshWindow.VerticesTriangles", from, L.T("Count.Chunk", chunks.Count), chunks.Sum(c => c.Positions.Length), chunks.Sum(c => c.Triangles))));
+            LodPanel.Children.Add(Table([L.T("MeshWindow.Chunk"), L.T("MeshWindow.Material"), L.T("MeshWindow.Vertices2"), L.T("MeshWindow.Indices"), L.T("MeshWindow.VerticesTriangle")],
                 [.. chunks.Select(c => new[]
                 {
                     $"{c.Index}" + (c.Skinned ? "  skinned" : ""),
@@ -340,18 +341,18 @@ public partial class MeshWindow : Window, IMessageHost
         ShowInfo();
 
         ReportPanel.Children.Clear();
-        ReportPanel.Children.Add(Heading("Totals", ""));
+        ReportPanel.Children.Add(Heading(L.T("MeshWindow.Totals"), ""));
         ReportPanel.Children.Add(Lines(
-            $"Mesh data: {Megabytes(MeshBytes(mesh))} MB",
-            $"Texture data: {Megabytes(_textureBytes)} MB in {Format.Count(_textureCount, "texture")}" + (textures.Count > _textureCount ? $" ({textures.Count - _textureCount} not found)" : ""),
-            $"Drawn up to: {(mesh.Mesh["autoHideDistance"] is float hide ? $"{hide:0.##} m" : "the default distance")}",
-            $"Bounding box: {View.Size().X:0.00} x {View.Size().Y:0.00} x {View.Size().Z:0.00} m"));
+            L.T("MeshWindow.MeshDataMB2", Megabytes(MeshBytes(mesh))),
+            L.T("MeshWindow.TextureData", Megabytes(_textureBytes), L.T("Count.Texture", _textureCount)) + (textures.Count > _textureCount ? L.T("MeshWindow.NotFoundCount", textures.Count - _textureCount) : ""),
+            L.T("MeshWindow.DrawnUpTo", mesh.Mesh["autoHideDistance"] is float hide ? L.T("MeshWindow.Metres", hide) : L.T("MeshWindow.DefaultDistance")),
+            L.T("MeshWindow.BoundingBoxXX", View.Size().X, View.Size().Y, View.Size().Z)));
         for (int lod = 0; lod < mesh.LodCount; lod++)
         {
             var chunks = MeshView.Drawn(mesh, lod).ToList();
             int triangles = chunks.Sum(c => c.Triangles);
-            ReportPanel.Children.Add(Heading($"LOD {lod}", $"{Format.Count(chunks.Count, "chunk")}, {chunks.Sum(c => c.Positions.Length):N0} vertices, {triangles:N0} triangles"));
-            ReportPanel.Children.Add(Table(["Material", "Triangles", "Share"],
+            ReportPanel.Children.Add(Heading(L.T("MeshWindow.LOD2", lod), L.T("MeshWindow.VerticesTriangles2", L.T("Count.Chunk", chunks.Count), chunks.Sum(c => c.Positions.Length), triangles)));
+            ReportPanel.Children.Add(Table([L.T("MeshWindow.Material"), L.T("MeshWindow.Triangles3"), L.T("MeshWindow.Share")],
                 [.. chunks.GroupBy(c => c.Material).Select(g => new[]
                 {
                     MaterialName(g.Key),
@@ -359,7 +360,7 @@ public partial class MeshWindow : Window, IMessageHost
                     triangles > 0 ? $"{100.0 * g.Sum(c => c.Triangles) / triangles:0.0}%" : "",
                 })]));
         }
-        ReportPanel.Children.Add(Heading("Textures", Format.Count(textures.Count, "texture")));
+        ReportPanel.Children.Add(Heading(L.T("Common.Textures"), L.T("Count.Texture", textures.Count)));
         foreach (var t in textures.OrderByDescending(t => t.Entry?.Size ?? 0))
         {
             var row = new DockPanel { Margin = new Thickness(0, 0, 0, 10) };
@@ -367,15 +368,15 @@ public partial class MeshWindow : Window, IMessageHost
             DockPanel.SetDock(picture, Dock.Left);
             row.Children.Add(picture);
             var text = (StackPanel)Lines(
-                t.Entry is { } entry ? $"{entry.FormatText}  ·  {Megabytes(entry.Size)} MB" : "Not found in any texture cache",
-                "Used by material " + string.Join(", ", t.Users));
+                t.Entry is { } entry ? $"{entry.FormatText}  ·  {Megabytes(entry.Size)} MB" : L.T("MeshWindow.NotFoundAnyTexture"),
+                L.T("MeshWindow.UsedMaterial", string.Join(", ", t.Users)));
             // the path, and the picture, open the texture in its viewer
             var name = new TextBlock { Text = t.Path, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 3) };
             if (t.Entry is { } found)
             {
                 name.SetResourceReference(TextBlock.ForegroundProperty, "AccentTextFillColorPrimaryBrush");
                 name.Cursor = picture.Cursor = Cursors.Hand;
-                name.ToolTip = picture.ToolTip = "Open it in the texture viewer";
+                name.ToolTip = picture.ToolTip = L.T("MeshWindow.OpenTextureViewer");
                 string path = t.Path;
                 name.MouseLeftButtonUp += (_, _) => TextureWindow.Open(found, this, () => _locator.ReadFile(path), _locator);
                 picture.MouseLeftButtonUp += (_, _) => TextureWindow.Open(found, this, () => _locator.ReadFile(path), _locator);
@@ -402,18 +403,18 @@ public partial class MeshWindow : Window, IMessageHost
         CollisionPanel.Children.Clear();
         if (_collision is not { } found)
         {
-            CollisionPanel.Children.Add(Lines("This mesh has no collision in the game's collision caches.",
-                "A mesh only collides when it's cooked with collision; REDkit's own (uncooked) meshes keep theirs in the file and aren't read here."));
+            CollisionPanel.Children.Add(Lines(L.T("MeshWindow.MeshHasNoCollision"),
+                L.T("MeshWindow.MeshOnlyCollidesWhen")));
             CollisionItem.IsEnabled = false;
             ShowInfo();
             return;
         }
-        CollisionPanel.Children.Add(Heading("Shapes", Format.Count(found.Count, "shape")));
-        CollisionPanel.Children.Add(Table(["Shape", "Kind", "Vertices", "Triangles", "Material"],
+        CollisionPanel.Children.Add(Heading(L.T("MeshWindow.Shapes"), L.T("Count.Shape", found.Count)));
+        CollisionPanel.Children.Add(Table([L.T("MeshWindow.Shape"), L.T("Common.Kind"), L.T("MeshWindow.Vertices2"), L.T("MeshWindow.Triangles3"), L.T("MeshWindow.Material")],
             [.. found.Shapes.Select((s, i) => new[] { $"{i}", s.Kind, $"{s.Vertices.Length:N0}", $"{s.Triangles.Length / 3:N0}", s.Material })]));
         if (found.Count > found.Shapes.Count)
-            CollisionPanel.Children.Add(Lines($"{found.Count - found.Shapes.Count} more shape(s) are boxes, spheres or capsules, which aren't drawn."));
-        CollisionPanel.Children.Add(Lines("Show › Collision (C) draws the shapes over the mesh, in orange."));
+            CollisionPanel.Children.Add(Lines(L.T("MeshWindow.MoreShapeBoxesSpheres", found.Count - found.Shapes.Count)));
+        CollisionPanel.Children.Add(Lines(L.T("MeshWindow.ShowCollisionCDraws")));
         ShowInfo();
     }
 
@@ -539,31 +540,31 @@ public partial class MeshWindow : Window, IMessageHost
     private async void OtherTexture_Click(object sender, RoutedEventArgs e)
     {
         if ((sender as FrameworkElement)?.Tag is not MeshMaterialItem item) return;
-        item.Status = "Listing the textures…";
+        item.Status = L.T("MeshWindow.ListingTextures");
         _allTextures ??= await Task.Run(() => _locator.AllPaths(".xbm"));
         item.Status = "";
         var near = NearFolders(item).ToList();
-        Picker.Show($"Texture for material {item.Index}: type part of its path", q => Filter(_allTextures, q, "", near), chosen =>
+        Picker.Show(L.T("MeshWindow.TextureMaterialTypePart", item.Index), q => Filter(_allTextures, q, "", near), chosen =>
         {
             if (chosen.Tag is string path) item.UseTexture(path);
-        }, $"{_allTextures.Count:N0} textures in the open files, the folder beside this one and the game. With nothing typed, those beside the mesh and its textures.");
+        }, L.T("MeshWindow.TexturesOpenFilesFolder", _allTextures.Count));
     }
 
     private async void OtherMaterial_Click(object sender, RoutedEventArgs e)
     {
         if ((sender as FrameworkElement)?.Tag is not MeshMaterialItem item) return;
-        item.Status = "Listing the materials…";
+        item.Status = L.T("MeshWindow.ListingMaterials");
         _allMaterials ??= await Task.Run(() => _locator.AllPaths(".w2mi"));
         item.Status = "";
         // a mesh's materials are usually in a materials folder beside its model folder
         var near = NearFolders(item).Concat(NearFolders(item).Select(f => Path.Combine(FolderOf(f), "materials"))).ToList();
-        Picker.Show($"Material for material {item.Index}: type part of a .w2mi's path", q => Filter(_allMaterials, q, "", near), async chosen =>
+        Picker.Show(L.T("MeshWindow.MaterialMaterialTypePart", item.Index), q => Filter(_allMaterials, q, "", near), async chosen =>
         {
             if (chosen.Tag is not string path) return;
-            item.Status = "Reading the material…";
+            item.Status = L.T("MeshWindow.ReadingMaterial");
             var material = await Task.Run(() => MeshMaterial.FromFile(path, _locator.ReadFile));
             item.Use(material);
-        }, $"{_allMaterials.Count:N0} material instances in the open files, the folder beside this one and the game.");
+        }, L.T("MeshWindow.MaterialInstancesOpenFiles", _allMaterials.Count));
     }
 
     private void ResetMaterial_Click(object sender, RoutedEventArgs e)
@@ -576,7 +577,7 @@ public partial class MeshWindow : Window, IMessageHost
     private void UpdateSave()
     {
         SaveButton.IsEnabled = _materials.Any(m => m.NeedsSave);
-        Title = (SaveButton.IsEnabled ? "• " : "") + $"{Path.GetFileName(_path)} - Mesh";
+        Title = L.T("MeshWindow.Mesh4", (SaveButton.IsEnabled ? "• " : ""), Path.GetFileName(_path));
     }
 
     /// <summary>The material a parameter shown in the list belongs to.</summary>
@@ -603,14 +604,14 @@ public partial class MeshWindow : Window, IMessageHost
     private async void PickParameterTexture_Click(object sender, RoutedEventArgs e)
     {
         if ((sender as FrameworkElement)?.Tag is not MaterialParameterItem parameter || OwnerOf(parameter) is not { } material) return;
-        material.Status = "Listing the textures…";
+        material.Status = L.T("MeshWindow.ListingTextures");
         _allTextures ??= await Task.Run(() => _locator.AllPaths(".xbm"));
         material.Status = "";
         var near = NearFolders(material).ToList();
-        Picker.Show($"{parameter.Name} for material {material.Index}: type part of a texture's path", q => Filter(_allTextures, q, "", near), chosen =>
+        Picker.Show(L.T("MeshWindow.MaterialTypePartTextures", parameter.Name, material.Index), q => Filter(_allTextures, q, "", near), chosen =>
         {
             if (chosen.Tag is string path) material.SetParameter(parameter.Parameter, new TextureRef(path));
-        }, "With nothing typed, the textures beside the mesh and the material's own.");
+        }, L.T("MeshWindow.NothingTypedTexturesBeside"));
     }
 
     // ---------------------------------------------------------------- saving into the project
@@ -621,7 +622,7 @@ public partial class MeshWindow : Window, IMessageHost
     /// </summary>
     private async Task<WorkbenchProject?> ProjectAsync() =>
         Application.Current.MainWindow is MainWindow main
-            ? await main.EnsureProjectAsync("Changes are saved into a mod's project: each file at its game path in the project's workspace, which Build packs into the mod, so the mod uses it in place of the game's. The files they came from are never changed.", Message)
+            ? await main.EnsureProjectAsync(L.T("MeshWindow.ChangesSavedIntoMods"), Message)
             : ProjectWorkspace.Current;
 
     /// <summary>Asks where in the project a new material goes, beside the mesh's own place by default. Its game path, or null.</summary>
@@ -632,15 +633,15 @@ public partial class MeshWindow : Window, IMessageHost
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { folder = project.Root; }
         var dialog = new SaveFileDialog
         {
-            Title = "Save as a new material in the project",
+            Title = L.T("MeshWindow.SaveNewMaterialProject"),
             InitialDirectory = folder,
             FileName = $"{Path.GetFileNameWithoutExtension(_path)}_{item.Index}.w2mi",
-            Filter = "Material instance (*.w2mi)|*.w2mi",
+            Filter = L.T("MeshWindow.MaterialInstanceW2miW2mi"),
         };
         if (dialog.ShowDialog(this) != true) return null;
         if (project.GamePathOf(dialog.FileName) is { } gamePath) return gamePath;
-        _ = ShowMessage("Pick a place in the project's workspace",
-            $"A material goes in the project's workspace, {project.WorkspacePath}, where its place under the folder is its game path.", MessageKind.Warning);
+        _ = ShowMessage(L.T("MeshWindow.PickPlaceProjectsWorkspace"),
+            L.T("MeshWindow.MaterialGoesProjectsWorkspace", project.WorkspacePath), MessageKind.Warning);
         return null;
     }
 
@@ -662,11 +663,11 @@ public partial class MeshWindow : Window, IMessageHost
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
         {
-            await ShowMessage("The material could not be saved", ex.Message, MessageKind.Warning);
+            await ShowMessage(L.T("MeshWindow.MaterialCouldNotSaved"), ex.Message, MessageKind.Warning);
             return;
         }
         item.Use(await Task.Run(() => MeshMaterial.FromFile(gamePath, _locator.ReadFile)));
-        item.Status = $"Saved as {gamePath}. Save to project to make the mesh use it.";
+        item.Status = L.T("MeshWindow.SavedSaveProjectMake", gamePath);
         await RefreshProjectAsync(project);
     }
 
@@ -701,9 +702,9 @@ public partial class MeshWindow : Window, IMessageHost
                 }
                 else if (material.IsFile)
                 {
-                    var choice = await Message.Ask($"{Path.GetFileName(material.Source)} is a material of its own",
-                        "Other meshes can use it too. Save the changes as a new material for this mesh only, or change it in the project, so every mesh that uses it changes in the mod?",
-                        MessageKind.Question, "New material for this mesh", "Change it for every mesh");
+                    var choice = await Message.Ask(L.T("MeshWindow.MaterialOwn", Path.GetFileName(material.Source)),
+                        L.T("MeshWindow.OtherMeshesCanUse"),
+                        MessageKind.Question, L.T("MeshWindow.NewMaterialMesh"), L.T("MeshWindow.ChangeEveryMesh"));
                     if (choice == MessageChoice.Cancel) return false;
                     if (choice == MessageChoice.Primary)
                     {
@@ -715,7 +716,7 @@ public partial class MeshWindow : Window, IMessageHost
                     else
                     {
                         var original = await Task.Run(() => _locator.ReadFile(material.Source))
-                            ?? throw new FileNotFoundException($"{material.Source} wasn't found to change.");
+                            ?? throw new FileNotFoundException(L.T("MeshWindow.WasntFoundChange", material.Source));
                         writes.Add((material.Source, MaterialWriter.EditFile(Cr2wFile.Read(original), material.Own)));
                         if (item.IsSwapped) slots[item.Index] = material.Source;
                         saved[item] = material.Source;
@@ -760,7 +761,7 @@ public partial class MeshWindow : Window, IMessageHost
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or NotSupportedException)
         {
-            await ShowMessage("The changes could not be saved", ex.Message, MessageKind.Warning);
+            await ShowMessage(L.T("MeshWindow.ChangesCouldNotSaved"), ex.Message, MessageKind.Warning);
             return false;
         }
 
@@ -768,8 +769,8 @@ public partial class MeshWindow : Window, IMessageHost
             item.Saved(gamePath is null ? item.Current : await Task.Run(() => MeshMaterial.FromFile(gamePath, _locator.ReadFile)));
         UpdateSave();
         await RefreshProjectAsync(project);
-        await ShowMessage($"Saved to {project.Name}",
-            string.Join("\n", writes.Select(w => w.GamePath)) + $"\n\nin {project.WorkspacePath}, which Build packs into the mod's bundle.", MessageKind.Info);
+        await ShowMessage(L.T("MeshWindow.Saved", project.Name),
+            L.T("MeshWindow.WhichBuildPacksInto", string.Join("\n", writes.Select(w => w.GamePath)), project.WorkspacePath), MessageKind.Info);
         return true;
     }
 
@@ -788,8 +789,8 @@ public partial class MeshWindow : Window, IMessageHost
         base.OnClosing(e);
         if (_closeAsked || !_materials.Any(m => m.NeedsSave)) return;
         e.Cancel = true;
-        var choice = await Message.Ask("Save the changes to the materials?", "They're lost if the window closes without saving them into the project.",
-            MessageKind.Question, "Save to project", "Don't save");
+        var choice = await Message.Ask(L.T("MeshWindow.SaveChangesMaterials"), L.T("MeshWindow.TheyreLostIfWindow"),
+            MessageKind.Question, L.T("Common.SaveProject"), L.T("Common.DontSave"));
         if (choice == MessageChoice.Cancel || choice == MessageChoice.Primary && !await SaveAsync()) return;
         _closeAsked = true;
         Close();
@@ -803,9 +804,9 @@ public partial class MeshWindow : Window, IMessageHost
         string name = Path.GetFileNameWithoutExtension(_path);
         var dialog = new SaveFileDialog
         {
-            Title = "Export the mesh",
+            Title = L.T("MeshWindow.ExportMesh"),
             FileName = name + (View.Lod > 0 ? $"_lod{View.Lod}" : "") + ".obj",
-            Filter = "Wavefront OBJ (*.obj)|*.obj",
+            Filter = L.T("MeshWindow.WavefrontOBJObjObj"),
         };
         if (dialog.ShowDialog(this) != true) return;
         var chunks = _chunks.Where(c => c.IsVisible).Select(c => c.Chunk).ToList();
@@ -824,11 +825,11 @@ public partial class MeshWindow : Window, IMessageHost
                 return ObjExport.Write(dialog.FileName, _path, chunks, textures);
             });
             int pictures = written.Count(w => w.EndsWith(".png", StringComparison.OrdinalIgnoreCase));
-            await ShowMessage("Mesh exported", $"{Path.GetFileName(dialog.FileName)} and its .mtl were saved" + (pictures > 0 ? $", with {pictures} texture{(pictures == 1 ? "" : "s")} as PNG." : "."), MessageKind.Info);
+            await ShowMessage(L.T("MeshWindow.MeshExported"), L.T("MeshWindow.ExportSaved", Path.GetFileName(dialog.FileName)) + (pictures > 0 ? L.T("MeshWindow.WithTextures", pictures) : "."), MessageKind.Info);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            await ShowMessage("The mesh could not be exported", ex.Message, MessageKind.Warning);
+            await ShowMessage(L.T("MeshWindow.MeshCouldNotExported"), ex.Message, MessageKind.Warning);
         }
         finally
         {

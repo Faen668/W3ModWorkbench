@@ -9,6 +9,7 @@ using W3ModWorkbench.Core.BehTrees;
 using W3ModWorkbench.Core.Cr2w;
 using W3ModWorkbench.Core.Trees;
 using W3ModWorkbench.ViewModels;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -48,8 +49,8 @@ public partial class TreeFileWindow : Window, IMessageHost
         _origin = origin;
         Title = $"{Path.GetFileName(path)} - {kind}";
         InfoText.Text = $"{path}   ·   {source}";
-        BusyText.Text = $"Reading the {kind.ToLowerInvariant()}…";
-        FoldBox.ItemsSource = new[] { "Open every branch" }.Concat(Enumerable.Range(1, 8).Select(d => $"Fold below level {d}")).ToList();
+        BusyText.Text = L.T("TreeFileWindow.Reading", kind.ToLowerInvariant());
+        FoldBox.ItemsSource = new[] { L.T("Common.OpenEveryBranch") }.Concat(Enumerable.Range(1, 8).Select(d => L.T("TreeFileWindow.FoldBelowLevel", d))).ToList();
         Loaded += async (_, _) => await LoadAsync();
     }
 
@@ -69,7 +70,7 @@ public partial class TreeFileWindow : Window, IMessageHost
     /// <summary>The file shown, once read.</summary>
     public TreeDocument? Document => _doc;
 
-    public Task ShowMessage(string? title, string message, MessageKind kind) => Message.Show(title, message, kind, primary: "OK");
+    public Task ShowMessage(string? title, string message, MessageKind kind) => Message.Show(title, message, kind, primary: L.T("Common.OK"));
 
     private async Task LoadAsync()
     {
@@ -79,7 +80,7 @@ public partial class TreeFileWindow : Window, IMessageHost
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or NotSupportedException)
         {
-            BusyText.Text = "The file could not be read.\n\n" + ex.Message;
+            BusyText.Text = L.T("TreeFileWindow.FileCouldNotRead", ex.Message);
             return;
         }
         BusyText.Visibility = Visibility.Collapsed;
@@ -101,13 +102,13 @@ public partial class TreeFileWindow : Window, IMessageHost
             ExtraSplitRow.Height = new GridLength(8);
             SideColumn.Width = new GridLength(620);
         }
-        InfoText.Text = $"{_path}   ·   {_source}   ·   CR2W {_doc.File.Version}, {Format.Count(_doc.NodeCount, "node")}"
+        InfoText.Text = L.T("TreeFileWindow.Info", _path, _source, _doc.File.Version, L.T("Count.Node", _doc.NodeCount))
                         + (_doc.Summary.Length > 0 ? $", {_doc.Summary}" : "");
         _ = LoadRedkitAsync();
         if (_doc.Root is null)
         {
             ShowResource();
-            NodeDetail.Text = $"This {_doc.KindName.ToLowerInvariant()} is empty: it has no root node.";
+            NodeDetail.Text = L.T("TreeFileWindow.EmptyHasNoRoot", _doc.KindName.ToLowerInvariant());
             return;
         }
         Graph.Show(_doc.Root);
@@ -166,8 +167,8 @@ public partial class TreeFileWindow : Window, IMessageHost
     {
         if (_doc is null) return;
         _shown = null;
-        NodeTitle.Text = $"The {_doc.KindName.ToLowerInvariant()}";
-        NodeDetail.Text = $"{_doc.Resource.ClassName}  ·  click a node in the tree to see its own";
+        NodeTitle.Text = L.T("TreeFileWindow.The", _doc.KindName.ToLowerInvariant());
+        NodeDetail.Text = L.T("TreeFileWindow.ClickNodeTreeSee", _doc.Resource.ClassName);
         NodeComment.Visibility = Visibility.Collapsed;
         Properties.Show(Rows(_doc.Resource, ["rootNode", "root", "jobTreeRootNode"]));
     }
@@ -179,7 +180,7 @@ public partial class TreeFileWindow : Window, IMessageHost
         _preview?.Picked(node);
         NodeTitle.Text = node.Title;
         var said = new List<string> { BehTreeGraph.KindOf(node), node.Object.ClassName };
-        if (node.Children.Count > 0) said.Add(Format.Count(node.Children.Count, "child", "children"));
+        if (node.Children.Count > 0) said.Add(L.T("Count.Child", node.Children.Count));
         if (node.Detail.Length > 0) said.Add(node.Detail);
         NodeDetail.Text = string.Join("  ·  ", said);
         string? note = node.Comment ?? node.Label;
@@ -206,7 +207,7 @@ public partial class TreeFileWindow : Window, IMessageHost
         var (path, origin) = (_path, _origin);
         var from = await Task.Run(() => RedkitSource.For(path, origin));
         _redkit = from.Redkit;
-        SourceNoteBar.Show(from.Source, from.RedkitPath ?? origin, _doc?.KindName.ToLowerInvariant() ?? "file");
+        SourceNoteBar.Show(from.Source, from.RedkitPath ?? origin, _doc?.KindName.ToLowerInvariant() ?? L.T("TreeFileWindow.File"));
         if (_shown is { } node) ShowNode(node);
         else ShowResource();
     }
@@ -228,7 +229,7 @@ public partial class TreeFileWindow : Window, IMessageHost
         _matches = text.Length < 2 || _doc?.Root is null ? [] : _doc.Root.All().Where(n => Matches(n, text)).ToList();
         _match = -1;
         Graph.Highlight(_matches);
-        MatchText.Text = text.Length < 2 ? "" : _matches.Count == 0 ? "none" : Format.Count(_matches.Count, "node");
+        MatchText.Text = text.Length < 2 ? "" : _matches.Count == 0 ? L.T("Common.None") : L.T("Count.Node", _matches.Count);
         if (_matches.Count > 0) NextMatch();
     }
 
@@ -251,7 +252,7 @@ public partial class TreeFileWindow : Window, IMessageHost
         var node = _matches[_match];
         Graph.Reveal(node);
         ShowNode(node);
-        MatchText.Text = $"{_match + 1} of {_matches.Count:N0}";
+        MatchText.Text = L.T("TreeFileWindow.Of", _match + 1, _matches.Count);
     }
 
     private void FoldBox_SelectionChanged(object sender, SelectionChangedEventArgs e)

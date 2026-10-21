@@ -3,6 +3,7 @@ using System.Windows;
 using W3ModWorkbench.Core;
 using W3ModWorkbench.Core.Cr2w;
 using W3ModWorkbench.Core.Trees;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -22,16 +23,16 @@ public static class DataViewers
 
     private static readonly Viewer[] Viewers =
     [
-        Tree("Spawn tree", SpawnTreeFile.IsSpawnTree, SpawnTreeFile.Read),
-        Tree("Steering graph", SteeringFile.IsSteering, SteeringFile.Read),
-        Tree("Job tree", JobTreeFile.IsJobTree, JobTreeFile.Read, w => new JobTreePreview(w.Locator)),
-        new("Community", CommunityWindow.CanShow, CommunityWindow.Open, CommunityWindow.OpenFile),
-        new("Journal", JournalWindow.CanShow, JournalWindow.Open, JournalWindow.OpenFile),
-        new("Animation events", AnimEventsWindow.CanShow, AnimEventsWindow.Open, AnimEventsWindow.OpenFile),
-        new("Animation set", AnimSetWindow.CanShow, AnimSetWindow.Open, AnimSetWindow.OpenFile),
-        new("Rig", RigWindow.CanShow, RigWindow.Open, RigWindow.OpenFile),
-        new("Sound", SoundWindow.CanShow, SoundWindow.Open, SoundWindow.OpenFile),
-        new("Material", MaterialWindow.CanShow, MaterialWindow.Open, MaterialWindow.OpenFile),
+        Tree(L.T("DataViewers.SpawnTree"), SpawnTreeFile.IsSpawnTree, SpawnTreeFile.Read),
+        Tree(L.T("DataViewers.SteeringGraph"), SteeringFile.IsSteering, SteeringFile.Read),
+        Tree(L.T("DataViewers.JobTree"), JobTreeFile.IsJobTree, JobTreeFile.Read, w => new JobTreePreview(w.Locator)),
+        new(L.T("DataViewers.Community"), CommunityWindow.CanShow, CommunityWindow.Open, CommunityWindow.OpenFile),
+        new(L.T("DataViewers.Journal"), JournalWindow.CanShow, JournalWindow.Open, JournalWindow.OpenFile),
+        new(L.T("DataViewers.AnimationEvents"), AnimEventsWindow.CanShow, AnimEventsWindow.Open, AnimEventsWindow.OpenFile),
+        new(L.T("Common.AnimationSet"), AnimSetWindow.CanShow, AnimSetWindow.Open, AnimSetWindow.OpenFile),
+        new(L.T("DataViewers.Rig"), RigWindow.CanShow, RigWindow.Open, RigWindow.OpenFile),
+        new(L.T("DataViewers.Sound"), SoundWindow.CanShow, SoundWindow.Open, SoundWindow.OpenFile),
+        new(L.T("DataViewers.Material"), MaterialWindow.CanShow, MaterialWindow.Open, MaterialWindow.OpenFile),
     ];
 
     /// <summary>Whether a file's name says a viewer here shows it.</summary>
@@ -71,7 +72,7 @@ public static class DataViewers
         if (SoundLinks.IsSound(path))
         {
             var sound = await SoundLinks.ReadAsync(path);
-            if (sound is null) await host.ShowMessage("Not found", $"{path}\n\nIt isn't in the game's sound caches or speech files.", MessageKind.Warning);
+            if (sound is null) await host.ShowMessage(L.T("Common.NotFound"), L.T("DataViewers.IsntGamesSoundCaches", path), MessageKind.Warning);
             else SoundWindow.Open(path, sound.Value.Source, sound.Value.Data, locator, owner);
             return;
         }
@@ -87,7 +88,7 @@ public static class DataViewers
         {
             try { Clipboard.SetText(path); }
             catch (System.Runtime.InteropServices.COMException) { }
-            await host.ShowMessage(null, $"There's no viewer for {FileKinds.Of(path)?.Name.ToLowerInvariant() ?? "this kind of"} files yet, so its path is copied:\n{path}", MessageKind.Info);
+            await host.ShowMessage(null, L.T("DataViewers.NoViewer", FileKinds.Of(path)?.Name.ToLowerInvariant() ?? L.T("Common.Kind2"), path), MessageKind.Info);
             return;
         }
         byte[]? data;
@@ -98,12 +99,12 @@ public static class DataViewers
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or NotSupportedException)
         {
-            await host.ShowMessage("It could not be read", $"{path}\n\n{ex.Message}", MessageKind.Error);
+            await host.ShowMessage(L.T("Common.CouldNotRead"), $"{path}\n\n{ex.Message}", MessageKind.Error);
             return;
         }
         if (data is null)
         {
-            await host.ShowMessage("Not found", $"{path}\n\nIt isn't in the open project, the archives open in the tool, or the game's bundles.", MessageKind.Warning);
+            await host.ShowMessage(L.T("Common.NotFound"), L.T("DataViewers.IsntOpenProjectArchives", path), MessageKind.Warning);
             return;
         }
         string source = entry is null ? "project" : entry.Archive.Name;
@@ -116,6 +117,6 @@ public static class DataViewers
         else if (BehTreeWindow.CanShow(path)) BehTreeWindow.Open(path, source, data, locator, owner, entry?.Archive);
         else if (XmlWindow.CanOpen(path)) XmlWindow.OpenData(name, $"{source}  ·  {path}", data, owner, path);
         else if (!TextureWindow.Open(name, $"{source}  ·  {path}", data, owner))
-            await host.ShowMessage("It can't be shown", $"{path}\n\nIt isn't a picture the texture viewer understands.", MessageKind.Warning);
+            await host.ShowMessage(L.T("Common.CantShown"), L.T("DataViewers.IsntPictureTextureViewer", path), MessageKind.Warning);
     }
 }

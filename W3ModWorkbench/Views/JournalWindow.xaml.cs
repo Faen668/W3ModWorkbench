@@ -9,6 +9,7 @@ using W3ModWorkbench.Core.Cr2w;
 using W3ModWorkbench.Core.Journals;
 using W3ModWorkbench.Core.Projects;
 using W3ModWorkbench.ViewModels;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -110,14 +111,14 @@ public partial class JournalWindow : Window, IMessageHost
         _open.Standalone(owner).Show();
     }
 
-    public Task ShowMessage(string? title, string message, MessageKind kind) => Message.Show(title, message, kind, primary: "OK");
+    public Task ShowMessage(string? title, string message, MessageKind kind) => Message.Show(title, message, kind, primary: L.T("Common.OK"));
 
     /// <summary>Reads every journal file the game, the archives open and the project have, and builds the tree.</summary>
     private async Task LoadAsync()
     {
         BusyText.Visibility = Visibility.Visible;
         Body.Visibility = Visibility.Hidden;
-        BusyText.Text = "Reading the journal…";
+        BusyText.Text = L.T("JournalWindow.ReadingJournal");
         var progress = new Progress<string>(text => BusyText.Text = text);
         var own = _own.ToDictionary(o => o.Key, o => o.Value, StringComparer.OrdinalIgnoreCase);
         List<JournalNode> roots;
@@ -128,7 +129,7 @@ public partial class JournalWindow : Window, IMessageHost
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
         {
-            BusyText.Text = "The journal could not be read.\n\n" + ex.Message;
+            BusyText.Text = L.T("JournalWindow.JournalCouldNotRead", ex.Message);
             return;
         }
         (_text, _) = await SceneWindow.LinesAsync();
@@ -139,9 +140,9 @@ public partial class JournalWindow : Window, IMessageHost
         BusyText.Visibility = Visibility.Collapsed;
         Body.Visibility = Visibility.Visible;
         int entries = _all.Count(i => i.Node.IsFile);
-        CountText.Text = $"{Format.Count(files, "journal file")}, {Format.Count(_all.Count - _roots.Count, "entry", "entries")}"
-                         + (unread > 0 ? $"  ·  {Format.Count(unread, "file")} couldn't be read" : "");
-        InfoText.Text = $"Journal   ·   {Format.Count(files, "file")} from the game, the archives open and the project   ·   {Format.Count(entries, "top entry", "top entries")}";
+        CountText.Text = $"{L.T("Count.JournalFile", files)}, {L.T("Count.Entry", _all.Count - _roots.Count)}"
+                         + (unread > 0 ? L.T("JournalWindow.CouldntRead", L.T("Count.File", unread)) : "");
+        InfoText.Text = L.T("JournalWindow.JournalGameArchivesOpen", L.T("Count.File", files), L.T("Count.TopEntry", entries));
         foreach (var root in _roots) root.IsExpanded = true;
         if (_pending is { } path) Pick(path);
     }
@@ -153,7 +154,7 @@ public partial class JournalWindow : Window, IMessageHost
         int unread = 0;
         for (int i = 0; i < paths.Count; i++)
         {
-            if (i % 50 == 0) progress.Report($"Reading the journal…\n{i:N0} of {paths.Count:N0} files");
+            if (i % 50 == 0) progress.Report(L.T("JournalWindow.ReadingJournalFiles", i, paths.Count));
             try
             {
                 var data = own.TryGetValue(paths[i], out var mine) ? mine : _locator.ReadFile(paths[i]);
@@ -198,7 +199,7 @@ public partial class JournalWindow : Window, IMessageHost
     private string Tip(JournalItem item)
     {
         var node = item.Node;
-        if (node.Object is null) return $"{node.Name}: {Format.Count(item.Children.Count, "entry", "entries")}";
+        if (node.Object is null) return $"{node.Name}: {L.T("Count.Entry", item.Children.Count)}";
         var lines = new List<string> { $"{node.Kind}  ·  {node.ClassName}" };
         foreach (var (property, id) in JournalTree.Strings(node.Object).Take(1))
             if (_text?.Invoke(id) is { Length: > 0 } text) lines.Add(text.Length > 120 ? text[..120] + "…" : text);
@@ -257,23 +258,23 @@ public partial class JournalWindow : Window, IMessageHost
         EntryTitle.Text = node.Name;
         if (node.Object is not { } o)
         {
-            EntryDetail.Text = $"{Format.Count(item.Children.Count, "entry", "entries")} in the journal's {node.Name.ToLowerInvariant()}";
+            EntryDetail.Text = L.T("JournalWindow.Journals", L.T("Count.Entry", item.Children.Count), node.Name.ToLowerInvariant());
             EntryButtons.Visibility = Visibility.Collapsed;
             Texts.ItemsSource = null;
             Properties.Show([]);
-            SourceNoteBar.Show(PropertySource.None, null, "journal entry");
+            SourceNoteBar.Show(PropertySource.None, null, L.T("JournalWindow.JournalEntry"));
             return;
         }
         var said = new List<string> { node.Kind, o.ClassName };
-        if (o["uniqueScriptIdentifier"] is string tag && tag.Length > 0) said.Add($"script tag {tag}");
+        if (o["uniqueScriptIdentifier"] is string tag && tag.Length > 0) said.Add(L.T("JournalWindow.ScriptTag", tag));
         if (node.Path is { } p) said.Add(p);
         EntryDetail.Text = string.Join("  ·  ", said);
         EntryButtons.Visibility = Visibility.Visible;
         // its texts in words, the title larger
-        string Words(uint id) => _text?.Invoke(id) is { } text ? text.Replace("<br>", "\n", StringComparison.OrdinalIgnoreCase) : $"(string {id})";
+        string Words(uint id) => _text?.Invoke(id) is { } text ? text.Replace("<br>", "\n", StringComparison.OrdinalIgnoreCase) : L.T("JournalWindow.String", id);
         var texts = JournalTree.Strings(o).Select(s => new
         {
-            Label = s.Property switch { "title" => "Title", "description" => "Description", "name" => "Name", var other => other },
+            Label = s.Property switch { "title" => L.T("JournalWindow.Title"), "description" => L.T("JournalWindow.Description"), "name" => L.T("Common.Name"), var other => other },
             Text = Words(s.Id),
             Size = s.Property == "title" ? 16.0 : 13.0,
         }).ToList();
@@ -282,7 +283,7 @@ public partial class JournalWindow : Window, IMessageHost
         if (objectives.Count > 0)
             texts.Add(new
             {
-                Label = $"Objectives ({objectives.Count})",
+                Label = L.T("JournalWindow.Objectives", objectives.Count),
                 Text = string.Join("\n", objectives.Select(i => "•  " + (JournalTree.Strings(i.Node.Object!).Select(s => Words(s.Id)).FirstOrDefault() ?? i.Name))),
                 Size = 13.0,
             });
@@ -290,7 +291,7 @@ public partial class JournalWindow : Window, IMessageHost
         string? phase = o["questPhase"] is RedHandle h ? node.File!.PathOf(h) : null;
         OpenPhaseButton.Visibility = phase is { Length: > 0 } ? Visibility.Visible : Visibility.Collapsed;
         OpenPhaseButton.Tag = phase;
-        OpenPhaseText.Text = "Open the quest phase";
+        OpenPhaseText.Text = L.T("JournalWindow.OpenQuestPhase");
         Properties.Show(PropertyRow.Of(o, node.File!, leaveOut: ["children"]));
         // the properties from REDkit's copy of the file, when it has the same entry
         if (node.Path is not { } path) return;
@@ -309,9 +310,9 @@ public partial class JournalWindow : Window, IMessageHost
         if (same is not null)
         {
             Properties.Show(PropertyRow.Of(same, redkit!, leaveOut: ["children"]));
-            SourceNoteBar.Show(PropertySource.Redkit, FileSafety.RedkitFile(path), "journal entry");
+            SourceNoteBar.Show(PropertySource.Redkit, FileSafety.RedkitFile(path), L.T("JournalWindow.JournalEntry"));
         }
-        else SourceNoteBar.Show(_own.ContainsKey(path) ? PropertySource.Own : PropertySource.Cooked, null, "journal entry");
+        else SourceNoteBar.Show(_own.ContainsKey(path) ? PropertySource.Own : PropertySource.Cooked, null, L.T("JournalWindow.JournalEntry"));
     }
 
     private void OpenPhase_Click(object sender, RoutedEventArgs e)
@@ -329,7 +330,7 @@ public partial class JournalWindow : Window, IMessageHost
         try
         {
             Clipboard.SetText(text);
-            _ = Message.Show(null, $"Copied {text}", MessageKind.Info, autoClose: true);
+            _ = Message.Show(null, L.T("JournalWindow.Copied", text), MessageKind.Info, autoClose: true);
         }
         catch (System.Runtime.InteropServices.COMException) { }
     }
@@ -358,7 +359,7 @@ public partial class JournalWindow : Window, IMessageHost
         foreach (var item in found) item.Where = string.Join(" › ", Parents(item).Select(p => p.Name));
         Results.ItemsSource = found;
         Results.Visibility = Visibility.Visible;
-        CountText.Text = found.Count == 0 ? "Nothing has those words" : found.Count == 500 ? "The first 500 found" : Format.Count(found.Count, "entry", "entries") + " found";
+        CountText.Text = found.Count == 0 ? L.T("JournalWindow.NothingHasThoseWords") : found.Count == 500 ? L.T("JournalWindow.FirstFound") : L.T("JournalWindow.Found", L.T("Count.Entry", found.Count));
     }
 
     private static IEnumerable<JournalItem> Parents(JournalItem item)
@@ -388,10 +389,10 @@ public partial class JournalWindow : Window, IMessageHost
     // ---------------------------------------------------------------- checks
 
     private void CheckTags_Click(object sender, RoutedEventArgs e) =>
-        Report("Duplicated unique script tags", "unique script tag", i => i.Node.Object?["uniqueScriptIdentifier"] as string is { Length: > 0 } t && t != "None" ? t : null);
+        Report(L.T("JournalWindow.DuplicatedUniqueScriptTags"), L.T("JournalWindow.UniqueScriptTag"), i => i.Node.Object?["uniqueScriptIdentifier"] as string is { Length: > 0 } t && t != "None" ? t : null);
 
     private void CheckGuids_Click(object sender, RoutedEventArgs e) =>
-        Report("Duplicated GUIDs", "GUID", i => i.Node.Guid != Guid.Empty ? i.Node.Guid.ToString() : null);
+        Report(L.T("JournalWindow.DuplicatedGUIDs"), "GUID", i => i.Node.Guid != Guid.Empty ? i.Node.Guid.ToString() : null);
 
     /// <summary>Lists the values more than one entry has, and the entries, as the editor's checks do.</summary>
     private void Report(string title, string what, Func<JournalItem, string?> key)
@@ -400,12 +401,12 @@ public partial class JournalWindow : Window, IMessageHost
             .Where(g => g.Count() > 1).ToList();
         if (groups.Count == 0)
         {
-            _ = Message.Show(title, $"No two entries have the same {what}.", MessageKind.Info, primary: "OK");
+            _ = Message.Show(title, L.T("JournalWindow.NoTwoEntriesHave", what), MessageKind.Info, primary: L.T("Common.OK"));
             return;
         }
         var lines = groups.Take(40).Select(g => $"{g.Key}\n    " + string.Join("\n    ", g.Select(x => $"{x.Item.Name}  ({x.Item.Node.Path})")));
         _ = Message.Show(title, $"{Format.Count(groups.Count, "duplicated " + what)}:\n\n" + string.Join("\n", lines)
-            + (groups.Count > 40 ? $"\n\n… and {groups.Count - 40:N0} more" : ""), MessageKind.Warning, primary: "OK");
+            + (groups.Count > 40 ? L.T("JournalWindow.More", groups.Count - 40) : ""), MessageKind.Warning, primary: L.T("Common.OK"));
     }
 
     private void MissingTags_Click(object sender, RoutedEventArgs e)
@@ -413,12 +414,12 @@ public partial class JournalWindow : Window, IMessageHost
         var missing = _all.Where(i => i.Node.Object is { } o && !(o["uniqueScriptIdentifier"] is string t && t.Length > 0 && t != "None")).ToList();
         if (missing.Count == 0)
         {
-            _ = Message.Show("Unique script tags", "Every entry has a unique script tag.", MessageKind.Info, primary: "OK");
+            _ = Message.Show(L.T("JournalWindow.UniqueScriptTags"), L.T("JournalWindow.EveryEntryHasUnique"), MessageKind.Info, primary: L.T("Common.OK"));
             return;
         }
         Results.ItemsSource = missing.Take(500).Select(i => { i.Where = string.Join(" › ", Parents(i).Select(p => p.Name)); return i; }).ToList();
         Results.Visibility = Visibility.Visible;
-        CountText.Text = $"{Format.Count(missing.Count, "entry", "entries")} without a unique script tag (clear the search to see the tree again)";
+        CountText.Text = L.T("JournalWindow.WithoutUniqueScriptTag", L.T("Count.Entry", missing.Count));
     }
 
     private void Window_PreviewKeyDown(object sender, KeyEventArgs e)

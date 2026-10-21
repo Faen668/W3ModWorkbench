@@ -6,6 +6,7 @@ using W3ModWorkbench.Core;
 using W3ModWorkbench.Core.Communities;
 using W3ModWorkbench.Core.Cr2w;
 using W3ModWorkbench.ViewModels;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -35,7 +36,7 @@ public partial class CommunityWindow : Window, IMessageHost
         _readData = readData;
         _locator = locator;
         _origin = origin;
-        Title = $"{Path.GetFileName(path)} - Community";
+        Title = L.T("CommunityWindow.Community2", Path.GetFileName(path));
         InfoText.Text = $"{path}   ·   {source}";
         Loaded += async (_, _) => await LoadAsync();
     }
@@ -48,7 +49,7 @@ public partial class CommunityWindow : Window, IMessageHost
     public static void OpenFile(string file, ResourceLocator locator, Window owner) =>
         new CommunityWindow(Path.GetFileName(file), file, () => File.ReadAllBytes(file), locator, file).Standalone(owner).Show();
 
-    public Task ShowMessage(string? title, string message, MessageKind kind) => Message.Show(title, message, kind, primary: "OK");
+    public Task ShowMessage(string? title, string message, MessageKind kind) => Message.Show(title, message, kind, primary: L.T("Common.OK"));
 
     private async Task LoadAsync()
     {
@@ -58,7 +59,7 @@ public partial class CommunityWindow : Window, IMessageHost
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or NotSupportedException)
         {
-            BusyText.Text = "The community could not be read.\n\n" + ex.Message;
+            BusyText.Text = L.T("CommunityWindow.CommunityCouldNotRead", ex.Message);
             return;
         }
         var c = _community;
@@ -66,12 +67,12 @@ public partial class CommunityWindow : Window, IMessageHost
         Body.Visibility = Visibility.Visible;
         TypeText.Text = c.SpawnsetType;
         int phases = c.Spawnset.Count(r => r.StoryPhase.Length > 0);
-        CountsText.Text = $"{Format.Count(c.Entries, "entry", "entries")}  ·  {Format.Count(phases, "story phase")}  ·  {Format.Count(c.TimetableCount, "timetable")}";
-        SpawnsetTab.Header = $"Spawnset ({c.Entries:N0})";
-        TimetablesTab.Header = $"Timetables ({c.TimetableCount:N0})";
+        CountsText.Text = $"{L.T("Count.Entry", c.Entries)}  ·  {L.T("Count.StoryPhase", phases)}  ·  {L.T("Count.Timetable", c.TimetableCount)}";
+        SpawnsetTab.Header = L.T("CommunityWindow.Spawnset2", c.Entries);
+        TimetablesTab.Header = L.T("CommunityWindow.Timetables2", c.TimetableCount);
         SpawnsetGrid.ItemsSource = c.Spawnset;
         TimetableGrid.ItemsSource = c.Timetables;
-        InfoText.Text = $"{_path}   ·   {_source}   ·   CR2W {c.File.Version}, {Format.Count(c.Entries, "entry", "entries")}, {Format.Count(c.TimetableCount, "timetable")}";
+        InfoText.Text = L.T("CommunityWindow.CR2W", _path, _source, c.File.Version, L.T("Count.Entry", c.Entries), L.T("Count.Timetable", c.TimetableCount));
         ShowCommunity();
         _ = LoadRedkitAsync();
     }
@@ -87,7 +88,7 @@ public partial class CommunityWindow : Window, IMessageHost
                 try { return CommunityFile.Read(file); }
                 catch (InvalidDataException) { return null; }
             });
-        SourceNoteBar.Show(from.Source, from.RedkitPath ?? origin, "community");
+        SourceNoteBar.Show(from.Source, from.RedkitPath ?? origin, L.T("CommunityWindow.Community3"));
         if (_shownRow is { } row) ShowRow(row);
         else ShowCommunity();
     }
@@ -108,8 +109,8 @@ public partial class CommunityWindow : Window, IMessageHost
     {
         if (_community is null) return;
         _shownRow = null;
-        PickedTitle.Text = "The community";
-        PickedDetail.Text = "Click a row to see its entry, entity and story phase";
+        PickedTitle.Text = L.T("CommunityWindow.Community4");
+        PickedDetail.Text = L.T("CommunityWindow.ClickRowSeeEntry2");
         OpenTemplateButton.IsEnabled = TimetableButton.IsEnabled = false;
         var (o, file) = _redkit is { } r ? (r.Community, r.File) : (_community.Community, _community.File);
         Properties.Show(PropertyRow.Of(o, file, leaveOut: ["communityTable", "storyPhaseTimetable"]));
@@ -127,27 +128,27 @@ public partial class CommunityWindow : Window, IMessageHost
         var (row, file) = Source(picked);
         var rows = new List<PropertyRow>();
         string id = row.Entry["entryID"] as string ?? "";
-        PickedTitle.Text = id.Length > 0 ? $"Entry {id}" : "Entry";
+        PickedTitle.Text = id.Length > 0 ? L.T("CommunityWindow.Entry", id) : L.T("CommunityWindow.Entry2");
         var said = new List<string>();
         if (picked.Template.Length > 0 || row.Entity is not null) said.Add(Path.GetFileName(TemplateOf(picked)));
         var phase = PhaseOf(picked);
-        if (phase is not null && Phase(phase) is { Length: > 0 } names) said.Add($"story phase {names}");
+        if (phase is not null && Phase(phase) is { Length: > 0 } names) said.Add(L.T("CommunityWindow.StoryPhase3", names));
         PickedDetail.Text = string.Join("  ·  ", said);
-        rows.Add(new PropertyRow("Entry", "", "", 0, null, heading: true));
+        rows.Add(new PropertyRow(L.T("CommunityWindow.Entry2"), "", "", 0, null, heading: true));
         rows.AddRange(PropertyRow.Of(row.Entry, file, leaveOut: ["entities", "storyPhases"]));
         if (row.Entity is { } entity)
         {
-            rows.Add(new PropertyRow("Entity", "", "", 0, null, heading: true));
+            rows.Add(new PropertyRow(L.T("CommunityWindow.Entity"), "", "", 0, null, heading: true));
             rows.AddRange(PropertyRow.Of(entity, file));
         }
         if (row.Phase is { } p)
         {
-            rows.Add(new PropertyRow("Story phase", "", "", 0, null, heading: true));
+            rows.Add(new PropertyRow(L.T("CommunityWindow.StoryPhase"), "", "", 0, null, heading: true));
             rows.AddRange(PropertyRow.Of(p, file, leaveOut: ["spawnTimetable"]));
         }
         if (row.Spawn is { } spawn)
         {
-            rows.Add(new PropertyRow("Spawn time", "", "", 0, null, heading: true));
+            rows.Add(new PropertyRow(L.T("CommunityWindow.SpawnTime"), "", "", 0, null, heading: true));
             rows.AddRange(PropertyRow.Of(spawn, file));
         }
         Properties.Show(rows);
@@ -185,7 +186,7 @@ public partial class CommunityWindow : Window, IMessageHost
         var first = _community.Timetables.FirstOrDefault(t => t.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
         if (first is null)
         {
-            _ = Message.Show(null, $"The timetable {name} isn't in this community: another one has it.", MessageKind.Info, primary: "OK");
+            _ = Message.Show(null, L.T("CommunityWindow.TimetableIsntCommunityAnother", name), MessageKind.Info, primary: L.T("Common.OK"));
             return;
         }
         TimetableGrid.SelectedItem = first;
@@ -196,9 +197,9 @@ public partial class CommunityWindow : Window, IMessageHost
     {
         if (TimetableGrid.SelectedItem is not TimetableRow row || _community is null) return;
         var name = _community.Timetables.Where(t => t.Group == row.Group).Select(t => t.Name).FirstOrDefault(n => n.Length > 0) ?? "";
-        PickedTitle.Text = name.Length > 0 ? $"Timetable {name}" : "Timetable";
+        PickedTitle.Text = name.Length > 0 ? L.T("CommunityWindow.Timetable3", name) : L.T("CommunityWindow.Timetable");
         var used = _community.Spawnset.Where(r => r.Timetable.Equals(name, StringComparison.OrdinalIgnoreCase)).Select(r => r.StoryPhase).Distinct().ToList();
-        PickedDetail.Text = used.Count > 0 ? $"kept by story phase {string.Join(", ", used)}" : "no story phase here keeps it";
+        PickedDetail.Text = used.Count > 0 ? L.T("CommunityWindow.KeptStoryPhase", string.Join(", ", used)) : L.T("CommunityWindow.NoStoryPhaseHere");
         OpenTemplateButton.IsEnabled = TimetableButton.IsEnabled = false;
         var timetable = _community.Community.Array("storyPhaseTimetable").OfType<RedObject>().ElementAtOrDefault(row.Group);
         Properties.Show(timetable is null ? [] : PropertyRow.Of(timetable, _community.File));
@@ -223,7 +224,7 @@ public partial class CommunityWindow : Window, IMessageHost
         var tables = _community.Timetables.Where(r => r.Text.Contains(text, StringComparison.OrdinalIgnoreCase)).Select(r => r.Group).ToHashSet();
         SpawnsetGrid.ItemsSource = _community.Spawnset.Where(r => entries.Contains(r.Group)).ToList();
         TimetableGrid.ItemsSource = _community.Timetables.Where(r => tables.Contains(r.Group)).ToList();
-        MatchText.Text = $"{Format.Count(entries.Count, "entry", "entries")}, {Format.Count(tables.Count, "timetable")}";
+        MatchText.Text = $"{L.T("Count.Entry", entries.Count)}, {L.T("Count.Timetable", tables.Count)}";
     }
 
     private void PropertySearch_TextChanged(object sender, TextChangedEventArgs e)

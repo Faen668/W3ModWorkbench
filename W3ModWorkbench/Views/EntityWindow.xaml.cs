@@ -11,6 +11,7 @@ using W3ModWorkbench.Core.Cutscenes;
 using W3ModWorkbench.Core.Entities;
 using W3ModWorkbench.Core.Meshes;
 using W3ModWorkbench.ViewModels;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -36,7 +37,7 @@ public partial class EntityWindow : Window, IMessageHost
     /// <summary>Whether it's one of the player's entities, which get a look of Geralt dressed.</summary>
     private bool _player;
 
-    private const string DressedLook = "Geralt, dressed (Workbench)";
+    private static string DressedLook => L.T("EntityWindow.DressedLook");
     private List<EntityComponent> _partComponents = [];
     private CancellationTokenSource? _meshLoad;
     private readonly Dictionary<string, Task<BitmapSource?>> _textures = new(StringComparer.OrdinalIgnoreCase);
@@ -57,20 +58,20 @@ public partial class EntityWindow : Window, IMessageHost
         InitializeComponent();
         // characters face +Y, so the view starts on that side, facing them, a little from above
         View.StartFrom(180, 10);
-        Resources["PropertyMenu"] = Menu(("Copy value", CopyValue_Click), ("Copy name", CopyName_Click), ("Copy name and value", CopyBoth_Click));
-        Resources["FileMenu"] = Menu(("Copy path", CopyPath_Click));
+        Resources["PropertyMenu"] = Menu((L.T("EntityWindow.CopyValue"), CopyValue_Click), (L.T("Common.CopyName"), CopyName_Click), (L.T("EntityWindow.CopyNameValue"), CopyBoth_Click));
+        Resources["FileMenu"] = Menu((L.T("Common.CopyPath"), CopyPath_Click));
         FloorToggle.IsChecked = View.ShowFloor = App.Settings.ShowEntityFloor;
         InfoPanel.Visibility = App.Settings.ShowEntityInfo ? Visibility.Visible : Visibility.Collapsed;
         SpeedBox.ItemsSource = Speeds.Select(s => $"{s * 100:0}%").ToList();
         SpeedBox.SelectedIndex = Array.IndexOf(Speeds, 1f);
-        FpsBox.ItemsSource = FrameRates.Select(f => f == 0 ? "Max" : $"{f} fps").ToList();
+        FpsBox.ItemsSource = FrameRates.Select(f => f == 0 ? L.T("EntityWindow.Max") : L.T("EntityWindow.Fps", f)).ToList();
         int remembered = Array.IndexOf(FrameRates, App.Settings.AnimationFps);
         FpsBox.SelectedIndex = remembered >= 0 ? remembered : Array.IndexOf(FrameRates, 30);
         _path = path;
         _source = source;
         _readData = readData;
         _locator = locator;
-        Title = $"{Path.GetFileName(path)} - Entity";
+        Title = L.T("EntityWindow.Entity2", Path.GetFileName(path));
         InfoText.Text = $"{path}   ·   {source}";
         Loaded += async (_, _) => await LoadAsync();
         Closed += (_, _) =>
@@ -91,7 +92,7 @@ public partial class EntityWindow : Window, IMessageHost
     public static void OpenFile(string file, ResourceLocator locator, Window owner) =>
         new EntityWindow(Path.GetFileName(file), file, () => File.ReadAllBytes(file), locator, file).Standalone(owner).Show();
 
-    public Task ShowMessage(string? title, string message, MessageKind kind) => Message.Show(title, message, kind, primary: "OK");
+    public Task ShowMessage(string? title, string message, MessageKind kind) => Message.Show(title, message, kind, primary: L.T("Common.OK"));
 
     private async Task LoadAsync()
     {
@@ -110,7 +111,7 @@ public partial class EntityWindow : Window, IMessageHost
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or NotSupportedException)
         {
-            BusyText.Text = "The entity could not be read.\n\n" + ex.Message;
+            BusyText.Text = L.T("EntityWindow.EntityCouldNotRead", ex.Message);
             return;
         }
         var e = _entity;
@@ -120,15 +121,15 @@ public partial class EntityWindow : Window, IMessageHost
         ShowLook(new EntityLook([.. e.Components], [.. e.Links]));
         ShowEntityAndTemplate(e);
         _ = LoadRedkitAsync(e);
-        EntityClassRun.Text = e.EntityClass ?? "(none)";
-        IncludeList.ItemsSource = e.Includes.Select(i => new CutsceneLinkItem(new CutsceneLink(i, "Included template"))).ToList();
+        EntityClassRun.Text = e.EntityClass ?? L.T("EntityWindow.None");
+        IncludeList.ItemsSource = e.Includes.Select(i => new CutsceneLinkItem(new CutsceneLink(i, L.T("EntityWindow.IncludedTemplate")))).ToList();
         NoIncludesText.Visibility = e.Includes.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         _ = LoadDependenciesAsync(e);
         AddListTabs(e);
         EffectList.ItemsSource = e.Effects.Select(x => new PropertyRow(x, "effect", "", 0, null)).ToList();
         FileList.ItemsSource = Files(e).Select(l => new CutsceneLinkItem(l)).ToList();
 
-        var looks = new List<object> { "The entity alone" };
+        var looks = new List<object> { L.T("EntityWindow.EntityAlone") };
         looks.AddRange(e.Appearances.Select(a => a.Name));
         // the player's entities are only a neck seam: the game dresses him in what's equipped, so offer him dressed, and start so
         _player = CutsceneCast.IsPlayer(_path);
@@ -136,17 +137,17 @@ public partial class EntityWindow : Window, IMessageHost
         AppearanceBox.ItemsSource = looks;
         AppearanceBox.SelectedIndex = _player && _lookWanted is null ? looks.Count - 1
             : (_lookWanted ?? e.DefaultAppearance) is { } shown ? e.Appearances.IndexOf(shown) + 1 : 0;
-        InfoText.Text = $"{_path}   ·   {_source}   ·   CR2W {e.File.Version}, {Format.Count(e.Components.Count, "component")}, "
-                      + $"{Format.Count(e.Appearances.Count, "appearance")}, {Format.Count(e.Includes.Count, "include")}"
-                      + (_lookWanted is { } asked && _lookAs is { } from ? $"   ·   shown as {from.From} shows it: {asked.Name}" : "");
+        InfoText.Text = L.T("EntityWindow.Info", _path, _source, e.File.Version, L.T("Count.Component", e.Components.Count),
+                          L.T("Count.Appearance", e.Appearances.Count), L.T("Count.Include", e.Includes.Count))
+                      + (_lookWanted is { } asked && _lookAs is { } from ? L.T("EntityWindow.ShownAs", from.From, asked.Name) : "");
     }
 
     /// <summary>Every file the entity refers to: its includes, the templates of its appearances, and its components' resources.</summary>
     private static IEnumerable<CutsceneLink> Files(EntityFile e) =>
-        e.Includes.Select(i => new CutsceneLink(i, "Included template"))
-            .Concat(e.Appearances.SelectMany(a => a.Templates.Select(t => new CutsceneLink(t, $"In appearance {a.Name}"))))
-            .Concat(e.Components.SelectMany(c => c.Resources.Select(r => new CutsceneLink(r, $"{FileKinds.Of(r)?.Name ?? "File"}, used by {c.Name}"))))
-            .Concat(e.File.Imports.Select(i => new CutsceneLink(i.Path, FileKinds.Of(i.Path)?.Name ?? "File")))
+        e.Includes.Select(i => new CutsceneLink(i, L.T("EntityWindow.IncludedTemplate")))
+            .Concat(e.Appearances.SelectMany(a => a.Templates.Select(t => new CutsceneLink(t, L.T("EntityWindow.Appearance2", a.Name)))))
+            .Concat(e.Components.SelectMany(c => c.Resources.Select(r => new CutsceneLink(r, L.T("EntityWindow.UsedBy", FileKinds.Of(r)?.Name ?? L.T("Common.File"), c.Name)))))
+            .Concat(e.File.Imports.Select(i => new CutsceneLink(i.Path, FileKinds.Of(i.Path)?.Name ?? L.T("Common.File"))))
             .Where(l => l.Path.Length > 0)
             .DistinctBy(l => l.Path, StringComparer.OrdinalIgnoreCase);
 
@@ -201,7 +202,7 @@ public partial class EntityWindow : Window, IMessageHost
         });
         foreach (var (key, file) in files) _redkit[key] = file;
         _redkitTemplate = from.Redkit is { } redkit ? RedkitSource.Match(redkit, e.Template, e.File) : null;
-        SourceNoteBar.Show(from.Source, from.RedkitPath ?? origin, "entity");
+        SourceNoteBar.Show(from.Source, from.RedkitPath ?? origin, L.T("EntityWindow.Entity3"));
         if (files.Count == 0) return;
         ShowEntityAndTemplate(e);
         if (_shownComponent is { } c) ShowComponent(c);
@@ -212,7 +213,7 @@ public partial class EntityWindow : Window, IMessageHost
     /// <summary>One of a list tab's entries: what it's called, whether it comes from an include, and its properties.</summary>
     private sealed record ListEntry(string Label, bool Included, Func<List<PropertyRow>> Rows, IReadOnlyList<string>? Files = null)
     {
-        public override string ToString() => Included ? $"{Label}  (included)" : Label;
+        public override string ToString() => Included ? L.T("EntityWindow.Included2", Label) : Label;
     }
 
     /// <summary>
@@ -240,7 +241,7 @@ public partial class EntityWindow : Window, IMessageHost
             a.Array("includedTemplates").OfType<RedHandle>().Select(f.Import).OfType<Cr2wImport>().Select(i => i.Path).ToList())).ToList();
         var colours = t.Array("coloringEntries").OfType<RedObject>()
             .Select(c => Entry(c, $"{c["appearance"] as string}  ·  {c["componentName"] as string}", false))
-            .Concat(e.IncludedColorings.Select(c => new ListEntry($"{c.Entry["appearance"] as string}  ·  {c.Entry["componentName"] as string}   from {c.From}", true,
+            .Concat(e.IncludedColorings.Select(c => new ListEntry(L.T("EntityWindow.ColoringFrom", c.Entry["appearance"] as string, c.Entry["componentName"] as string, c.From), true,
                 () => PropertyRow.Of(c.Entry, c.File)))).ToList();
         var slots = t.Array("slots").OfType<RedObject>().Select(s => Entry(s, s["name"] as string ?? "", Included(s))).ToList();
         var ai = parameters.Where(IsAi).Select(p => Entry(p, Named(p, Kind(p)), Included(p))).ToList();
@@ -248,14 +249,14 @@ public partial class EntityWindow : Window, IMessageHost
             .SelectMany(p => p.Array("entries").OfType<RedHandle>().Select(f.Object).OfType<RedObject>().Select(x => (Entry: x, Included: Included(p))))
             .Select(x => Entry(x.Entry, $"{x.Entry["category"] as string}:{(x.Entry["initializer"] is RedHandle h && f.Object(h) is { } i ? i["itemName"] as string : null) ?? x.Entry["itemName"] as string ?? "any"}", x.Included)).ToList();
         var voicetags = t.Array("voicetagAppearances").OfType<RedObject>()
-            .Select(v => Entry(v, $"{v["voicetag"] as string ?? "None"}  →  {v["appearance"] as string}", false)).ToList();
+            .Select(v => Entry(v, $"{v["voicetag"] as string ?? L.T("EntityWindow.None3")}  →  {v["appearance"] as string}", false)).ToList();
         var animation = parameters.Where(IsAnimation).Select(p => Entry(p, p.ClassName switch
         {
-            "CAnimAnimsetsParam" => $"Animsets: {Named(p, "")}",
-            "CAnimBehaviorsParam" => $"Behaviors: {Named(p, "")}",
-            "CAnimConstraintsParam" => "Constraints",
-            "CAnimMimicParam" => "Mimics",
-            "CAnimGlobalParam" => "Global",
+            "CAnimAnimsetsParam" => L.T("EntityWindow.Animsets", Named(p, "")),
+            "CAnimBehaviorsParam" => L.T("EntityWindow.Behaviors", Named(p, "")),
+            "CAnimConstraintsParam" => L.T("EntityWindow.Constraints"),
+            "CAnimMimicParam" => L.T("EntityWindow.Mimics"),
+            "CAnimGlobalParam" => L.T("EntityWindow.Global"),
             _ => Named(p, Kind(p)),
         }, Included(p))).ToList();
         var gameplay = parameters.Where(p => !IsAi(p) && !IsAnimation(p) && !IsAnimationSlots(p) && !IsInventory(p) && !IsDismemberment(p))
@@ -265,17 +266,17 @@ public partial class EntityWindow : Window, IMessageHost
             .SelectMany(p => p.Array("wounds").OfType<RedHandle>().Select(f.Object).OfType<RedObject>().Select(w => Entry(w, w["name"] as string ?? "", Included(p)))).ToList();
 
         int at = Tabs.Items.IndexOf(EffectsTab);
-        Tabs.Items.Insert(at++, ListTab("Appearances", appearances, "It has no appearances."));
-        Tabs.Items.Insert(at++, ListTab("Colors", colours, "Neither it nor the templates it includes have colour entries."));
+        Tabs.Items.Insert(at++, ListTab(L.T("EntityWindow.Appearances2"), appearances, L.T("EntityWindow.HasNoAppearances")));
+        Tabs.Items.Insert(at++, ListTab(L.T("EntityWindow.Colors"), colours, L.T("EntityWindow.NeitherNorTemplatesIncludes")));
         at++; // after Effects
-        Tabs.Items.Insert(at++, ListTab("Slots", slots, "It has no slots."));
-        Tabs.Items.Insert(at++, ListTab("AI", ai, "It has no AI settings."));
-        Tabs.Items.Insert(at++, ListTab("Inventory", inventory, "It has no inventory."));
-        Tabs.Items.Insert(at++, ListTab("Voicetags", voicetags, "It has no voice tags."));
-        Tabs.Items.Insert(at++, ListTab("Animation", animation, "It has no animation settings."));
-        Tabs.Items.Insert(at++, ListTab("Gameplay", gameplay, "It has no gameplay params."));
-        Tabs.Items.Insert(at++, ListTab("Animation Slots", animationSlots, "It has no animation slots."));
-        Tabs.Items.Insert(at, ListTab("Dismemberment", wounds, "It has no wounds."));
+        Tabs.Items.Insert(at++, ListTab(L.T("EntityWindow.Slots"), slots, L.T("EntityWindow.HasNoSlots")));
+        Tabs.Items.Insert(at++, ListTab("AI", ai, L.T("EntityWindow.HasNoAISettings")));
+        Tabs.Items.Insert(at++, ListTab(L.T("EntityWindow.Inventory"), inventory, L.T("EntityWindow.HasNoInventory")));
+        Tabs.Items.Insert(at++, ListTab(L.T("EntityWindow.Voicetags"), voicetags, L.T("EntityWindow.HasNoVoiceTags")));
+        Tabs.Items.Insert(at++, ListTab(L.T("Common.Animation"), animation, L.T("EntityWindow.HasNoAnimationSettings")));
+        Tabs.Items.Insert(at++, ListTab(L.T("EntityWindow.Gameplay"), gameplay, L.T("EntityWindow.HasNoGameplayParams")));
+        Tabs.Items.Insert(at++, ListTab(L.T("EntityWindow.AnimationSlots"), animationSlots, L.T("EntityWindow.HasNoAnimationSlots")));
+        Tabs.Items.Insert(at, ListTab(L.T("EntityWindow.Dismemberment"), wounds, L.T("EntityWindow.HasNoWounds")));
     }
 
     /// <summary>A tab with a list on the left and the properties of the entry picked on the right, with the files it uses.</summary>
@@ -304,7 +305,7 @@ public partial class EntityWindow : Window, IMessageHost
         {
             if (list.SelectedItem is not ListEntry entry) return;
             ShowRows(details, entry.Rows());
-            files.ItemsSource = entry.Files?.Select(p => new CutsceneLinkItem(new CutsceneLink(p, "Template"))).ToList();
+            files.ItemsSource = entry.Files?.Select(p => new CutsceneLinkItem(new CutsceneLink(p, L.T("Common.Template")))).ToList();
         };
         if (entries.Count == 0)
             grid.Children.Add(new TextBlock { Text = empty, Opacity = 0.6, Margin = new Thickness(6, 4, 0, 0), TextWrapping = TextWrapping.Wrap });
@@ -371,7 +372,7 @@ public partial class EntityWindow : Window, IMessageHost
     /// </summary>
     private async Task LoadDependenciesAsync(EntityFile entity)
     {
-        DependenciesHeading.Text = "Dependencies (finding them…)";
+        DependenciesHeading.Text = L.T("EntityWindow.DependenciesFindingThem");
         _dependencies = await Task.Run(() =>
         {
             var found = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -400,7 +401,7 @@ public partial class EntityWindow : Window, IMessageHost
     {
         var shown = OnlyTemplatesCheck.IsChecked == true ? _dependencies.Where(EntityFile.IsEntity).ToList() : _dependencies;
         DependencyList.ItemsSource = shown;
-        DependenciesHeading.Text = $"Dependencies ({shown.Count:N0})";
+        DependenciesHeading.Text = L.T("EntityWindow.Dependencies2", shown.Count);
     }
 
     private void OnlyTemplates_Click(object sender, RoutedEventArgs e) => ShowDependencies();
@@ -429,13 +430,11 @@ public partial class EntityWindow : Window, IMessageHost
         _meshLoad?.Cancel();
         var cts = _meshLoad = new CancellationTokenSource();
         if (dressed)
-            GeneratedNote.ShowText($"{DressedLook} is put together by the app, not an appearance in the game's files: the player's entity is only "
-                + "a neck seam, and the game dresses him in what's equipped. This is his default gear (his head, starting armour and both swords), "
-                + "as the scene and cutscene previews dress him. It isn't saved anywhere and changes nothing.");
+            GeneratedNote.ShowText(L.T("EntityWindow.PutTogetherAppNot", DressedLook));
         else GeneratedNote.Visibility = Visibility.Collapsed;
         var token = cts.Token;
         var e = _entity!;
-        ViewText.Text = "Reading the meshes…";
+        ViewText.Text = L.T("EntityWindow.ReadingMeshes");
         ViewText.Visibility = Visibility.Visible;
         List<(MeshFile Mesh, System.Numerics.Matrix4x4 Place)> parts;
         List<EntityComponent> drawnBy;
@@ -452,7 +451,7 @@ public partial class EntityWindow : Window, IMessageHost
             var coloredBy = parts.Select(_ => (e, appearance?.Name)).ToList();
             if (dressed)
             {
-                ViewText.Text = "Dressing Geralt…";
+                ViewText.Text = L.T("EntityWindow.DressingGeralt");
                 (parts, drawnBy, coloredBy) = await Task.Run(() => Dress(e, look, parts, drawnBy, coloredBy, token), token);
                 if (token.IsCancellationRequested) return;
             }
@@ -462,7 +461,7 @@ public partial class EntityWindow : Window, IMessageHost
                 : LookTextures.Coloring(e, appearance?.Name, drawnBy[p].Name))).ToList();
             var progress = new Progress<(int Done, int Total)>(n =>
             {
-                if (!token.IsCancellationRequested && n.Total > 0) ViewText.Text = $"Loading textures, {n.Done} of {n.Total}…";
+                if (!token.IsCancellationRequested && n.Total > 0) ViewText.Text = L.T("EntityWindow.LoadingTextures", n.Done, n.Total);
             });
             textures = await StageTextures.LoadAsync(coloured, _locator, Texture, progress, token);
         }
@@ -476,15 +475,15 @@ public partial class EntityWindow : Window, IMessageHost
         (_resumeAt, _resumePlaying) = _clip is null ? (0f, true) : (_time, _playing);
         StopAnimation();
         View.ShowParts(parts, textures);
-        _meshesNote = $"{Format.Count(parts.Count, "mesh", "meshes")} shown" + (missing > 0 ? $", {missing:N0} not found or not read" : "")
-                    + (appearance is null ? "" : $"  ·  {Format.Count(appearance.Templates.Count, "template")} in {appearance.Name}");
+        _meshesNote = L.T("EntityWindow.MeshesShown", L.T("Count.Mesh", parts.Count)) + (missing > 0 ? L.T("EntityWindow.MissingMeshes", missing) : "")
+                    + (appearance is null ? "" : L.T("EntityWindow.TemplatesIn", L.T("Count.Template", appearance.Templates.Count), appearance.Name));
         _syncing = true;
-        LodBox.ItemsSource = Enumerable.Range(0, View.LodCount).Select(i => $"LOD {i}").ToList();
+        LodBox.ItemsSource = Enumerable.Range(0, View.LodCount).Select(i => L.T("EntityWindow.LOD2", i)).ToList();
         LodBox.SelectedIndex = 0;
         _syncing = false;
         ShowStats();
         if (Graph.Selected is { } selected) Highlight(selected);
-        ViewText.Text = parts.Count == 0 ? (wanted == 0 ? "It has no meshes to show." : "None of its meshes could be read.") : "";
+        ViewText.Text = parts.Count == 0 ? (wanted == 0 ? L.T("EntityWindow.HasNoMeshesShow") : L.T("EntityWindow.NoneMeshesCouldRead")) : "";
         ViewText.Visibility = parts.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         _ = FindRigAsync(look, parts, token);
     }
@@ -559,12 +558,12 @@ public partial class EntityWindow : Window, IMessageHost
         int duplicates = resources.GroupBy(r => r, StringComparer.OrdinalIgnoreCase).Count(g => g.Count() > 1);
         var lines = new List<string>
         {
-            $"Streamed components: {streamed:N0}",
-            $"Not streamed components: {look.Components.Count - streamed:N0}",
-            $"All components: {look.Components.Count:N0}" + (look.Components.Any(c => c.FromAppearance) ? $" ({look.Components.Count(c => c.FromAppearance):N0} from the appearance)" : ""),
+            L.T("EntityWindow.StreamedComponents", streamed),
+            L.T("EntityWindow.NotStreamedComponents", look.Components.Count - streamed),
+            L.T("EntityWindow.AllComponents", look.Components.Count) + (look.Components.Any(c => c.FromAppearance) ? L.T("EntityWindow.FromAppearance", look.Components.Count(c => c.FromAppearance)) : ""),
         };
-        if (_entity?.Entity?["streamingDistance"] is not null) lines.Add($"Streaming distance: {_entity.Entity.Integer("streamingDistance"):N0}");
-        lines.Add($"Resources: {unique:N0} unique" + (duplicates > 0 ? $", {duplicates:N0} used by more than one component" : ""));
+        if (_entity?.Entity?["streamingDistance"] is not null) lines.Add(L.T("EntityWindow.StreamingDistance", _entity.Entity.Integer("streamingDistance")));
+        lines.Add(L.T("EntityWindow.ResourcesUnique", unique, (duplicates > 0 ? L.T("EntityWindow.UsedMoreThanOne", duplicates) : "")));
         if (_entity?.EntityClass is { } cls) lines.Add(cls);
         SummaryText.Text = string.Join("   ·   ", lines);
         // the component picked stays picked when it's in the new look too
@@ -576,7 +575,7 @@ public partial class EntityWindow : Window, IMessageHost
     {
         var parts = Enumerable.Range(0, _partComponents.Count).Where(i => component is not null && _partComponents[i] == component).ToList();
         int triangles = View.Highlight(parts);
-        SelectedText.Text = parts.Count == 0 ? "" : $"Selected: {component!.Name}, {triangles:N0} triangles";
+        SelectedText.Text = parts.Count == 0 ? "" : L.T("EntityWindow.SelectedTriangles", component!.Name, triangles);
         SelectedText.Visibility = parts.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
     }
 
@@ -596,7 +595,7 @@ public partial class EntityWindow : Window, IMessageHost
     private void ShowStats()
     {
         var (triangles, vertices, chunks) = View.Stats();
-        MeshesText.Text = $"{_meshesNote}  ·  {triangles:N0} triangles, {vertices:N0} vertices, {Format.Count(chunks, "chunk")}";
+        MeshesText.Text = L.T("EntityWindow.TrianglesVertices", _meshesNote, triangles, vertices, L.T("Count.Chunk", chunks));
         ShowInfo();
     }
 
@@ -616,15 +615,15 @@ public partial class EntityWindow : Window, IMessageHost
         var size = View.Size();
         var lines = new List<string>
         {
-            $"Triangles  {triangles,10:N0}",
-            $"Vertices   {vertices,10:N0}",
-            $"Meshes     {_partComponents.Count,10:N0}",
-            $"Chunks     {chunks,10:N0}",
-            $"LOD        {View.Lod,10}",
-            $"Size  {size.X:0.00} x {size.Y:0.00} x {size.Z:0.00} m",
+            L.T("EntityWindow.Triangles", triangles),
+            L.T("EntityWindow.Vertices", vertices),
+            L.T("EntityWindow.Meshes", _partComponents.Count),
+            L.T("EntityWindow.Chunks", chunks),
+            L.T("EntityWindow.LOD3", View.Lod),
+            L.T("EntityWindow.SizeXXM", size.X, size.Y, size.Z),
         };
-        if (_posing is { } posing) lines.Add($"Skeleton  {Path.GetFileNameWithoutExtension(posing.RigPath)}, {posing.Rig.Count} bones");
-        if (_playing) lines.Add($"Drawing  {_framesPerSecond,5:0} fps, pose {_poseMilliseconds:0.0} ms");
+        if (_posing is { } posing) lines.Add(L.T("EntityWindow.SkeletonBones", Path.GetFileNameWithoutExtension(posing.RigPath), posing.Rig.Count));
+        if (_playing) lines.Add(L.T("EntityWindow.DrawingFpsPoseMs", _framesPerSecond, _poseMilliseconds));
         InfoOverlay.Text = string.Join("\n", lines);
     }
 
@@ -740,7 +739,7 @@ public partial class EntityWindow : Window, IMessageHost
         }, token).ContinueWith(t => t.IsCompletedSuccessfully ? t.Result : null, TaskScheduler.Default);
         if (posing is null || token.IsCancellationRequested) return;
         _posing = posing;
-        AnimsetBox.ItemsSource = sets.Select(s => new CutsceneLinkItem(new CutsceneLink(s, "Animation set"))).ToList();
+        AnimsetBox.ItemsSource = sets.Select(s => new CutsceneLinkItem(new CutsceneLink(s, L.T("Common.AnimationSet")))).ToList();
         AnimsetBox.DisplayMemberPath = nameof(CutsceneLinkItem.Name);
         AnimationBar.Visibility = PlayBar.Visibility = Visibility.Visible;
         ShowInfo();
@@ -823,7 +822,7 @@ public partial class EntityWindow : Window, IMessageHost
         if (token.IsCancellationRequested) return;
         if (read is not { } r || r.List.Count == 0)
         {
-            TimeText.Text = read is null ? "not read" : "none in it";
+            TimeText.Text = read is null ? L.T("EntityWindow.NotRead") : L.T("EntityWindow.None2");
             return;
         }
         (_animset, _animsetPath) = (r.File, path);
@@ -864,8 +863,8 @@ public partial class EntityWindow : Window, IMessageHost
         ScrubSlider.IsEnabled = PlayButton.IsEnabled = _clip is not null;
         if (_clip is null)
         {
-            TimeText.Text = otherRig ? "other skeleton" : "not read";
-            TimeText.ToolTip = otherRig ? "This animation is made for a skeleton with more bones than this entity's, such as another kind of creature's, so it can't be played on it" : "The animation could not be read";
+            TimeText.Text = otherRig ? L.T("EntityWindow.OtherSkeleton") : L.T("EntityWindow.NotRead");
+            TimeText.ToolTip = otherRig ? L.T("EntityWindow.AnimationMadeSkeletonMore") : L.T("EntityWindow.AnimationCouldNotRead");
             _scrubbing = true;
             ScrubSlider.Value = 0;
             _scrubbing = false;
@@ -934,7 +933,7 @@ public partial class EntityWindow : Window, IMessageHost
         var bones = posing.Meshes.Select((m, i) => Skinning.BoneMatrices(m, posing.Maps[i], posing.Rest, model)).ToList();
         View.Pose((part, chunk) => part < bones.Count ? Skinning.Pose(chunk, bones[part]) : null);
         if (_playing) CountFrame(System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds);
-        TimeText.Text = $"{time,5:0.00} / {clip.Duration:0.00} s";
+        TimeText.Text = L.T("EntityWindow.S", time, clip.Duration);
         TimeText.ToolTip = null;
         _scrubbing = true;
         ScrubSlider.Value = time;
@@ -1075,14 +1074,14 @@ public partial class EntityWindow : Window, IMessageHost
     {
         ComponentTitle.Text = $"{c.Name}  ·  {c.ClassName}";
         var said = new List<string>();
-        if (c.Origin is { } origin) said.Add((c.FromAppearance ? "from the appearance's " : "included from ") + origin);
-        if (c.Overridden) said.Add("its properties are overridden here");
+        if (c.Origin is { } origin) said.Add((c.FromAppearance ? L.T("EntityWindow.Appearances") : L.T("EntityWindow.Included")) + origin);
+        if (c.Overridden) said.Add(L.T("EntityWindow.PropertiesOverriddenHere"));
         if (c.Streamed) said.Add("streamed");
         var links = _look?.Links ?? _entity!.Links;
         foreach (var link in links.Where(l => l.Child == c))
-            said.Add($"{(link.Kind == "Skinned" ? "skinned to" : "attached to")} {link.Parent.Name}" + (link.Slot is { } slot ? $" at {slot}" : ""));
+            said.Add(L.T(link.Kind == "Skinned" ? "EntityWindow.SkinnedTo" : "EntityWindow.AttachedTo", link.Parent.Name) + (link.Slot is { } slot ? L.T("EntityWindow.At", slot) : ""));
         var children = links.Where(l => l.Parent == c).Select(l => l.Child.Name).ToList();
-        if (children.Count > 0) said.Add($"holds {string.Join(", ", children)}");
+        if (children.Count > 0) said.Add(L.T("EntityWindow.Holds", string.Join(", ", children)));
         ComponentDetail.Text = string.Join("  ·  ", said);
         _shownComponent = c;
         ShowRows(ComponentProperties, Rows(c.Object, c.File, c.Origin ?? _path, []));
@@ -1120,7 +1119,7 @@ public partial class EntityWindow : Window, IMessageHost
         bool viewable = MeshWindow.CanShow(path) || CutsceneWindow.CanShow(path) || SceneWindow.CanShow(path) || CanShow(path) || BehTreeWindow.CanShow(path) || XmlWindow.CanOpen(path) || TextureWindow.CanShow(path) || DataViewers.CanShow(path);
         if (!viewable)
         {
-            string kind = FileKinds.Of(path)?.Name.ToLowerInvariant() ?? "this kind of";
+            string kind = FileKinds.Of(path)?.Name.ToLowerInvariant() ?? L.T("Common.Kind2");
             Copy(path, $"There's no viewer for {kind} files yet, so its path is copied:\n{path}");
             return;
         }
@@ -1132,12 +1131,12 @@ public partial class EntityWindow : Window, IMessageHost
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or NotSupportedException)
         {
-            await ShowMessage("It could not be read", $"{path}\n\n{ex.Message}", MessageKind.Error);
+            await ShowMessage(L.T("Common.CouldNotRead"), $"{path}\n\n{ex.Message}", MessageKind.Error);
             return;
         }
         if (data is null)
         {
-            await ShowMessage("Not found", $"{path}\n\nIt isn't in the open project, the archives open in the tool, or the game's bundles.", MessageKind.Warning);
+            await ShowMessage(L.T("Common.NotFound"), L.T("EntityWindow.IsntOpenProjectArchives", path), MessageKind.Warning);
             return;
         }
         string source = entry is null ? "project" : entry.Archive.Name;
@@ -1150,7 +1149,7 @@ public partial class EntityWindow : Window, IMessageHost
         else if (BehTreeWindow.CanShow(path)) BehTreeWindow.Open(path, source, data, _locator, this, entry?.Archive);
         else if (XmlWindow.CanOpen(path)) XmlWindow.OpenData(name, $"{source}  ·  {path}", data, this, path);
         else if (!TextureWindow.Open(name, $"{source}  ·  {path}", data, this))
-            await ShowMessage("It can't be shown", $"{path}\n\nIt isn't a picture the texture viewer understands.", MessageKind.Warning);
+            await ShowMessage(L.T("Common.CantShown"), L.T("EntityWindow.IsntPictureTextureViewer", path), MessageKind.Warning);
     }
 
     private void Copy(string? text, string? message = null)
@@ -1160,7 +1159,7 @@ public partial class EntityWindow : Window, IMessageHost
         {
             Clipboard.SetText(text);
             // a short "Copied" goes by itself; a longer message waits for OK
-            _ = Message.Show(null, message ?? $"Copied {text}", MessageKind.Info, primary: message is null ? null : "OK", autoClose: message is null);
+            _ = Message.Show(null, message ?? L.T("EntityWindow.Copied", text), MessageKind.Info, primary: message is null ? null : L.T("Common.OK"), autoClose: message is null);
         }
         catch (System.Runtime.InteropServices.COMException)
         {

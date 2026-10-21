@@ -1,8 +1,9 @@
 <Window x:Class="W3ModWorkbench.TextureWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:l="clr-namespace:W3ModWorkbench.Localisation"
         xmlns:local="clr-namespace:W3ModWorkbench"
-        Title="Texture" Icon="pack://application:,,,/W3ModWorkbench;component/Assets/app.ico"
+        Title="{l:T TextureWindow.Texture}" Icon="pack://application:,,,/W3ModWorkbench;component/Assets/app.ico"
         Width="1280" Height="800" MinWidth="720" MinHeight="420"
         WindowStartupLocation="CenterOwner" PreviewKeyDown="Window_PreviewKeyDown">
 
@@ -50,42 +51,42 @@
 
         <DockPanel Grid.Row="0" Margin="14,12,14,10" LastChildFill="False">
             <StackPanel Orientation="Horizontal" DockPanel.Dock="Left">
-                <RadioButton x:Name="ChannelRgba" Style="{StaticResource Segment}" GroupName="Channel" Content="RGBA" IsChecked="True" Checked="Channel_Checked" ToolTip="All channels, over a chequerboard" />
-                <RadioButton x:Name="ChannelRgb" Style="{StaticResource Segment}" GroupName="Channel" Content="RGB" Checked="Channel_Checked" ToolTip="Colour without transparency" />
+                <RadioButton x:Name="ChannelRgba" Style="{StaticResource Segment}" GroupName="Channel" Content="{l:T TextureWindow.Rgba}" IsChecked="True" Checked="Channel_Checked" ToolTip="{l:T TextureWindow.AllChannelsOverChequerboard}" />
+                <RadioButton x:Name="ChannelRgb" Style="{StaticResource Segment}" GroupName="Channel" Content="{l:T TextureWindow.RGB}" Checked="Channel_Checked" ToolTip="{l:T TextureWindow.ColourWithoutTransparency}" />
                 <RadioButton x:Name="ChannelR" Style="{StaticResource Segment}" GroupName="Channel" Content="R" Checked="Channel_Checked" />
                 <RadioButton x:Name="ChannelG" Style="{StaticResource Segment}" GroupName="Channel" Content="G" Checked="Channel_Checked" />
                 <RadioButton x:Name="ChannelB" Style="{StaticResource Segment}" GroupName="Channel" Content="B" Checked="Channel_Checked" />
-                <RadioButton x:Name="ChannelA" Style="{StaticResource Segment}" GroupName="Channel" Content="A" Checked="Channel_Checked" ToolTip="The alpha channel, as grey" />
-                <TextBlock Text="Mip" VerticalAlignment="Center" Margin="18,0,8,0" Opacity="0.7" />
+                <RadioButton x:Name="ChannelA" Style="{StaticResource Segment}" GroupName="Channel" Content="A" Checked="Channel_Checked" ToolTip="{l:T TextureWindow.AlphaChannelGrey}" />
+                <TextBlock Text="{l:T TextureWindow.Mip}" VerticalAlignment="Center" Margin="18,0,8,0" Opacity="0.7" />
                 <ComboBox x:Name="MipBox" Width="150" SelectionChanged="Mip_SelectionChanged" />
-                <TextBlock x:Name="SliceLabel" Text="Slice" VerticalAlignment="Center" Margin="14,0,8,0" Opacity="0.7" Visibility="Collapsed" />
+                <TextBlock x:Name="SliceLabel" Text="{l:T TextureWindow.Slice}" VerticalAlignment="Center" Margin="14,0,8,0" Opacity="0.7" Visibility="Collapsed" />
                 <ComboBox x:Name="SliceBox" Width="110" SelectionChanged="Mip_SelectionChanged" Visibility="Collapsed" />
-                <RadioButton x:Name="View2D" Style="{StaticResource Segment}" GroupName="View" Margin="18,0,2,0" Content="2D" IsChecked="True" Checked="View_Checked" ToolTip="The texture as a picture" />
-                <RadioButton x:Name="View3D" Style="{StaticResource Segment}" GroupName="View" Content="3D" Checked="View_Checked" ToolTip="The texture on a shape, lit, as REDkit's texture viewer shows it" />
-                <ToggleButton x:Name="FitToggle" Margin="12,0,0,0" Padding="12,5" Content="Fit" IsChecked="True" Click="Fit_Click" ToolTip="Fit the window, or show at its size (Ctrl+wheel zooms)" />
+                <RadioButton x:Name="View2D" Style="{StaticResource Segment}" GroupName="View" Margin="18,0,2,0" Content="{l:T TextureWindow.D}" IsChecked="True" Checked="View_Checked" ToolTip="{l:T TextureWindow.TexturePicture}" />
+                <RadioButton x:Name="View3D" Style="{StaticResource Segment}" GroupName="View" Content="{l:T TextureWindow.D2}" Checked="View_Checked" ToolTip="{l:T TextureWindow.TextureShapeLitREDkits}" />
+                <ToggleButton x:Name="FitToggle" Margin="12,0,0,0" Padding="12,5" Content="{l:T Common.Fit}" IsChecked="True" Click="Fit_Click" ToolTip="{l:T TextureWindow.FitWindowShowSize}" />
                 <StackPanel x:Name="ShapeBar" Orientation="Horizontal" Visibility="Collapsed">
-                    <ComboBox x:Name="ShapeBox" Margin="12,0,0,0" Width="110" SelectionChanged="Shape_SelectionChanged" ToolTip="The shape to put the texture on (a cube map goes round it, each part showing the face it looks at)">
-                        <ComboBoxItem Content="Sphere" IsSelected="True" />
-                        <ComboBoxItem Content="Box" />
-                        <ComboBoxItem Content="Cylinder" />
-                        <ComboBoxItem Content="Plane" />
+                    <ComboBox x:Name="ShapeBox" Margin="12,0,0,0" Width="110" SelectionChanged="Shape_SelectionChanged" ToolTip="{l:T TextureWindow.ShapePutTextureCube}">
+                        <ComboBoxItem Content="{l:T TextureWindow.Sphere}" IsSelected="True" />
+                        <ComboBoxItem Content="{l:T TextureWindow.Box}" />
+                        <ComboBoxItem Content="{l:T TextureWindow.Cylinder}" />
+                        <ComboBoxItem Content="{l:T TextureWindow.Plane}" />
                     </ComboBox>
-                    <TextBlock Text="Light" VerticalAlignment="Center" Margin="14,0,8,0" Opacity="0.7" />
+                    <TextBlock Text="{l:T TextureWindow.Light}" VerticalAlignment="Center" Margin="14,0,8,0" Opacity="0.7" />
                     <Slider x:Name="LightSlider" Width="110" Minimum="-180" Maximum="180" Value="45" VerticalAlignment="Center"
-                            ValueChanged="Light_ValueChanged" ToolTip="Where the light comes from, round the shape" />
+                            ValueChanged="Light_ValueChanged" ToolTip="{l:T TextureWindow.WhereLightComesRound}" />
                 </StackPanel>
             </StackPanel>
             <StackPanel Orientation="Horizontal" DockPanel.Dock="Right">
-                <Button x:Name="SavePngButton" Padding="12,5" Click="SavePng_Click" IsEnabled="False" ToolTip="Save the mip level shown as a PNG">
+                <Button x:Name="SavePngButton" Padding="12,5" Click="SavePng_Click" IsEnabled="False" ToolTip="{l:T TextureWindow.SaveMipLevelShown}">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Style="{StaticResource IconText}" Text="&#xE74E;" Margin="0,1,0,0" />
-                        <TextBlock Margin="8,0,0,0" Text="Save PNG" />
+                        <TextBlock Margin="8,0,0,0" Text="{l:T TextureWindow.SavePNG}" />
                     </StackPanel>
                 </Button>
-                <Button x:Name="SaveDdsButton" Margin="6,0,0,0" Padding="12,5" Click="SaveDds_Click" IsEnabled="False" ToolTip="Save the whole texture, every mip level, as a .dds">
+                <Button x:Name="SaveDdsButton" Margin="6,0,0,0" Padding="12,5" Click="SaveDds_Click" IsEnabled="False" ToolTip="{l:T TextureWindow.SaveWholeTextureEvery}">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Style="{StaticResource IconText}" Text="&#xE74E;" Margin="0,1,0,0" />
-                        <TextBlock Margin="8,0,0,0" Text="Save DDS" />
+                        <TextBlock Margin="8,0,0,0" Text="{l:T TextureWindow.SaveDDS}" />
                     </StackPanel>
                 </Button>
             </StackPanel>
@@ -106,7 +107,7 @@
                         <Image x:Name="Picture" Stretch="Uniform" RenderOptions.BitmapScalingMode="NearestNeighbor" />
                     </Border>
                 </ScrollViewer>
-                <TextBlock x:Name="BusyText" Text="Reading the texture…" HorizontalAlignment="Center" VerticalAlignment="Center" Opacity="0.7" />
+                <TextBlock x:Name="BusyText" Text="{l:T TextureWindow.ReadingTexture}" HorizontalAlignment="Center" VerticalAlignment="Center" Opacity="0.7" />
             </Grid>
         </Border>
         <GridSplitter Grid.Column="1" Width="8" HorizontalAlignment="Stretch" Background="Transparent" />
@@ -114,9 +115,9 @@
             <DockPanel>
                 <Grid DockPanel.Dock="Top" Margin="10,10,10,6">
                     <TextBox x:Name="PropertySearch" Padding="30,5,8,5" TextChanged="PropertySearch_TextChanged"
-                             ToolTip="Show only the properties whose name or value has this" />
+                             ToolTip="{l:T TextureWindow.ShowOnlyPropertiesWhose}" />
                     <TextBlock Style="{StaticResource IconText}" Text="&#xE721;" FontSize="12" Margin="10,0,0,0" Opacity="0.6" HorizontalAlignment="Left" IsHitTestVisible="False" />
-                    <TextBlock x:Name="PropertySearchPlaceholder" Text="Search properties" Margin="31,0,0,0" Opacity="0.55" VerticalAlignment="Center" IsHitTestVisible="False" />
+                    <TextBlock x:Name="PropertySearchPlaceholder" Text="{l:T Common.SearchProperties}" Margin="31,0,0,0" Opacity="0.55" VerticalAlignment="Center" IsHitTestVisible="False" />
                 </Grid>
                 <local:SourceNote x:Name="SourceNoteBar" DockPanel.Dock="Top" Margin="10,0,10,6" />
                 <local:PropertyListView x:Name="Properties" NameColumnWidth="190" TypeColumnWidth="0" LinkClicked="Properties_LinkClicked" />

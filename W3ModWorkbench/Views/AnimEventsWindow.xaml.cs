@@ -7,6 +7,7 @@ using W3ModWorkbench.Core.Animation;
 using W3ModWorkbench.Core.Cr2w;
 using W3ModWorkbench.Core.Trees;
 using W3ModWorkbench.ViewModels;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -33,15 +34,15 @@ public partial class AnimEventsWindow : Window, IMessageHost
     private static readonly (string Name, string Path)[] Entities =
     [
         ("Geralt", @"characters\player_entities\geralt\geralt_player.w2ent"),
-        ("Man", JobTreeFile.PreviewEntities[0]), ("Woman", JobTreeFile.PreviewEntities[1]),
-        ("Child", JobTreeFile.PreviewEntities[2]), ("Dwarf", JobTreeFile.PreviewEntities[3]),
+        (L.T("AnimEventsWindow.Man"), JobTreeFile.PreviewEntities[0]), (L.T("AnimEventsWindow.Woman"), JobTreeFile.PreviewEntities[1]),
+        (L.T("AnimEventsWindow.Child"), JobTreeFile.PreviewEntities[2]), (L.T("AnimEventsWindow.Dwarf"), JobTreeFile.PreviewEntities[3]),
     ];
 
     private sealed record AnimationItem(string Name, int Events, bool InSet)
     {
-        public string Note => $"{Events:N0}" + (InSet ? "" : "  no animation");
+        public string Note => $"{Events:N0}" + (InSet ? "" : L.T("AnimEventsWindow.NoAnimation"));
         public double Opacity => InSet ? 1 : 0.55;
-        public string Tip => InSet ? $"{Name}: {Format.Count(Events, "event")}" : $"{Name} isn't in the animation set picked";
+        public string Tip => InSet ? $"{Name}: {L.T("Count.Event", Events)}" : L.T("AnimEventsWindow.IsntAnimationSetPicked", Name);
     }
 
     private AnimEventsWindow(string path, string source, Func<byte[]> readData, ResourceLocator locator, string? origin)
@@ -52,7 +53,7 @@ public partial class AnimEventsWindow : Window, IMessageHost
         _readData = readData;
         _locator = locator;
         _origin = origin;
-        Title = $"{Path.GetFileName(path)} - Animation events";
+        Title = L.T("AnimEventsWindow.AnimationEvents2", Path.GetFileName(path));
         InfoText.Text = $"{path}   ·   {source}";
         EntityBox.ItemsSource = Entities.Select(e => e.Name).ToList();
         Preview.TimeChanged += (_, time) =>
@@ -72,7 +73,7 @@ public partial class AnimEventsWindow : Window, IMessageHost
     public static void OpenFile(string file, ResourceLocator locator, Window owner) =>
         new AnimEventsWindow(Path.GetFileName(file), file, () => File.ReadAllBytes(file), locator, file).Standalone(owner).Show();
 
-    public Task ShowMessage(string? title, string message, MessageKind kind) => Message.Show(title, message, kind, primary: "OK");
+    public Task ShowMessage(string? title, string message, MessageKind kind) => Message.Show(title, message, kind, primary: L.T("Common.OK"));
 
     private async Task LoadAsync()
     {
@@ -82,14 +83,14 @@ public partial class AnimEventsWindow : Window, IMessageHost
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or NotSupportedException)
         {
-            BusyText.Text = "The animation events could not be read.\n\n" + ex.Message;
+            BusyText.Text = L.T("AnimEventsWindow.AnimationEventsCouldNot", ex.Message);
             return;
         }
         var ev = _events;
         BusyText.Visibility = Visibility.Collapsed;
         Body.Visibility = Visibility.Visible;
-        AnimationsTab.Header = $"Animations ({ev.Animations.Count:N0})";
-        InfoText.Text = $"{_path}   ·   {_source}   ·   CR2W {ev.File.Version}, {Format.Count(ev.Events.Count, "event")} on {Format.Count(ev.Animations.Count, "animation")}";
+        AnimationsTab.Header = L.T("AnimEventsWindow.Animations", ev.Animations.Count);
+        InfoText.Text = L.T("AnimEventsWindow.CR2W", _path, _source, ev.File.Version, L.T("Count.Event", ev.Events.Count), L.T("Count.Animation", ev.Animations.Count));
         ShowAnimations();
         FileProperties.Show(PropertyRow.Of(ev.Resource, ev.File));
         _ = LoadRedkitAsync();
@@ -112,13 +113,13 @@ public partial class AnimEventsWindow : Window, IMessageHost
     /// </summary>
     private async Task FindSetAsync()
     {
-        SetNote.Text = "Finding the animation set…";
+        SetNote.Text = L.T("AnimEventsWindow.FindingAnimationSet");
         _animsets = await Task.Run(() => _locator.AllPaths(".w2anims"));
         _syncing = true;
         SetBox.ItemsSource = _animsets;
         _syncing = false;
         string? found = AnimEventsFile.AnimsetByName(_path, _animsets);
-        string how = "named as the file is";
+        string how = L.T("AnimEventsWindow.NamedFile");
         if (found is null)
         {
             var wanted = _events!.Animations.ToHashSet(StringComparer.Ordinal);
@@ -127,7 +128,7 @@ public partial class AnimEventsWindow : Window, IMessageHost
                 .Where(w => w.Length > 2 && w is not ("sounds" or "sound" or "w2animev" or "characters" or "animations")).ToHashSet();
             var candidates = _animsets.Where(a => a.ToLowerInvariant().Split(['\\', '/', '_', '.'], StringSplitOptions.RemoveEmptyEntries).Any(words.Contains)).Take(300).ToList();
             int done = 0;
-            var progress = new Progress<int>(n => SetNote.Text = $"Finding the animation set: {n:N0} of {candidates.Count:N0} looked in…");
+            var progress = new Progress<int>(n => SetNote.Text = L.T("AnimEventsWindow.FindingAnimationSetLooked", n, candidates.Count));
             found = await Task.Run(() =>
             {
                 string? best = null;
@@ -140,11 +141,11 @@ public partial class AnimEventsWindow : Window, IMessageHost
                 }
                 return best;
             });
-            how = "the one with the most of its animations";
+            how = L.T("AnimEventsWindow.OneMostAnimations");
         }
         if (found is null)
         {
-            SetNote.Text = "No animation set has these animations; pick one above to play them.";
+            SetNote.Text = L.T("AnimEventsWindow.NoAnimationSetHas");
             return;
         }
         _syncing = true;
@@ -177,7 +178,7 @@ public partial class AnimEventsWindow : Window, IMessageHost
         var names = await Task.Run(() => Names(set));
         _inSet = names.ToHashSet(StringComparer.Ordinal);
         int have = _events!.Animations.Count(_inSet.Contains);
-        SetNote.Text = $"{set} ({how}): {have:N0} of the {_events.Animations.Count:N0} animations are in it";
+        SetNote.Text = L.T("AnimEventsWindow.Animations2", set, how, have, _events.Animations.Count);
         ShowAnimations();
         if (_animation is { } playing) _ = PlayAsync(playing);
     }
@@ -207,11 +208,11 @@ public partial class AnimEventsWindow : Window, IMessageHost
         _animation = animation;
         var events = _events!.Events.Where(e => e.Animation == animation).ToList();
         Timeline.Show(events, 0);
-        TimelineTitle.Text = $"{animation}: {Format.Count(events.Count, "event")} on {Format.Count(events.Select(e => e.Track).Distinct().Count(), "track")}";
+        TimelineTitle.Text = L.T("AnimEventsWindow.On", animation, L.T("Count.Event", events.Count), L.T("Count.Track", events.Select(e => e.Track).Distinct().Count()));
         if (_animset is null)
         {
             Preview.StopAnimation();
-            Preview.Message = "Pick the animation set the events are for, above, to play the animations.";
+            Preview.Message = L.T("AnimEventsWindow.PickAnimationSetEvents");
             return;
         }
         if (await Preview.PlayAsync(_animset, animation)) Timeline.Duration = Preview.Duration;
@@ -235,7 +236,7 @@ public partial class AnimEventsWindow : Window, IMessageHost
         Preview.Pause();
         Preview.SetTime(ev.Start);
         EventTitle.Text = ev.Label;
-        EventDetail.Text = $"{ev.Object.ClassName}  ·  track {ev.Track}  ·  at {ev.Start:0.000} s" + (ev.Duration > 0 ? $" for {ev.Duration:0.000} s" : "") + $"  ·  {ev.Animation}";
+        EventDetail.Text = L.T("AnimEventsWindow.EventDetail", ev.Object.ClassName, ev.Track, ev.Start) + (ev.Duration > 0 ? L.T("EventTimeline.EventFor", ev.Duration) : "") + $"  ·  {ev.Animation}";
         EventProperties.Show(PropertyRow.Of(ev.Object, _events!.File));
         Tabs.SelectedItem = EventTab;
     }
@@ -259,7 +260,7 @@ public partial class AnimEventsWindow : Window, IMessageHost
         var (path, origin) = (_path, _origin);
         var from = await Task.Run(() => RedkitSource.For(path, origin));
         if (from.Redkit?.First("CExtAnimEventsFile") is { } own) FileProperties.Show(PropertyRow.Of(own, from.Redkit));
-        SourceNoteBar.Show(from.Source, from.RedkitPath ?? origin, "animation events file");
+        SourceNoteBar.Show(from.Source, from.RedkitPath ?? origin, L.T("AnimEventsWindow.AnimationEventsFile"));
     }
 
     private void FilterBox_TextChanged(object sender, TextChangedEventArgs e)

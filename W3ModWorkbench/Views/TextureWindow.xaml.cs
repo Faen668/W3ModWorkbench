@@ -10,6 +10,7 @@ using W3ModWorkbench.Core.Cr2w;
 using W3ModWorkbench.Core.Textures;
 using W3ModWorkbench.Core.Projects;
 using W3ModWorkbench.ViewModels;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -49,16 +50,16 @@ public partial class TextureWindow : Window, IMessageHost
         _facts = facts;
         _resource = resource;
         _origin = facts.FirstOrDefault(f => f.Name == "Cache").Value;
-        Title = $"{title} - Texture";
+        Title = L.T("TextureWindow.Texture2", title);
         int width = info?.Width ?? picture!.Width, height = info?.Height ?? picture!.Height;
         for (int level = 0; level < mips; level++)
-            MipBox.Items.Add($"{Math.Max(1, width >> level)} x {Math.Max(1, height >> level)}" + (level == 0 ? "  (full)" : ""));
+            MipBox.Items.Add($"{Math.Max(1, width >> level)} x {Math.Max(1, height >> level)}" + (level == 0 ? L.T("TextureWindow.Full") : ""));
         MipBox.SelectedIndex = 0;
         if (info is { Slices: > 1 })
         {
             for (int s = 0; s < info.Slices; s++) SliceBox.Items.Add(info.IsCube ? FaceNames[s] : $"texture_{s}");
             SliceBox.SelectedIndex = Math.Clamp(slice, 0, info.Slices - 1);
-            SliceLabel.Text = info.IsCube ? "Face" : "Slice";
+            SliceLabel.Text = info.IsCube ? L.T("TextureWindow.Face") : L.T("TextureWindow.Slice");
             SliceLabel.Visibility = SliceBox.Visibility = Visibility.Visible;
         }
         InfoText.Text = $"{path}   ·   {detail}";
@@ -91,14 +92,14 @@ public partial class TextureWindow : Window, IMessageHost
         {
             try { Clipboard.SetText(path); }
             catch (System.Runtime.InteropServices.COMException) { } // another program has the clipboard open
-            _ = message.Show(null, $"There's no viewer for {FileKinds.Of(path)?.Name.ToLowerInvariant() ?? "this kind of"} files here, so its path is copied:\n{path}",
-                MessageKind.Info, primary: "OK");
+            _ = message.Show(null, L.T("TextureWindow.NoViewer", FileKinds.Of(path)?.Name.ToLowerInvariant() ?? L.T("Common.Kind2"), path),
+                MessageKind.Info, primary: L.T("Common.OK"));
             return;
         }
         var found = await Task.Run(() => locator.FindTexture(path));
         if (found is null)
         {
-            _ = message.Show("Not found", $"{path} isn't in the game's texture caches or the ones open.", MessageKind.Warning, primary: "OK");
+            _ = message.Show(L.T("Common.NotFound"), L.T("TextureWindow.IsntGamesTextureCaches", path), MessageKind.Warning, primary: L.T("Common.OK"));
             return;
         }
         Open(found, owner, () => locator.ReadFile(path), locator);
@@ -111,8 +112,8 @@ public partial class TextureWindow : Window, IMessageHost
     {
         var info = entry.Info;
         var archive = entry.Archive;
-        string detail = $"{entry.FormatText}   ·   {Format.Bytes(info.UnpackedSize)} unpacked, {Format.Bytes(info.PackedSize)} in the cache"
-            + (info.IsCube ? "   ·   a cube map's six faces" : info.Slices > 1 ? $"   ·   an array of {info.Slices} textures" : "");
+        string detail = L.T("TextureWindow.Detail", entry.FormatText, Format.Bytes(info.UnpackedSize), Format.Bytes(info.PackedSize))
+            + (info.IsCube ? L.T("TextureWindow.CubeFaces") : info.Slices > 1 ? L.T("TextureWindow.ArrayOf", info.Slices) : "");
         string name = Path.GetFileName(entry.Path);
         new TextureWindow(entry.Path, info is { Slices: > 1, IsCube: false } ? $"{name}.texture_{slice}" : name, detail, info, () =>
         {
@@ -141,15 +142,15 @@ public partial class TextureWindow : Window, IMessageHost
         var info = entry.Info;
         var facts = new List<(string, string)>
         {
-            ("Format", info.FormatName),
-            ("Size", $"{info.Width} x {info.Height}"),
-            ("Mip levels", $"{info.Mips}"),
+            (L.T("Common.Format"), info.FormatName),
+            (L.T("Common.Size"), $"{info.Width} x {info.Height}"),
+            (L.T("TextureWindow.MipLevels"), $"{info.Mips}"),
         };
-        if (info.IsCube) facts.Add(("Faces", "6 (a cube map)"));
-        else if (info.Slices > 1) facts.Add(("Textures", $"{info.Slices} (a texture array)"));
-        facts.Add(("Memory", Format.Bytes(info.UnpackedSize)));
-        facts.Add(("In the cache", Format.Bytes(info.PackedSize)));
-        facts.Add(("Cache", entry.Archive.FilePath));
+        if (info.IsCube) facts.Add((L.T("TextureWindow.Faces"), L.T("TextureWindow.CubeMap")));
+        else if (info.Slices > 1) facts.Add((L.T("Common.Textures"), L.T("TextureWindow.TextureArray", info.Slices)));
+        facts.Add((L.T("TextureWindow.Memory"), Format.Bytes(info.UnpackedSize)));
+        facts.Add((L.T("TextureWindow.Cache"), Format.Bytes(info.PackedSize)));
+        facts.Add((L.T("TextureWindow.Cache2"), entry.Archive.FilePath));
         return facts;
     }
 
@@ -164,11 +165,11 @@ public partial class TextureWindow : Window, IMessageHost
         if (Path.GetExtension(name).Equals(".dds", StringComparison.OrdinalIgnoreCase))
         {
             if (!Dds.TryRead(data, out var info, out var pixels) || TextureDecoder.Decode(info, pixels, 0) is null) return false;
-            var facts = new List<(string, string)> { ("Format", info.FormatName), ("Size", $"{info.Width} x {info.Height}"), ("Mip levels", $"{info.Mips}") };
-            if (info.IsCube) facts.Add(("Faces", "6 (a cube map)"));
-            else if (info.Slices > 1) facts.Add(("Textures", $"{info.Slices} (a texture array)"));
-            facts.Add(("File size", Format.Bytes(data.Length)));
-            facts.Add(("From", source));
+            var facts = new List<(string, string)> { (L.T("Common.Format"), info.FormatName), (L.T("Common.Size"), $"{info.Width} x {info.Height}"), (L.T("TextureWindow.MipLevels"), $"{info.Mips}") };
+            if (info.IsCube) facts.Add((L.T("TextureWindow.Faces"), L.T("TextureWindow.CubeMap")));
+            else if (info.Slices > 1) facts.Add((L.T("Common.Textures"), L.T("TextureWindow.TextureArray", info.Slices)));
+            facts.Add((L.T("TextureWindow.FileSize"), Format.Bytes(data.Length)));
+            facts.Add((L.T("Common.From"), source));
             new TextureWindow(name, file, $"{source}   ·   {info.Description}   ·   {Format.Bytes(data.Length)}",
                 info, () => pixels, null, info.Mips, facts, null, null).Standalone(owner).Show();
             return true;
@@ -188,14 +189,14 @@ public partial class TextureWindow : Window, IMessageHost
         }
         var pictureFacts = new List<(string, string)>
         {
-            ("Size", $"{picture.Width} x {picture.Height}"), ("File size", Format.Bytes(data.Length)), ("From", source),
+            (L.T("Common.Size"), $"{picture.Width} x {picture.Height}"), (L.T("TextureWindow.FileSize"), Format.Bytes(data.Length)), (L.T("Common.From"), source),
         };
         new TextureWindow(name, file, $"{source}   ·   {picture.Width}x{picture.Height}   ·   {Format.Bytes(data.Length)}", null, () => [], picture, 1,
             pictureFacts, null, null).Standalone(owner).Show();
         return true;
     }
 
-    public Task ShowMessage(string? title, string message, MessageKind kind) => Message.Show(title, message, kind, primary: "OK");
+    public Task ShowMessage(string? title, string message, MessageKind kind) => Message.Show(title, message, kind, primary: L.T("Common.OK"));
 
     private async Task LoadAsync()
     {
@@ -207,8 +208,8 @@ public partial class TextureWindow : Window, IMessageHost
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
         {
-            BusyText.Text = "The texture could not be read.";
-            await ShowMessage("The texture could not be read", ex.Message, MessageKind.Warning);
+            BusyText.Text = L.T("TextureWindow.TextureCouldNotRead");
+            await ShowMessage(L.T("TextureWindow.TextureCouldNotRead2"), ex.Message, MessageKind.Warning);
             return;
         }
         SaveDdsButton.IsEnabled = _info is { Format: not TextureFormat.Unknown };
@@ -216,7 +217,7 @@ public partial class TextureWindow : Window, IMessageHost
         if (origin is not null)
         {
             var (file, source, redkitPath) = await readResource;
-            SourceNoteBar.Show(source, redkitPath, _info is { IsCube: true } ? "cube map" : "texture");
+            SourceNoteBar.Show(source, redkitPath, _info is { IsCube: true } ? L.T("TextureWindow.CubeMap2") : L.T("TextureWindow.Texture3"));
             ShowProperties(file);
         }
     }
@@ -228,7 +229,7 @@ public partial class TextureWindow : Window, IMessageHost
     private void ShowProperties(Cr2wFile? resource)
     {
         var rows = new List<PropertyRow>();
-        var heading = PropertyRow.Child(rows, new PropertyRow("Texture", "", "", 0, null, heading: true), null);
+        var heading = PropertyRow.Child(rows, new PropertyRow(L.T("TextureWindow.Texture"), "", "", 0, null, heading: true), null);
         foreach (var (name, value) in _facts) PropertyRow.Child(rows, new PropertyRow(name, "", value, 1, null), heading);
         if (resource is not null && resource.Exports.Count > 0)
             rows.AddRange(PropertyRow.Of(resource.Object(0), resource));
@@ -256,7 +257,7 @@ public partial class TextureWindow : Window, IMessageHost
             Picture.Source = null;
             Preview3D.ShowTexture(null);
             BusyText.Visibility = Visibility.Visible;
-            BusyText.Text = $"Texture format {_info?.RawFormat} can't be shown yet. Save DDS isn't available for it either.";
+            BusyText.Text = L.T("TextureWindow.TextureFormatCantShown", _info?.RawFormat);
             SavePngButton.IsEnabled = false;
             return;
         }
@@ -383,7 +384,7 @@ public partial class TextureWindow : Window, IMessageHost
     private void SavePng_Click(object sender, RoutedEventArgs e)
     {
         if (_image is null) return;
-        var dialog = new SaveFileDialog { Title = "Save the picture", FileName = BaseName + (_info is { Slices: > 1 } ? $"_{Slice}" : "") + (Level > 0 ? $"_mip{Level}" : "") + ".png", Filter = "PNG image (*.png)|*.png" };
+        var dialog = new SaveFileDialog { Title = L.T("TextureWindow.SavePicture"), FileName = BaseName + (_info is { Slices: > 1 } ? $"_{Slice}" : "") + (Level > 0 ? $"_mip{Level}" : "") + ".png", Filter = L.T("TextureWindow.PNGImagePngPng") };
         if (dialog.ShowDialog(this) != true) return;
         try
         {
@@ -395,14 +396,14 @@ public partial class TextureWindow : Window, IMessageHost
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            _ = ShowMessage("The picture could not be saved", ex.Message, MessageKind.Warning);
+            _ = ShowMessage(L.T("TextureWindow.PictureCouldNotSaved"), ex.Message, MessageKind.Warning);
         }
     }
 
     private void SaveDds_Click(object sender, RoutedEventArgs e)
     {
         if (_pixels is null || _info is null) return;
-        var dialog = new SaveFileDialog { Title = "Save the texture", FileName = BaseName + ".dds", Filter = "DirectDraw Surface (*.dds)|*.dds" };
+        var dialog = new SaveFileDialog { Title = L.T("TextureWindow.SaveTexture"), FileName = BaseName + ".dds", Filter = L.T("TextureWindow.DirectDrawSurfaceDdsDds") };
         if (dialog.ShowDialog(this) != true) return;
         try
         {
@@ -411,7 +412,7 @@ public partial class TextureWindow : Window, IMessageHost
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException or InvalidDataException)
         {
-            _ = ShowMessage("The texture could not be saved", ex.Message, MessageKind.Warning);
+            _ = ShowMessage(L.T("TextureWindow.TextureCouldNotSaved"), ex.Message, MessageKind.Warning);
         }
     }
 }

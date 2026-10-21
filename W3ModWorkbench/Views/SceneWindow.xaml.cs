@@ -8,6 +8,7 @@ using W3ModWorkbench.Core.Cutscenes;
 using W3ModWorkbench.Core.Scenes;
 using W3ModWorkbench.Core.Strings;
 using W3ModWorkbench.ViewModels;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -45,13 +46,13 @@ public partial class SceneWindow : Window, IMessageHost
     private SceneWindow(string path, string source, Func<byte[]> readData, ResourceLocator locator, string? origin)
     {
         InitializeComponent();
-        StageLoading.Prompt("Preview", PreviewPrompt);
+        StageLoading.Prompt(L.T("Common.Preview2"), PreviewPrompt);
         _path = path;
         _source = source;
         _readData = readData;
         _locator = locator;
         _origin = origin;
-        Title = $"{Path.GetFileName(path)} - Scene";
+        Title = L.T("SceneWindow.Scene2", Path.GetFileName(path));
         InfoText.Text = $"{path}   ·   {source}";
         LanguageBox.ItemsSource = W3Strings.Languages;
         LanguageBox.SelectedItem = W3Strings.Language(_language) ?? W3Strings.Languages[0];
@@ -78,7 +79,7 @@ public partial class SceneWindow : Window, IMessageHost
     public static void OpenFile(string file, ResourceLocator locator, Window owner) =>
         new SceneWindow(Core.Projects.FileSafety.GamePathOf(file) ?? Path.GetFileName(file), file, () => File.ReadAllBytes(file), locator, file).Standalone(owner).Show();
 
-    public Task ShowMessage(string? title, string message, MessageKind kind) => Message.Show(title, message, kind, primary: "OK");
+    public Task ShowMessage(string? title, string message, MessageKind kind) => Message.Show(title, message, kind, primary: L.T("Common.OK"));
 
     /// <summary>
     /// The words of the game's strings in the language last picked here, for the preview pane; or why there are none
@@ -86,7 +87,7 @@ public partial class SceneWindow : Window, IMessageHost
     /// </summary>
     public static async Task<(Func<uint, string?>? Text, string? Note)> LinesAsync()
     {
-        if (GameLocator.Resolve(null) is not { } game) return (null, "The game folder isn't set, so lines show as string IDs.");
+        if (GameLocator.Resolve(null) is not { } game) return (null, L.T("SceneWindow.GameFolderIsntSet"));
         if (W3Strings.Language(_language) is not { } language) return (null, null);
         try
         {
@@ -95,7 +96,7 @@ public partial class SceneWindow : Window, IMessageHost
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
         {
-            return (null, "The game's strings could not be read, so lines show as string IDs.");
+            return (null, L.T("SceneWindow.GamesStringsCouldNot"));
         }
     }
 
@@ -107,7 +108,7 @@ public partial class SceneWindow : Window, IMessageHost
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or NotSupportedException)
         {
-            BusyText.Text = "The scene could not be read.\n\n" + ex.Message;
+            BusyText.Text = L.T("SceneWindow.SceneCouldNotRead", ex.Message);
             return;
         }
         var s = _scene;
@@ -119,8 +120,7 @@ public partial class SceneWindow : Window, IMessageHost
         await ShowStagingAsync(s);
         Rebuild();
         int lines = s.Lines.Count(), choices = s.Nodes.SelectMany(n => n.Elements).Count(e => e.Kind == SceneElementKind.Choice);
-        InfoText.Text = $"{_path}   ·   {_source}   ·   CR2W {s.File.Version}, {Format.Count(s.Nodes.Count, "part")}, "
-                      + $"{Format.Count(lines, "line")}, {Format.Count(choices, "choice")}, {Format.Count(s.Actors.Count, "actor")}";
+        InfoText.Text = L.T("SceneWindow.CR2W", _path, _source, s.File.Version, L.T("Count.Part", s.Nodes.Count), L.T("Count.Line", lines), L.T("Count.Choice", choices), L.T("Count.Actor", s.Actors.Count));
         await LoadStringsAsync();
     }
 
@@ -132,10 +132,10 @@ public partial class SceneWindow : Window, IMessageHost
         string? game = GameLocator.Resolve(null);
         if (game is null)
         {
-            SearchPlaceholder.Text = "The game folder isn't set, so lines show as string IDs. Set it in Settings.";
+            SearchPlaceholder.Text = L.T("SceneWindow.GameFolderIsntSet2");
             return;
         }
-        SearchPlaceholder.Text = $"Reading the {language.Handle} strings…";
+        SearchPlaceholder.Text = L.T("SceneWindow.ReadingStrings", language.Handle);
         try
         {
             var index = await GameStringIndex.GetAsync(game, language);
@@ -144,10 +144,10 @@ public partial class SceneWindow : Window, IMessageHost
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
         {
-            SearchPlaceholder.Text = "The game's strings could not be read, so lines show as string IDs.";
+            SearchPlaceholder.Text = L.T("SceneWindow.GamesStringsCouldNot");
             return;
         }
-        SearchPlaceholder.Text = "Search lines, speakers and sections  (Ctrl+F)";
+        SearchPlaceholder.Text = L.T("SceneWindow.SearchLinesSpeakersSections");
         Rebuild();
     }
 
@@ -273,12 +273,12 @@ public partial class SceneWindow : Window, IMessageHost
         var from = await Task.Run(() => RedkitSource.For(path, origin));
         _redkit = from.Redkit;
         _propertySource = from.Source;
-        SourceNoteBar.ShowText(RedkitSource.TimelineNote(from.Source, from.RedkitPath ?? _origin, "scene"));
+        SourceNoteBar.ShowText(RedkitSource.TimelineNote(from.Source, from.RedkitPath ?? _origin, L.T("SceneWindow.Scene3")));
         _redkitPath = from.RedkitPath ?? origin;
         (_places, _placesFromRedkit) = await Task.Run(() => SceneGraphLayout.Layout(s, _redkit));
         GraphNote.Text = _placesFromRedkit
-            ? "Laid out as in REDkit's copy of the scene. Ctrl and the wheel zoom; drag with the right button to move about."
-            : "Laid out left to right by the flow (REDkit's layout is kept only in its own copy of the game's scenes). Ctrl and the wheel zoom; drag with the right button to move about.";
+            ? L.T("SceneWindow.LaidOutREDkitsCopy")
+            : L.T("SceneWindow.LaidOutLeftRight");
 
         var root = s.File.First("CStoryScene");
         var dialogsets = _dialogsets = root is null ? [] : SceneStaging.Dialogsets(s.File, root);
@@ -290,8 +290,8 @@ public partial class SceneWindow : Window, IMessageHost
         var timelines = await ReadTimelinesAsync(s);
         var animations = SceneAnimationRow.Of(timelines.Select(t => t.Timeline));
         AnimationGrid.ItemsSource = animations;
-        AnimationNote.Text = animations.Count == 0 ? "The scene's timelines play no animations."
-            : $"{Format.Count(animations.Count, "animation")} its sections' timelines play, by actor: body, face (mimics), additive and camera.";
+        AnimationNote.Text = animations.Count == 0 ? L.T("SceneWindow.ScenesTimelinesPlayNo")
+            : L.T("SceneWindow.SectionsTimelinesPlayActor", L.T("Count.Animation", animations.Count));
 
         var input = s.File.Exports.FirstOrDefault(x => x.ClassName == "CStorySceneInput") is { } first ? s.File.Object(first.Index) : null;
         StartProperties.Show(input is null ? [] : Rows(input, ["voicetagMappings", "nextLinkElement"]));
@@ -358,12 +358,12 @@ public partial class SceneWindow : Window, IMessageHost
         if (o.ClassName is "CStorySceneSection" or "CStorySceneCutsceneSection")
         {
             VariantGrid.ItemsSource = SceneVariantRow.Of(_scene.File, o);
-            VariantNote.Text = $"The versions of {node.Title}: each language can play its own, timed to its voices; the default plays for any without one.";
+            VariantNote.Text = L.T("SceneWindow.VersionsEachLanguageCan", node.Title);
         }
         else
         {
             VariantGrid.ItemsSource = null;
-            VariantNote.Text = "Only sections have versions. Click a section to see them.";
+            VariantNote.Text = L.T("SceneWindow.OnlySectionsHaveVersions");
         }
     }
 
@@ -391,12 +391,12 @@ public partial class SceneWindow : Window, IMessageHost
     private void MainTabs_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         // the lists inside the tabs raise this too
-        if (e.Source != MainTabs || MainTabs.SelectedItem is not TabItem { Header: "Preview" }) return;
+        if (e.Source != MainTabs || MainTabs.SelectedItem != PreviewTab) return;
         BottomTabs.SelectedIndex = 1; // the timeline drives it
     }
 
-    private const string PreviewPrompt = "Plays the scene in 3D with its timeline. Its actors, their textures, its props and every cutscene it "
-        + "plays are all loaded first so it plays smoothly, which can take a while for a big scene. Read through loads it too.";
+    private static string PreviewPrompt => L.T("SceneWindow.PreviewPrompt") + " " + PreviewPromptRest;
+    private static string PreviewPromptRest => L.T("SceneWindow.PreviewPromptRest");
 
     private void StageLoading_LoadRequested(object? sender, EventArgs e) => StartStageLoad();
 
@@ -420,12 +420,12 @@ public partial class SceneWindow : Window, IMessageHost
         var sets = standIn ? [SceneStaging.StandIn(s.File)] : _dialogsets;
         var cutscenes = s.Nodes.Where(n => n.Kind == SceneNodeKind.Cutscene && n.Cutscene is not null).Select(n => n.Cutscene!)
             .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-        var loaded = await StageLoading.RunAsync($"Loading {Path.GetFileNameWithoutExtension(_path)}", async (report, token) =>
+        var loaded = await StageLoading.RunAsync(L.T("SceneWindow.Loading", Path.GetFileNameWithoutExtension(_path)), async (report, token) =>
         {
-            report.Step("Putting the actors together");
+            report.Step(L.T("SceneWindow.PuttingActorsTogether"));
             var notes = new List<string>();
             if (standIn)
-                notes.Add("The scene has no dialog sets: the game plays it where its actors already stand in the world, so here they stand in a ring facing each other.");
+                notes.Add(L.T("SceneWindow.SceneHasNoDialog"));
             var (cast, idles, bySection) = await Task.Run(() =>
             {
                 var idles = SceneStage.Idles(locator);
@@ -454,11 +454,11 @@ public partial class SceneWindow : Window, IMessageHost
                     }
                 return (SceneStage.Load(s, wanted, locator, notes, token), idles, bySection);
             }, token);
-            report.Step("Reading the camera animations");
+            report.Step(L.T("SceneWindow.ReadingCameraAnimations"));
             var cameraAnimations = await Task.Run(() => SceneStage.LoadCameraAnimations(timelines.Select(t => t.Value), locator, token), token);
-            report.Step("Putting the props together");
+            report.Step(L.T("SceneWindow.PuttingPropsTogether"));
             var props = await Task.Run(() => SceneStage.LoadProps(s, timelines.SelectMany(t => SceneStage.ItemsTaken(t.Value)), locator, notes, token), token);
-            report.Step("Loading the actors' textures", string.Join(", ", cast.Select(a => a.Name)));
+            report.Step(L.T("SceneWindow.LoadingActorsTextures"), string.Join(", ", cast.Select(a => a.Name)));
             var parts = cast.SelectMany(a => a.Parts.Select((part, i) =>
                 (part.Mesh, StageTextures.Coloring(a.Entity, a.ColoredBy[i].Entity, a.ColoredBy[i].Appearance, a.DrawnBy[i].Name))))
                 .Concat(props.SelectMany(p => p.Parts.Select((part, i) => (part.Mesh, StageTextures.Coloring(p.Entity, p.Entity, p.Appearance, p.DrawnBy[i].Name)))))
@@ -468,18 +468,18 @@ public partial class SceneWindow : Window, IMessageHost
             for (int i = 0; i < cutscenes.Count; i++)
             {
                 string path = cutscenes[i], name = Path.GetFileNameWithoutExtension(path);
-                report.Step($"Cutscene {i + 1} of {cutscenes.Count}: reading it", name);
+                report.Step(L.T("SceneWindow.CutsceneReading", i + 1, cutscenes.Count), name);
                 try
                 {
                     var cutscene = await Task.Run(() => locator.ReadFile(path) is { } data ? CutsceneFile.Read(data) : null, token);
                     if (cutscene is null) continue;
                     var playback = await Task.Run(() => CutscenePlayback.Load(cutscene, locator, path, locator.Find(path)?.Archive), token);
-                    var prepared = await CutsceneStage.PrepareAsync(cutscene, playback, locator, StageTexture, report, token, $"Cutscene {i + 1} of {cutscenes.Count}: ");
+                    var prepared = await CutsceneStage.PrepareAsync(cutscene, playback, locator, StageTexture, report, token, L.T("SceneWindow.Cutscene", i + 1, cutscenes.Count));
                     _preparedCutscenes[path] = prepared;
                 }
                 catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or NotSupportedException)
                 {
-                    notes.Add($"The cutscene {name} could not be read: {ex.Message}");
+                    notes.Add(L.T("SceneWindow.CutsceneCouldNotRead", name, ex.Message));
                 }
             }
             return new LoadedStage(cast, props, cameraAnimations, idles, bySection, textures, notes);
@@ -488,7 +488,7 @@ public partial class SceneWindow : Window, IMessageHost
         {
             // stopped: it can be loaded again
             _stageLoad = null;
-            StageLoading.Prompt("Loading was stopped", "Load the preview again to see the scene played in 3D. " + PreviewPrompt[(PreviewPrompt.IndexOf(". ") + 2)..]);
+            StageLoading.Prompt(L.T("SceneWindow.LoadingStopped"), L.T("SceneWindow.LoadPreviewAgainSee", PreviewPromptRest));
             return;
         }
         StageControls.IsEnabled = true;
@@ -514,10 +514,10 @@ public partial class SceneWindow : Window, IMessageHost
                 _propParts.Add((prop, i));
             }
         StageView.ShowParts(shown, loaded.Textures);
-        StageText.Text = stageCast.Count == 0 ? "None of the scene's actors could be put together." : "Pick a section to see it played.";
+        StageText.Text = stageCast.Count == 0 ? L.T("SceneWindow.NoneScenesActorsCould") : L.T("SceneWindow.PickSectionSeePlayed");
         StageText.Visibility = stageCast.Count == 0 || _timelineNode is null ? Visibility.Visible : Visibility.Collapsed;
         var stageNotes = loaded.Notes;
-        StageNotes.Text = string.Join("\n", stageNotes.Take(6)) + (stageNotes.Count > 6 ? $"\n… and {stageNotes.Count - 6} more" : "");
+        StageNotes.Text = string.Join("\n", stageNotes.Take(6)) + (stageNotes.Count > 6 ? L.T("SceneWindow.More", stageNotes.Count - 6) : "");
         LayoutStage();
         PoseStage(SectionTimeline.Playhead ?? 0, fit: true);
         _stageReady.TrySetResult();
@@ -604,7 +604,7 @@ public partial class SceneWindow : Window, IMessageHost
         if (!_timelines.TryGetValue(node, out var timeline))
         {
             StageView.Pose((_, chunk) => new System.Numerics.Vector3[chunk.Positions.Length]);
-            StageText.Text = "Only sections are played here. Pick a section to see it.";
+            StageText.Text = L.T("SceneWindow.OnlySectionsPlayedHere");
             StageText.Visibility = Visibility.Visible;
             StageCameraText.Text = "";
             return;
@@ -612,7 +612,7 @@ public partial class SceneWindow : Window, IMessageHost
         var tracks = TracksOf(node);
         if (_lipSyncsAsked.Add(node)) _ = LoadLipSyncsAsync(timeline);
         StageText.Visibility = tracks.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-        if (tracks.Count == 0) StageText.Text = "No one stands in this section: its dialog set wasn't found.";
+        if (tracks.Count == 0) StageText.Text = L.T("SceneWindow.NoOneStandsSection");
         // worked out in the background, the latest time next: the UI thread only puts the bent meshes in
         var (cast, parts, idles, lips, at) = (stage, _stageParts.ToList(), _idles, new Dictionary<uint, Core.Animation.LipSync?>(_lipSyncs), (float)time);
         if (!_propEvents.TryGetValue(node, out var propEvents)) _propEvents[node] = propEvents = SceneStage.PropEvents(timeline);
@@ -640,7 +640,7 @@ public partial class SceneWindow : Window, IMessageHost
 
         ShowOverlays(timeline, time);
         var camera = SceneStage.CameraAt(timeline, _cameras, (float)time, _scene?.File) is { } cut ? SceneStage.Shaken(cut, timeline, _cameraAnimations, (float)time) : (StageCamera?)null;
-        StageCameraText.Text = camera is { } named ? $"Camera {named.Name}   FOV {named.FieldOfView:0.#}°" : "The section has no camera.";
+        StageCameraText.Text = camera is { } named ? L.T("SceneWindow.CameraFOV", named.Name, named.FieldOfView) : L.T("SceneWindow.SectionHasNoCamera");
         _lightKinds ??= _scene is null ? [] : SceneStage.LightKinds(_scene.File);
         StageView.SetLights(SceneStage.LightsAt(timeline, _lightKinds, (float)time).Select(StageLightOf).ToList());
         if (StageCameraToggle.IsChecked == true && camera is { } through)
@@ -666,7 +666,7 @@ public partial class SceneWindow : Window, IMessageHost
             return;
         }
         CutsceneView.SetTime((float)time);
-        StageCameraText.Text = CutsceneView.Playback?.CameraAt((float)time) is { } camera ? $"The cutscene's camera   FOV {camera.FieldOfView:0.#}°" : "";
+        StageCameraText.Text = CutsceneView.Playback?.CameraAt((float)time) is { } camera ? L.T("SceneWindow.CutscenesCameraFOV", camera.FieldOfView) : "";
         if (fit && !CutsceneView.ThroughCamera) CutsceneView.FitActors();
     }
 
@@ -675,7 +675,7 @@ public partial class SceneWindow : Window, IMessageHost
         // the preview loads the scene's cutscenes with its actors: wait for that rather than read one twice
         if (_stageLoad is { IsCompleted: false } loading)
         {
-            CutsceneView.Message = "Loading the scene…";
+            CutsceneView.Message = L.T("SceneWindow.LoadingScene");
             await loading;
             if (!string.Equals(path, _cutsceneShown, StringComparison.OrdinalIgnoreCase)) return;
             // loading was stopped: it all loads again when the preview is opened again
@@ -690,16 +690,16 @@ public partial class SceneWindow : Window, IMessageHost
         {
             CutsceneView.Clear();
             var locator = _locator;
-            prepared = await StageLoading.RunAsync($"Loading {Path.GetFileNameWithoutExtension(path)}", async (report, token) =>
+            prepared = await StageLoading.RunAsync(L.T("SceneWindow.Loading", Path.GetFileNameWithoutExtension(path)), async (report, token) =>
             {
-                report.Step("Reading the cutscene");
-                var cutscene = await Task.Run(() => locator.ReadFile(path) is { } data ? CutsceneFile.Read(data) : throw new FileNotFoundException("The cutscene wasn't found.", path), token);
+                report.Step(L.T("SceneWindow.ReadingCutscene"));
+                var cutscene = await Task.Run(() => locator.ReadFile(path) is { } data ? CutsceneFile.Read(data) : throw new FileNotFoundException(L.T("SceneWindow.CutsceneWasntFound"), path), token);
                 var playback = await Task.Run(() => CutscenePlayback.Load(cutscene, locator, path, locator.Find(path)?.Archive), token);
                 return await CutsceneStage.PrepareAsync(cutscene, playback, locator, StageTexture, report, token);
             }, _closing.Token).ContinueWith(t => t.IsCompletedSuccessfully ? t.Result : null, TaskScheduler.FromCurrentSynchronizationContext());
             if (prepared is null)
             {
-                CutsceneView.Message = "The cutscene could not be loaded.";
+                CutsceneView.Message = L.T("SceneWindow.CutsceneCouldNotLoaded");
                 return;
             }
             _preparedCutscenes[path] = prepared;
@@ -949,16 +949,15 @@ public partial class SceneWindow : Window, IMessageHost
         SectionTimeline.Show(timeline, id => Text(id), _scene is null ? new Dictionary<string, System.Windows.Media.Brush>() : SceneNodeItem.SpeakerBrushes(_scene));
         PlaySectionButton.IsEnabled = timeline is not null && !_reading;
         TimelineTitle.Text = timeline is null
-            ? "Only sections have timelines. Click a section to see its own."
-            : $"{node.Title}: {Format.Count(timeline.Elements.Count(e => e.Kind == SceneElementKind.Line), "line")}, {Format.Count(timeline.Events.Count, "event")}, "
-              + $"{timeline.Duration:0.0} s. Click an event for its properties.";
+            ? L.T("SceneWindow.OnlySectionsHaveTimelines")
+            : L.T("SceneWindow.ClickEventProperties", node.Title, L.T("Count.Line", timeline.Elements.Count(e => e.Kind == SceneElementKind.Line)), L.T("Count.Event", timeline.Events.Count), timeline.Duration);
         ShowSectionTime(0);
     }
 
     private void ShowSectionTime(double time)
     {
         var timeline = SectionTimeline.Timeline;
-        SectionTimeText.Text = timeline is null ? "" : $"{time:0.00} / {timeline.Duration:0.00} s";
+        SectionTimeText.Text = timeline is null ? "" : L.T("SceneWindow.S", time, timeline.Duration);
         SectionTimeline.Playhead = timeline is null ? null : time;
         PoseStage(time);
     }
@@ -968,8 +967,8 @@ public partial class SceneWindow : Window, IMessageHost
         if (_scene is null || item is null) return;
         var (heading, source) = item switch
         {
-            SceneTimelineEvent e => ($"{e.Name}{(e.Actor is { Length: > 0 } a ? $" ({a})" : "")} at {e.Start:0.00} s", e.Source),
-            SceneTimelineElement e => ($"{e.Kind} at {e.Start:0.00} s", e.Source),
+            SceneTimelineEvent e => (e.Actor is { Length: > 0 } a ? L.T("SceneWindow.ActorAtS", e.Name, a, e.Start) : L.T("SceneWindow.AtS", e.Name, e.Start), e.Source),
+            SceneTimelineElement e => (L.T("SceneWindow.AtS", e.Kind, e.Start), e.Source),
             _ => ("", null),
         };
         if (source is null) return;
@@ -1278,7 +1277,7 @@ public partial class SceneWindow : Window, IMessageHost
     {
         var token = Restart();
         SetReading(true);
-        if (MainTabs.Items.OfType<TabItem>().FirstOrDefault(t => t.Header as string == "Preview") is { } preview) MainTabs.SelectedItem = preview;
+        MainTabs.SelectedItem = PreviewTab;
         // reading it through plays it in the preview, so it loads it
         StartStageLoad();
         for (int hops = 0; hops < 1000; hops++)
@@ -1299,14 +1298,14 @@ public partial class SceneWindow : Window, IMessageHost
             if (options.Count > 0)
             {
                 // a moment to read the options, or to click one
-                ReadLabel.Text = "Choosing…";
+                ReadLabel.Text = L.T("SceneWindow.Choosing");
                 try { await Task.Delay(2000, token); }
                 catch (OperationCanceledException) { return; }
                 // not a shop, barber, Gwent and the like: those open a service rather than going on with the talk
                 var talk = options.Where(o => !o.OpensService).ToList();
                 if (talk.Count > 0) options = talk;
                 way = options[_random.Next(options.Count)];
-                ReadLabel.Text = "Stop";
+                ReadLabel.Text = L.T("SceneWindow.Stop");
             }
             else if (node.Kind is SceneNodeKind.Condition or SceneNodeKind.Switch or SceneNodeKind.Random && ways.Count > 0)
                 way = ways[_random.Next(ways.Count)];
@@ -1334,7 +1333,7 @@ public partial class SceneWindow : Window, IMessageHost
     {
         _reading = reading;
         ReadIcon.Text = char.ConvertFromUtf32(reading ? 0xE71A : 0xE768); // stop, play
-        ReadLabel.Text = reading ? "Stop" : "Read through";
+        ReadLabel.Text = reading ? L.T("SceneWindow.Stop") : L.T("SceneWindow.ReadThrough");
         PlaySectionButton.IsEnabled = !reading && SectionTimeline.Timeline is not null;
     }
 
@@ -1346,7 +1345,7 @@ public partial class SceneWindow : Window, IMessageHost
         // an actor's template shows the appearance the scene puts it in: its appearance filter, else its voice tag's
         var lookAs = (sender as FrameworkElement)?.DataContext is SceneActorRow { } actor
             ? new EntityWindow.LookAs(actor.AppearanceFilter.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries), actor.Id,
-                $"the scene's {actor.Id}")
+                L.T("SceneWindow.Scenes", actor.Id))
             : null;
         _ = OpenLinkAsync(path, lookAs);
     }
@@ -1362,7 +1361,7 @@ public partial class SceneWindow : Window, IMessageHost
         bool viewable = EntityWindow.CanShow(path) || BehTreeWindow.CanShow(path) || MeshWindow.CanShow(path) || CutsceneWindow.CanShow(path) || CanShow(path) || XmlWindow.CanOpen(path) || TextureWindow.CanShow(path) || DataViewers.CanShow(path);
         if (!viewable)
         {
-            string kind = FileKinds.Of(path)?.Name.ToLowerInvariant() ?? "this kind of";
+            string kind = FileKinds.Of(path)?.Name.ToLowerInvariant() ?? L.T("Common.Kind2");
             Copy(path, $"There's no viewer for {kind} files yet, so its path is copied:\n{path}");
             return;
         }
@@ -1374,12 +1373,12 @@ public partial class SceneWindow : Window, IMessageHost
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or NotSupportedException)
         {
-            await ShowMessage("It could not be read", $"{path}\n\n{ex.Message}", MessageKind.Error);
+            await ShowMessage(L.T("Common.CouldNotRead"), $"{path}\n\n{ex.Message}", MessageKind.Error);
             return;
         }
         if (data is null)
         {
-            await ShowMessage("Not found", $"{path}\n\nIt isn't in the open project, the archives open in the tool, or the game's bundles.", MessageKind.Warning);
+            await ShowMessage(L.T("Common.NotFound"), L.T("SceneWindow.IsntOpenProjectArchives", path), MessageKind.Warning);
             return;
         }
         string source = entry is null ? "project" : entry.Archive.Name;
@@ -1392,7 +1391,7 @@ public partial class SceneWindow : Window, IMessageHost
         else if (CanShow(path)) Open(path, source, data, _locator, this, entry?.Archive);
         else if (XmlWindow.CanOpen(path)) XmlWindow.OpenData(name, $"{source}  ·  {path}", data, this, path);
         else if (!TextureWindow.Open(name, $"{source}  ·  {path}", data, this))
-            await ShowMessage("It can't be shown", $"{path}\n\nIt isn't a picture the texture viewer understands.", MessageKind.Warning);
+            await ShowMessage(L.T("Common.CantShown"), L.T("SceneWindow.IsntPictureTextureViewer", path), MessageKind.Warning);
     }
 
     private void Copy(string? text, string? message = null)
@@ -1402,7 +1401,7 @@ public partial class SceneWindow : Window, IMessageHost
         {
             Clipboard.SetText(text);
             // a short "Copied" goes by itself; a longer message waits for OK
-            _ = Message.Show(null, message ?? $"Copied {text}", MessageKind.Info, primary: message is null ? null : "OK", autoClose: message is null);
+            _ = Message.Show(null, message ?? L.T("SceneWindow.Copied", text), MessageKind.Info, primary: message is null ? null : L.T("Common.OK"), autoClose: message is null);
         }
         catch (System.Runtime.InteropServices.COMException)
         {

@@ -12,6 +12,7 @@ using W3ModWorkbench.Core.Cr2w;
 using W3ModWorkbench.Core.Entities;
 using W3ModWorkbench.Core.Trees;
 using W3ModWorkbench.ViewModels;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -65,7 +66,7 @@ public partial class RigWindow : Window, IMessageHost
         _readData = readData;
         _locator = locator;
         _origin = origin;
-        Title = $"{Path.GetFileName(path)} - Rig";
+        Title = L.T("RigWindow.Rig2", Path.GetFileName(path));
         InfoText.Text = $"{path}   ·   {source}";
         View.StartFrom(180, 10);
         Loaded += async (_, _) => await LoadAsync();
@@ -80,7 +81,7 @@ public partial class RigWindow : Window, IMessageHost
     public static void OpenFile(string file, ResourceLocator locator, Window owner) =>
         new RigWindow(Path.GetFileName(file), file, () => File.ReadAllBytes(file), locator, file).Standalone(owner).Show();
 
-    public Task ShowMessage(string? title, string message, MessageKind kind) => Message.Show(title, message, kind, primary: "OK");
+    public Task ShowMessage(string? title, string message, MessageKind kind) => Message.Show(title, message, kind, primary: L.T("Common.OK"));
 
     private async Task LoadAsync()
     {
@@ -91,13 +92,13 @@ public partial class RigWindow : Window, IMessageHost
             (file, skeleton, _rig) = await Task.Run(() =>
             {
                 var f = Cr2wFile.Read(_readData());
-                var s = f.First("CSkeleton") ?? throw new InvalidDataException("There's no skeleton in it: it has no CSkeleton.");
+                var s = f.First("CSkeleton") ?? throw new InvalidDataException(L.T("RigWindow.TheresNoSkeletonHas"));
                 return (f, s, Skeleton.FromObject(s, f));
             });
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or NotSupportedException)
         {
-            BusyText.Text = "The rig could not be read.\n\n" + ex.Message;
+            BusyText.Text = L.T("RigWindow.RigCouldNotRead", ex.Message);
             return;
         }
         var rig = _rig;
@@ -115,18 +116,17 @@ public partial class RigWindow : Window, IMessageHost
             if (parent >= 0 && parent < i) _all[parent].Children.Add(_all[i]); else _roots.Add(_all[i]);
         }
         ShowTree();
-        BonesTab.Header = $"Bones ({rig.Count:N0})";
+        BonesTab.Header = L.T("RigWindow.Bones", rig.Count);
         var tracks = file.Array(skeleton, "tracks").OfType<RedObject>().Select(t => t["nameAsCName"] as string ?? t["name"] as string ?? "").ToList();
-        TrackList.ItemsSource = tracks.Count > 0 ? tracks : ["The rig has no float tracks."];
-        TracksTab.Header = $"Tracks ({tracks.Count:N0})";
+        TrackList.ItemsSource = tracks.Count > 0 ? tracks : [L.T("RigWindow.RigHasNoFloat")];
+        TracksTab.Header = L.T("RigWindow.Tracks2", tracks.Count);
         int depth = Enumerable.Range(0, rig.Count).Max(Depth);
         var (min, max) = Box();
-        InfoText.Text = $"{_path}   ·   {_source}   ·   CR2W {file.Version}, {Format.Count(rig.Count, "bone")} up to {depth} deep, {Format.Count(tracks.Count, "track")}"
-            + $", {max.Z - Math.Min(0, min.Z):0.00} m tall";
+        InfoText.Text = L.T("RigWindow.CR2WUpDeepM", _path, _source, file.Version, L.T("Count.Bone", rig.Count), depth, L.T("Count.Track", tracks.Count), max.Z - Math.Min(0, min.Z));
         FileProperties.Show(PropertyRow.Of(skeleton, file));
         _ = LoadRedkitAsync();
         CharacterCheck.IsEnabled = CharacterFor() is not null;
-        if (!CharacterCheck.IsEnabled) CharacterCheck.ToolTip = "No character made on this rig was found beside it";
+        if (!CharacterCheck.IsEnabled) CharacterCheck.ToolTip = L.T("RigWindow.NoCharacterMadeRig");
         Draw();
         await Dispatcher.InvokeAsync(Fit, System.Windows.Threading.DispatcherPriority.Loaded);
     }
@@ -181,7 +181,7 @@ public partial class RigWindow : Window, IMessageHost
         int parent = rig.Parents[node.Index];
         var children = _all[node.Index].Children;
         BoneTitle.Text = $"{node.Name}  ({node.Index})";
-        BoneDetail.Text = (parent >= 0 ? $"under {rig.Names[parent]} ({parent})" : "a root") + $"  ·  {Format.Count(children.Count, "bone")} under it  ·  {Depth(node.Index)} deep"
+        BoneDetail.Text = (parent >= 0 ? L.T("RigWindow.Under", rig.Names[parent], parent) : L.T("RigWindow.Root")) + L.T("RigWindow.UnderIt", L.T("Count.Bone", children.Count), Depth(node.Index))
             + (children.Count > 0 ? $": {string.Join(", ", children.Take(8).Select(c => c.Name))}{(children.Count > 8 ? ", …" : "")}" : "")
             + $"\n{Chain(node.Index)}";
         BonePosition.Text = $"{pose.Position.X,8:0.0000} {pose.Position.Y,8:0.0000} {pose.Position.Z,8:0.0000}";
@@ -232,12 +232,12 @@ public partial class RigWindow : Window, IMessageHost
         }
         if (_characterShown || CharacterFor() is not { } path) return;
         var token = (_characterLoad = new CancellationTokenSource()).Token;
-        ViewNote.Text = $"Loading {Path.GetFileName(path)}…";
+        ViewNote.Text = L.T("RigWindow.Loading", Path.GetFileName(path));
         try
         {
             var entity = await Task.Run(() =>
             {
-                var read = EntityFile.Read(_locator.ReadFile(path) ?? throw new FileNotFoundException($"{path} isn't in the game's files."));
+                var read = EntityFile.Read(_locator.ReadFile(path) ?? throw new FileNotFoundException(L.T("RigWindow.IsntGamesFiles", path)));
                 read.FindOrigins(_locator.ReadFile);
                 return read;
             }, token);
@@ -245,12 +245,12 @@ public partial class RigWindow : Window, IMessageHost
             var look = await Task.Run(() => entity.Look(appearance, _locator.ReadFile), token);
             var (parts, drawnBy, _, _) = await Task.Run(() => EntityWindow.ReadMeshes(look, _locator, token), token);
             var coloured = parts.Select((part, p) => (part.Mesh, LookTextures.Coloring(entity, appearance?.Name, drawnBy[p].Name))).ToList();
-            var progress = new Progress<(int Done, int Total)>(n => { if (!token.IsCancellationRequested && n.Total > 0) ViewNote.Text = $"Loading textures, {n.Done} of {n.Total}…"; });
+            var progress = new Progress<(int Done, int Total)>(n => { if (!token.IsCancellationRequested && n.Total > 0) ViewNote.Text = L.T("RigWindow.LoadingTextures", n.Done, n.Total); });
             var textures = await StageTextures.LoadAsync(coloured, _locator, Texture, progress, token);
             if (token.IsCancellationRequested || CharacterCheck.IsChecked != true) return;
             View.ShowParts(parts, textures);
             _characterShown = true;
-            ViewNote.Text = $"Inside {Path.GetFileNameWithoutExtension(path)}, as it's modelled. Click a bone in the list to pick it out.";
+            ViewNote.Text = L.T("RigWindow.InsideModelledClickBone", Path.GetFileNameWithoutExtension(path));
             Draw();
             Fit();
         }
@@ -259,7 +259,7 @@ public partial class RigWindow : Window, IMessageHost
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or NotSupportedException)
         {
-            ViewNote.Text = $"{Path.GetFileName(path)} could not be shown: {ex.Message}";
+            ViewNote.Text = L.T("RigWindow.CouldNotShown", Path.GetFileName(path), ex.Message);
         }
     }
 
@@ -324,7 +324,7 @@ public partial class RigWindow : Window, IMessageHost
         var (path, origin) = (_path, _origin);
         var from = await Task.Run(() => RedkitSource.For(path, origin));
         if (from.Redkit?.First("CSkeleton") is { } own) FileProperties.Show(PropertyRow.Of(own, from.Redkit));
-        SourceNoteBar.Show(from.Source, from.RedkitPath ?? origin, "rig");
+        SourceNoteBar.Show(from.Source, from.RedkitPath ?? origin, L.T("RigWindow.Rig3"));
     }
 
     private void FilterBox_TextChanged(object sender, TextChangedEventArgs e)

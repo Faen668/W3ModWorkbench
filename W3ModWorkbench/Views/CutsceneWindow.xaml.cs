@@ -14,6 +14,7 @@ using W3ModWorkbench.Core.Scenes;
 using W3ModWorkbench.Core.Sounds;
 using W3ModWorkbench.Core.Strings;
 using W3ModWorkbench.ViewModels;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -57,7 +58,7 @@ public partial class CutsceneWindow : Window, IMessageHost
         _readData = readData;
         _locator = locator;
         _origin = origin;
-        Title = $"{Path.GetFileName(path)} - Cutscene";
+        Title = L.T("CutsceneWindow.Cutscene2", Path.GetFileName(path));
         InfoText.Text = $"{path}   ·   {source}";
         ZoomSlider.Value = ZoomToSlider(40);
         Stage.View.FieldOfView = FovSlider.Value; // REDkit's preview starts at 60°
@@ -84,7 +85,7 @@ public partial class CutsceneWindow : Window, IMessageHost
         new CutsceneWindow(Core.Projects.FileSafety.GamePathOf(file) ?? Path.GetFileName(file), file, () => File.ReadAllBytes(file), locator, file)
             .Standalone(owner).Show();
 
-    public Task ShowMessage(string? title, string message, MessageKind kind) => Message.Show(title, message, kind, primary: "OK");
+    public Task ShowMessage(string? title, string message, MessageKind kind) => Message.Show(title, message, kind, primary: L.T("Common.OK"));
 
     private async Task LoadAsync()
     {
@@ -94,7 +95,7 @@ public partial class CutsceneWindow : Window, IMessageHost
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or NotSupportedException)
         {
-            BusyText.Text = "The cutscene could not be read.\n\n" + ex.Message;
+            BusyText.Text = L.T("CutsceneWindow.CutsceneCouldNotRead", ex.Message);
             return;
         }
         var c = _cutscene;
@@ -110,34 +111,32 @@ public partial class CutsceneWindow : Window, IMessageHost
         NoEffectsText.Visibility = c.Effects.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         EffectList.Visibility = c.Effects.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
         LinkList.ItemsSource = c.Links.Select(l => new CutsceneLinkItem(l)).ToList();
-        SceneGrid.ItemsSource = c.UsedIn.Select(p => new CutsceneLinkItem(new CutsceneLink(p, "Scene that plays it"))).ToList();
+        SceneGrid.ItemsSource = c.UsedIn.Select(p => new CutsceneLinkItem(new CutsceneLink(p, L.T("CutsceneWindow.ScenePlays")))).ToList();
         var animations = c.Actors.SelectMany(a => a.Animations).ToList();
         AnimationBox.ItemsSource = animations;
         if (animations.Count > 0) AnimationBox.SelectedIndex = 0;
-        CameraName.Text = c.Actors.FirstOrDefault(a => a.Type == "Camera")?.Name ?? "none";
+        CameraName.Text = c.Actors.FirstOrDefault(a => a.Type == "Camera")?.Name ?? L.T("Common.None");
 
         var more = new List<string>();
-        if (c.AudioTrack is { } audio) more.Add($"Its sound and voices are the audio event {audio}.");
-        if (c.PlaceTags.Count > 0) more.Add($"Played at the place tagged {string.Join(", ", c.PlaceTags)}.");
-        if (c.HiddenTags.Count > 0) more.Add($"Hides what's tagged {string.Join(", ", c.HiddenTags)} while it plays.");
-        if (c.FadeBefore > 0 || c.FadeAfter > 0) more.Add($"Fades {c.FadeBefore:0.##} s before and {c.FadeAfter:0.##} s after.");
-        if (c.Level is { } level) more.Add($"Made in {level}.");
+        if (c.AudioTrack is { } audio) more.Add(L.T("CutsceneWindow.SoundVoicesAudioEvent", audio));
+        if (c.PlaceTags.Count > 0) more.Add(L.T("CutsceneWindow.PlayedPlaceTagged", string.Join(", ", c.PlaceTags)));
+        if (c.HiddenTags.Count > 0) more.Add(L.T("CutsceneWindow.HidesWhatsTaggedWhile", string.Join(", ", c.HiddenTags)));
+        if (c.FadeBefore > 0 || c.FadeAfter > 0) more.Add(L.T("CutsceneWindow.FadesBeforeAfter", c.FadeBefore, c.FadeAfter));
+        if (c.Level is { } level) more.Add(L.T("CutsceneWindow.Made", level));
         MoreText.Text = string.Join("\n", more);
         MoreText.Visibility = more.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
 
         ApplyFilter();
         ShowDialogs(false);
         int shown = _events.Count(e => e.Event.Kind != CutsceneEventKind.Cloth);
-        InfoText.Text = $"{_path}   ·   {_source}   ·   CR2W {c.File.Version}, {CutsceneTimeline.FormatTime(c.Duration)}, "
-                      + $"{Format.Count(c.Actors.Count, "actor")}, {Format.Count(_events.Count, "event")}, {Format.Count(c.Effects.Count, "effect")}";
-        if (shown == 0) SearchPlaceholder.Text = "No events: the actors' animations play on their own";
+        InfoText.Text = L.T("CutsceneWindow.CR2W", _path, _source, c.File.Version, CutsceneTimeline.FormatTime(c.Duration), L.T("Count.Actor", c.Actors.Count), L.T("Count.Event", _events.Count), L.T("Count.Effect", c.Effects.Count));
+        if (shown == 0) SearchPlaceholder.Text = L.T("CutsceneWindow.NoEventsActorsAnimations");
         // the actors load when asked for: the events, properties and sound are there without them
-        StageLoading.Prompt("Preview", PreviewPrompt);
+        StageLoading.Prompt(L.T("Common.Preview2"), PreviewPrompt);
         await Task.WhenAll(LoadDialogLinesAsync(c), ShowTemplateAsync(c), LoadTrackAsync(c));
     }
 
-    private const string PreviewPrompt = "Plays the cutscene in 3D: its actors as they are in the game, through its camera, with its sound. "
-        + "Every actor and texture is loaded first so it plays smoothly, which can take a while for a big cutscene.";
+    private static string PreviewPrompt => L.T("CutsceneWindow.PreviewPrompt");
 
     private void StageLoading_LoadRequested(object? sender, EventArgs e)
     {
@@ -152,7 +151,7 @@ public partial class CutsceneWindow : Window, IMessageHost
         TemplateProperties.Show(from.Redkit is { } redkit && RedkitSource.Match(redkit, c.Template, c.File) is { } own
             ? PropertyRow.Of(own, redkit)
             : PropertyRow.Of(c.Template, c.File));
-        SourceNoteBar.ShowText(RedkitSource.TimelineNote(from.Source, from.RedkitPath ?? origin, "cutscene"));
+        SourceNoteBar.ShowText(RedkitSource.TimelineNote(from.Source, from.RedkitPath ?? origin, L.T("CutsceneWindow.Cutscene3")));
     }
 
     /// <summary>
@@ -178,7 +177,7 @@ public partial class CutsceneWindow : Window, IMessageHost
                     if (section is null) continue;
                     var said = section.Elements.Where(e => e.Kind == SceneElementKind.Line).ToList();
                     ids = said.Select(e => e.StringId).ToList();
-                    return said.Select(e => (e.Speaker ?? "", e.StringId is { } id && strings.WithId(id) is { Count: > 0 } found ? found[^1].Text : $"(string {e.StringId})"))
+                    return said.Select(e => (e.Speaker ?? "", e.StringId is { } id && strings.WithId(id) is { Count: > 0 } found ? found[^1].Text : L.T("CutsceneWindow.String", e.StringId)))
                         .ToList();
                 }
                 return null;
@@ -293,7 +292,7 @@ public partial class CutsceneWindow : Window, IMessageHost
         TrackToggle.IsEnabled = _track is not null;
         SaveSoundButton.IsEnabled = _track is not null || _voices.Count > 0;
         VoicesToggle.IsEnabled = _voices.Count > 0;
-        if (_voices.Count > 0) VoicesToggle.ToolTip = $"Play the dialog lines' voices (V): {Format.Count(_voices.Count, "voiced line")}, in English";
+        if (_voices.Count > 0) VoicesToggle.ToolTip = L.T("CutsceneWindow.PlayDialogLinesVoices2", L.T("Count.VoicedLine", _voices.Count));
         if (_playing) StartSound(_time);
     }
 
@@ -355,7 +354,7 @@ public partial class CutsceneWindow : Window, IMessageHost
     /// </summary>
     private void SaveSound_Click(object sender, RoutedEventArgs e)
     {
-        var dialog = new Microsoft.Win32.OpenFolderDialog { Title = "Choose a folder for the cutscene's sound" };
+        var dialog = new Microsoft.Win32.OpenFolderDialog { Title = L.T("CutsceneWindow.ChooseFolderCutscenesSound") };
         if (dialog.ShowDialog(this) != true) return;
         string name = Path.GetFileNameWithoutExtension(_path);
         var saved = new List<string>();
@@ -367,13 +366,13 @@ public partial class CutsceneWindow : Window, IMessageHost
                 File.WriteAllBytes(path, WwiseOpus.ToWav(Pcm(stereo), 2));
                 saved.Add(path);
             }
-            if (_track is { } track) Save($"{name} music and effects", track);
+            if (_track is { } track) Save(L.T("CutsceneWindow.MusicEffects", name), track);
             foreach (var voice in _voices) Save($"{name} {voice.Name}", voice.Stereo);
-            if (_track is not null && _voices.Count > 0) Save($"{name} mixed", Mixed());
+            if (_track is not null && _voices.Count > 0) Save(L.T("CutsceneWindow.Mixed", name), Mixed());
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            MessageBox.Show(this, $"The sound couldn't be saved: {ex.Message}", "Save sound", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show(this, L.T("CutsceneWindow.SoundCouldntSaved", ex.Message), L.T("CutsceneWindow.SaveSound2"), MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
         if (saved.Count > 0) ShellReveal.Show(saved);
@@ -428,11 +427,11 @@ public partial class CutsceneWindow : Window, IMessageHost
         if (_cutscene is not { } c) return;
         var marks = c.SceneEvents.Where(e => e.Kind == CutsceneEventKind.Dialog).OrderBy(e => e.Start).ToList();
         DialogGrid.ItemsSource = marks.Select((e, i) => new CutsceneDialogRow(CutsceneTimeline.FormatTime(e.Start),
-            named ? e.Detail : "", named ? e.Title : "(the words are in the scene that plays it)",
+            named ? e.Detail : "", named ? e.Title : L.T("CutsceneWindow.WordsScenePlays"),
             e.Source?["eventName"] as string ?? "", i + 1, e)).ToList();
-        DialogNote.Text = marks.Count == 0 ? "This cutscene has no dialog lines."
-            : named ? $"{Format.Count(marks.Count, "line")}, their words and speakers from the scene that plays it."
-            : $"{Format.Count(marks.Count, "line")}. The cutscene only marks when each is said; their words are read from the scene that plays it, when it's found.";
+        DialogNote.Text = marks.Count == 0 ? L.T("CutsceneWindow.CutsceneHasNoDialog")
+            : named ? L.T("CutsceneWindow.TheirWordsSpeakersScene", L.T("Count.Line", marks.Count))
+            : L.T("CutsceneWindow.CutsceneOnlyMarksWhen", L.T("Count.Line", marks.Count));
     }
 
     // ---------------------------------------------------------------- the actors, drawn and played
@@ -445,9 +444,9 @@ public partial class CutsceneWindow : Window, IMessageHost
     {
         // every actor and texture read before it's shown, so it plays smoothly from the start; the view shows how it's getting on
         CutscenePlayback? p = null;
-        var prepared = await StageLoading.RunAsync($"Loading {Path.GetFileNameWithoutExtension(_path)}", async (report, token) =>
+        var prepared = await StageLoading.RunAsync(L.T("CutsceneWindow.Loading", Path.GetFileNameWithoutExtension(_path)), async (report, token) =>
         {
-            report.Step("Reading the actors' animations");
+            report.Step(L.T("CutsceneWindow.ReadingActorsAnimations"));
             p = await Stage.LoadPlaybackAsync(c, _path, _locator);
             token.ThrowIfCancellationRequested();
             return p is null ? null! : await CutsceneStage.PrepareAsync(c, p, _locator, Stage.TextureReader, report, token);
@@ -455,7 +454,7 @@ public partial class CutsceneWindow : Window, IMessageHost
         if (p is null)
         {
             if (prepared is null && !_closing.IsCancellationRequested && Stage.Message.Length == 0)
-                StageLoading.Prompt("Loading was stopped", "Load the preview again to see the cutscene played in 3D.");
+                StageLoading.Prompt(L.T("CutsceneWindow.LoadingStopped"), L.T("CutsceneWindow.LoadPreviewAgainSee"));
             return;
         }
         _playback = p;
@@ -467,11 +466,11 @@ public partial class CutsceneWindow : Window, IMessageHost
         CameraBox.ItemsSource = p.Cameras.Where(c => c.Rig is not null).Select(c => c.Name).ToList();
         CameraBox.SelectedItem = p.Camera?.Name;
         CameraBox.IsEnabled = p.Cameras.Count(c => c.Rig is not null) > 1;
-        if (!CameraToggle.IsEnabled) CameraToggle.ToolTip = "The cutscene has no camera animation, or its rig wasn't found";
+        if (!CameraToggle.IsEnabled) CameraToggle.ToolTip = L.T("CutsceneWindow.CutsceneHasNoCamera");
         SetTime(0);
         if (prepared is null)
         {
-            StageLoading.Prompt("Loading was stopped", "Load the preview again to see the cutscene played in 3D.");
+            StageLoading.Prompt(L.T("CutsceneWindow.LoadingStopped"), L.T("CutsceneWindow.LoadPreviewAgainSee"));
             return;
         }
         Stage.Show(prepared, _locator);
@@ -492,7 +491,7 @@ public partial class CutsceneWindow : Window, IMessageHost
         ScrubSlider.Value = time;
         _scrubbing = false;
         ShowCamera(time, camera);
-        LensText.Text = camera is { } lens ? $"FOV {lens.FieldOfView:0.0}°   DOF {CameraDof.Text}" : "";
+        LensText.Text = camera is { } lens ? L.T("CutsceneWindow.FOVDOF", lens.FieldOfView, CameraDof.Text) : "";
     }
 
     /// <summary>The Camera tab: where the camera is, its field of view, and the depth of field, clipping planes and fade at a time.</summary>
@@ -504,10 +503,10 @@ public partial class CutsceneWindow : Window, IMessageHost
         CameraLooking.Text = camera is { } looking ? $"{looking.Forward.X:0.00}, {looking.Forward.Y:0.00}, {looking.Forward.Z:0.00}" : "—";
         // what's in force at the time: the last of each kind that has started
         CutsceneEvent? Last(Func<CutsceneEvent, bool> which) => c.SceneEvents.Where(e => which(e) && e.Start <= time + 1e-3f).OrderBy(e => e.Start).LastOrDefault();
-        CameraDof.Text = Last(e => e.ClassName.Contains("Dof", StringComparison.Ordinal)) is { } dof ? $"{dof.Detail}  (from {CutsceneTimeline.FormatTime(dof.Start)})" : "the default";
-        CameraPlanes.Text = Last(e => e.ClassName == "CExtAnimCutsceneSetClippingPlanesEvent") is { } planes ? $"{planes.Detail}  (from {CutsceneTimeline.FormatTime(planes.Start)})" : "the default";
+        CameraDof.Text = Last(e => e.ClassName.Contains("Dof", StringComparison.Ordinal)) is { } dof ? L.T("CutsceneWindow.From", dof.Detail, CutsceneTimeline.FormatTime(dof.Start)) : L.T("CutsceneWindow.Default");
+        CameraPlanes.Text = Last(e => e.ClassName == "CExtAnimCutsceneSetClippingPlanesEvent") is { } planes ? L.T("CutsceneWindow.From", planes.Detail, CutsceneTimeline.FormatTime(planes.Start)) : L.T("CutsceneWindow.Default");
         CameraFade.Text = Last(e => e.ClassName == "CExtAnimCutsceneFadeEvent") is { } fade
-            ? $"{fade.Title}{(fade.Detail.Length > 0 ? ", " + fade.Detail : "")}  (at {CutsceneTimeline.FormatTime(fade.Start)})" : "none yet";
+            ? L.T("CutsceneWindow.At", fade.Title, (fade.Detail.Length > 0 ? ", " + fade.Detail : ""), CutsceneTimeline.FormatTime(fade.Start)) : L.T("CutsceneWindow.NoneYet");
     }
 
     private void Play_Click(object sender, RoutedEventArgs e)
@@ -736,8 +735,8 @@ public partial class CutsceneWindow : Window, IMessageHost
     private void ShowEvent(CutsceneEvent e)
     {
         EventTitle.Text = e.Title;
-        EventDetail.Text = string.Join("  ·  ", new[] { CutsceneTimeline.FormatTime(e.Start) + (e.Duration > 0 ? $" for {CutsceneTimeline.FormatTime(e.Duration)}" : ""),
-            e.Actor ?? "the whole cutscene", e.ClassName, e.Detail }.Where(s => s.Length > 0));
+        EventDetail.Text = string.Join("  ·  ", new[] { CutsceneTimeline.FormatTime(e.Start) + (e.Duration > 0 ? L.T("CutsceneWindow.For", CutsceneTimeline.FormatTime(e.Duration)) : ""),
+            e.Actor ?? L.T("CutsceneWindow.WholeCutscene"), e.ClassName, e.Detail }.Where(s => s.Length > 0));
         EventProperties.Show(e.Source is { } source && _cutscene is { } c ? PropertyRow.Of(source, c.File) : []);
     }
 
@@ -757,7 +756,7 @@ public partial class CutsceneWindow : Window, IMessageHost
         if (animation.Object is { } o) rows.AddRange(PropertyRow.Of(o, c.File, leaveOut: ["animBuffer"]));
         if (animation.Entry is { } entry)
         {
-            rows.Add(new PropertyRow("Set entry", "", "", 0, null, heading: true));
+            rows.Add(new PropertyRow(L.T("CutsceneWindow.SetEntry"), "", "", 0, null, heading: true));
             rows.AddRange(PropertyRow.Of(entry, c.File, leaveOut: ["animation", "events"]));
         }
         AnimationProperties.Show(rows);
@@ -780,7 +779,7 @@ public partial class CutsceneWindow : Window, IMessageHost
     private void OpenEventSound(DataGrid grid)
     {
         if (SoundOf(grid.SelectedItem) is { } sound) SoundWindow.OpenEvent(sound, _locator, this);
-        else _ = Message.Show(null, "The event picked plays no sound event.", MessageKind.Info, primary: "OK");
+        else _ = Message.Show(null, L.T("CutsceneWindow.EventPickedPlaysNo"), MessageKind.Info, primary: L.T("Common.OK"));
     }
 
     private void OpenEventSound_Click(object sender, RoutedEventArgs e) =>
@@ -798,7 +797,7 @@ public partial class CutsceneWindow : Window, IMessageHost
         if (row.Line - 1 < _lineIds.Count && _lineIds[row.Line - 1] is { } id)
             _ = DataViewers.OpenLinkAsync($@"speech\en\{id}.wem", _locator, this, this);
         else
-            _ = Message.Show(null, "This line's string isn't known: the scene that plays the cutscene wasn't found.", MessageKind.Info, primary: "OK");
+            _ = Message.Show(null, L.T("CutsceneWindow.LinesStringIsntKnown"), MessageKind.Info, primary: L.T("Common.OK"));
     }
 
     private void OpenVoiceLine_Click(object sender, RoutedEventArgs e) => OpenVoiceLine();
@@ -834,7 +833,7 @@ public partial class CutsceneWindow : Window, IMessageHost
         if ((sender as FrameworkElement)?.Tag is not string path) return;
         // shown in the appearance the cutscene gives the actor, else its voice tag's, as the preview puts it together
         var lookAs = (sender as FrameworkElement)?.DataContext is CutsceneActorItem { Actor: var actor }
-            ? new EntityWindow.LookAs(actor.Appearance is { } a ? [a] : [], actor.VoiceTag, $"the cutscene's {actor.Name}")
+            ? new EntityWindow.LookAs(actor.Appearance is { } a ? [a] : [], actor.VoiceTag, L.T("CutsceneWindow.Cutscenes", actor.Name))
             : null;
         _ = ViewerLinks.OpenAsync(this, Message, _locator, path, lookAs);
     }
@@ -865,7 +864,7 @@ public partial class CutsceneWindow : Window, IMessageHost
         {
             Clipboard.SetText(text);
             // a short "Copied" goes by itself; a longer message waits for OK
-            _ = Message.Show(null, message ?? $"Copied {text}", MessageKind.Info, primary: message is null ? null : "OK", autoClose: message is null);
+            _ = Message.Show(null, message ?? L.T("CutsceneWindow.Copied", text), MessageKind.Info, primary: message is null ? null : L.T("Common.OK"), autoClose: message is null);
         }
         catch (System.Runtime.InteropServices.COMException)
         {

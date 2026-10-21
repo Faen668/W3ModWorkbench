@@ -1,9 +1,10 @@
 <Window x:Class="W3ModWorkbench.MeshWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:l="clr-namespace:W3ModWorkbench.Localisation"
         xmlns:local="clr-namespace:W3ModWorkbench"
         xmlns:vm="clr-namespace:W3ModWorkbench.ViewModels"
-        Title="Mesh" Icon="pack://application:,,,/W3ModWorkbench;component/Assets/app.ico"
+        Title="{l:T MeshWindow.Mesh}" Icon="pack://application:,,,/W3ModWorkbench;component/Assets/app.ico"
         Width="1380" Height="860" MinWidth="820" MinHeight="460"
         WindowStartupLocation="CenterOwner" PreviewKeyDown="Window_PreviewKeyDown">
 
@@ -61,50 +62,50 @@
 
         <DockPanel Grid.Row="0" Margin="14,12,14,10" LastChildFill="False">
             <StackPanel Orientation="Horizontal" DockPanel.Dock="Left">
-                <TextBlock Text="LOD" VerticalAlignment="Center" Margin="0,0,8,0" Opacity="0.7" />
-                <ComboBox x:Name="LodBox" Width="190" SelectionChanged="Lod_SelectionChanged" ToolTip="The level of detail shown: 0 is the most detailed, used up close" />
-                <ToggleButton x:Name="TexturedToggle" Margin="14,0,0,0" Padding="12,5" Content="Textures" IsChecked="True" Click="Textured_Click" ToolTip="Show the materials' colour textures, or the shape alone in grey (T)" />
-                <ToggleButton x:Name="WireToggle" Margin="6,0,0,0" Padding="12,5" Content="Wireframe" Click="Wire_Click" ToolTip="Draw the triangles' edges over the mesh (W)" />
-                <ToggleButton x:Name="FloorToggle" Margin="6,0,0,0" Padding="12,5" Content="Floor" Click="Floor_Click" ToolTip="A grid on the ground under the mesh (G)" />
-                <Button x:Name="ShowButton" Margin="6,0,0,0" Padding="12,5" Click="Show_Click" ToolTip="Draw how the mesh is made: its box, vertex colours, normals, bones and collision">
+                <TextBlock Text="{l:T MeshWindow.LOD}" VerticalAlignment="Center" Margin="0,0,8,0" Opacity="0.7" />
+                <ComboBox x:Name="LodBox" Width="190" SelectionChanged="Lod_SelectionChanged" ToolTip="{l:T MeshWindow.LevelDetailShownMost}" />
+                <ToggleButton x:Name="TexturedToggle" Margin="14,0,0,0" Padding="12,5" Content="{l:T Common.Textures}" IsChecked="True" Click="Textured_Click" ToolTip="{l:T MeshWindow.ShowMaterialsColourTextures}" />
+                <ToggleButton x:Name="WireToggle" Margin="6,0,0,0" Padding="12,5" Content="{l:T Common.Wireframe}" Click="Wire_Click" ToolTip="{l:T MeshWindow.DrawTrianglesEdgesOver}" />
+                <ToggleButton x:Name="FloorToggle" Margin="6,0,0,0" Padding="12,5" Content="{l:T MeshWindow.Floor}" Click="Floor_Click" ToolTip="{l:T MeshWindow.GridGroundUnderMesh}" />
+                <Button x:Name="ShowButton" Margin="6,0,0,0" Padding="12,5" Click="Show_Click" ToolTip="{l:T MeshWindow.DrawHowMeshMade}">
                     <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="Show" />
+                        <TextBlock Text="{l:T MeshWindow.Show}" />
                         <TextBlock Style="{StaticResource IconText}" Text="&#xE70D;" FontSize="9" Margin="8,2,0,0" />
                     </StackPanel>
                     <Button.ContextMenu>
                         <ContextMenu x:Name="ShowMenu">
-                            <MenuItem x:Name="BoundsItem" Header="Bounding box" InputGestureText="B" IsCheckable="True" />
-                            <MenuItem x:Name="ColorsItem" Header="Vertex colours" InputGestureText="V" IsCheckable="True" />
-                            <MenuItem x:Name="NormalsItem" Header="Normals" InputGestureText="N" IsCheckable="True" />
-                            <MenuItem x:Name="BonesItem" Header="Bones" InputGestureText="K" IsCheckable="True" />
-                            <MenuItem x:Name="CollisionItem" Header="Collision" InputGestureText="C" IsCheckable="True" />
+                            <MenuItem x:Name="BoundsItem" Header="{l:T MeshWindow.BoundingBox}" InputGestureText="B" IsCheckable="True" />
+                            <MenuItem x:Name="ColorsItem" Header="{l:T MeshWindow.VertexColours}" InputGestureText="V" IsCheckable="True" />
+                            <MenuItem x:Name="NormalsItem" Header="{l:T MeshWindow.Normals}" InputGestureText="N" IsCheckable="True" />
+                            <MenuItem x:Name="BonesItem" Header="{l:T Common.Bones}" InputGestureText="K" IsCheckable="True" />
+                            <MenuItem x:Name="CollisionItem" Header="{l:T MeshWindow.Collision}" InputGestureText="C" IsCheckable="True" />
                             <Separator />
-                            <MenuItem x:Name="InfoItem" Header="Info panel" InputGestureText="I" IsCheckable="True" />
+                            <MenuItem x:Name="InfoItem" Header="{l:T MeshWindow.InfoPanel}" InputGestureText="I" IsCheckable="True" />
                         </ContextMenu>
                     </Button.ContextMenu>
                 </Button>
-                <Button Margin="14,0,0,0" Padding="12,5" Click="Fit_Click" ToolTip="Fit the mesh to the view (F, or double-click it)">
+                <Button Margin="14,0,0,0" Padding="12,5" Click="Fit_Click" ToolTip="{l:T MeshWindow.FitMeshViewF}">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Style="{StaticResource IconText}" Text="&#xE9A6;" />
-                        <TextBlock Margin="8,0,0,0" Text="Fit" />
+                        <TextBlock Margin="8,0,0,0" Text="{l:T Common.Fit}" />
                     </StackPanel>
                 </Button>
-                <Button Margin="6,0,0,0" Padding="10,5" Content="Front" Click="Front_Click" ToolTip="Look at the front (1)" />
-                <Button Margin="2,0,0,0" Padding="10,5" Content="Side" Click="Side_Click" ToolTip="Look at the right side (2)" />
-                <Button Margin="2,0,0,0" Padding="10,5" Content="Top" Click="Top_Click" ToolTip="Look from above (3)" />
+                <Button Margin="6,0,0,0" Padding="10,5" Content="{l:T MeshWindow.Front}" Click="Front_Click" ToolTip="{l:T MeshWindow.LookFront}" />
+                <Button Margin="2,0,0,0" Padding="10,5" Content="{l:T MeshWindow.Side}" Click="Side_Click" ToolTip="{l:T MeshWindow.LookRightSide}" />
+                <Button Margin="2,0,0,0" Padding="10,5" Content="{l:T MeshWindow.Top}" Click="Top_Click" ToolTip="{l:T MeshWindow.LookAbove}" />
             </StackPanel>
             <StackPanel Orientation="Horizontal" DockPanel.Dock="Right">
                 <Button x:Name="SaveButton" Padding="12,5" Margin="0,0,6,0" Click="Save_Click" IsEnabled="False" Style="{StaticResource AccentButtonStyle}"
-                        ToolTip="Save the changed materials into the open project, at their game paths, so the mod uses them in place of the game's (Ctrl+S)">
+                        ToolTip="{l:T MeshWindow.SaveChangedMaterialsInto}">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Style="{StaticResource IconText}" Text="&#xE74E;" Margin="0,1,0,0" />
-                        <TextBlock Margin="8,0,0,0" Text="Save to project" />
+                        <TextBlock Margin="8,0,0,0" Text="{l:T Common.SaveProject}" />
                     </StackPanel>
                 </Button>
-                <Button x:Name="ExportButton" Padding="12,5" Click="Export_Click" IsEnabled="False" ToolTip="Save the LOD shown, with the chunks that are ticked, as an .obj with its textures as PNG files">
+                <Button x:Name="ExportButton" Padding="12,5" Click="Export_Click" IsEnabled="False" ToolTip="{l:T MeshWindow.SaveLODShownChunks}">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Style="{StaticResource IconText}" Text="&#xE74E;" Margin="0,1,0,0" />
-                        <TextBlock Margin="8,0,0,0" Text="Export OBJ" />
+                        <TextBlock Margin="8,0,0,0" Text="{l:T MeshWindow.ExportOBJ}" />
                     </StackPanel>
                 </Button>
             </StackPanel>
@@ -131,9 +132,9 @@
                             Background="#88000000" IsHitTestVisible="False" Visibility="Collapsed">
                         <TextBlock x:Name="InfoOverlay" FontFamily="Cascadia Mono, Consolas" FontSize="11.5" Foreground="#E6E6EC" LineHeight="17" />
                     </Border>
-                    <TextBlock x:Name="BusyText" Text="Reading the mesh…" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="White" Opacity="0.8"
+                    <TextBlock x:Name="BusyText" Text="{l:T MeshWindow.ReadingMesh}" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="White" Opacity="0.8"
                                TextWrapping="Wrap" TextAlignment="Center" MaxWidth="460" IsHitTestVisible="False" />
-                    <TextBlock Text="Drag to turn  ·  right-drag or Shift+drag to move  ·  wheel to zoom  ·  double-click to fit" Foreground="White" Opacity="0.55"
+                    <TextBlock Text="{l:T MeshWindow.DragTurnRightDrag}" Foreground="White" Opacity="0.55"
                                HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,8" FontSize="11" IsHitTestVisible="False" />
                 </Grid>
             </Border>
@@ -150,10 +151,10 @@
                             </DockPanel>
                         </ControlTemplate>
                     </TabControl.Template>
-                    <TabItem Header="Materials">
+                    <TabItem Header="{l:T MeshWindow.Materials}">
                         <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="12,10">
                             <StackPanel>
-                                <TextBlock Style="{StaticResource Heading}" Text="Chunks" />
+                                <TextBlock Style="{StaticResource Heading}" Text="{l:T MeshWindow.Chunks}" />
                                 <ItemsControl x:Name="ChunkList">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate DataType="{x:Type vm:MeshChunkItem}">
@@ -167,7 +168,7 @@
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
 
-                                <TextBlock Style="{StaticResource Heading}" Text="Materials" Margin="2,16,0,8" />
+                                <TextBlock Style="{StaticResource Heading}" Text="{l:T MeshWindow.Materials}" Margin="2,16,0,8" />
                                 <ItemsControl x:Name="MaterialList">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate DataType="{x:Type vm:MeshMaterialItem}">
@@ -176,25 +177,25 @@
                                                     <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
                                                     <TextBlock Text="{Binding Source}" Opacity="0.75" FontSize="11" TextTrimming="CharacterEllipsis" ToolTip="{Binding SourceTip}" Margin="0,2,0,2" />
                                                     <Button HorizontalAlignment="Left" Margin="0,0,0,6" Cursor="Hand" Click="OpenMaterial_Click" Tag="{Binding MaterialLink}"
-                                                            Visibility="{Binding MaterialLinkVisibility}" ToolTip="Open it in the material viewer: every parameter, a live preview, and what uses it">
+                                                            Visibility="{Binding MaterialLinkVisibility}" ToolTip="{l:T MeshWindow.OpenMaterialViewerEvery}">
                                                         <Button.Template>
                                                             <ControlTemplate TargetType="Button">
                                                                 <TextBlock Text="{Binding MaterialLinkText}" FontSize="11" Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}" />
                                                             </ControlTemplate>
                                                         </Button.Template>
                                                     </Button>
-                                                    <TextBlock Text="Colour texture" Opacity="0.7" FontSize="11" Margin="0,0,0,3" />
+                                                    <TextBlock Text="{l:T MeshWindow.ColourTexture}" Opacity="0.7" FontSize="11" Margin="0,0,0,3" />
                                                     <ComboBox ItemsSource="{Binding Options}" SelectedItem="{Binding Selected}" DisplayMemberPath="Label" ToolTip="{Binding Selected.Path}" />
                                                     <TextBlock Text="{Binding Status}" Opacity="0.7" FontSize="11" Margin="0,4,0,0" TextWrapping="Wrap" />
                                                     <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
-                                                        <Button Padding="10,3" Content="Other texture…" Click="OtherTexture_Click" Tag="{Binding}" ToolTip="Put any texture from the game or an open mod on this material's chunks" />
-                                                        <Button Margin="6,0,0,0" Padding="10,3" Content="Other material…" Click="OtherMaterial_Click" Tag="{Binding}" ToolTip="Use another material instance (.w2mi) for these chunks" />
+                                                        <Button Padding="10,3" Content="{l:T MeshWindow.OtherTexture}" Click="OtherTexture_Click" Tag="{Binding}" ToolTip="{l:T MeshWindow.PutAnyTextureGame}" />
+                                                        <Button Margin="6,0,0,0" Padding="10,3" Content="{l:T MeshWindow.OtherMaterial}" Click="OtherMaterial_Click" Tag="{Binding}" ToolTip="{l:T MeshWindow.UseAnotherMaterialInstance}" />
                                                     </StackPanel>
                                                     <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
-                                                        <Button Padding="10,3" Content="Save as new material…" Click="SaveNewMaterial_Click" Tag="{Binding}"
-                                                                ToolTip="Save this material, with its changes, as a new .w2mi in the project, and use it for these chunks" />
-                                                        <Button Margin="6,0,0,0" Padding="10,3" Content="Back to its own" Click="ResetMaterial_Click" Tag="{Binding}"
-                                                                Visibility="{Binding ResetVisibility}" ToolTip="Undo the changes and use the mesh's own material again" />
+                                                        <Button Padding="10,3" Content="{l:T MeshWindow.SaveNewMaterial}" Click="SaveNewMaterial_Click" Tag="{Binding}"
+                                                                ToolTip="{l:T MeshWindow.SaveMaterialChangesNew}" />
+                                                        <Button Margin="6,0,0,0" Padding="10,3" Content="{l:T MeshWindow.BackOwn}" Click="ResetMaterial_Click" Tag="{Binding}"
+                                                                Visibility="{Binding ResetVisibility}" ToolTip="{l:T MeshWindow.UndoChangesUseMeshs}" />
                                                     </StackPanel>
                                                     <Expander Header="{Binding ParametersHeader}" Margin="0,6,0,0" FontSize="11">
                                                         <ItemsControl ItemsSource="{Binding Parameters}" Margin="0,4,0,0">
@@ -208,9 +209,9 @@
                                                                         </DockPanel>
                                                                         <DockPanel Margin="0,2,0,0">
                                                                             <Button DockPanel.Dock="Right" Padding="6,1" Margin="4,0,0,0" Content="&#xE7A7;" FontFamily="{StaticResource IconFont}"
-                                                                                    Click="ResetParameter_Click" Tag="{Binding}" Visibility="{Binding ResetVisibility}" ToolTip="Take its own value away, so it takes its base's again" />
+                                                                                    Click="ResetParameter_Click" Tag="{Binding}" Visibility="{Binding ResetVisibility}" ToolTip="{l:T MeshWindow.TakeOwnValueAway}" />
                                                                             <Button DockPanel.Dock="Right" Padding="6,1" Margin="4,0,0,0" Content="…" Click="PickParameterTexture_Click" Tag="{Binding}"
-                                                                                    Visibility="{Binding PickVisibility}" ToolTip="Pick a texture" />
+                                                                                    Visibility="{Binding PickVisibility}" ToolTip="{l:T MeshWindow.PickTexture}" />
                                                                             <TextBox Text="{Binding Text, UpdateSourceTrigger=LostFocus}" IsReadOnly="{Binding IsReadOnly, Mode=OneWay}"
                                                                                      FontSize="11" Padding="4,2" MinHeight="0" KeyDown="ParameterBox_KeyDown" ToolTip="{Binding Detail}" />
                                                                         </DockPanel>
@@ -228,29 +229,29 @@
                             </StackPanel>
                         </ScrollViewer>
                     </TabItem>
-                    <TabItem Header="Properties">
+                    <TabItem Header="{l:T Common.Properties}">
                         <DockPanel Margin="6,4,2,2">
                             <Grid DockPanel.Dock="Top" Margin="0,0,0,6">
                                 <TextBox x:Name="PropertySearch" Padding="30,5,8,5" VerticalContentAlignment="Center" TextChanged="PropertySearch_TextChanged" />
                                 <TextBlock Style="{StaticResource IconText}" Text="&#xE721;" FontSize="12" Margin="10,0,0,0" Opacity="0.6" HorizontalAlignment="Left" IsHitTestVisible="False" />
                                 <TextBlock x:Name="PropertySearchPlaceholder" Margin="31,0,0,0" Opacity="0.55" VerticalAlignment="Center" IsHitTestVisible="False"
-                                           Text="Find properties by name or value" />
+                                           Text="{l:T Common.FindPropertiesNameValue}" />
                             </Grid>
                             <local:SourceNote x:Name="SourceNoteBar" DockPanel.Dock="Top" Margin="0,0,0,6" />
                             <local:PropertyListView x:Name="Properties" />
                         </DockPanel>
                     </TabItem>
-                    <TabItem Header="LODs">
+                    <TabItem Header="{l:T MeshWindow.LODs}">
                         <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="8,4">
                             <StackPanel x:Name="LodPanel" />
                         </ScrollViewer>
                     </TabItem>
-                    <TabItem Header="Report">
+                    <TabItem Header="{l:T MeshWindow.Report}">
                         <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="8,4">
                             <StackPanel x:Name="ReportPanel" />
                         </ScrollViewer>
                     </TabItem>
-                    <TabItem Header="Collision">
+                    <TabItem Header="{l:T MeshWindow.Collision}">
                         <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="8,4">
                             <StackPanel x:Name="CollisionPanel" />
                         </ScrollViewer>

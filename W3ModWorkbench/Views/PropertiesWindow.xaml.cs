@@ -6,6 +6,7 @@ using System.Windows.Input;
 using W3ModWorkbench.Core;
 using W3ModWorkbench.Core.Cr2w;
 using W3ModWorkbench.ViewModels;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -29,7 +30,7 @@ public sealed class PropertiesObjectItem(int index, string className, string det
     public Visibility DetailVisibility => Detail.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
     public Visibility ExpanderVisibility => Children.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
     public Visibility SpacerVisibility => Children.Count > 0 ? Visibility.Collapsed : Visibility.Visible;
-    public string ToolTip => Children.Count > 0 ? $"{ClassName}: {Format.Count(Children.Count, "object")} under it" : ClassName;
+    public string ToolTip => Children.Count > 0 ? L.T("PropertiesWindow.Under", ClassName, L.T("Count.Object", Children.Count)) : ClassName;
 
     private bool _isExpanded = true;
 
@@ -82,7 +83,7 @@ public partial class PropertiesWindow : Window, IMessageHost
         _locator = locator;
         _origin = origin;
         _diskPath = diskPath;
-        Title = $"{Path.GetFileName(path)} - Properties";
+        Title = L.T("PropertiesWindow.Properties", Path.GetFileName(path));
         HeadingText.Text = Path.GetFileName(path);
         KindText.Text = FileKinds.Of(path) is { } kind ? $"{kind.Name}  ·  {path}" : path;
         InfoText.Text = $"{path}   ·   {source}";
@@ -101,7 +102,7 @@ public partial class PropertiesWindow : Window, IMessageHost
         new PropertiesWindow(Core.Projects.FileSafety.GamePathOf(file) ?? Path.GetFileName(file), file, () => File.ReadAllBytes(file), locator, file, file)
             .Standalone(owner).Show();
 
-    public Task ShowMessage(string? title, string message, MessageKind kind) => Message.Show(title, message, kind, primary: "OK");
+    public Task ShowMessage(string? title, string message, MessageKind kind) => Message.Show(title, message, kind, primary: L.T("Common.OK"));
 
     private async Task LoadAsync()
     {
@@ -118,7 +119,7 @@ public partial class PropertiesWindow : Window, IMessageHost
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or NotSupportedException)
         {
-            BusyText.Text = "The file could not be read.\n\n" + ex.Message;
+            BusyText.Text = L.T("PropertiesWindow.FileCouldNotRead", ex.Message);
             return;
         }
         _redkit = from.Redkit;
@@ -126,7 +127,7 @@ public partial class PropertiesWindow : Window, IMessageHost
         var file = _file;
         if (file.Exports.Count == 0)
         {
-            BusyText.Text = "This file has no objects in it.";
+            BusyText.Text = L.T("PropertiesWindow.FileHasNoObjects");
             BusyText.Visibility = Visibility.Visible;
             return;
         }
@@ -134,9 +135,9 @@ public partial class PropertiesWindow : Window, IMessageHost
         SourceNoteBar.Show(from.Source, from.RedkitPath ?? origin, what);
         (_roots, _all) = Objects(file);
         ShowObjects();
-        ObjectsTitle.Text = $"Objects ({_all.Count:N0})";
+        ObjectsTitle.Text = L.T("PropertiesWindow.Objects2", _all.Count);
         HeadingText.Text = $"{Path.GetFileName(path)}  ·  {file.Exports[0].ClassName}";
-        InfoText.Text = $"{path}   ·   {_source}   ·   CR2W {file.Version}, {Format.Count(file.Exports.Count, "object")}, {Format.Count(file.Imports.Count, "file")} used";
+        InfoText.Text = L.T("PropertiesWindow.CR2WUsed", path, _source, file.Version, L.T("Count.Object", file.Exports.Count), L.T("Count.File", file.Imports.Count));
         ObjectList.SelectedIndex = 0;
     }
 
@@ -188,7 +189,7 @@ public partial class PropertiesWindow : Window, IMessageHost
             shown.AddRange(_all.Where(keep.Contains));
         }
         ObjectList.ItemsSource = shown;
-        ObjectsTitle.Text = text.Length == 0 ? $"Objects ({_all.Count:N0})" : $"Objects ({_all.Count(i => i.Matches(text)):N0} of {_all.Count:N0})";
+        ObjectsTitle.Text = text.Length == 0 ? L.T("PropertiesWindow.Objects2", _all.Count) : L.T("PropertiesWindow.Objects3", _all.Count(i => i.Matches(text)), _all.Count);
         if (picked is not null && shown.Contains(picked)) ObjectList.SelectedItem = picked;
     }
 
@@ -271,7 +272,7 @@ public partial class PropertiesWindow : Window, IMessageHost
         }
         catch (Exception ex) when (ex is InvalidDataException or ArgumentOutOfRangeException or IndexOutOfRangeException)
         {
-            Properties.Show([new PropertyRow("This object could not be read", "", ex.Message, 0, null)]);
+            Properties.Show([new PropertyRow(L.T("PropertiesWindow.ObjectCouldNotRead"), "", ex.Message, 0, null)]);
         }
     }
 
@@ -296,7 +297,7 @@ public partial class PropertiesWindow : Window, IMessageHost
         try
         {
             Clipboard.SetText(text);
-            _ = Message.Show(null, message ?? $"Copied {text}", MessageKind.Info, primary: message is null ? null : "OK", autoClose: message is null);
+            _ = Message.Show(null, message ?? L.T("PropertiesWindow.Copied", text), MessageKind.Info, primary: message is null ? null : L.T("Common.OK"), autoClose: message is null);
         }
         catch (System.Runtime.InteropServices.COMException)
         {
