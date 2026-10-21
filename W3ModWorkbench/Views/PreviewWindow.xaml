@@ -134,6 +134,10 @@
                         ToolTip="Insert snippet: common WitcherScript patterns, and your own (Ctrl+J)">
                     <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE943;" VerticalAlignment="Center" />
                 </Button>
+                <Button x:Name="StubButton" Margin="4,0,0,0" Click="Stub_Click" Padding="10,6"
+                        ToolTip="Stub generator: write a wrap, a replacement or an addition for one of the game's functions, ready to paste (Ctrl+Shift+W). Starts on the name at the cursor">
+                    <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE70F;" VerticalAlignment="Center" />
+                </Button>
                 <Button x:Name="BuildButton" Margin="4,0,0,0" Click="Build_Click" Padding="10,6" ToolTipService.ShowOnDisabled="True"
                         ToolTip="Build the mod (Ctrl+Shift+B)">
                     <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE90F;" VerticalAlignment="Center" />

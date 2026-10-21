@@ -6,7 +6,7 @@ summary: Read and edit the game's XML (items, abilities, menus) with colouring, 
 keywords: xml editor items abilities def_item outline format encoding
 windows: XmlWindow
 ---
-Much of the game's data is XML: items, abilities, loot, menus. Double-click an XML file to read it; right-click one and choose **Open in XML editor** (or use **Tools > Open an XML file**, or drop one on the window) to edit it.
+Much of the game's data is XML: items, abilities, loot, menus. Double-click an XML file to read it; right-click one and choose **Open in XML editor** (or use **Open files** in the main window, or drop one on it) to edit it.
 
 ![An item definition in the XML editor](xml-editor.jpg)
 

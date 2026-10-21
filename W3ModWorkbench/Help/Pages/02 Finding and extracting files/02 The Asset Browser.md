@@ -51,4 +51,4 @@ Right-click a file and choose **What uses this file?** to see every file that re
 
 Preview, open as JSON, **Copy to project** (a mesh's buffers come too), extract, copy paths, **Open another copy…**, **Other copies of this file…**, show in Explorer, and **Copy > Link to open it in W3 Mod Workbench**, a `w3modworkbench://` link that opens the browser at that file. See [[EasyAssetBrowser]] for links from its website.
 
-**Tools > Browse game scripts** lists the game's own scripts in the main window, to read.
+The game's own scripts are in [[Script Bench]], under **Game scripts**, with go to definition and search.

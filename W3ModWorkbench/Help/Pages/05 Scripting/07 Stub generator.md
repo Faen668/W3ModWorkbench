@@ -6,7 +6,7 @@ summary: Writes the start of a @wrapMethod, @replaceMethod, @addMethod or @addFi
 keywords: stub generator wrap replace add method field signature template
 windows: StubWindow
 ---
-Wrapping or replacing one of the game's functions always starts the same way: the annotation, the exact signature, and a call to the original. **Tools > Stub generator** ({{Ctrl+Shift+W}}) writes that for you from the game's own scripts. In Script Bench, **Create a wrap or replace stub** on the right-click menu opens it on the function under the cursor.
+Wrapping or replacing one of the game's functions always starts the same way: the annotation, the exact signature, and a call to the original. The stub generator writes that for you from the game's own scripts. Open it from [[Script Bench]]: the stub button in its toolbar, or {{Ctrl+Shift+W}}, opens it on the name at the cursor, and **Create a wrap or replace stub** on the right-click menu does the same for the function under the mouse.
 
 ![The stub generator, wrapping the player's OnSpawned](stub-generator.jpg)
 

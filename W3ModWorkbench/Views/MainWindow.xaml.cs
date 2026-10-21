@@ -598,6 +598,8 @@ public partial class MainWindow : Window, IMessageHost
         menu.Items.Add(new Separator());
         Add("New project…", "Ctrl+Shift+N", () => _ = NewProjectAsync());
         Add("Open project…", "Ctrl+Shift+O", OpenProjectDialog);
+        Add("New mod menu…", "", () => XmlWindow.OpenNewMenu(this))
+            .ToolTip = "A menu of your mod's options in the game's Mods menu, built page by page: the XML it needs, its strings and the script that reads it";
         var recent = new MenuItem { Header = "Recent projects" };
         var recents = ProjectWorkspace.Recent().Where(p => project is null || !p.Equals(project.FilePath, StringComparison.OrdinalIgnoreCase)).ToList();
         foreach (string path in recents)
@@ -1625,10 +1627,8 @@ public partial class MainWindow : Window, IMessageHost
             return item;
         }
         Add("Asset Browser", "Ctrl+Shift+A", () => _ = BrowseGameFilesAsync());
-        Add("Browse game scripts", "", () => _ = BrowseGameScriptsAsync());
         menu.Items.Add(new Separator());
         Add("Search game strings…", "Ctrl+Shift+G", OpenGameStrings);
-        Add("Stub generator…", "Ctrl+Shift+W", OpenStubGenerator);
         Add("Source inspector…", "Ctrl+Shift+I", () => SourceInspectorWindow.Open(this));
         Add("Load order analyser…", "Ctrl+Shift+L", () => LoadOrderWindow.Open(this));
         Add("View XML overrides…", "", () => XmlOverridesWindow.Open(this));
@@ -1639,10 +1639,6 @@ public partial class MainWindow : Window, IMessageHost
         Add("Key binding helper…", "", () => InputBindingsWindow.Open(this));
         Add("Hashes and IDs…", "", () => HashToolsWindow.Open(this));
         Add("CR2W and JSON…", "", () => Cr2wJsonWindow.Open(this));
-        menu.Items.Add(new Separator());
-        Add("New mod menu…", "", () => XmlWindow.OpenNewMenu(this));
-        Add("Open an XML file…", "", OpenXmlFile);
-        Add("Open a JSON file…", "", OpenJsonFile);
         menu.IsOpen = true;
     }
 
@@ -1653,18 +1649,6 @@ public partial class MainWindow : Window, IMessageHost
         .Concat(_actOn?.Select(i => i.Entry.Archive) ?? []).Distinct();
 
     /// <summary>Opens the game's own scripts (content\content0\scripts) in the file list, to read, with no project needed.</summary>
-    private async Task BrowseGameScriptsAsync()
-    {
-        string? game = GameLocator.Resolve(null);
-        string? scripts = game is null ? null : Path.Combine(game, "content", "content0", "scripts");
-        if (scripts is null || !Directory.Exists(scripts))
-        {
-            ShowError("The game folder isn't set.\n\nBrowsing the game's scripts needs The Witcher 3's folder. Set it in Settings.");
-            return;
-        }
-        await BrowseAsync([scripts], scripts);
-    }
-
     /// <summary>The asset browser, a tool window of its own: every file the game has (content0, DLC and installed mods).</summary>
     private Task BrowseGameFilesAsync()
     {
@@ -1691,38 +1675,6 @@ public partial class MainWindow : Window, IMessageHost
     {
         // without a game folder it can still read REDkit's strings database, and says so when there's neither
         GameStringsWindow.Open(this, GameLocator.Resolve(null));
-    }
-
-    private void OpenStubGenerator() => StubWindow.Open(this, GameLocator.Resolve(null));
-
-    private void BrowseGame_Click(object sender, RoutedEventArgs e) => _ = BrowseGameScriptsAsync();
-
-    private void OpenXmlFile()
-    {
-        var dialog = new OpenFileDialog
-        {
-            Title = "Open an XML file",
-            Filter = "XML (*.xml)|*.xml|All files (*.*)|*.*",
-            Multiselect = true,
-            InitialDirectory = Directory.Exists(_settings.LastOpenFolder) ? _settings.LastOpenFolder : "",
-        };
-        if (dialog.ShowDialog(this) != true) return;
-        _settings.LastOpenFolder = Path.GetDirectoryName(dialog.FileNames[0]) ?? "";
-        foreach (string path in dialog.FileNames) XmlWindow.Open(path, this);
-    }
-
-    private void OpenJsonFile()
-    {
-        var dialog = new OpenFileDialog
-        {
-            Title = "Open a JSON file",
-            Filter = "JSON (*.json)|*.json|All files (*.*)|*.*",
-            Multiselect = true,
-            InitialDirectory = Directory.Exists(_settings.LastOpenFolder) ? _settings.LastOpenFolder : "",
-        };
-        if (dialog.ShowDialog(this) != true) return;
-        _settings.LastOpenFolder = Path.GetDirectoryName(dialog.FileNames[0]) ?? "";
-        foreach (string path in dialog.FileNames) JsonWindow.Open(path, this);
     }
 
     private async Task PreviewAsync(EntryItem item)
@@ -1995,11 +1947,6 @@ public partial class MainWindow : Window, IMessageHost
         else if (Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && e.Key == Key.B && ProjectWorkspace.Current is not null)
         {
             _ = BuildModAsync();
-            e.Handled = true;
-        }
-        else if (Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && e.Key == Key.W)
-        {
-            OpenStubGenerator();
             e.Handled = true;
         }
         else if (Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && e.Key == Key.O)

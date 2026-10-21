@@ -79,7 +79,7 @@
         <!-- Toolbar -->
         <DockPanel Grid.Row="0" Margin="14,12,14,10" LastChildFill="True">
             <StackPanel Orientation="Horizontal" DockPanel.Dock="Left">
-                <Button x:Name="OpenBundlesButton" Click="OpenBundles_Click" ToolTip="Open .bundle or .rsblob files (Ctrl+O)">
+                <Button x:Name="OpenBundlesButton" Click="OpenBundles_Click" ToolTip="Open projects, bundles, compiled and loose scripts, strings, XML, JSON and the game's resource files (Ctrl+O)">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Style="{StaticResource IconText}" Text="&#xE8E5;" Margin="0,1,0,0" />
                         <TextBlock Margin="8,0,0,0" Text="Open files" VerticalAlignment="Center" />

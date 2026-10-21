@@ -17,7 +17,6 @@ keywords: keys hotkeys shortcuts keyboard
 | {{Ctrl+Shift+B}} | build your mod |
 | {{Ctrl+Shift+N}} / {{Ctrl+Shift+O}} | new project / open a project |
 | {{Ctrl+Shift+G}} | search the game's strings |
-| {{Ctrl+Shift+W}} | stub generator |
 | {{Ctrl+Shift+I}} | source inspector |
 | {{Ctrl+Shift+L}} | load order analyser |
 
@@ -45,6 +44,7 @@ keywords: keys hotkeys shortcuts keyboard
 | {{Ctrl+Z}} / {{Ctrl+Y}} | undo / redo |
 | {{Ctrl+F}} | search in the file; {{F3}} / {{Shift+F3}} next and previous match |
 | {{Ctrl+Shift+F}} | [[Find in files]] (Script Bench) |
+| {{Ctrl+Shift+W}} | [[Stub generator]], on the name at the cursor (Script Bench) |
 | {{F7}} | compile (check) your scripts |
 | {{Ctrl+Click}} or {{F12}} | go to definition |
 | {{Ctrl+Alt+Click}} or {{Ctrl+F12}} | open the definition in the other group |

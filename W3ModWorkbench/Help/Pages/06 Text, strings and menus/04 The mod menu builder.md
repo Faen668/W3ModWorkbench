@@ -7,7 +7,7 @@ keywords: mod menu options settings user_config_matrix xml builder presets toggl
 ---
 A mod's options in the game's **Mods** menu come from an XML file in `bin\config\r4game\user_config_matrix\pc`. The **menu builder** edits one with forms and writes the XML for you.
 
-**Tools > New mod menu** starts one from a small example; in the XML editor, **Menu builder** ({{Ctrl+B}}) opens it on any menu file.
+**Project > New mod menu** starts one from a small example; in the XML editor, **Menu builder** ({{Ctrl+B}}) opens it on any menu file.
 
 ![The menu builder](menu-builder.jpg)
 

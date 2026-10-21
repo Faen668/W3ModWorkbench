@@ -1076,7 +1076,7 @@ public partial class PreviewWindow : Window, IMessageHost
             : "No changes to save";
         EditButton.Visibility = CanEditAsProject(doc) ? Visibility.Visible : Visibility.Collapsed;
         var scriptTools = _isBench || doc.Item.IsScript ? Visibility.Visible : Visibility.Collapsed;
-        foreach (var tool in new UIElement[] { BackButton, ForwardButton, HistoryButton, GoToSymbolButton, FindInFilesButton, SnippetButton, BuildButton, ScriptToolsDivider })
+        foreach (var tool in new UIElement[] { BackButton, ForwardButton, HistoryButton, GoToSymbolButton, FindInFilesButton, SnippetButton, StubButton, BuildButton, ScriptToolsDivider })
             tool.Visibility = scriptTools;
         GoToSymbolButton.IsEnabled = ScriptDocument() is not null;
         SnippetButton.IsEnabled = doc.CanNavigate;
@@ -1565,6 +1565,27 @@ public partial class PreviewWindow : Window, IMessageHost
 
     private void FindInFiles_Click(object sender, RoutedEventArgs e) => FindInFiles();
 
+    private void Stub_Click(object sender, RoutedEventArgs e) => OpenStubGenerator();
+
+    /// <summary>The stub generator, searching for the name selected or at the cursor, when there's one.</summary>
+    private void OpenStubGenerator()
+    {
+        string? name = null;
+        if (Current is { } doc)
+        {
+            if (doc.SelectedText is { Length: > 0 and < 80 } selected && !selected.Contains('\n')) name = selected.Trim();
+            else
+            {
+                string text = doc.Text;
+                int start = Math.Min(doc.CaretOffset, text.Length), end = start;
+                while (start > 0 && Core.Scripts.Navigation.ScriptParser.IsWordChar(text[start - 1])) start--;
+                while (end < text.Length && Core.Scripts.Navigation.ScriptParser.IsWordChar(text[end])) end++;
+                if (end > start) name = text[start..end];
+            }
+        }
+        StubWindow.Open(this, GameLocator.Resolve(null), name);
+    }
+
     private void Snippet_Click(object sender, RoutedEventArgs e) => Current?.InsertSnippet();
 
     private void Build_Click(object sender, RoutedEventArgs e)
@@ -1638,6 +1659,8 @@ public partial class PreviewWindow : Window, IMessageHost
             ReopenClosed();
         else if (key == Key.F && mods == (ModifierKeys.Control | ModifierKeys.Shift))
             FindInFiles();
+        else if (key == Key.W && mods == (ModifierKeys.Control | ModifierKeys.Shift) && StubButton.IsVisible)
+            OpenStubGenerator();
         else if (key == Key.F4 && mods is ModifierKeys.None or ModifierKeys.Shift && Results.IsVisible)
         {
             if (Results.Step(mods == ModifierKeys.Shift ? -1 : 1) is { } row) OpenResult(row, toSide: false);
