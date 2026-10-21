@@ -78,7 +78,8 @@ public static class MetadataStore
         int String(string text)
         {
             int at = (int)strings.Length;
-            var bytes = Encoding.ASCII.GetBytes(text);
+            // UTF-8, as the game's own store has its one path that isn't ASCII
+            var bytes = ArchivePaths.Bytes(text);
             strings.Write(bytes);
             strings.WriteByte(0);
             return at;

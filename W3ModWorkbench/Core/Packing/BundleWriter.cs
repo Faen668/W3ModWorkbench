@@ -157,7 +157,7 @@ public static class BundleWriter
             for (int i = 0; i < count; i++)
             {
                 var e = table.AsSpan(i * EntrySize, EntrySize);
-                var name = Encoding.Latin1.GetBytes(packed[i].Path);
+                var name = ArchivePaths.Bytes(packed[i].Path);
                 name.AsSpan(0, Math.Min(name.Length, NameSize - 1)).CopyTo(e);
                 BinaryPrimitives.WriteInt64LittleEndian(e[0x110..], packed[i].Offset);
                 BinaryPrimitives.WriteInt32LittleEndian(e[0x118..], packed[i].Size);

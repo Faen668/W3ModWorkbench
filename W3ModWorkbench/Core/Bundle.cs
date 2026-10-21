@@ -94,7 +94,7 @@ public sealed class Bundle : IArchive
         {
             var e = toc.AsSpan(p, entrySize);
             int nameLength = e[..NameSize].IndexOf((byte)0);
-            string name = Encoding.Latin1.GetString(e[..(nameLength < 0 ? NameSize : nameLength)]);
+            string name = ArchivePaths.Read(e[..(nameLength < 0 ? NameSize : nameLength)]);
 
             ulong offset;
             uint size, packed, crc, comp;

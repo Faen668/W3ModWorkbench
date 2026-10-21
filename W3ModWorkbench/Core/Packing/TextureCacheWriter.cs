@@ -72,7 +72,7 @@ public static class TextureCacheWriter
             at = end;
 
             int nameAt = (int)names.Length;
-            names.Write(Encoding.Latin1.GetBytes(texture.Path));
+            names.Write(ArchivePaths.Bytes(texture.Path));
             names.WriteByte(0);
 
             var e = entries.AsSpan(i * EntrySize, EntrySize);

@@ -147,7 +147,7 @@ public sealed class TextureCacheArchive : IArchive
             int raw = e[48];
             if (nameOffset < 0 || nameOffset >= names.Length) continue;
             int end = Array.IndexOf(names, (byte)0, nameOffset);
-            string name = System.Text.Encoding.Latin1.GetString(names, nameOffset, (end < 0 ? names.Length : end) - nameOffset);
+            string name = ArchivePaths.Read(names.AsSpan(nameOffset, (end < 0 ? names.Length : end) - nameOffset));
             var info = new TextureInfo(width, height, Math.Max(1, mips), Math.Max(1, slices), raw, FormatOf(raw), alignment, page * PageSize, packed, unpacked)
             {
                 // a cube map's own file, or a layer's environment probe
