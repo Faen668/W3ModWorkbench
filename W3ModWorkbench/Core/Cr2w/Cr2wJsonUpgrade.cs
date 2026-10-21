@@ -286,7 +286,11 @@ public static partial class Cr2wJson
                 long low = Whole(flags) & 0xFFFF;
                 if (low == 0) node.Remove("$flags"); else node["$flags"] = (int)low;
             }
-            // the 0 an object's properties end with before 139, which later versions have before them instead
+            // the 0 an object's properties end with before 139, which later versions have before them instead; a
+            // script's arguments come before it, so there it's what's left after them
+            if (node["$end"] is JsonValue endValue && endValue.TryGetValue(out bool ended) && !ended
+                && node["$arguments"] is not null && (string?)node["$tail"] == "AA==")
+                node.Remove("$tail");
             node.Remove("$end");
             if (node["$arguments"] is JsonObject arguments && ArgumentsClass(className) is { } argumentsClass) Struct(arguments, argumentsClass, path + ".$arguments");
             if (node["$events"] is JsonArray events)
@@ -789,6 +793,7 @@ public static partial class Cr2wJson
         {
             oldClass ??= className;
             node.Remove("$marker");
+            node.Remove("$pad");
             if (className is "SSimpleCurve" or "SCurveData") Curve(node, className);
             var local = node["$types"] as JsonObject;
             var newLocal = new JsonObject();

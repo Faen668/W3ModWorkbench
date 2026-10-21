@@ -436,8 +436,10 @@ public static partial class Cr2wJson
         public readonly Dictionary<string, string> Types = new(StringComparer.Ordinal);
         /// <summary>The newer layout's writer, which keeps the names and imports itself; null for the older layout.</summary>
         public Cr2wBuilder? Builder;
-        /// <summary>Whether objects and structs start with a zero byte, and whether properties have two bytes after their type.</summary>
-        public readonly bool Marker, Pad;
+        /// <summary>Whether objects and structs start with a zero byte.</summary>
+        public readonly bool Marker;
+        /// <summary>Whether properties have two bytes after their type (a script's arguments in a few older files don't).</summary>
+        public bool Pad;
         /// <summary>Whether the version's objects can be either way about the zero byte (the newer layout, 155 on).</summary>
         public readonly bool MarkerVaries;
         /// <summary>The older layout's dependencies, which its soft references are to; null for the newer layout.</summary>
@@ -651,19 +653,28 @@ public static partial class Cr2wJson
         private JsonObject? Arguments(ref int pos, int end, string argumentsClass, string path)
         {
             int start = pos, rawValues = RawValues, rawPaths = RawPaths.Count;
-            try
+            bool pad = context.Pad;
+            // as the version keeps properties, or else (before 139) without the two bytes after each type, as a few
+            // scripts' arguments are kept (noted in the JSON, so they're written back so)
+            foreach (bool withPad in pad ? new[] { true, false } : [false])
             {
-                var node = new JsonObject();
-                Struct(node, argumentsClass, ref pos, end, path + ".$arguments", marker: false);
-                return node;
+                try
+                {
+                    context.Pad = withPad;
+                    var node = new JsonObject();
+                    if (withPad != pad) node["$pad"] = false;
+                    Struct(node, argumentsClass, ref pos, end, path + ".$arguments", marker: false);
+                    return node;
+                }
+                catch (Exception ex) when (ex is InvalidDataException or ArgumentOutOfRangeException or IndexOutOfRangeException)
+                {
+                    pos = start;
+                    RawValues = rawValues;
+                    RawPaths.RemoveRange(rawPaths, RawPaths.Count - rawPaths);
+                }
+                finally { context.Pad = pad; }
             }
-            catch (Exception ex) when (ex is InvalidDataException or ArgumentOutOfRangeException or IndexOutOfRangeException)
-            {
-                pos = start;
-                RawValues = rawValues;
-                RawPaths.RemoveRange(rawPaths, RawPaths.Count - rawPaths);
-                return null;
-            }
+            return null;
         }
 
         /// <summary>
@@ -1177,7 +1188,13 @@ public static partial class Cr2wJson
                     _out.Position = after;
                 }
             }
-            if (node["$arguments"] is JsonObject arguments) Struct(ArgumentsClass(className) ?? throw new InvalidDataException($"A {className} has no arguments."), arguments, marker: false);
+            if (node["$arguments"] is JsonObject arguments)
+            {
+                bool pad = context.Pad;
+                if (arguments["$pad"] is JsonValue p && p.TryGetValue(out bool hasPad)) context.Pad = hasPad;
+                try { Struct(ArgumentsClass(className) ?? throw new InvalidDataException($"A {className} has no arguments."), arguments, marker: false); }
+                finally { context.Pad = pad; }
+            }
             if (node["$events"] is JsonArray events)
             {
                 byte[] before = node["$eventsBefore"] is JsonValue b ? Convert.FromBase64String((string)b!) : new byte[EventsBefore(className) ?? 0];
