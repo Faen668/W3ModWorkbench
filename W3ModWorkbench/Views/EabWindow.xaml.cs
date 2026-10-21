@@ -45,8 +45,11 @@ public sealed class EabRow : INotifyPropertyChanged
     public IEnumerable<string> Removed => (Asset?.Tags ?? []).Where(t => !Tags.Contains(t));
     public bool CategoryChanged => Asset is not null && Category != Asset.Category;
 
-    /// <summary>Whether there's anything to suggest: tags added or taken off, a category changed, or a file EAB doesn't list given tags.</summary>
-    public bool Changed => Category is not null && (Added.Any() || Removed.Any() || CategoryChanged);
+    /// <summary>Whether a file EAB doesn't list is suggested for adding, with tags or without.</summary>
+    public bool Adding { get; private set; }
+
+    /// <summary>Whether there's anything to suggest: tags added or taken off, a category changed, or a file EAB doesn't list to add.</summary>
+    public bool Changed => Category is not null && (Asset is null ? Adding : Added.Any() || Removed.Any() || CategoryChanged);
 
     /// <summary>What's changed, in a few words: "+Ruin −Cave", "Meshes → Entities", "new: +Ruin".</summary>
     public string ChangeText
@@ -55,7 +58,7 @@ public sealed class EabRow : INotifyPropertyChanged
         {
             if (!Changed) return "";
             var parts = new List<string>();
-            if (Asset is null) parts.Add("new:");
+            if (Asset is null) parts.Add(Tags.Count == 0 ? "new" : "new:");
             if (CategoryChanged) parts.Add($"{Asset!.Category} → {Category}");
             parts.AddRange(Added.Order(StringComparer.OrdinalIgnoreCase).Select(t => "+" + t));
             parts.AddRange(Removed.Order(StringComparer.OrdinalIgnoreCase).Select(t => "−" + t));
@@ -73,6 +76,16 @@ public sealed class EabRow : INotifyPropertyChanged
     {
         if (on) Tags.Add(tag);
         else Tags.Remove(tag);
+        // tagging a file EAB doesn't list suggests adding it
+        if (on && Asset is null) Adding = true;
+        Notify();
+    }
+
+    /// <summary>Suggests adding a file EAB doesn't list, or stops; nothing for one it lists already.</summary>
+    public void SetAdding(bool on)
+    {
+        if (Asset is not null || Category is null) return;
+        Adding = on;
         Notify();
     }
 
@@ -81,6 +94,7 @@ public sealed class EabRow : INotifyPropertyChanged
         Category = Asset?.Category ?? EasyAssetBrowser.CategoryFor(Item.Path);
         Tags.Clear();
         Tags.UnionWith(Asset?.Tags ?? []);
+        Adding = false;
         Notify();
     }
 
@@ -162,7 +176,7 @@ public partial class EabWindow : Window
                 ListedText.Text = row.Asset is not null ? $"Listed on EasyAssetBrowser · {row.Item.Path}"
                     : row.Category is null ? $"EasyAssetBrowser lists meshes, entities, decals (.xbm), particles, communities and SpeedTree trees (.srt) for world building. "
                         + $"It has no category for {System.IO.Path.GetExtension(row.Item.Name)} files, so this one can't be tagged."
-                    : "Not listed on EasyAssetBrowser yet. Give it tags to suggest adding it.";
+                    : "Not listed on EasyAssetBrowser yet.";
                 PathText.Text = row.EabPath;
                 OriginText.Text = row.Origin;
             }
@@ -183,6 +197,16 @@ public partial class EabWindow : Window
             CategoryBox.IsEnabled = canTag;
             TagSection.Visibility = canTag ? Visibility.Visible : Visibility.Collapsed;
             OpenOnSiteButton.Visibility = picked is [{ Asset: not null }] ? Visibility.Visible : Visibility.Collapsed;
+            var unlisted = picked.Where(r => r.Asset is null && r.Category is not null).ToList();
+            AddCheck.Visibility = unlisted.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+            AddCheck.Content = unlisted.Count switch
+            {
+                1 when picked.Count == 1 => "Suggest adding it to EasyAssetBrowser",
+                1 => "Suggest adding the 1 file it doesn't list to EasyAssetBrowser",
+                var n => $"Suggest adding the {n:N0} files it doesn't list to EasyAssetBrowser",
+            };
+            int adding = unlisted.Count(r => r.Adding);
+            AddCheck.IsChecked = _addWas = adding == 0 ? false : adding == unlisted.Count ? true : null;
             FillTags(picked);
         }
         finally
@@ -233,6 +257,19 @@ public partial class EabWindow : Window
             TagPanel.Children.Add(box);
         }
     }
+
+    /// <summary>Suggests adding the files highlighted that EAB doesn't list (from some, to all of them), or stops.</summary>
+    private void AddCheck_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_filling) return;
+        // a click on a filled box (some of them) unticks it; it means all of them
+        bool on = AddCheck.IsChecked == true || (_addWas is null && AddCheck.IsChecked == false);
+        foreach (var row in Picked) row.SetAdding(on);
+        ShowPicked();
+    }
+
+    // the add box's state as last shown, to tell a click from some to all
+    private bool? _addWas;
 
     private void CategoryBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
@@ -320,39 +357,81 @@ public partial class EabWindow : Window
         if (ChangedRows is { Count: > 0 } rows) Clipboard.SetText(Json(rows));
     }
 
+    // GitHub keeps at most 65,536 characters of an issue's text
+    private const int MostIssueText = 64_000;
+
     /// <summary>
     /// Opens a new issue on EasyAssetBrowser's repository with the changes: a table of what changed, then the files as
-    /// its lists would hold them. When that's too long for a link, it goes on the clipboard to paste into the issue.
+    /// its lists would hold them; a big batch without the table, a file to a line. When that's too long for a link, it
+    /// goes on the clipboard to paste into the issue, and when it's too long for an issue, it says so.
     /// </summary>
     private void Suggest_Click(object sender, RoutedEventArgs e)
     {
         var rows = ChangedRows;
         if (rows.Count == 0) return;
-        string title = rows.Count == 1 ? $"Tag suggestion: {rows[0].Name}" : $"Tag suggestions: {rows[0].Name} and {rows.Count - 1} more";
-        var body = new StringBuilder();
-        body.AppendLine($"Suggested from W3 Mod Workbench's asset browser ({rows.Count} file{(rows.Count == 1 ? "" : "s")}).");
-        body.AppendLine();
-        body.AppendLine("| Asset | Category | Change |");
-        body.AppendLine("| --- | --- | --- |");
-        foreach (var row in rows)
-            body.AppendLine($"| `{row.EabPath}` | {row.Category} | {row.ChangeText.Replace("|", "\\|")} |");
-        body.AppendLine();
-        body.AppendLine("As the lists hold them:");
-        body.AppendLine();
-        body.AppendLine("```json");
-        body.AppendLine(Json(rows));
-        body.AppendLine("```");
+        bool allNew = rows.All(r => r.Asset is null);
+        string kind = allNew ? "Assets to add" : rows.Any(r => r.Asset is null) ? "Asset and tag suggestions" : "Tag suggestions";
+        string title = rows.Count == 1 ? $"{(allNew ? "Asset to add" : "Tag suggestion")}: {rows[0].Name}" : $"{kind}: {rows[0].Name} and {rows.Count - 1} more";
+        string intro = $"Suggested from W3 Mod Workbench's asset browser ({rows.Count} file{(rows.Count == 1 ? "" : "s")}).";
 
-        string Link(string text) => $"{EasyAssetBrowser.Repository}/issues/new?title={Uri.EscapeDataString(title)}&body={Uri.EscapeDataString(text)}";
-        string link = Link(body.ToString());
+        string text = Full();
+        if (text.Length > MostIssueText) text = Compact();
+        if (text.Length > MostIssueText)
+        {
+            int fit = rows.Count * MostIssueText / text.Length;
+            MessageBox.Show(this, $"{rows.Count:N0} files are more than one GitHub issue can hold (about {fit:N0} fit). Highlight fewer and suggest them in parts, or use Copy as JSON and send the file another way.",
+                "Suggest on GitHub", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        string Link(string body) => $"{EasyAssetBrowser.Repository}/issues/new?title={Uri.EscapeDataString(title)}&body={Uri.EscapeDataString(body)}";
+        string link = Link(text);
         // browsers and GitHub cut links off at about 8,000 characters
         if (link.Length > 7500)
         {
-            Clipboard.SetText(body.ToString());
+            Clipboard.SetText(text);
             link = Link("The suggestion is on the clipboard: paste it here (Ctrl+V), replacing this line.");
             MessageBox.Show(this, "The suggestion is too long to put in the link, so it's on the clipboard. Paste it into the issue that opens (Ctrl+V).",
                 "Suggest on GitHub", MessageBoxButton.OK, MessageBoxImage.Information);
         }
         AssetBrowserWindow.OpenLink(link);
+
+        // a table of what changed, then the files as the lists hold them
+        string Full()
+        {
+            var body = new StringBuilder();
+            body.AppendLine(intro);
+            body.AppendLine();
+            body.AppendLine("| Asset | Category | Change |");
+            body.AppendLine("| --- | --- | --- |");
+            foreach (var row in rows)
+                body.AppendLine($"| `{row.EabPath}` | {row.Category} | {row.ChangeText.Replace("|", @"\|")} |");
+            body.AppendLine();
+            body.AppendLine("As the lists hold them:");
+            body.AppendLine();
+            body.AppendLine("```json");
+            body.AppendLine(Json(rows));
+            body.AppendLine("```");
+            return body.ToString();
+        }
+
+        // only the files, a line each, for a batch the table would make too long
+        string Compact()
+        {
+            var body = new StringBuilder();
+            body.AppendLine(intro);
+            body.AppendLine();
+            body.AppendLine("As the lists hold them, a file to a line:");
+            body.AppendLine();
+            body.AppendLine("```json");
+            body.AppendLine("[");
+            for (int i = 0; i < rows.Count; i++)
+                body.AppendLine("  " + JsonSerializer.Serialize(rows[i].ToEab(), Inline) + (i < rows.Count - 1 ? "," : ""));
+            body.AppendLine("]");
+            body.AppendLine("```");
+            return body.ToString();
+        }
     }
+
+    private static readonly JsonSerializerOptions Inline = new() { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
 }

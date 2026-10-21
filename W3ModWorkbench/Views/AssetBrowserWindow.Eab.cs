@@ -19,6 +19,9 @@ public partial class AssetBrowserWindow
 
     private static EasyAssetBrowser? Eab => EasyAssetBrowser.Current;
 
+    /// <summary>The EAB category choice for files of the kinds EAB lists that it doesn't list yet.</summary>
+    private const string NotInEab = "Not in EAB";
+
     /// <summary>Reads EasyAssetBrowser's lists (from the cache, or GitHub once a day or when <paramref name="refresh"/>) and shows them.</summary>
     private async Task LoadEabAsync(bool refresh)
     {
@@ -60,7 +63,8 @@ public partial class AssetBrowserWindow
         return i =>
         {
             var asset = eab.Find(i.Path);
-            if (category is not null && asset?.Category != category) return false;
+            if (category == NotInEab) { if (asset is not null || EasyAssetBrowser.CategoryFor(i.Path) is null) return false; }
+            else if (category is not null && asset?.Category != category) return false;
             if (include.Count > 0 && (asset is null || !include.All(t => asset.Tags.Contains(t, StringComparer.OrdinalIgnoreCase)))) return false;
             return exclude.Count == 0 || asset is null || !exclude.Any(t => asset.Tags.Contains(t, StringComparer.OrdinalIgnoreCase));
         };
@@ -69,7 +73,8 @@ public partial class AssetBrowserWindow
     private IEnumerable<string> DescribeEab()
     {
         if (!_settings.EasyAssetBrowserOn || Eab is null) yield break;
-        if (_eabCategory is not null) yield return $"EAB category {_eabCategory}";
+        if (_eabCategory == NotInEab) yield return "not in EAB yet";
+        else if (_eabCategory is not null) yield return $"EAB category {_eabCategory}";
         if (_eabInclude.Count > 0) yield return "EAB tags " + string.Join(" + ", _eabInclude.Order(StringComparer.OrdinalIgnoreCase));
         if (_eabExclude.Count > 0) yield return "no EAB tag " + string.Join(" or ", _eabExclude.Order(StringComparer.OrdinalIgnoreCase));
     }
@@ -79,16 +84,19 @@ public partial class AssetBrowserWindow
     {
         if (Eab is not { } eab) return;
         var counts = new Dictionary<string, int>(StringComparer.Ordinal);
-        int any = 0;
+        int any = 0, missing = 0;
         foreach (var item in leftByOthers)
         {
             any++;
             if (eab.Find(item.Path) is { } asset) counts[asset.Category] = counts.GetValueOrDefault(asset.Category) + 1;
+            else if (EasyAssetBrowser.CategoryFor(item.Path) is not null) missing++;
         }
         // EAB's own order of its categories
         var choices = new List<ClassChoice> { new(null, any) };
         choices.AddRange(eab.Categories.Select(c => new ClassChoice(c.Name, counts.GetValueOrDefault(c.Name))));
         choices.AddRange(counts.Keys.Where(k => eab.Categories.All(c => c.Name != k)).Order().Select(k => new ClassChoice(k, counts[k])));
+        // the kinds of file EAB lists that it doesn't list yet, to suggest adding
+        choices.Add(new ClassChoice(NotInEab, missing));
         _fillingEab = true;
         try
         {

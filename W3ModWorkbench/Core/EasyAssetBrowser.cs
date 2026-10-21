@@ -170,12 +170,15 @@ public sealed class EasyAssetBrowser
     /// <summary>A game path as EasyAssetBrowser writes it, with forward slashes.</summary>
     public static string EabPath(string path) => path.Replace('\\', '/');
 
-    /// <summary>The category EasyAssetBrowser would put a file in, by its type, or null when it has none for it.</summary>
+    /// <summary>
+    /// The category EasyAssetBrowser would put a file in, by its type, or null when it has none for it. Of textures it
+    /// lists only decals, all of which are in a decals folder or named as one.
+    /// </summary>
     public static string? CategoryFor(string path) => Path.GetExtension(path).ToLowerInvariant() switch
     {
         ".w2mesh" => "Meshes",
         ".w2ent" => "Entities",
-        ".xbm" => "Decals",
+        ".xbm" when path.Contains("decal", StringComparison.OrdinalIgnoreCase) => "Decals",
         ".w2p" => "Particles",
         ".w2comm" => "Communities",
         ".srt" => "SRT Trees",
