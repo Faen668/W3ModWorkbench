@@ -234,6 +234,20 @@ public sealed class StubGenerator
         return sb.ToString();
     }
 
+    /// <summary>
+    /// The function under an annotation already typed (<c>@wrapMethod(CR4Player)</c>): its signature, and a body that
+    /// calls the original (a wrap) or is the original's (a replace), with no comment above and no annotation. The
+    /// place to type next is marked <c>$0</c>, for a snippet.
+    /// </summary>
+    public static string WriteUnderAnnotation(GameFunction f, StubKind kind)
+    {
+        string text = Write(f, kind, new Options(CommentOriginal: false));
+        text = text[(text.IndexOf('\n') + 1)..];
+        // the cursor goes where the mod's own code starts
+        int before = text.IndexOf("// runs before the original", StringComparison.Ordinal);
+        return before >= 0 ? text[..before] + "$0" + text[(before + "// runs before the original".Length)..] : text.TrimEnd('\n') + "$0";
+    }
+
     /// <summary>Takes the indentation the closing brace has off every line, so the body starts at the left margin.</summary>
     private static string Dedent(string body)
     {
