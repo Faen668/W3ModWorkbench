@@ -34,7 +34,7 @@
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" MinWidth="360" />
                 <ColumnDefinition Width="8" />
-                <ColumnDefinition Width="460" MinWidth="300" />
+                <ColumnDefinition x:Name="SideColumn" Width="460" MinWidth="300" />
             </Grid.ColumnDefinitions>
             <Grid.RowDefinitions>
                 <RowDefinition Height="*" MinHeight="200" />
@@ -102,8 +102,18 @@
 
             <GridSplitter Grid.Column="1" Grid.RowSpan="3" Width="8" HorizontalAlignment="Stretch" Background="Transparent" ResizeBehavior="PreviousAndNext" />
 
-            <!-- the node picked -->
-            <Border Grid.Column="2" Grid.RowSpan="3" Style="{StaticResource Card}">
+            <!-- a preview the kind of file has (a job tree's animations), over the node picked -->
+            <Grid Grid.Column="2" Grid.RowSpan="3">
+                <Grid.RowDefinitions>
+                    <RowDefinition x:Name="ExtraRow" Height="0" />
+                    <RowDefinition x:Name="ExtraSplitRow" Height="0" />
+                    <RowDefinition Height="*" MinHeight="160" />
+                </Grid.RowDefinitions>
+                <Border x:Name="ExtraCard" Style="{StaticResource Card}" Visibility="Collapsed">
+                    <ContentControl x:Name="ExtraHost" Margin="8" />
+                </Border>
+                <GridSplitter x:Name="ExtraSplitter" Grid.Row="1" Height="8" HorizontalAlignment="Stretch" Background="Transparent" ResizeBehavior="PreviousAndNext" Visibility="Collapsed" />
+            <Border Grid.Row="2" Style="{StaticResource Card}">
                 <DockPanel Margin="12,10,8,8">
                     <StackPanel DockPanel.Dock="Top" Margin="0,0,0,8">
                         <TextBlock x:Name="NodeTitle" FontSize="16" FontWeight="SemiBold" TextWrapping="Wrap" Text="Click a node in the tree" />
@@ -120,6 +130,7 @@
                     <local:PropertyListView x:Name="Properties" LinkClicked="Properties_LinkClicked" />
                 </DockPanel>
             </Border>
+            </Grid>
         </Grid>
 
         <TextBlock x:Name="BusyText" Text="Reading the file…" HorizontalAlignment="Center" VerticalAlignment="Center" Opacity="0.8"

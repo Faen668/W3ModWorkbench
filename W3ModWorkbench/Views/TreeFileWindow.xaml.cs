@@ -30,10 +30,15 @@ public partial class TreeFileWindow : Window, IMessageHost
     private Cr2wFile? _redkit;
     private BehTreeNode? _shown;
     private List<BehTreeNode> _matches = [];
+    // a panel the kind of file adds over the properties (a job tree's preview), told each node picked
+    private readonly Func<TreeFileWindow, ITreePreview?>? _extra;
+    private ITreePreview? _preview;
     private int _match = -1;
 
-    private TreeFileWindow(string path, string source, Func<byte[]> readData, Func<byte[], TreeDocument> read, string kind, ResourceLocator locator, string? origin)
+    private TreeFileWindow(string path, string source, Func<byte[]> readData, Func<byte[], TreeDocument> read, string kind, ResourceLocator locator, string? origin,
+        Func<TreeFileWindow, ITreePreview?>? extra = null)
     {
+        _extra = extra;
         InitializeComponent();
         _path = path;
         _source = source;
@@ -49,12 +54,20 @@ public partial class TreeFileWindow : Window, IMessageHost
     }
 
     /// <summary>Opens a tree file in a window of its own, reading it with <paramref name="read"/>.</summary>
-    public static void Open(string path, string source, byte[] data, Func<byte[], TreeDocument> read, string kind, ResourceLocator locator, Window owner, IArchive? archive = null) =>
-        new TreeFileWindow(path, source, () => data, read, kind, locator, archive?.FilePath).Standalone(owner).Show();
+    public static void Open(string path, string source, byte[] data, Func<byte[], TreeDocument> read, string kind, ResourceLocator locator, Window owner,
+        IArchive? archive = null, Func<TreeFileWindow, ITreePreview?>? extra = null) =>
+        new TreeFileWindow(path, source, () => data, read, kind, locator, archive?.FilePath, extra).Standalone(owner).Show();
 
     /// <summary>Opens a tree file on disk.</summary>
-    public static void OpenFile(string file, Func<byte[], TreeDocument> read, string kind, ResourceLocator locator, Window owner) =>
-        new TreeFileWindow(Path.GetFileName(file), file, () => File.ReadAllBytes(file), read, kind, locator, file).Standalone(owner).Show();
+    public static void OpenFile(string file, Func<byte[], TreeDocument> read, string kind, ResourceLocator locator, Window owner,
+        Func<TreeFileWindow, ITreePreview?>? extra = null) =>
+        new TreeFileWindow(Path.GetFileName(file), file, () => File.ReadAllBytes(file), read, kind, locator, file, extra).Standalone(owner).Show();
+
+    /// <summary>The locator the window reads with, for a preview to read with too.</summary>
+    public ResourceLocator Locator => _locator;
+
+    /// <summary>The file shown, once read.</summary>
+    public TreeDocument? Document => _doc;
 
     public Task ShowMessage(string? title, string message, MessageKind kind) => Message.Show(title, message, kind, primary: "OK");
 
@@ -79,6 +92,15 @@ public partial class TreeFileWindow : Window, IMessageHost
             return new { l.Name, Brush = brush };
         }).ToList();
         ShowTables(_doc.Tables);
+        if (_extra?.Invoke(this) is { } preview)
+        {
+            _preview = preview;
+            ExtraHost.Content = preview.View;
+            ExtraCard.Visibility = ExtraSplitter.Visibility = Visibility.Visible;
+            ExtraRow.Height = new GridLength(1.3, GridUnitType.Star);
+            ExtraSplitRow.Height = new GridLength(8);
+            SideColumn.Width = new GridLength(620);
+        }
         InfoText.Text = $"{_path}   ·   {_source}   ·   CR2W {_doc.File.Version}, {Format.Count(_doc.NodeCount, "node")}"
                         + (_doc.Summary.Length > 0 ? $", {_doc.Summary}" : "");
         _ = LoadRedkitAsync();
@@ -126,6 +148,13 @@ public partial class TreeFileWindow : Window, IMessageHost
         else ShowResource();
     }
 
+    /// <summary>Picks a node as clicking it does, for a preview that picks one.</summary>
+    public void Pick(BehTreeNode node)
+    {
+        Graph.Reveal(node);
+        ShowNode(node);
+    }
+
     private void FileProperties_Click(object sender, RoutedEventArgs e)
     {
         Graph.Selected = null;
@@ -147,6 +176,7 @@ public partial class TreeFileWindow : Window, IMessageHost
     private void ShowNode(BehTreeNode node)
     {
         _shown = node;
+        _preview?.Picked(node);
         NodeTitle.Text = node.Title;
         var said = new List<string> { BehTreeGraph.KindOf(node), node.Object.ClassName };
         if (node.Children.Count > 0) said.Add(Format.Count(node.Children.Count, "child", "children"));
@@ -252,4 +282,11 @@ public partial class TreeFileWindow : Window, IMessageHost
         }
         e.Handled = true;
     }
+}
+
+/// <summary>A panel a kind of tree file adds to the tree viewer (a job tree's animation preview), told each node picked.</summary>
+public interface ITreePreview
+{
+    FrameworkElement View { get; }
+    void Picked(BehTreeNode node);
 }

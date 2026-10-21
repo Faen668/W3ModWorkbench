@@ -16,14 +16,15 @@ public static class DataViewers
     private sealed record Viewer(string Kind, Func<string, bool> Shows,
         Action<string, string, byte[], ResourceLocator, Window, IArchive?> Open, Action<string, ResourceLocator, Window> OpenFile);
 
-    private static Viewer Tree(string kind, Func<string, bool> shows, Func<byte[], TreeDocument> read) => new(kind, shows,
-        (path, source, data, locator, owner, archive) => TreeFileWindow.Open(path, source, data, read, kind, locator, owner, archive),
-        (file, locator, owner) => TreeFileWindow.OpenFile(file, read, kind, locator, owner));
+    private static Viewer Tree(string kind, Func<string, bool> shows, Func<byte[], TreeDocument> read, Func<TreeFileWindow, ITreePreview?>? extra = null) => new(kind, shows,
+        (path, source, data, locator, owner, archive) => TreeFileWindow.Open(path, source, data, read, kind, locator, owner, archive, extra),
+        (file, locator, owner) => TreeFileWindow.OpenFile(file, read, kind, locator, owner, extra));
 
     private static readonly Viewer[] Viewers =
     [
         Tree("Spawn tree", SpawnTreeFile.IsSpawnTree, SpawnTreeFile.Read),
         Tree("Steering graph", SteeringFile.IsSteering, SteeringFile.Read),
+        Tree("Job tree", JobTreeFile.IsJobTree, JobTreeFile.Read, w => new JobTreePreview(w.Locator)),
         new("Community", CommunityWindow.CanShow, CommunityWindow.Open, CommunityWindow.OpenFile),
         new("Journal", JournalWindow.CanShow, JournalWindow.Open, JournalWindow.OpenFile),
     ];

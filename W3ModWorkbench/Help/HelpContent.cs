@@ -443,6 +443,16 @@ A **steering graph** is how an NPC moves towards its goal: **groups** run all th
 Both are drawn as the behaviour tree viewer draws a tree, from the root down, coloured by kind (the colours are listed under it), with a label over a node saying why its parent goes to it: a node's comment (a time of day, a quest fact), or its place among its parent's children. Drag to move, use the wheel to zoom, double-click a node to fold its branch, and **Find** (**Ctrl+F**) marks the nodes whose name, class, comment or settings have the words. Click a node to see its properties on the right (a steering task's or test's under it), and the button by **Fit** to see the file's own. Every one of REDkit's spawn trees and steering graphs reads (558).
 """),
 
+        new(Basics, "Job trees", "\uE7C1", """
+Double-click a `.w2job`, or select it and press **Enter**, to open it in the job tree viewer. A job tree is what an NPC does at an action point: nodes that run their children in order (**sequence**) or pick one at random, some times over or looping, with the **actions** they play on entering, leaving and being made to leave in a hurry. Each action is an animation of its job category's set (`quest_man`, `work_woman`…), at a place, with an item in hand maybe.
+
+The tree is drawn as the behaviour tree viewer draws one: nodes say how they run and for which categories, actions their animation and where, labelled **enter**, **leave** or **fast leave**. Click one for its properties under the tree; with none picked (or with the button by **Fit**), the job tree's own settings show: how the NPC moves to it, and what happens to what it holds.
+
+Above the properties a character plays the action picked, in 3D, as REDkit's job tree editor previews it: from its category's animation set (the game's table of them, `gameplay\globals\animations.csv`), on a man, a woman, a child or a dwarf as the category is for, or the one picked in **Preview on**. When the game's copy of the set hasn't got the animation, the other categories' sets are looked in, and it says where it was found. Beside it is the category's set: pick another category, narrow the list by some letters, and click any animation to play it. Play, pause, drag to any moment and change the speed under the view.
+
+Every one of REDkit's job trees reads (1,057).
+"""),
+
         new(Basics, "Communities", "\uE716", """
 Double-click a `.w2comm`, or select it and press **Enter**, to open it in the community viewer. One a property refers to opens from the other viewers too, and a file on disk opens from **Open files** or by dropping it on the window.
 
