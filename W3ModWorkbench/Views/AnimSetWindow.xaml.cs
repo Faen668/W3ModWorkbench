@@ -131,26 +131,28 @@ public partial class AnimSetWindow : Window, IMessageHost
     /// </summary>
     private int PickEntity()
     {
-        // a file opened from a folder is known by its whole path, the game's folders in it
-        var words = (_diskFile ?? _path).ToLowerInvariant().Split(['\\', '/'], StringSplitOptions.RemoveEmptyEntries);
-        var folders = words.Take(words.Length - 1).ToList();
-        bool Has(string w) => folders.Any(f => f == w || f.StartsWith(w + "_", StringComparison.Ordinal));
-        if (Has("geralt") || Has("player")) return 0;
-        if (Has("woman") || Has("women")) return 2;
-        if (Has("child") || Has("children")) return 3;
-        if (Has("dwarf")) return 4;
-        if (Has("man") || Has("men") || Has("npc") || Has("community")) return 1;
-        // a creature's: the deepest folder that isn't a generic one, found among the creatures' templates
-        var generic = new HashSet<string> { "animations", "monsters", "animals", "combat", "exploration", "gameplay", "quest", "work", "community", "cutscenes", "scenes", "dlc" };
-        var entities = _locator.AllPaths(".w2ent");
-        foreach (var folder in folders.AsEnumerable().Reverse().Where(f => !generic.Contains(f) && f.Length > 2))
+        // the words of its game path, folders and name (man_geralt_carry_item: man, geralt, carry, item)
+        var folders = GamePath().ToLowerInvariant().Split(['\\', '/'], StringSplitOptions.RemoveEmptyEntries).ToList();
+        var words = folders.SelectMany(f => Path.GetFileNameWithoutExtension(f).Split('_', StringSplitOptions.RemoveEmptyEntries)).ToHashSet();
+        if (words.Contains("geralt") || words.Contains("player") || words.Contains("ger")) return 0;
+        if (words.Contains("woman") || words.Contains("women")) return 2;
+        if (words.Contains("child") || words.Contains("children") || words.Contains("kid")) return 3;
+        if (words.Contains("dwarf")) return 4;
+        // a creature's set (animations\animals\bear, animations\monsters\wolf): a creature's template named as its folder is
+        int kind = folders.FindIndex(f => f is "monsters" or "animals");
+        if (kind >= 0 && kind + 1 < folders.Count - 1)
         {
-            var found = entities.Where(e => e.Contains(@"characters\npc_entities", StringComparison.OrdinalIgnoreCase)
-                    && Path.GetFileNameWithoutExtension(e).Contains(folder, StringComparison.OrdinalIgnoreCase))
+            string creature = folders[kind + 1];
+            var found = _locator.AllPaths(".w2ent")
+                .Where(e => e.StartsWith(@"characters\npc_entities\monsters\", StringComparison.OrdinalIgnoreCase) || e.StartsWith(@"characters\npc_entities\animals\", StringComparison.OrdinalIgnoreCase))
+                .Where(e => Path.GetFileNameWithoutExtension(e).Split('_').Contains(creature, StringComparer.OrdinalIgnoreCase)
+                    || e.Contains($@"\{creature}\", StringComparison.OrdinalIgnoreCase))
                 .OrderBy(e => e.Length).FirstOrDefault();
-            if (found is null) continue;
-            _entities.Add((Path.GetFileNameWithoutExtension(found), found));
-            return _entities.Count - 1;
+            if (found is not null)
+            {
+                _entities.Add((Path.GetFileNameWithoutExtension(found), found));
+                return _entities.Count - 1;
+            }
         }
         return 1;
     }

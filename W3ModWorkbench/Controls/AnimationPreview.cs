@@ -48,7 +48,12 @@ public sealed class AnimationPreview : Grid
     private CancellationTokenSource? _load;
     private int _animationVersion;
 
-    private sealed record Posing(Skeleton Rig, Matrix4x4[] Rest, List<MeshFile> Meshes, List<(int Bone, bool ByName)[]> Maps);
+    /// <summary>
+    /// What poses the entity: its rig, the rig's resting pose, each mesh with its bones mapped onto the rig, where each is
+    /// placed, and the bone a rigid piece hangs on (a sword on its slot) with where it is on it, or -1 for one that's skinned.
+    /// </summary>
+    private sealed record Posing(Skeleton Rig, Matrix4x4[] Rest, List<MeshFile> Meshes, List<(int Bone, bool ByName)[]> Maps,
+        List<Matrix4x4> Places, List<(int Bone, Matrix4x4 Offset)> AttachedTo);
 
     private bool _showBones, _showNames;
     private string? _traced;
@@ -201,14 +206,27 @@ public sealed class AnimationPreview : Grid
             var look = await Task.Run(() => entity.Look(appearance, locator.ReadFile), token);
             var (parts, drawnBy, _, _) = await Task.Run(() => EntityWindow.ReadMeshes(look, locator, token), token);
             if (token.IsCancellationRequested) return;
-            var coloured = parts.Select((part, p) => (part.Mesh, LookTextures.Coloring(entity, appearance?.Name, drawnBy[p].Name))).ToList();
+            var coloredBy = parts.Select(_ => (Entity: entity, Appearance: appearance?.Name)).ToList();
+            var attachedTo = parts.Select(_ => (Bone: -1, Offset: Matrix4x4.Identity)).ToList();
+            // the player's entity has only a neck seam of its own, as the game dresses him in what's equipped: he's
+            // dressed in his default gear, his swords on their slots, as a cutscene shows him
+            string? bodyRig = null;
+            if (CutsceneCast.IsPlayer(path))
+                bodyRig = await Task.Run(() =>
+                {
+                    if (BodyRig(look, locator) is not { } body) return null;
+                    CutsceneCast.Dress(entity, look, body.Rig, locator, parts, drawnBy, coloredBy, attachedTo, token);
+                    return body.Path;
+                }, token);
+            if (token.IsCancellationRequested) return;
+            var coloured = parts.Select((part, p) => (part.Mesh, LookTextures.Coloring(coloredBy[p].Entity, coloredBy[p].Appearance, drawnBy[p].Name))).ToList();
             var progress = new Progress<(int Done, int Total)>(n => { if (!token.IsCancellationRequested && n.Total > 0) Message = $"Loading textures, {n.Done} of {n.Total}…"; });
             var textures = await StageTextures.LoadAsync(coloured, locator, Texture, progress, token);
             if (token.IsCancellationRequested) return;
             _view.ShowParts(parts, textures);
             _view.FitToView();
             _travel = null;
-            _posing = await Task.Run(() => FindRig(look, parts.Select(p => p.Mesh).ToList(), locator), token);
+            _posing = await Task.Run(() => FindRig(look, parts, attachedTo, locator, bodyRig), token);
             // the sets the template and those it includes name, as a scene finds them
             EntityAnimsets = (await Task.Run(() => SceneStage.AnimationSets(path, locator), token)).Order(StringComparer.OrdinalIgnoreCase).ToList();
             _from = null;
@@ -226,10 +244,46 @@ public sealed class AnimationPreview : Grid
         }
     }
 
-    /// <summary>The rig most of the meshes' bones are named in, among those the look's components use, ready to pose them.</summary>
-    private static Posing? FindRig(EntityLook look, List<MeshFile> meshes, ResourceLocator locator)
+    /// <summary>The rig of the body a look's components use (not a dangling cloak's or hair's), or a man's.</summary>
+    private static (string Path, Skeleton Rig)? BodyRig(EntityLook look, ResourceLocator locator)
     {
+        var rigs = look.Components.Where(c => !c.ClassName.Contains("Dangle", StringComparison.Ordinal)).SelectMany(c => c.Resources)
+            .Where(r => r.EndsWith(".w2rig", StringComparison.OrdinalIgnoreCase)).Append(BaseRigs[0]);
+        foreach (var path in rigs)
+            try
+            {
+                if (locator.ReadFile(path) is { } data) return (path, Skeleton.Read(data));
+            }
+            catch (InvalidDataException)
+            {
+            }
+        return null;
+    }
+
+    /// <summary>
+    /// The rig most of the meshes' bones are named in, among those the look's components use (or the one given, the body's
+    /// the player is dressed on, with the small rigs hung on it), ready to pose them.
+    /// </summary>
+    private static Posing? FindRig(EntityLook look, List<(MeshFile Mesh, Matrix4x4 Place)> parts, List<(int Bone, Matrix4x4 Offset)> attachedTo, ResourceLocator locator, string? only)
+    {
+        var meshes = parts.Select(p => p.Mesh).ToList();
+        var places = parts.Select(p => p.Place).ToList();
         if (!meshes.Any(m => m.BoneNames.Length > 0)) return null;
+        if (only is not null)
+        {
+            try
+            {
+                if (locator.ReadFile(only) is not { } data) return null;
+                var body = SceneStage.WithCarriedRigs(Skeleton.Read(data), look, locator);
+                var bodyRest = new Matrix4x4[body.Count];
+                body.ToModel(body.Pose, bodyRest);
+                return new Posing(body, bodyRest, meshes, meshes.Select(m => Skinning.MapBones(m, body, bodyRest)).ToList(), places, attachedTo);
+            }
+            catch (InvalidDataException)
+            {
+                return null;
+            }
+        }
         static bool IsRig(string r) => r.EndsWith(".w2rig", StringComparison.OrdinalIgnoreCase);
         var rigs = look.Components.Where(c => !c.ClassName.Contains("Dangle", StringComparison.Ordinal)).SelectMany(c => c.Resources).Where(IsRig)
             .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
@@ -249,7 +303,7 @@ public sealed class AnimationPreview : Grid
                 if (named <= bestNamed) continue;
                 var rest = new Matrix4x4[rig.Count];
                 rig.ToModel(rig.Pose, rest);
-                (best, bestNamed) = (new Posing(rig, rest, meshes, meshes.Select(m => Skinning.MapBones(m, rig, rest)).ToList()), named);
+                (best, bestNamed) = (new Posing(rig, rest, meshes, meshes.Select(m => Skinning.MapBones(m, rig, rest)).ToList(), places, attachedTo), named);
             }
             catch (InvalidDataException)
             {
@@ -545,7 +599,18 @@ public sealed class AnimationPreview : Grid
         _posed = model;
         if (_showBones || _showNames) DrawSkeleton();
         var bones = posing.Meshes.Select((m, i) => Skinning.BoneMatrices(m, posing.Maps[i], posing.Rest, model)).ToList();
-        _view.Pose((part, chunk) => part < bones.Count ? Skinning.Pose(chunk, bones[part]) : null);
+        _view.Pose((part, chunk) =>
+        {
+            if (part >= bones.Count) return null;
+            var (hung, offset) = part < posing.AttachedTo.Count ? posing.AttachedTo[part] : (-1, Matrix4x4.Identity);
+            if (hung < 0 || hung >= model.Length) return Skinning.Pose(chunk, bones[part]);
+            // a piece on a slot goes where the slot is on its bone, the view placing it as it places the part
+            var place = posing.Places[part];
+            var moved = place * offset * model[hung] * (Matrix4x4.Invert(place, out var back) ? back : Matrix4x4.Identity);
+            var positions = new Vector3[chunk.Positions.Length];
+            for (int v = 0; v < positions.Length; v++) positions[v] = Vector3.Transform(chunk.Positions[v], moved);
+            return positions;
+        });
         _timeText.Text = $"{time,5:0.00} / {clip.Duration:0.00} s";
         _scrubbing = true;
         _scrub.Value = time;
