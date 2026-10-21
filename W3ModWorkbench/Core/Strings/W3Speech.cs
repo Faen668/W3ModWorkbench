@@ -163,13 +163,26 @@ public static class WwiseOpus
         if (fmt < 0 || data < 0 || seek < 0 || fmtSize < 0x22) throw new InvalidDataException("The sound is missing a part it needs.");
         var f = riff.AsSpan(fmt, fmtSize);
         if (BinaryPrimitives.ReadUInt16LittleEndian(f) != 0x3041) throw new InvalidDataException($"The sound's codec ({BinaryPrimitives.ReadUInt16LittleEndian(f):X4}) isn't Wwise Opus.");
-        int channels = Math.Clamp((int)BinaryPrimitives.ReadUInt16LittleEndian(f[2..]), 1, 2);
+        int channels = Math.Clamp((int)BinaryPrimitives.ReadUInt16LittleEndian(f[2..]), 1, 8);
         int total = BinaryPrimitives.ReadInt32LittleEndian(f[0x18..]);
         int packets = BinaryPrimitives.ReadInt32LittleEndian(f[0x1C..]);
         int skip = BinaryPrimitives.ReadUInt16LittleEndian(f[0x20..]);
         if (packets <= 0 || packets * 2 > seekSize) throw new InvalidDataException("The sound's packet list is cut short.");
 
-        var decoder = Concentus.OpusCodecFactory.CreateDecoder(SampleRate, channels);
+        // more than two channels are several Opus streams in each packet, laid out as Opus's channel mapping family 1
+        // lays them out (the Vorbis order); they're put back in the usual order after
+        Func<byte[], int, int, short[], int> decode;
+        if (channels <= 2)
+        {
+            var decoder = Concentus.OpusCodecFactory.CreateDecoder(SampleRate, channels);
+            decode = (d, at, size, frame) => decoder.Decode(d.AsSpan(at, size), frame, 5760, false);
+        }
+        else
+        {
+            var (streams, coupled, mapping) = VorbisLayouts[channels - 1];
+            var decoder = Concentus.OpusCodecFactory.CreateMultiStreamDecoder(SampleRate, channels, streams, coupled, mapping);
+            decode = (d, at, size, frame) => decoder.DecodeMultistream(d.AsSpan(at, size), frame, 5760, false);
+        }
         var output = new List<short>(Math.Max(0, total) * channels + 5760 * channels);
         var frame = new short[5760 * channels];
         int read = data;
@@ -177,15 +190,42 @@ public static class WwiseOpus
         {
             int size = BinaryPrimitives.ReadUInt16LittleEndian(riff.AsSpan(seek + i * 2));
             if (read + size > data + dataSize) break;
-            int samples = decoder.Decode(riff.AsSpan(read, size), frame, 5760, false);
+            int samples = decode(riff, read, size, frame);
             output.AddRange(frame.AsSpan(0, samples * channels).ToArray());
             read += size;
+        }
+        if (channels > 2 && WaveOrder[channels - 1] is { } order)
+        {
+            // from the Vorbis order (FL C FR …) to the usual one (FL FR C LFE …)
+            var span = System.Runtime.InteropServices.CollectionsMarshal.AsSpan(output);
+            var copy = new short[channels];
+            for (int at = 0; at + channels <= span.Length; at += channels)
+            {
+                span.Slice(at, channels).CopyTo(copy);
+                for (int c = 0; c < channels; c++) span[at + c] = copy[order[c]];
+            }
         }
         // the encoder's delay is skipped, and the end trimmed to the sound's length
         int start = Math.Min(skip * channels, output.Count);
         int length = total > 0 ? Math.Min(total * channels, output.Count - start) : output.Count - start;
         return (output.GetRange(start, length).ToArray(), channels);
     }
+
+    /// <summary>Opus's layouts of one to eight channels (mapping family 1): its streams, how many are stereo, and each channel's place.</summary>
+    private static readonly (int Streams, int Coupled, byte[] Mapping)[] VorbisLayouts =
+    [
+        (1, 0, [0]), (1, 1, [0, 1]), (2, 1, [0, 2, 1]), (2, 2, [0, 1, 2, 3]), (3, 2, [0, 4, 1, 2, 3]),
+        (4, 2, [0, 4, 1, 2, 3, 5]), (4, 3, [0, 4, 1, 2, 3, 5, 6]), (5, 3, [0, 6, 1, 2, 3, 4, 5, 7]),
+    ];
+
+    /// <summary>
+    /// For each count of channels, which Vorbis-ordered channel goes in each place of the usual order: 3 is FL C FR to
+    /// FL FR C, 5.1 is FL C FR BL BR LFE to FL FR C LFE BL BR, 7.1 FL C FR SL SR BL BR LFE to FL FR C LFE BL BR SL SR.
+    /// </summary>
+    private static readonly int[]?[] WaveOrder =
+    [
+        null, null, [0, 2, 1], null, [0, 2, 1, 3, 4], [0, 2, 1, 5, 3, 4], [0, 2, 1, 6, 5, 3, 4], [0, 2, 1, 7, 5, 6, 3, 4],
+    ];
 
     /// <summary>Samples as a 16-bit PCM WAV file, which Windows can play as it is.</summary>
     public static byte[] ToWav(short[] samples, int channels, int rate = SampleRate)

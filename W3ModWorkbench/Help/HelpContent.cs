@@ -506,7 +506,7 @@ The game's sounds are in the Asset Browser's game files: the sound cache's banks
 - **A bank** lists every sound it plays or keeps, kept in it or streamed, with its codec, channels, length and size: click one to play it, or right-click to open it in a window of its own. **Objects** counts its objects by kind (sounds, events, actions, containers, music tracks, buses…) and its sections.
 - **Save as WAV** saves the sound as a WAV file anything can play; **Save .wem** saves it as the game keeps it.
 
-Wwise Opus and PCM sounds play: every voice line, most of the sounds the banks keep and some of the streamed ones. Wwise Vorbis sounds (much of the music and some effects) show their details but don't play yet.
+Every sound plays, Wwise Opus and Wwise Vorbis alike (surround sounds mixed down to stereo): of the game's 90,995 sounds, 90,926 play at their exact lengths. The 69 that don't are the controller's vibration waveforms in `fx_haptic.bnk` (PTADPCM), which show their details. A bank's sound kept in another bank (a media bank) is played from there; one a bank keeps only the start of, to begin it at once, is played whole from the sound cache.
 """),
 
         new(Basics, "Communities", "\uE716", """

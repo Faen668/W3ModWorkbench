@@ -326,15 +326,16 @@ public partial class SoundWindow : Window, IMessageHost
             foreach (var sound in bank.Sounds)
             {
                 if (!seen.Add(sound.SourceId)) continue;
-                if (bank.Embedded.ContainsKey(sound.SourceId))
-                {
-                    list.Add(new SoundRow(sound.SourceId, sound, true, null, sound.Kind, Info(bank.EmbeddedSound(sound.SourceId))));
-                    continue;
-                }
+                // a streamed sound first: a bank may keep the start of one too, to begin it at once, but only the start
                 string streamed = $"{sound.SourceId}.wem";
                 if (caches.FirstOrDefault(c => c.Has(streamed)) is { } cache)
                 {
                     list.Add(new SoundRow(sound.SourceId, sound, false, null, sound.Kind, Info(cache.ReadHead(streamed))));
+                    continue;
+                }
+                if (bank.Embedded.ContainsKey(sound.SourceId))
+                {
+                    list.Add(new SoundRow(sound.SourceId, sound, true, null, sound.Kind, Info(bank.EmbeddedSound(sound.SourceId))));
                     continue;
                 }
                 string? other = index?.KeptIn.GetValueOrDefault(sound.SourceId);

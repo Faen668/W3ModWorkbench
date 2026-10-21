@@ -42,6 +42,8 @@
     <EmbeddedResource Include="Core\Scripts\Standalone\rtti.txt.gz" LogicalName="W3ModWorkbench.Core.Scripts.Standalone.rtti.txt.gz" />
     <!-- The game's script classes and the class each extends, from the vanilla scripts: what an object of a script class is -->
     <EmbeddedResource Include="Core\Cr2w\scriptclasses.txt.gz" LogicalName="W3ModWorkbench.Core.Cr2w.scriptclasses.txt.gz" />
+    <!-- ww2ogg's library of the aoTuV 6.03 Vorbis codebooks Wwise numbers (BSD, https://github.com/hcs64/ww2ogg) -->
+    <EmbeddedResource Include="Assets\Sounds\packed_codebooks_aoTuV_603.bin" LogicalName="W3ModWorkbench.Assets.Sounds.packed_codebooks_aoTuV_603.bin" />
   </ItemGroup>
 
   <ItemGroup>
@@ -52,6 +54,7 @@
     <!-- Direct3D 11 viewport the 3D views draw with: normal maps, per-pixel light, blended hair (MIT) -->
     <PackageReference Include="HelixToolkit.Wpf.SharpDX" Version="3.1.2" />
     <PackageReference Include="NAudio.WinMM" Version="2.2.1" />
+    <PackageReference Include="NVorbis" Version="0.10.5" />
   </ItemGroup>
 
   <!-- Ship the licence, notices and readme next to the exe -->

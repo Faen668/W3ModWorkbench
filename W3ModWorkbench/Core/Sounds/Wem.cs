@@ -266,11 +266,11 @@ public sealed class SoundBank
     }
 }
 
-/// <summary>Turns a Wwise sound into samples to play, for the codecs the tool reads: Wwise Opus and PCM.</summary>
+/// <summary>Turns a Wwise sound into samples to play, for the codecs the tool reads: Wwise Opus, Wwise Vorbis and PCM.</summary>
 public static class SoundDecoder
 {
     /// <summary>Whether a codec can be played.</summary>
-    public static bool CanPlay(ushort codec) => codec is 0x3041 or 0x0001 or 0xFFFE;
+    public static bool CanPlay(ushort codec) => codec is 0x3041 or 0xFFFF or 0x0001 or 0xFFFE;
 
     /// <summary>The sound's samples, its channels interleaved, and its rate. Throws for a codec it doesn't read.</summary>
     public static (short[] Samples, int Channels, int Rate) Decode(byte[] riff, WemInfo info)
@@ -280,6 +280,18 @@ public static class SoundDecoder
             case 0x3041:
                 var (samples, channels) = WwiseOpus.Decode(riff);
                 return (samples, channels, WwiseOpus.SampleRate);
+            case 0xFFFF:
+            {
+                // rebuilt as Ogg Vorbis, then decoded as any Vorbis is
+                using var reader = new NVorbis.VorbisReader(new MemoryStream(WwiseVorbis.ToOgg(riff)), true);
+                int count = reader.Channels;
+                var output = new List<short>((int)Math.Min(int.MaxValue / 2, Math.Max(0, info.Samples) * count + 4096));
+                var buffer = new float[4096 * count];
+                int read;
+                while ((read = reader.ReadSamples(buffer, 0, buffer.Length)) > 0)
+                    for (int i = 0; i < read; i++) output.Add((short)Math.Clamp(buffer[i] * 32767f, short.MinValue, short.MaxValue));
+                return ([.. output], count, reader.SampleRate);
+            }
             case 0x0001 or 0xFFFE when info.BitsPerSample == 16:
                 var data = info.Chunks.First(c => c.Id == "data");
                 var pcm = new short[data.Size / 2];

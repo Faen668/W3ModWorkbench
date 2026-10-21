@@ -186,6 +186,76 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTI
 USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
+## Wwise Vorbis rebuilding: ww2ogg by Adam Gashlin
+
+Wwise's Vorbis sounds are rebuilt as standard Ogg Vorbis by a C# port of ww2ogg's rebuilding (`Core/Sounds/WwiseVorbis.cs`), with ww2ogg's library of the aoTuV 6.03 codebooks Wwise numbers (`packed_codebooks_aoTuV_603.bin`) included unchanged.
+
+- Project: https://github.com/hcs64/ww2ogg
+- Licence: BSD 3-clause
+
+```
+Copyright (c) 2002, Xiph.org Foundation
+Copyright (c) 2009-2016, Adam Gashlin
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions
+are met:
+
+- Redistributions of source code must retain the above copyright
+notice, this list of conditions and the following disclaimer.
+
+- Redistributions in binary form must reproduce the above copyright
+notice, this list of conditions and the following disclaimer in the
+documentation and/or other materials provided with the distribution.
+
+- Neither the name of the Xiph.org Foundation nor the names of its
+contributors may be used to endorse or promote products derived from
+this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+A PARTICULAR PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION
+OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+```
+
+## NVorbis
+
+The rebuilt Ogg Vorbis sounds are decoded with NVorbis.
+
+- Project: https://github.com/NVorbis/NVorbis
+- Licence: MIT
+
+```
+MIT License
+
+Copyright (c) 2020 Andrew Ward
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
 ## Helix Toolkit
 
 The 3D views (meshes, entities, cutscenes, scenes and the preview pane) draw with Helix Toolkit's Direct3D 11 viewport for WPF, `HelixToolkit.Wpf.SharpDX`, with its `HelixToolkit`, `HelixToolkit.SharpDX`, `HelixToolkit.Geometry` and `HelixToolkit.Maths` libraries. It brings SharpDX (MIT, http://sharpdx.org) and the .NET Community Toolkit (`CommunityToolkit.Mvvm`, `.Common`, `.Diagnostics`; MIT, https://github.com/CommunityToolkit/dotnet) with it.
