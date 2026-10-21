@@ -774,7 +774,7 @@ public static class SceneStage
     /// The animation sets an entity template names, and those of the templates it includes: the dialog sets first, as a
     /// scene's animations are mostly in them. A face's sets are left out, as they move the face's own rig.
     /// </summary>
-    private static List<string> AnimationSets(string template, ResourceLocator locator)
+    public static List<string> AnimationSets(string template, ResourceLocator locator)
     {
         var found = new List<string>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

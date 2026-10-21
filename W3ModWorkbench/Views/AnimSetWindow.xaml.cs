@@ -109,6 +109,7 @@ public partial class AnimSetWindow : Window, IMessageHost
             + $", {set.Animations.Sum(a => a.Duration):0.#} s in all";
         SetNote.Text = "Reading the events files it names…";
         ShowAnimations();
+        ShowBlendChoices();
         FileProperties.Show(PropertyRow.Of(set.Resource, set.File));
         _ = LoadRedkitAsync();
         _ = LoadOutsideEventsAsync();
@@ -159,7 +160,157 @@ public partial class AnimSetWindow : Window, IMessageHost
         if (EntityBox.SelectedIndex < 0) return;
         await Preview.LoadEntityAsync(_entities[EntityBox.SelectedIndex].Path, _locator);
         ShowBones();
+        ShowEntitySets();
+        await ApplyBlendAsync();
         if (_animation is { } playing) await PlayAsync(playing);
+    }
+
+    private sealed record SetItem(string Path, bool This)
+    {
+        public FontWeight Weight => This ? FontWeights.SemiBold : FontWeights.Normal;
+        public string Note => This ? "this set" : "";
+    }
+
+    /// <summary>The animation sets the character plays from, as REDkit's Entity AnimSets tab lists them, this one marked.</summary>
+    private void ShowEntitySets()
+    {
+        string who = EntityBox.SelectedIndex >= 0 ? _entities[EntityBox.SelectedIndex].Name : "The character";
+        var sets = Preview.EntityAnimsets;
+        string own = GamePath();
+        bool has = sets.Any(s => s.Equals(own, StringComparison.OrdinalIgnoreCase));
+        EntitySetsTab.Header = $"Character's sets ({sets.Count:N0})";
+        EntitySetsTitle.Text = $"The animation sets {who} plays from";
+        EntitySetsNote.Text = sets.Count == 0 ? $"{who}'s templates name no animation sets; its behaviours bring theirs."
+            : (has ? "This set is one of them." : "This set isn't one of them: in the game the character plays its animations only when a behaviour or a scene brings it.")
+              + " Double-click one to open it.";
+        EntitySetsList.ItemsSource = sets.Select(s => new SetItem(s, s.Equals(own, StringComparison.OrdinalIgnoreCase))).ToList();
+    }
+
+    /// <summary>The set's path in the game's files: as opened, or below the content folder of a file opened from a folder.</summary>
+    private string GamePath()
+    {
+        if (_diskFile is null) return _path;
+        string full = _diskFile.Replace('/', '\\');
+        foreach (var root in new[] { @"\r4data\", @"\content\", @"\files\" })
+        {
+            int at = full.IndexOf(root, StringComparison.OrdinalIgnoreCase);
+            if (at >= 0) return full[(at + root.Length)..];
+        }
+        return _path;
+    }
+
+    private void OpenSet(string path) => _ = DataViewers.OpenLinkAsync(path, _locator, this, this);
+
+    private void EntitySetsList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        if (EntitySetsList.SelectedItem is SetItem item) OpenSet(item.Path);
+    }
+
+    private void EntitySetsList_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter || EntitySetsList.SelectedItem is not SetItem item) return;
+        OpenSet(item.Path);
+        e.Handled = true;
+    }
+
+    private void OpenEntitySet_Click(object sender, RoutedEventArgs e)
+    {
+        if (EntitySetsList.SelectedItem is SetItem item) OpenSet(item.Path);
+    }
+
+    private void CopyEntitySet_Click(object sender, RoutedEventArgs e)
+    {
+        if (EntitySetsList.SelectedItem is SetItem item) Copy(item.Path);
+    }
+
+    private const string NoBlend = "(no blending)", RestPose = "(the pose it rests in)";
+
+    /// <summary>
+    /// What the animations blend from: the set's idle when it has one, as a character stands in it before it acts, at
+    /// REDkit's 0.2 seconds; else none.
+    /// </summary>
+    private void ShowBlendChoices()
+    {
+        var names = _set!.Animations.Select(a => a.Name).Order(StringComparer.OrdinalIgnoreCase).ToList();
+        string? idle = names.Where(n => n.Contains("idle", StringComparison.OrdinalIgnoreCase) && !n.Contains("additive", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(n => n.Length).FirstOrDefault();
+        _syncing = true;
+        BlendBox.ItemsSource = new[] { NoBlend, RestPose }.Concat(names).ToList();
+        BlendBox.SelectedItem = idle ?? NoBlend;
+        _syncing = false;
+    }
+
+    /// <summary>Seconds typed in a box (a point or the machine's own decimal mark, an "s" after it or not), or null.</summary>
+    private static float? Seconds(TextBox box)
+    {
+        string text = box.Text.Trim().TrimEnd('s', 'S').Trim();
+        return float.TryParse(text, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var v) || float.TryParse(text, out v)
+            ? Math.Clamp(v, 0, 10) : null;
+    }
+
+    /// <summary>Gives the preview what the blending fields say.</summary>
+    private async Task ApplyBlendAsync()
+    {
+        string choice = BlendBox.SelectedItem as string ?? NoBlend;
+        bool blend = choice != NoBlend;
+        BlendInBox.IsEnabled = BlendOutBox.IsEnabled = blend;
+        Preview.BlendIn = blend ? Seconds(BlendInBox) ?? 0.2f : 0;
+        Preview.BlendOut = blend ? Seconds(BlendOutBox) ?? 0.2f : 0;
+        bool fromAnimation = choice is not (NoBlend or RestPose);
+        if (!await Preview.BlendFromAsync(fromAnimation ? _path : null, fromAnimation ? choice : null))
+            Preview.Message = $"{choice} can't be blended from: it's for another skeleton or can't be read.";
+    }
+
+    private void BlendBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!_syncing) _ = ApplyBlendAsync();
+    }
+
+    private void BlendBox_LostFocus(object sender, RoutedEventArgs e) => _ = ApplyBlendAsync();
+
+    private void BlendText_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter) return;
+        _ = ApplyBlendAsync();
+        e.Handled = true;
+    }
+
+    private void LoopCheck_Click(object sender, RoutedEventArgs e)
+    {
+        Preview.Loop = LoopCheck.IsChecked == true;
+        if (Preview.Loop && !Preview.IsPlaying) Preview.Play();
+    }
+
+    private static void Copy(string text)
+    {
+        try { Clipboard.SetText(text); }
+        catch (System.Runtime.InteropServices.COMException) { }
+    }
+
+    private void AnimationGrid_ContextMenuOpening(object sender, ContextMenuEventArgs e)
+    {
+        BlendFromMenu.IsEnabled = AnimationGrid.SelectedItem is AnimationItem;
+        int files = _set?.EventFiles.Count ?? 0;
+        OpenEventsMenu.IsEnabled = files > 0;
+        OpenEventsMenu.Header = files == 1 ? $"Open {Path.GetFileName(_set!.EventFiles[0])}" : "Open the events files";
+    }
+
+    private void CopyName_Click(object sender, RoutedEventArgs e)
+    {
+        if (AnimationGrid.SelectedItem is AnimationItem item) Copy(item.Name);
+    }
+
+    private void CopyNames_Click(object sender, RoutedEventArgs e) =>
+        Copy(string.Join(Environment.NewLine, AnimationGrid.Items.OfType<AnimationItem>().Select(i => i.Name)));
+
+    private void BlendFromThis_Click(object sender, RoutedEventArgs e)
+    {
+        if (AnimationGrid.SelectedItem is AnimationItem item) BlendBox.SelectedItem = item.Name;
+    }
+
+    private void OpenEvents_Click(object sender, RoutedEventArgs e)
+    {
+        foreach (var file in _set?.EventFiles ?? []) OpenSet(file);
     }
 
     /// <summary>The bones of the character's rig, to trace one of.</summary>
@@ -339,6 +490,21 @@ public partial class AnimSetWindow : Window, IMessageHost
             return;
         }
         if (e.OriginalSource is TextBox) return;
+        if (e.Key == Key.C && Keyboard.Modifiers == ModifierKeys.Control && AnimationGrid.IsKeyboardFocusWithin && AnimationGrid.SelectedItem is AnimationItem picked)
+        {
+            Copy(picked.Name);
+            e.Handled = true;
+            return;
+        }
+        if (e.Key is Key.Left or Key.Right && Keyboard.Modifiers == ModifierKeys.None && Preview.Duration > 0 && !AnimationGrid.IsKeyboardFocusWithin)
+        {
+            // a frame back or on, paused
+            Preview.Pause();
+            float frame = 1f / (_animation?.FramesPerSecond ?? 30);
+            Preview.SetTime(Preview.Time + (e.Key == Key.Right ? frame : -frame));
+            e.Handled = true;
+            return;
+        }
         if (e.Key == Key.Space)
         {
             if (Preview.IsPlaying) Preview.Pause(); else Preview.Play();

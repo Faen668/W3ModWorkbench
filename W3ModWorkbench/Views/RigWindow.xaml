@@ -90,6 +90,16 @@
                                            Text="Show only the bones with these letters  (Ctrl+F)" />
                             </Grid>
                             <TreeView x:Name="BoneTree" Grid.Row="1" SelectedItemChanged="BoneTree_SelectedItemChanged">
+                                <TreeView.ContextMenu>
+                                    <ContextMenu>
+                                        <MenuItem Header="Copy name" Click="CopyBone_Click" InputGestureText="Ctrl+C" />
+                                        <MenuItem Header="Copy its chain from the root" Click="CopyChain_Click" />
+                                        <MenuItem Header="Copy every bone, numbered" Click="CopyAll_Click" />
+                                        <Separator />
+                                        <MenuItem Header="Open every branch" Click="ExpandAll_Click" />
+                                        <MenuItem Header="Close every branch" Click="CollapseAll_Click" />
+                                    </ContextMenu>
+                                </TreeView.ContextMenu>
                                 <TreeView.ItemContainerStyle>
                                     <Style TargetType="TreeViewItem" BasedOn="{StaticResource {x:Type TreeViewItem}}">
                                         <Setter Property="IsExpanded" Value="{Binding Expanded, Mode=TwoWay}" />

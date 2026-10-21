@@ -7,6 +7,43 @@
         WindowStartupLocation="CenterOwner" PreviewKeyDown="Window_PreviewKeyDown">
 
     <Window.Resources>
+        <!-- compact tabs, as the scene viewer's, so every tab fits in a row -->
+        <Style x:Key="PanelTabs" TargetType="TabControl">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TabControl">
+                        <DockPanel>
+                            <WrapPanel DockPanel.Dock="Top" IsItemsHost="True" Margin="2,0,2,4" />
+                            <Border DockPanel.Dock="Top" Height="1" Background="{DynamicResource CardStrokeColorDefaultBrush}" Margin="0,0,0,2" />
+                            <ContentPresenter ContentSource="SelectedContent" TextElement.Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                        </DockPanel>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="PanelTab" TargetType="TabItem">
+            <!-- what's in a tab takes its text colour from the tab: the theme's, not the plain black a tab has without the theme's style -->
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TabItem">
+                        <Border x:Name="Back" Padding="9,4" Margin="0,0,2,4" CornerRadius="5" Background="Transparent" Cursor="Hand"
+                                TextElement.Foreground="{DynamicResource TextFillColorSecondaryBrush}">
+                            <ContentPresenter ContentSource="Header" TextElement.FontSize="12.5" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Back" Property="Background" Value="{DynamicResource SubtleFillColorTertiaryBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Back" Property="Background" Value="{DynamicResource AccentFillColorDefaultBrush}" />
+                                <Setter TargetName="Back" Property="TextElement.Foreground" Value="{DynamicResource TextOnAccentFillColorPrimaryBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
         <Style x:Key="IconText" TargetType="TextBlock">
             <Setter Property="FontFamily" Value="{StaticResource IconFont}" />
             <Setter Property="FontSize" Value="14" />
@@ -66,6 +103,20 @@
                             <ComboBox x:Name="TraceBox" MinWidth="120" MaxWidth="200" IsTextSearchEnabled="True" SelectionChanged="TraceBox_SelectionChanged"
                                       ToolTip="Draw the path a bone takes over the whole animation, as REDkit's trajectory tool does" />
                         </WrapPanel>
+                        <WrapPanel DockPanel.Dock="Bottom" Margin="0,6,0,0">
+                            <CheckBox x:Name="LoopCheck" Content="Loop" MinWidth="0" IsChecked="True" VerticalAlignment="Center" Margin="2,0,0,0" Click="LoopCheck_Click"
+                                      ToolTip="Start the animation again when it ends, or stop on its last frame" />
+                            <TextBlock Text="Blend from" VerticalAlignment="Center" Opacity="0.75" Margin="14,0,8,0" />
+                            <ComboBox x:Name="BlendBox" MinWidth="150" MaxWidth="240" IsTextSearchEnabled="True" SelectionChanged="BlendBox_SelectionChanged"
+                                      ToolTip="What the animation blends in from at its start and back to at its end, as the game blends one animation into the next: another of the set's animations (an idle), the pose the rig rests in, or no blending" />
+                            <TextBlock Text="in" VerticalAlignment="Center" Opacity="0.75" Margin="10,0,6,0" />
+                            <TextBox x:Name="BlendInBox" Width="48" Text="0.2" VerticalContentAlignment="Center" LostFocus="BlendBox_LostFocus" KeyDown="BlendText_KeyDown"
+                                     ToolTip="Seconds the animation takes to blend in (REDkit's default is 0.2)" />
+                            <TextBlock Text="out" VerticalAlignment="Center" Opacity="0.75" Margin="8,0,6,0" />
+                            <TextBox x:Name="BlendOutBox" Width="48" Text="0.2" VerticalContentAlignment="Center" LostFocus="BlendBox_LostFocus" KeyDown="BlendText_KeyDown"
+                                     ToolTip="Seconds the animation takes to blend back out at its end" />
+                            <TextBlock Text="s" VerticalAlignment="Center" Opacity="0.75" Margin="4,0,0,0" />
+                        </WrapPanel>
                         <TextBlock x:Name="MotionText" DockPanel.Dock="Bottom" Style="{StaticResource Small}" Margin="4,6,0,0" TextWrapping="Wrap"
                                    ToolTip="How the animation moves the character as a whole (its motion extraction): the game moves the character along this, rather than the animation moving its body" />
                         <local:AnimationPreview x:Name="Preview" />
@@ -75,7 +126,7 @@
                 <GridSplitter Grid.Column="1" Width="8" HorizontalAlignment="Stretch" Background="Transparent" ResizeBehavior="PreviousAndNext" />
 
                 <Border Grid.Column="2" Style="{StaticResource Card}">
-                    <TabControl x:Name="Tabs" Margin="6,4,6,6">
+                    <TabControl x:Name="Tabs" Margin="8,8,8,6" Style="{StaticResource PanelTabs}" ItemContainerStyle="{StaticResource PanelTab}">
                         <TabItem x:Name="AnimationsTab" Header="Animations">
                             <DockPanel Margin="0,6,0,0">
                                 <Grid DockPanel.Dock="Top" Margin="0,0,0,6">
@@ -85,9 +136,18 @@
                                                Text="Show only the animations with these letters  (Ctrl+F)" />
                                 </Grid>
                                 <TextBlock x:Name="SetNote" DockPanel.Dock="Top" Style="{StaticResource Small}" TextWrapping="Wrap" Margin="2,0,0,6" />
-                                <DataGrid x:Name="AnimationGrid" AutoGenerateColumns="False" IsReadOnly="True" HeadersVisibility="Column" SelectionMode="Single"
+                                <DataGrid x:Name="AnimationGrid" AutoGenerateColumns="False" ContextMenuOpening="AnimationGrid_ContextMenuOpening" IsReadOnly="True" HeadersVisibility="Column" SelectionMode="Single"
                                           GridLinesVisibility="None" CanUserSortColumns="True" SelectionChanged="AnimationGrid_SelectionChanged"
                                           ToolTip="Click an animation to play it; click a heading to sort by it">
+                                    <DataGrid.ContextMenu>
+                                        <ContextMenu>
+                                            <MenuItem Header="Copy name" Click="CopyName_Click" InputGestureText="Ctrl+C" />
+                                            <MenuItem Header="Copy every name shown" Click="CopyNames_Click" />
+                                            <Separator />
+                                            <MenuItem x:Name="BlendFromMenu" Header="Blend the others from this one" Click="BlendFromThis_Click" />
+                                            <MenuItem x:Name="OpenEventsMenu" Header="Open the events file" Click="OpenEvents_Click" />
+                                        </ContextMenu>
+                                    </DataGrid.ContextMenu>
                                     <DataGrid.Columns>
                                         <DataGridTextColumn Header="Animation" Binding="{Binding Name}" Width="*" MinWidth="200" />
                                         <DataGridTextColumn Header="Length" Binding="{Binding LengthText}" SortMemberPath="Length" ElementStyle="{StaticResource Number}" />
@@ -124,6 +184,29 @@
                                     </Grid>
                                 </Border>
                                 <local:PropertyListView x:Name="AnimationProperties" LinkClicked="Properties_LinkClicked" />
+                            </DockPanel>
+                        </TabItem>
+                        <TabItem x:Name="EntitySetsTab" Header="Character's sets">
+                            <DockPanel Margin="4,8,0,0">
+                                <TextBlock x:Name="EntitySetsTitle" DockPanel.Dock="Top" FontSize="16" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                <TextBlock x:Name="EntitySetsNote" DockPanel.Dock="Top" Style="{StaticResource Small}" TextWrapping="Wrap" Margin="0,4,0,8" />
+                                <ListBox x:Name="EntitySetsList" MouseDoubleClick="EntitySetsList_MouseDoubleClick" KeyDown="EntitySetsList_KeyDown"
+                                         ToolTip="Double-click a set, or press Enter, to open it">
+                                    <ListBox.ContextMenu>
+                                        <ContextMenu>
+                                            <MenuItem Header="Open" Click="OpenEntitySet_Click" />
+                                            <MenuItem Header="Copy path" Click="CopyEntitySet_Click" />
+                                        </ContextMenu>
+                                    </ListBox.ContextMenu>
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="{Binding Path}" FontWeight="{Binding Weight}" />
+                                                <TextBlock Text="{Binding Note}" Margin="8,0,0,0" Style="{StaticResource Small}" VerticalAlignment="Center" />
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
                             </DockPanel>
                         </TabItem>
                         <TabItem x:Name="EventTab" Header="Event">

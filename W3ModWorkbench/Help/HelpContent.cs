@@ -476,6 +476,9 @@ The window is laid out as REDkit's animation browser: the animation picked playi
 - **Bones** draws the skeleton over the character as it moves, **Names** writes each bone's name beside it, and **Trace** draws the path a bone takes over the whole animation (pick `r_weapon` to see a sword's swing), as REDkit's trajectory tool does.
 - **Animation** has the animation's properties, from REDkit's copy when there is one, and its motion extraction: where it has moved and turned the character by its end and at the moment shown. The character stays in place in the view, as the game moves it along that.
 - **The timeline** has a row for each track, the set's own events and those of the events files it names (from REDkit's copies, which keep their tracks' names). Click an event to go to it and see its properties under **Event**.
+- **Loop** plays the animation on, or stops it on its last frame. **Blend from** blends it in from another of the set's animations (its idle is picked for you, as the character would stand before acting), from the pose the rig rests in, or not at all, and back out at its end, over the seconds in **in** and **out** (REDkit's 0.2 to start), as the game blends one animation into the next. The arrow keys step a frame back or on.
+- **Character's sets** lists every animation set the character's templates name (and those they include), this one in bold, and says when this set isn't one of them: in the game the character plays its animations only when a behaviour or a scene brings it. Double-click one, or press **Enter**, to open it.
+- **Right-click an animation** to copy its name (**Ctrl+C**) or every name shown, blend the others from it, or open the events file the set names.
 
 **Properties** has the set's own properties. Every one of REDkit's animation sets reads (450), and 25,293 of their animations play.
 """),
@@ -488,6 +491,7 @@ The window is laid out as REDkit's skeleton editor: the skeleton in 3D on the le
 - **The view** draws a line from each bone to its parent, faint for the helper bones hung from the root (IK targets, the trajectory). **Bone names** writes each bone's name beside it, **Bone axes** draws each bone's axes (X red, Y green, Z blue), and **On a character** shows the skeleton inside a character made on it (a base character's rig, or one beside it), to see where the bones sit in the body. **Fit** (**F**) frames the whole skeleton.
 - **Bones** is a tree from the root, each bone numbered as the rig numbers it; narrow it by some letters (**Ctrl+F**). Click a bone to pick it out in the view and see where it is from its parent (position, rotation in degrees and as a quaternion, scale) and in the model.
 - **Tracks** lists the float tracks animations can drive beside the bones.
+- **Right-click a bone** to copy its name (**Ctrl+C**), its chain from the root (`Root > pelvis > torso > …`) or every bone numbered with its parent, or to open or close every branch. A bone picked lists the bones under it and its chain.
 
 **Properties** has the rig's properties (its speeds, LODs and control rig), from REDkit's copy when there is one. Every one of REDkit's rigs reads (420), the oldest (137 and before) too.
 """),

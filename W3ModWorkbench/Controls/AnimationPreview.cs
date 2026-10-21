@@ -55,6 +55,9 @@ public sealed class AnimationPreview : Grid
     private List<Vector3>? _trail;
     private Matrix4x4[]? _posed;
 
+    /// <summary>The animation sets the entity's components name, as its templates make it, for the entity shown.</summary>
+    public IReadOnlyList<string> EntityAnimsets { get; private set; } = [];
+
     /// <summary>The rig the entity is posed with, or null.</summary>
     public Skeleton? Rig => _posing?.Rig;
 
@@ -206,6 +209,9 @@ public sealed class AnimationPreview : Grid
             _view.FitToView();
             _travel = null;
             _posing = await Task.Run(() => FindRig(look, parts.Select(p => p.Mesh).ToList(), locator), token);
+            // the sets the template and those it includes name, as a scene finds them
+            EntityAnimsets = (await Task.Run(() => SceneStage.AnimationSets(path, locator), token)).Order(StringComparer.OrdinalIgnoreCase).ToList();
+            _from = null;
             _posed = _posing?.Rest;
             _trail = null;
             DrawSkeleton();
@@ -296,7 +302,32 @@ public sealed class AnimationPreview : Grid
             if (Message.Length == 0) Message = "The entity has no skeleton to play animations on.";
             return false;
         }
-        var clip = await Task.Run<(AnimationClip? Clip, string Why)>(() =>
+        var clip = await ReadClipAsync(locator, animset, animation);
+        if (version != _animationVersion) return false;
+        if (clip.Clip is null || clip.Clip.BoneCount > posing.Rig.Count)
+        {
+            StopAnimation();
+            Message = clip.Clip is null ? clip.Why : $"{animation} is made for another skeleton than this entity's.";
+            return false;
+        }
+        Message = "";
+        _clip = clip.Clip;
+        _fit = Fit(_clip, posing.Rig);
+        _placing = Placing(_clip, posing, _fit);
+        _scrub.Maximum = Math.Max(0.01, _clip.Duration);
+        _scrub.IsEnabled = _play.IsEnabled = true;
+        _travel = Travel(_clip, posing, _placing, _fit);
+        _trail = Trail();
+        SetTime(0);
+        // each animation frames the actor over all of its moves, from the angle the view is at
+        Frame();
+        if (play) Play();
+        return true;
+    }
+
+    /// <summary>An animation of a set read, or why it can't be.</summary>
+    private Task<(AnimationClip? Clip, string Why)> ReadClipAsync(ResourceLocator locator, string animset, string animation) =>
+        Task.Run<(AnimationClip? Clip, string Why)>(() =>
         {
             Cr2wFile? set;
             lock (_sets)
@@ -321,26 +352,63 @@ public sealed class AnimationPreview : Grid
                 return (null, $"{animation} could not be read.");
             }
         });
-        if (version != _animationVersion) return false;
-        if (clip.Clip is null || clip.Clip.BoneCount > posing.Rig.Count)
+
+    /// <summary>Whether the animation starts again when it ends, or stops on its last frame.</summary>
+    public bool Loop { get; set; } = true;
+
+    /// <summary>How long, in seconds, the animation takes to blend in from the pose it's blended from, as the game blends.</summary>
+    public float BlendIn
+    {
+        get => _blendIn;
+        set { _blendIn = Math.Max(0, value); Redraw(); }
+    }
+
+    /// <summary>How long, in seconds, the animation takes to blend back out to the pose it's blended from, at its end.</summary>
+    public float BlendOut
+    {
+        get => _blendOut;
+        set { _blendOut = Math.Max(0, value); Redraw(); }
+    }
+
+    private float _blendIn, _blendOut, _fromFit;
+    private AnimationClip? _from;
+
+    /// <summary>
+    /// The animation blended from and back to (an idle, as the character would be standing in before), or null for the
+    /// pose the rig rests in. False, with nothing changed, when it can't be read or isn't for this skeleton.
+    /// </summary>
+    public async Task<bool> BlendFromAsync(string? animset, string? animation)
+    {
+        if (animset is null || animation is null || _locator is not { } locator || _posing is not { } posing)
         {
-            StopAnimation();
-            Message = clip.Clip is null ? clip.Why : $"{animation} is made for another skeleton than this entity's.";
-            return false;
+            _from = null;
+            Redraw();
+            return animset is null;
         }
-        Message = "";
-        _clip = clip.Clip;
-        _fit = Fit(_clip, posing.Rig);
-        _placing = Placing(_clip, posing, _fit);
-        _scrub.Maximum = Math.Max(0.01, _clip.Duration);
-        _scrub.IsEnabled = _play.IsEnabled = true;
-        _travel = Travel(_clip, posing, _placing, _fit);
-        _trail = Trail();
-        SetTime(0);
-        // each animation frames the actor over all of its moves, from the angle the view is at
-        Frame();
-        if (play) Play();
+        var read = await ReadClipAsync(locator, animset, animation);
+        if (read.Clip is null || read.Clip.BoneCount > posing.Rig.Count) return false;
+        _from = read.Clip;
+        _fromFit = Fit(read.Clip, posing.Rig);
+        Redraw();
         return true;
+    }
+
+    private void Redraw()
+    {
+        if (_clip is not null) SetTime(_time);
+    }
+
+    /// <summary>
+    /// How much of the animation is in the pose at a time, between blending in at its start and out at its end, eased.
+    /// 1 when it isn't blended.
+    /// </summary>
+    private float Weight(float time, float duration)
+    {
+        float w = 1;
+        if (_blendIn > 0 && time < _blendIn) w = Math.Min(w, time / _blendIn);
+        if (_blendOut > 0 && time > duration - _blendOut) w = Math.Min(w, (duration - time) / _blendOut);
+        w = Math.Clamp(w, 0, 1);
+        return w * w * (3 - 2 * w);
     }
 
     /// <summary>
@@ -461,6 +529,16 @@ public sealed class AnimationPreview : Grid
         _time = time = Math.Clamp(time, 0, clip.Duration);
         if (_pose.Length != posing.Rig.Count) _pose = new BoneTransform[posing.Rig.Count];
         Sample(clip, posing.Rig, time, _pose, _fit);
+        if (Weight(time, clip.Duration) is var weight && weight < 1)
+        {
+            // what it's blended from: the animation picked, playing on, or the rig's resting pose
+            var from = new BoneTransform[posing.Rig.Count];
+            if (_from is { } before) Sample(before, posing.Rig, before.Duration > 0 ? time % before.Duration : 0, from, _fromFit);
+            else posing.Rig.Pose.CopyTo(from, 0);
+            for (int i = 0; i < from.Length; i++)
+                _pose[i] = new BoneTransform(Vector3.Lerp(from[i].Position, _pose[i].Position, weight),
+                    Quaternion.Slerp(from[i].Rotation, _pose[i].Rotation, weight), Vector3.Lerp(from[i].Scale, _pose[i].Scale, weight));
+        }
         var model = new Matrix4x4[posing.Rig.Count];
         posing.Rig.ToModel(_pose, model);
         for (int i = 0; i < model.Length; i++) model[i] *= _placing;
@@ -521,6 +599,12 @@ public sealed class AnimationPreview : Grid
         _nextDraw += 1.0 / 30;
         if (_nextDraw < now) _nextDraw = now + 1.0 / 30;
         float time = _playedFrom + (float)now * _speed;
+        if (!Loop && time >= clip.Duration)
+        {
+            SetTime(clip.Duration);
+            Pause();
+            return;
+        }
         SetTime(clip.Duration > 0 ? time % clip.Duration : 0);
     }
 }

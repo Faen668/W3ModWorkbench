@@ -181,7 +181,9 @@ public partial class RigWindow : Window, IMessageHost
         int parent = rig.Parents[node.Index];
         var children = _all[node.Index].Children;
         BoneTitle.Text = $"{node.Name}  ({node.Index})";
-        BoneDetail.Text = (parent >= 0 ? $"under {rig.Names[parent]} ({parent})" : "a root") + $"  ·  {Format.Count(children.Count, "bone")} under it  ·  {Depth(node.Index)} deep";
+        BoneDetail.Text = (parent >= 0 ? $"under {rig.Names[parent]} ({parent})" : "a root") + $"  ·  {Format.Count(children.Count, "bone")} under it  ·  {Depth(node.Index)} deep"
+            + (children.Count > 0 ? $": {string.Join(", ", children.Take(8).Select(c => c.Name))}{(children.Count > 8 ? ", …" : "")}" : "")
+            + $"\n{Chain(node.Index)}";
         BonePosition.Text = $"{pose.Position.X,8:0.0000} {pose.Position.Y,8:0.0000} {pose.Position.Z,8:0.0000}";
         var (x, y, z) = Euler(pose.Rotation);
         BoneRotation.Text = $"{x,8:0.00}° {y,8:0.00}° {z,8:0.00}°";
@@ -274,6 +276,46 @@ public partial class RigWindow : Window, IMessageHost
 
     private void Overlay_Click(object sender, RoutedEventArgs e) => Draw();
 
+    private static void Copy(string text)
+    {
+        try { Clipboard.SetText(text); }
+        catch (System.Runtime.InteropServices.COMException) { }
+    }
+
+    /// <summary>A bone's chain from the root down to it: Root > pelvis > torso > ….</summary>
+    private string Chain(int bone)
+    {
+        var names = new List<string>();
+        for (int at = bone; at >= 0 && at < _rig!.Count; at = _rig.Parents[at] < at ? _rig.Parents[at] : -1) names.Add(_rig.Names[at]);
+        names.Reverse();
+        return string.Join(" > ", names);
+    }
+
+    private void CopyBone_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selected >= 0) Copy(_rig!.Names[_selected]);
+    }
+
+    private void CopyChain_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selected >= 0) Copy(Chain(_selected));
+    }
+
+    private void CopyAll_Click(object sender, RoutedEventArgs e)
+    {
+        if (_rig is { } rig) Copy(string.Join(Environment.NewLine, rig.Names.Select((n, i) => $"{i}\t{n}\t{(rig.Parents[i] >= 0 ? rig.Names[rig.Parents[i]] : "")}")));
+    }
+
+    private void ExpandAll_Click(object sender, RoutedEventArgs e)
+    {
+        foreach (var bone in _all) bone.Expanded = true;
+    }
+
+    private void CollapseAll_Click(object sender, RoutedEventArgs e)
+    {
+        foreach (var bone in _all) bone.Expanded = false;
+    }
+
     private void FitButton_Click(object sender, RoutedEventArgs e) => Fit();
 
     /// <summary>Says where the rig's properties come from.</summary>
@@ -305,6 +347,12 @@ public partial class RigWindow : Window, IMessageHost
             return;
         }
         if (e.OriginalSource is TextBox) return;
+        if (e.Key == Key.C && Keyboard.Modifiers == ModifierKeys.Control && _selected >= 0)
+        {
+            Copy(_rig!.Names[_selected]);
+            e.Handled = true;
+            return;
+        }
         if (e.Key == Key.F)
         {
             Fit();
