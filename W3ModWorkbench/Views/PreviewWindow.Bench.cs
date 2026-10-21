@@ -23,6 +23,9 @@ public partial class PreviewWindow
     private static PreviewWindow? _bench;
 
     private bool _isBench;
+
+    /// <summary>Whether this is Script Bench, rather than a window for other files.</summary>
+    public bool IsBench => _isBench;
     private MainWindow? _benchMain;
     private readonly ObservableCollection<BenchNode> _benchRoots = [];
     private BenchNode? _mine, _game, _mods;

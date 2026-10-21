@@ -1,19 +1,30 @@
-using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 
 namespace W3ModWorkbench.Help;
 
+/// <summary>
+/// The guide: its categories down the left, each folding open to its pages, with a search over every page; the page
+/// picked on the right, with its sections to jump to, its screenshots to open large, and the pages either side.
+/// </summary>
 public partial class HelpWindow : Window
 {
-    private static readonly FontFamily Mono = new("Cascadia Mono, Consolas, Courier New");
     private static HelpWindow? _open;
 
-    /// <summary>Shows the help window, reusing it if it is already open.</summary>
-    public static void ShowHelp(Window owner, string? topic = null)
+    /// <summary>Categories folded open, kept while the app runs.</summary>
+    private static readonly HashSet<string> Expanded = new(StringComparer.Ordinal);
+
+    private readonly HelpRenderer _renderer;
+    private readonly Stack<HelpPage> _back = new(), _forward = new();
+    private HelpPage? _page;
+    private IReadOnlyList<string> _highlight = [];
+
+    /// <summary>Shows the guide, reusing the window when it's open, at a page when one is named.</summary>
+    public static void ShowHelp(Window owner, string? page = null)
     {
         if (_open is null)
         {
@@ -26,264 +37,334 @@ public partial class HelpWindow : Window
             if (_open.WindowState == WindowState.Minimized) _open.WindowState = WindowState.Normal;
             _open.Activate();
         }
-        if (topic is not null) _open.Select(topic);
+        if (page is not null) _open.Open(page);
     }
+
+    /// <summary>F1 in a window: the guide's page about it, or the start when there's none.</summary>
+    public static void ShowHelpFor(Window window) =>
+        ShowHelp(window, HelpLibrary.ForWindow(window is PreviewWindow { IsBench: true } ? "PreviewWindow:bench" : window.GetType().Name)?.Title);
 
     private HelpWindow()
     {
         InitializeComponent();
-        Fill("");
-        TopicList.SelectedIndex = 1; // first topic, after the group header
+        _renderer = new HelpRenderer(this, title => Open(title), ShowImage);
+        if (Expanded.Count == 0 && HelpLibrary.Categories.FirstOrDefault() is { } first) Expanded.Add(first.Title);
+        if (HelpLibrary.Categories.FirstOrDefault()?.Pages.FirstOrDefault() is { } home) Show(home, remember: false);
+        BuildContents();
     }
 
-    private void Select(string title)
-    {
-        foreach (var item in TopicList.Items)
-            if (item is ListBoxItem { Tag: HelpTopic t } li && t.Title == title)
-                TopicList.SelectedItem = li;
-    }
+    // ---------------------------------------------------------------- the contents
 
-    // ------------------------------------------------------------------ topic list
-
-    private void Fill(string filter)
+    private void BuildContents()
     {
-        var selected = (TopicList.SelectedItem as ListBoxItem)?.Tag as HelpTopic;
-        TopicList.Items.Clear();
-        foreach (var group in HelpContent.Topics.GroupBy(t => t.Group))
+        NavPanel.Children.Clear();
+        NavHeading.Text = "CONTENTS";
+        ExpandAllButton.Visibility = Visibility.Visible;
+        ExpandAllText.Text = HelpLibrary.Categories.All(c => Expanded.Contains(c.Title)) ? "Collapse all" : "Expand all";
+        foreach (var category in HelpLibrary.Categories)
         {
-            var topics = group.Where(t => filter.Length == 0
-                || t.Title.Contains(filter, StringComparison.OrdinalIgnoreCase)
-                || t.Body.Contains(filter, StringComparison.OrdinalIgnoreCase)).ToList();
-            if (topics.Count == 0) continue;
-
-            TopicList.Items.Add(new ListBoxItem
+            bool open = Expanded.Contains(category.Title);
+            var chevron = new TextBlock { Text = open ? "" : "", FontFamily = Icons, FontSize = 10, Width = 18, VerticalAlignment = VerticalAlignment.Center, Opacity = 0.7 };
+            var icon = new TextBlock { Text = category.Glyph, FontFamily = Icons, FontSize = 15, Margin = new Thickness(0, 0, 10, 0), VerticalAlignment = VerticalAlignment.Center };
+            icon.SetResourceReference(TextBlock.ForegroundProperty, "AccentTextFillColorPrimaryBrush");
+            var title = new TextBlock { Text = category.Title, FontWeight = FontWeights.SemiBold, FontSize = 14, VerticalAlignment = VerticalAlignment.Center, TextWrapping = TextWrapping.Wrap };
+            var count = new TextBlock { Text = category.Pages.Count.ToString(), FontSize = 12, Opacity = 0.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 4, 0) };
+            var row = new DockPanel();
+            DockPanel.SetDock(chevron, Dock.Left);
+            DockPanel.SetDock(icon, Dock.Left);
+            DockPanel.SetDock(count, Dock.Right);
+            row.Children.Add(chevron);
+            row.Children.Add(icon);
+            row.Children.Add(count);
+            row.Children.Add(title);
+            var header = Row(row, new Thickness(4, 7, 4, 7), category.Summary);
+            header.Margin = new Thickness(0, NavPanel.Children.Count == 0 ? 0 : 4, 0, 0);
+            header.MouseLeftButtonUp += (_, _) =>
             {
-                Content = new TextBlock { Text = group.Key.ToUpperInvariant(), FontSize = 11, FontWeight = FontWeights.SemiBold, Opacity = 0.6 },
-                IsEnabled = false,
-                Focusable = false,
-                Margin = new Thickness(0, TopicList.Items.Count == 0 ? 0 : 12, 0, 2),
-            });
-            foreach (var t in topics)
+                if (!Expanded.Remove(category.Title)) Expanded.Add(category.Title);
+                BuildContents();
+            };
+            NavPanel.Children.Add(header);
+            if (!open) continue;
+            foreach (var page in category.Pages)
             {
-                // a long title wraps under itself, beside the icon, rather than running out of the list
-                var row = new Grid();
-                row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(26) });
-                row.ColumnDefinitions.Add(new ColumnDefinition());
-                row.Children.Add(new TextBlock { Text = t.Glyph, FontFamily = (FontFamily)FindResource("IconFont"), VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(0, 3, 0, 0) });
-                var title = new TextBlock { Text = t.Title, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center };
-                Grid.SetColumn(title, 1);
-                row.Children.Add(title);
-                var item = new ListBoxItem { Content = row, Tag = t };
-                TopicList.Items.Add(item);
-                if (t == selected) TopicList.SelectedItem = item;
+                var label = new TextBlock { Text = page.Title, TextWrapping = TextWrapping.Wrap, FontSize = 14, VerticalAlignment = VerticalAlignment.Center };
+                var pageIcon = new TextBlock { Text = page.Glyph, FontFamily = Icons, FontSize = 13, Width = 26, Opacity = 0.75, VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(0, 2, 0, 0) };
+                var line = new DockPanel();
+                DockPanel.SetDock(pageIcon, Dock.Left);
+                line.Children.Add(pageIcon);
+                line.Children.Add(label);
+                var item = Row(line, new Thickness(28, 6, 6, 6), page.Summary, selected: page == _page);
+                item.MouseLeftButtonUp += (_, _) => Open(page);
+                NavPanel.Children.Add(item);
             }
         }
-        if (TopicList.SelectedItem is null)
-            TopicList.SelectedItem = TopicList.Items.OfType<ListBoxItem>().FirstOrDefault(i => i.Tag is HelpTopic);
     }
 
-    private void FilterBox_TextChanged(object sender, TextChangedEventArgs e)
+    private static readonly FontFamily Icons = (FontFamily)Application.Current.FindResource("IconFont");
+
+    /// <summary>A line in the list that lights up under the mouse, and in the accent when it's the page shown.</summary>
+    private Border Row(UIElement content, Thickness padding, string tip, bool selected = false)
     {
-        FilterPlaceholder.Visibility = FilterBox.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
-        Fill(FilterBox.Text.Trim());
+        var border = new Border { Child = content, Padding = padding, CornerRadius = new CornerRadius(6), Cursor = Cursors.Hand, Background = Brushes.Transparent };
+        if (tip.Length > 0) border.ToolTip = tip;
+        if (selected)
+        {
+            border.SetResourceReference(Border.BackgroundProperty, "SubtleFillColorSecondaryBrush");
+            var bar = new Border { Width = 3, CornerRadius = new CornerRadius(1.5), HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(-padding.Left + 3, 3, 0, 3) };
+            bar.SetResourceReference(Border.BackgroundProperty, "AccentFillColorDefaultBrush");
+            var holder = new Grid();
+            border.Child = holder;
+            holder.Children.Add(content);
+            holder.Children.Add(bar);
+        }
+        border.MouseEnter += (_, _) => { if (!selected) border.SetResourceReference(Border.BackgroundProperty, "SubtleFillColorTertiaryBrush"); };
+        border.MouseLeave += (_, _) => { if (!selected) border.Background = Brushes.Transparent; };
+        return border;
     }
 
-    private void TopicList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    private void ExpandAll_Click(object sender, RoutedEventArgs e)
     {
-        if ((TopicList.SelectedItem as ListBoxItem)?.Tag is not HelpTopic topic) return;
-        GroupText.Text = topic.Group;
-        TitleText.Text = topic.Title;
-        Render(topic.Body);
+        bool all = HelpLibrary.Categories.All(c => Expanded.Contains(c.Title));
+        Expanded.Clear();
+        if (!all) foreach (var c in HelpLibrary.Categories) Expanded.Add(c.Title);
+        BuildContents();
+    }
+
+    // ---------------------------------------------------------------- searching
+
+    private void SearchBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        string query = SearchBox.Text.Trim();
+        SearchPlaceholder.Visibility = SearchBox.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
+        ClearSearchButton.Visibility = SearchBox.Text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
+        if (query.Length == 0)
+        {
+            _highlight = [];
+            if (_page is not null) Show(_page, remember: false);
+            BuildContents();
+            return;
+        }
+        ShowResults(query);
+    }
+
+    private List<HelpHit> _hits = [];
+
+    private void ShowResults(string query)
+    {
+        _hits = HelpLibrary.Search(query);
+        var words = HelpLibrary.Words(query);
+        NavPanel.Children.Clear();
+        ExpandAllButton.Visibility = Visibility.Collapsed;
+        NavHeading.Text = _hits.Count == 0 ? "NO PAGES MATCH" : _hits.Count == 1 ? "1 PAGE MATCHES" : $"{_hits.Count} PAGES MATCH";
+        if (_hits.Count == 0)
+        {
+            NavPanel.Children.Add(new TextBlock
+            {
+                Text = "Try fewer words, or another word for the same thing: the guide calls a .w2mesh a mesh, a .ws file a script.",
+                TextWrapping = TextWrapping.Wrap, Opacity = 0.7, Margin = new Thickness(4, 6, 4, 0),
+            });
+            return;
+        }
+        foreach (var hit in _hits)
+        {
+            var stack = new StackPanel();
+            var title = new TextBlock { FontWeight = FontWeights.SemiBold, FontSize = 14, TextWrapping = TextWrapping.Wrap };
+            Mark(title.Inlines, hit.Page.Title, words);
+            stack.Children.Add(title);
+            stack.Children.Add(new TextBlock
+            {
+                Text = $"{hit.Page.Category.Title}" + (hit.Count > 0 ? $"  ·  {hit.Count} {(hit.Count == 1 ? "match" : "matches")}" : ""),
+                FontSize = 11.5, Opacity = 0.6, Margin = new Thickness(0, 1, 0, 3),
+            });
+            var snippet = new TextBlock { FontSize = 12.5, Opacity = 0.85, TextWrapping = TextWrapping.Wrap, LineHeight = 18 };
+            Mark(snippet.Inlines, hit.Snippet, words);
+            stack.Children.Add(snippet);
+            var item = Row(stack, new Thickness(8, 8, 8, 8), "", selected: hit.Page == _page);
+            item.MouseLeftButtonUp += (_, _) => Open(hit.Page, words);
+            NavPanel.Children.Add(item);
+        }
+    }
+
+    /// <summary>Text with the words picked out.</summary>
+    private static void Mark(InlineCollection inlines, string text, List<string> words)
+    {
+        var pattern = new System.Text.RegularExpressions.Regex(string.Join("|", words.Select(System.Text.RegularExpressions.Regex.Escape)),
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        int at = 0;
+        foreach (System.Text.RegularExpressions.Match m in pattern.Matches(text))
+        {
+            if (m.Index > at) inlines.Add(new Run(text[at..m.Index]));
+            var run = new Run(m.Value) { FontWeight = FontWeights.SemiBold };
+            run.SetResourceReference(TextElement.BackgroundProperty, "SystemFillColorCautionBackgroundBrush");
+            inlines.Add(run);
+            at = m.Index + m.Length;
+        }
+        if (at < text.Length) inlines.Add(new Run(text[at..]));
+    }
+
+    private void SearchBox_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter && _hits.Count > 0)
+        {
+            Open(_hits[0].Page, HelpLibrary.Words(SearchBox.Text));
+            e.Handled = true;
+        }
+    }
+
+    private void ClearSearch_Click(object sender, RoutedEventArgs e)
+    {
+        SearchBox.Clear();
+        SearchBox.Focus();
+    }
+
+    // ---------------------------------------------------------------- the page
+
+    /// <summary>Opens a page by its title; a missing one says so rather than doing nothing.</summary>
+    public void Open(string title)
+    {
+        if (HelpLibrary.Find(title) is { } page) Open(page);
+        else MessageBox.Show(this, $"There's no page called \"{title}\" yet.", "Help", MessageBoxButton.OK, MessageBoxImage.Information);
+    }
+
+    private void Open(HelpPage page, List<string>? highlight = null)
+    {
+        _highlight = highlight ?? (SearchBox.Text.Trim().Length > 0 ? HelpLibrary.Words(SearchBox.Text) : []);
+        Show(page, remember: true);
+    }
+
+    private void Show(HelpPage page, bool remember)
+    {
+        if (remember && _page is not null && _page != page)
+        {
+            _back.Push(_page);
+            _forward.Clear();
+        }
+        _page = page;
+        Expanded.Add(page.Category.Title);
+        Breadcrumb.Text = $"{page.Category.Title}  ›  {page.Title}";
+        TitleIcon.Text = page.Glyph;
+        TitleText.Text = page.Title;
+        SummaryText.Text = page.Summary;
+        SummaryText.Visibility = page.Summary.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+        Title = $"{page.Title} - W3 Mod Workbench Help";
+
+        _renderer.Highlight = _highlight;
+        _renderer.Render(page.Body, PageBody);
+
+        SectionLinks.Children.Clear();
+        foreach (string section in page.Sections)
+        {
+            var link = new Hyperlink(new Run(section));
+            link.SetResourceReference(TextElement.ForegroundProperty, "AccentTextFillColorPrimaryBrush");
+            string target = section;
+            link.Click += (_, _) => ScrollTo(_renderer.Anchors.GetValueOrDefault(target));
+            SectionLinks.Children.Add(new TextBlock(link) { Margin = new Thickness(0, 0, 20, 6), FontSize = 13.5 });
+        }
+        OnThisPage.Visibility = page.Sections.Count >= 3 ? Visibility.Visible : Visibility.Collapsed;
+
+        var all = HelpLibrary.Pages.ToList();
+        int index = all.IndexOf(page);
+        _previous = index > 0 ? all[index - 1] : null;
+        _next = index >= 0 && index + 1 < all.Count ? all[index + 1] : null;
+        PreviousCard.Visibility = _previous is null ? Visibility.Hidden : Visibility.Visible;
+        NextCard.Visibility = _next is null ? Visibility.Hidden : Visibility.Visible;
+        PreviousTitle.Text = _previous?.Title ?? "";
+        NextTitle.Text = _next?.Title ?? "";
+
+        BackButton.IsEnabled = _back.Count > 0;
+        ForwardButton.IsEnabled = _forward.Count > 0;
+        if (SearchBox.Text.Trim().Length == 0) BuildContents();
+        else ShowResults(SearchBox.Text.Trim());
+
         PageScroller.ScrollToTop();
+        if (_renderer.FirstMatch is { } match)
+            Dispatcher.BeginInvoke(() => ScrollTo(match, 80), System.Windows.Threading.DispatcherPriority.Loaded);
     }
+
+    private HelpPage? _previous, _next;
+
+    private void ScrollTo(FrameworkElement? element, double above = 12)
+    {
+        if (element is null) return;
+        var point = element.TransformToAncestor(PageColumn).Transform(new Point(0, 0));
+        PageScroller.ScrollToVerticalOffset(Math.Max(0, point.Y - above));
+    }
+
+    private void PreviousCard_Click(object sender, MouseButtonEventArgs e)
+    {
+        if (_previous is not null) Open(_previous, []);
+    }
+
+    private void NextCard_Click(object sender, MouseButtonEventArgs e)
+    {
+        if (_next is not null) Open(_next, []);
+    }
+
+    private void Back_Click(object sender, RoutedEventArgs e) => GoBack();
+
+    private void Forward_Click(object sender, RoutedEventArgs e) => GoForward();
+
+    private void Home_Click(object sender, RoutedEventArgs e)
+    {
+        if (HelpLibrary.Categories.FirstOrDefault()?.Pages.FirstOrDefault() is { } home) Open(home, []);
+    }
+
+    private void GoBack()
+    {
+        if (_back.Count == 0 || _page is null) return;
+        _forward.Push(_page);
+        _page = null;
+        Show(_back.Pop(), remember: false);
+    }
+
+    private void GoForward()
+    {
+        if (_forward.Count == 0 || _page is null) return;
+        _back.Push(_page);
+        _page = null;
+        Show(_forward.Pop(), remember: false);
+    }
+
+    // ---------------------------------------------------------------- screenshots at full size
+
+    private void ShowImage(BitmapSource image, string caption)
+    {
+        LightboxImage.Source = image;
+        LightboxCaption.Text = HelpLibrary.Plain(caption);
+        Lightbox.Visibility = Visibility.Visible;
+    }
+
+    private void Lightbox_Click(object sender, MouseButtonEventArgs e) => Lightbox.Visibility = Visibility.Collapsed;
+
+    // ---------------------------------------------------------------- keys
 
     private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key == Key.Escape)
+        var key = e.Key == Key.System ? e.SystemKey : e.Key;
+        if (key == Key.Escape)
         {
-            if (FilterBox.Text.Length > 0) FilterBox.Clear();
+            if (Lightbox.Visibility == Visibility.Visible) Lightbox.Visibility = Visibility.Collapsed;
+            else if (SearchBox.Text.Length > 0) SearchBox.Clear();
             else Close();
-            e.Handled = true;
         }
-        else if (e.Key == Key.F && Keyboard.Modifiers == ModifierKeys.Control)
+        else if (key == Key.F && Keyboard.Modifiers == ModifierKeys.Control)
         {
-            FilterBox.Focus();
-            FilterBox.SelectAll();
-            e.Handled = true;
+            SearchBox.Focus();
+            SearchBox.SelectAll();
         }
+        else if (key == Key.Left && Keyboard.Modifiers == ModifierKeys.Alt) GoBack();
+        else if (key == Key.Right && Keyboard.Modifiers == ModifierKeys.Alt) GoForward();
+        else if (key == Key.Home && Keyboard.Modifiers == ModifierKeys.Alt) Home_Click(this, e);
+        else return;
+        e.Handled = true;
     }
 
-    // ------------------------------------------------------------------ page rendering
-
-    private void Render(string body)
+    private void Window_PreviewMouseDown(object sender, MouseButtonEventArgs e)
     {
-        PageBody.Children.Clear();
-        var lines = body.Replace("\r", "").Split('\n');
-        var paragraph = new StringBuilder();
-
-        void FlushParagraph()
-        {
-            if (paragraph.Length == 0) return;
-            PageBody.Children.Add(Text(paragraph.ToString(), new Thickness(0, 0, 0, 12)));
-            paragraph.Clear();
-        }
-
-        for (int i = 0; i < lines.Length; i++)
-        {
-            string line = lines[i];
-            if (line.StartsWith("```", StringComparison.Ordinal))
-            {
-                FlushParagraph();
-                var code = new StringBuilder();
-                while (++i < lines.Length && !lines[i].StartsWith("```", StringComparison.Ordinal))
-                    code.AppendLine(lines[i]);
-                PageBody.Children.Add(CodeBlock(code.ToString().TrimEnd()));
-            }
-            else if (line.StartsWith("## ", StringComparison.Ordinal))
-            {
-                FlushParagraph();
-                PageBody.Children.Add(new TextBlock
-                {
-                    Text = line[3..],
-                    FontSize = 18,
-                    FontWeight = FontWeights.SemiBold,
-                    Margin = new Thickness(0, 14, 0, 8),
-                    TextWrapping = TextWrapping.Wrap,
-                });
-            }
-            else if (line.StartsWith("- ", StringComparison.Ordinal))
-            {
-                FlushParagraph();
-                var row = new Grid { Margin = new Thickness(6, 0, 0, 6) };
-                row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(18) });
-                row.ColumnDefinitions.Add(new ColumnDefinition());
-                row.Children.Add(new TextBlock { Text = "•", Opacity = 0.7 });
-                var text = Text(line[2..], new Thickness(0));
-                Grid.SetColumn(text, 1);
-                row.Children.Add(text);
-                PageBody.Children.Add(row);
-                if (i + 1 >= lines.Length || !lines[i + 1].StartsWith("- ", StringComparison.Ordinal))
-                    row.Margin = new Thickness(6, 0, 0, 12);
-            }
-            else if (line.StartsWith("> ", StringComparison.Ordinal))
-            {
-                FlushParagraph();
-                PageBody.Children.Add(Note(line[2..]));
-            }
-            else if (line.Trim().Length == 0)
-            {
-                FlushParagraph();
-            }
-            else
-            {
-                if (paragraph.Length > 0) paragraph.Append(' ');
-                paragraph.Append(line.Trim());
-            }
-        }
-        FlushParagraph();
-    }
-
-    private TextBlock Text(string markup, Thickness margin)
-    {
-        var tb = new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = margin, FontSize = 14, LineHeight = 22 };
-        AddInlines(tb.Inlines, markup);
-        return tb;
-    }
-
-    /// <summary>Handles **bold** and `code` spans.</summary>
-    private static void AddInlines(InlineCollection inlines, string markup)
-    {
-        int i = 0;
-        while (i < markup.Length)
-        {
-            int bold = markup.IndexOf("**", i, StringComparison.Ordinal);
-            int code = markup.IndexOf('`', i);
-            int next = bold < 0 ? code : code < 0 ? bold : Math.Min(bold, code);
-            if (next < 0)
-            {
-                inlines.Add(new Run(markup[i..]));
-                break;
-            }
-            if (next > i) inlines.Add(new Run(markup[i..next]));
-
-            if (next == bold)
-            {
-                int end = markup.IndexOf("**", bold + 2, StringComparison.Ordinal);
-                if (end < 0) { inlines.Add(new Run(markup[bold..])); break; }
-                inlines.Add(new Bold(new Run(markup[(bold + 2)..end])));
-                i = end + 2;
-            }
-            else
-            {
-                int end = markup.IndexOf('`', code + 1);
-                if (end < 0) { inlines.Add(new Run(markup[code..])); break; }
-                var run = new Run(markup[(code + 1)..end]) { FontFamily = Mono, FontSize = 13 };
-                run.SetResourceReference(TextElement.BackgroundProperty, "SubtleFillColorSecondaryBrush");
-                inlines.Add(run);
-                i = end + 1;
-            }
-        }
-    }
-
-    private Border CodeBlock(string code)
-    {
-        var border = new Border
-        {
-            CornerRadius = new CornerRadius(6),
-            BorderThickness = new Thickness(1),
-            Padding = new Thickness(14, 10, 14, 10),
-            Margin = new Thickness(0, 2, 0, 14),
-            Child = CodeText(code),
-        };
-        border.SetResourceReference(Border.BackgroundProperty, "SubtleFillColorSecondaryBrush");
-        border.SetResourceReference(Border.BorderBrushProperty, "CardStrokeColorDefaultBrush");
-        return border;
-    }
-
-    /// <summary>A code block's text, coloured as the JSON editor colours it when it's JSON.</summary>
-    private TextBlock CodeText(string code)
-    {
-        var text = new TextBlock { FontFamily = Mono, FontSize = 13 };
-        string trimmed = code.TrimStart();
-        if (!trimmed.StartsWith('{') && !trimmed.StartsWith('['))
-        {
-            text.Text = code;
-            return text;
-        }
-        bool dark = TryFindResource("TextFillColorPrimaryBrush") is SolidColorBrush b && 0.299 * b.Color.R + 0.587 * b.Color.G + 0.114 * b.Color.B > 128;
-        int at = 0;
-        foreach (var span in Highlighting.JsonScanner.Scan(code))
-        {
-            if (span.Start > at) text.Inlines.Add(new Run(code[at..span.Start]));
-            text.Inlines.Add(new Run(code.Substring(span.Start, span.Length)) { Foreground = Highlighting.JsonColorizer.BrushFor(span.Kind, dark) });
-            at = span.Start + span.Length;
-        }
-        if (at < code.Length) text.Inlines.Add(new Run(code[at..]));
-        return text;
-    }
-
-    private Border Note(string markup)
-    {
-        var row = new Grid();
-        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        row.ColumnDefinitions.Add(new ColumnDefinition());
-        var icon = new TextBlock { Text = "", FontFamily = (FontFamily)FindResource("IconFont"), FontSize = 16, Margin = new Thickness(0, 2, 12, 0) };
-        icon.SetResourceReference(TextBlock.ForegroundProperty, "AccentTextFillColorPrimaryBrush");
-        row.Children.Add(icon);
-        var text = Text(markup, new Thickness(0));
-        Grid.SetColumn(text, 1);
-        row.Children.Add(text);
-
-        var border = new Border
-        {
-            CornerRadius = new CornerRadius(6),
-            BorderThickness = new Thickness(1),
-            Padding = new Thickness(14, 10, 14, 10),
-            Margin = new Thickness(0, 2, 0, 14),
-            Child = row,
-        };
-        border.SetResourceReference(Border.BackgroundProperty, "CardBackgroundFillColorDefaultBrush");
-        border.SetResourceReference(Border.BorderBrushProperty, "CardStrokeColorDefaultBrush");
-        return border;
+        if (e.ChangedButton == MouseButton.XButton1) GoBack();
+        else if (e.ChangedButton == MouseButton.XButton2) GoForward();
+        else return;
+        e.Handled = true;
     }
 }

@@ -75,6 +75,13 @@ public static class DataViewers
             else SoundWindow.Open(path, sound.Value.Source, sound.Value.Data, locator, owner);
             return;
         }
+        // a texture's description: its pixels are in a texture cache under the same path, which the locator finds
+        if (Path.GetExtension(path).ToLowerInvariant() is ".xbm" or ".w2cube" or ".texarray"
+            && await Task.Run(() => locator.FindTexture(path)) is { } texture)
+        {
+            TextureWindow.Open(texture, owner, () => locator.ReadFile(path), locator);
+            return;
+        }
         bool viewable = CanOpen(path);
         if (!viewable)
         {

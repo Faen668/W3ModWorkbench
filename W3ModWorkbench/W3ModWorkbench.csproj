@@ -36,6 +36,9 @@
   <!-- WitcherScript grammar from WebSpam's witcherscript-vscode (MIT), used as-is -->
   <ItemGroup>
     <EmbeddedResource Include="Highlighting\witcherscript.tmLanguage.json" />
+    <!-- the guide's pages and screenshots (Help\Pages\README.md says how pages are written) -->
+    <EmbeddedResource Include="Help\Pages\**\*.md" LogicalName="HelpPages/%(RecursiveDir)%(Filename)%(Extension)" />
+    <EmbeddedResource Include="Help\Images\*.jpg;Help\Images\*.png" LogicalName="HelpImages/%(Filename)%(Extension)" />
     <!-- The engine's native classes and enums for the standalone compiler: REDkit's wcc_lite -dumprtti, slimmed -->
     <!-- the 3D view's pixel shader, compiled when the first view is made, with the Helix Toolkit (MIT) files it includes -->
     <EmbeddedResource Include="Rendering\Shaders\*.hlsl" LogicalName="W3ModWorkbench.Shaders.%(Filename)%(Extension)" />

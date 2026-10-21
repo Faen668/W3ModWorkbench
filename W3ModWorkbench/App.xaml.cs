@@ -28,6 +28,16 @@ public partial class App : Application
         }
         ApplyTheme(Settings.Theme, Settings.ThemePreset);
 
+        // F1 in any window opens the guide at that window's page (the main window opens it at the start)
+        EventManager.RegisterClassHandler(typeof(Window), System.Windows.Input.Keyboard.PreviewKeyDownEvent,
+            new System.Windows.Input.KeyEventHandler((sender, args) =>
+            {
+                if (args.Key != System.Windows.Input.Key.F1 || System.Windows.Input.Keyboard.Modifiers != System.Windows.Input.ModifierKeys.None
+                    || sender is not Window window || window is Help.HelpWindow || args.Handled) return;
+                Help.HelpWindow.ShowHelpFor(window);
+                args.Handled = true;
+            }));
+
         // Text boxes give everything inside them the text cursor, their scroll bars included.
         // Answer the cursor query for scroll bars before the text box does; a ScrollBar style here
         // would replace the theme's own scroll bar look.
