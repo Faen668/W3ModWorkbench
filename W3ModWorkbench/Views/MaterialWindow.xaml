@@ -207,7 +207,7 @@
                 <DockPanel Margin="8">
                     <WrapPanel DockPanel.Dock="Top" Margin="0,0,0,6">
                         <TextBlock Text="Preview on" VerticalAlignment="Center" Opacity="0.75" Margin="2,0,8,0" />
-                        <ComboBox x:Name="ShapeBox" MinWidth="150" MaxWidth="320" DisplayMemberPath="Label" SelectionChanged="ShapeBox_SelectionChanged"
+                        <ComboBox x:Name="ShapeBox" MinWidth="180" MaxWidth="360" DisplayMemberPath="Label" SelectionChanged="ShapeBox_SelectionChanged" DropDownOpened="ShapeBox_DropDownOpened"
                                   ToolTip="A sphere, a box, or a mesh that uses the material, drawn with it as the game draws it" />
                         <ToggleButton x:Name="SpinToggle" Margin="10,0,0,0" Padding="10,4" Click="SpinToggle_Click" ToolTip="Turn the preview slowly round (P)">
                             <StackPanel Orientation="Horizontal">

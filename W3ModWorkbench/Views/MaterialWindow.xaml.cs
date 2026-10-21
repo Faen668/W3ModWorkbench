@@ -41,8 +41,12 @@ public partial class MaterialWindow : Window, IMessageHost
     private List<MaterialParameter> _savedOwn = [];
     private List<MaterialValueRow> _rows = [];
     private ListCollectionView? _view;
-    private MeshFile? _previewMesh;
-    private HashSet<int> _ours = [];
+    private List<(MeshFile Mesh, Matrix4x4 Place)> _previewParts = [];
+    private HashSet<(int Part, int Material)> _ours = [];
+    private List<string> _users = [], _entities = [];
+    private List<string>? _allModels;
+    private Shape? _shown;
+    private CancellationTokenSource? _shapeLoad;
     private int _previewVersion, _lookVersion;
     private readonly DispatcherTimer _spin = new() { Interval = TimeSpan.FromMilliseconds(30) };
     private readonly DispatcherTimer _relook = new() { Interval = TimeSpan.FromMilliseconds(140) };
@@ -59,8 +63,10 @@ public partial class MaterialWindow : Window, IMessageHost
         public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) => value is not true;
     }
 
-    /// <summary>A shape to preview the material on: one of the game's, or a mesh that uses it.</summary>
-    private sealed record Shape(string Label, string Path, bool UsesIt);
+    private enum ShapeKind { Shape, Model, Pick }
+
+    /// <summary>What to preview the material on: one of the game's shapes, a mesh or an entity, or picking one.</summary>
+    private sealed record Shape(string Label, string Path, ShapeKind Kind);
 
     private sealed record ChainItem(string Name, string Detail, string Count, string Path, bool CanOpen);
 
@@ -74,8 +80,8 @@ public partial class MaterialWindow : Window, IMessageHost
     // shapes the game itself has, so the preview needs nothing but the game
     private static readonly Shape[] Shapes =
     [
-        new("Sphere", @"engine\reference_level\level_assets\tags\materials\sphere.w2mesh", false),
-        new("Box", @"engine\meshes\editor\box.w2mesh", false),
+        new("Sphere", @"engine\reference_level\level_assets\tags\materials\sphere.w2mesh", ShapeKind.Shape),
+        new("Box", @"engine\meshes\editor\box.w2mesh", ShapeKind.Shape),
     ];
 
     private MaterialWindow(string path, string source, Func<byte[]> readData, ResourceLocator locator, string? origin, IArchive? archive, string? diskFile)
@@ -170,10 +176,7 @@ public partial class MaterialWindow : Window, IMessageHost
         var resource = _file.First(IsGraph ? "CMaterialGraph" : "CMaterialInstance");
         if (resource is not null) FileProperties.Show(PropertyRow.Of(resource, _file));
         _ = LoadRedkitAsync();
-        _syncing = true;
-        ShapeBox.ItemsSource = Shapes.ToList();
-        ShapeBox.SelectedIndex = 0;
-        _syncing = false;
+        ShowShapes(Shapes[0]);
         await ShowShapeAsync(Shapes[0]);
         _ = FindUsersAsync();
     }
@@ -266,77 +269,159 @@ public partial class MaterialWindow : Window, IMessageHost
         }
     }
 
+    /// <summary>The meshes a model is drawn with: a mesh alone, or an entity's in its default appearance, dyed as the game dyes them.</summary>
+    private async Task<(List<(MeshFile Mesh, Matrix4x4 Place)> Parts, List<(MeshFile Mesh, (ColorShift? First, ColorShift? Second)? Coloring)> Coloured)?> ReadModelAsync(string path, CancellationToken token)
+    {
+        if (path.EndsWith(".w2ent", StringComparison.OrdinalIgnoreCase))
+        {
+            var entity = await Task.Run(() =>
+            {
+                var read = Core.Entities.EntityFile.Read(_locator.ReadFile(path) ?? throw new FileNotFoundException($"{path} isn't in the game's files or the archives open."));
+                read.FindOrigins(_locator.ReadFile);
+                return read;
+            }, token);
+            var appearance = entity.DefaultAppearance;
+            var look = await Task.Run(() => entity.Look(appearance, _locator.ReadFile), token);
+            var (parts, drawnBy, _, _) = await Task.Run(() => EntityWindow.ReadMeshes(look, _locator, token), token);
+            return (parts, parts.Select((part, p) => (part.Mesh, LookTextures.Coloring(entity, appearance?.Name, drawnBy[p].Name))).ToList());
+        }
+        var mesh = await Task.Run(() =>
+        {
+            if (_locator.ReadFile(path) is not { } data) return null;
+            var archive = _locator.Find(path)?.Archive;
+            return MeshFile.Read(data, n => _locator.ReadBuffer(path, n, archive));
+        }, token);
+        return mesh is null ? null : ([(mesh, Matrix4x4.Identity)], [(mesh, null)]);
+    }
+
     /// <summary>
-    /// Draws a shape with the material on it: a sphere or a box with it on every chunk, or a mesh that uses it with it
-    /// on the chunks it's on (the rest in their own materials).
+    /// Draws a model with the material on it: a sphere or a box with it on every chunk; a mesh or an entity that uses it
+    /// with it where it's used (the rest in their own materials, dyed as the game dyes them); any other model picked with
+    /// it on everything.
     /// </summary>
     private async Task ShowShapeAsync(Shape shape)
     {
+        if (shape.Kind == ShapeKind.Pick)
+        {
+            await PickModelAsync();
+            return;
+        }
+        _shapeLoad?.Cancel();
+        var token = (_shapeLoad = new CancellationTokenSource()).Token;
         int version = ++_previewVersion;
         ViewMessage.Visibility = Visibility.Collapsed;
         PreviewNote.Text = $"Reading {Path.GetFileName(shape.Path)}…";
-        MeshFile? mesh;
+        List<(MeshFile Mesh, Matrix4x4 Place)> parts;
+        List<(MeshFile Mesh, (ColorShift? First, ColorShift? Second)? Coloring)> coloured;
         try
         {
-            mesh = await Task.Run(() =>
+            if (await ReadModelAsync(shape.Path, token) is not { } model)
             {
-                if (_locator.ReadFile(shape.Path) is not { } data) return null;
-                var archive = _locator.Find(shape.Path)?.Archive;
-                return MeshFile.Read(data, n => _locator.ReadBuffer(shape.Path, n, archive));
-            });
+                ViewMessage.Text = $"{Path.GetFileName(shape.Path)} isn't in the game's files or the archives open.";
+                ViewMessage.Visibility = Visibility.Visible;
+                return;
+            }
+            (parts, coloured) = model;
+        }
+        catch (OperationCanceledException)
+        {
+            return;
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or NotSupportedException)
         {
-            mesh = null;
             PreviewNote.Text = $"{Path.GetFileName(shape.Path)} could not be read: {ex.Message}";
+            return;
         }
         if (version != _previewVersion) return;
-        if (mesh is null)
+        if (parts.Count == 0)
         {
-            ViewMessage.Text = $"{shape.Label} isn't in the game's files or the archives open.";
+            ViewMessage.Text = $"{Path.GetFileName(shape.Path)} has no meshes to draw.";
             ViewMessage.Visibility = Visibility.Visible;
             return;
         }
-        _previewMesh = mesh;
-        View.Show(mesh);
-        View.FitToView();
+        // which of its parts' materials are this one: where it's used, or, on a shape or a model that doesn't use it, everywhere
         string self = GamePath;
-        _ours = shape.UsesIt
-            ? [.. Enumerable.Range(0, mesh.Materials.Count).Where(i => mesh.File.Import(mesh.Materials[i])?.Path is { } p && p.Equals(self, StringComparison.OrdinalIgnoreCase))]
-            : [.. Enumerable.Range(0, mesh.Materials.Count)];
-        PreviewNote.Text = shape.UsesIt
-            ? $"On {Path.GetFileName(shape.Path)}: the material on {Format.Count(_ours.Count, "of its materials", "of its materials")}, the rest in their own. Drag to turn it, the wheel to zoom."
-            : $"On the game's {shape.Label.ToLowerInvariant()}, as the game draws the material. Drag to turn it, the wheel to zoom.";
-        // a mesh's other materials as they are
-        if (shape.UsesIt)
-            for (int i = 0; i < mesh.Materials.Count; i++)
-            {
-                if (_ours.Contains(i)) continue;
-                var (picture, look, _) = await LookTextures.ForMaterial(mesh, i, _locator, Texture);
-                if (version != _previewVersion) return;
-                View.SetTexture(i, picture, look);
-            }
+        var uses = parts.SelectMany((part, p) => Enumerable.Range(0, part.Mesh.Materials.Count)
+            .Where(i => part.Mesh.File.Import(part.Mesh.Materials[i])?.Path is { } m && m.Equals(self, StringComparison.OrdinalIgnoreCase)).Select(i => (p, i))).ToHashSet();
+        bool everywhere = shape.Kind == ShapeKind.Shape || uses.Count == 0;
+        _ours = everywhere ? [.. parts.SelectMany((part, p) => Enumerable.Range(0, part.Mesh.Materials.Count).Select(i => (p, i)))] : uses;
+        _previewParts = parts;
+        string name = Path.GetFileName(shape.Path);
+        PreviewNote.Text = shape.Kind == ShapeKind.Shape ? $"On the game's {shape.Label.ToLowerInvariant()}, as the game draws the material. Drag to turn it, the wheel to zoom."
+            : everywhere ? $"On {name}, which doesn't use it: the material on everything. Drag to turn it, the wheel to zoom."
+            : $"On {name}: the material where it's used ({Format.Count(uses.Count, "of its materials", "of its materials")}), the rest in their own. Drag to turn it, the wheel to zoom.";
+        // the model's own materials first, as the game draws them, then this one over them where it goes
+        string note = PreviewNote.Text;
+        var progress = new Progress<(int Done, int Total)>(n => { if (version == _previewVersion && n.Total > 0) PreviewNote.Text = $"Loading textures, {n.Done} of {n.Total}…"; });
+        var textures = shape.Kind == ShapeKind.Shape ? [] : await StageTextures.LoadAsync(coloured, _locator, Texture, progress, token);
+        if (version != _previewVersion) return;
+        View.ShowParts(parts, textures);
+        View.FitToView();
         await ApplyLookAsync();
+        if (version == _previewVersion) PreviewNote.Text = note;
     }
 
     /// <summary>Puts the material, as it is with its changes, on the preview's chunks that have it.</summary>
     private async Task ApplyLookAsync()
     {
-        if (_material is null || _previewMesh is null) return;
+        if (_material is null || _previewParts.Count == 0) return;
         int version = ++_lookVersion;
         var current = _material.WithOwn([.. _own]);
         var picture = current.Diffuse?.Path is { } diffuse ? await Texture(diffuse) : null;
         var look = await LookTextures.LookOf(current, _locator, Texture);
         if (version != _lookVersion) return;
-        foreach (int i in _ours) View.SetTexture(i, picture, look);
-        if (current.Diffuse is null) PreviewNote.Text = PreviewNote.Text.Split("  ·  ")[0] + "  ·  It has no colour texture.";
+        foreach (var (part, material) in _ours) View.SetTexture(part, material, picture, look);
     }
 
     private void ShapeBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_syncing || ShapeBox.SelectedItem is not Shape shape) return;
+        if (shape.Kind != ShapeKind.Pick) _shown = shape;
         _ = ShowShapeAsync(shape);
     }
+
+    /// <summary>The shapes to preview on: the game's sphere and box, picking any model, then the meshes and entities that use the material.</summary>
+    private void ShowShapes(Shape? select = null)
+    {
+        var items = new List<Shape>(Shapes) { new("View on model…", "", ShapeKind.Pick) };
+        items.AddRange(_users.Where(u => u.EndsWith(".w2mesh", StringComparison.OrdinalIgnoreCase)).Take(60)
+            .Select(u => new Shape($"Mesh: {Path.GetFileNameWithoutExtension(u)}", u, ShapeKind.Model)));
+        items.AddRange(_entities.Take(60).Select(u => new Shape($"Entity: {Path.GetFileNameWithoutExtension(u)}", u, ShapeKind.Model)));
+        if (select is not null && !items.Contains(select)) items.Add(select);
+        _syncing = true;
+        var selected = select ?? ShapeBox.SelectedItem as Shape;
+        ShapeBox.ItemsSource = items;
+        ShapeBox.SelectedItem = selected is null ? items[0] : items.FirstOrDefault(i => i.Path == selected.Path && i.Kind == selected.Kind) ?? items[0];
+        _syncing = false;
+    }
+
+    /// <summary>Picks any mesh or entity to see the material on, those that use it first.</summary>
+    private async Task PickModelAsync()
+    {
+        // back to what was shown in the list while the pick is open
+        ShowShapes(_shown);
+        PreviewNote.Text = "Listing the models…";
+        _allModels ??= await Task.Run(() => _locator.AllPaths(".w2mesh").Concat(_locator.AllPaths(".w2ent")).ToList());
+        PreviewNote.Text = "";
+        var users = _users.Concat(_entities).ToList();
+        Picker.Show("A mesh or an entity to see the material on: type part of its path", query =>
+        {
+            var words = query.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            IEnumerable<string> found = words.Length == 0 ? users
+                : _allModels.Where(p => words.All(w => p.Contains(w, StringComparison.OrdinalIgnoreCase)))
+                    .OrderByDescending(p => users.Contains(p, StringComparer.OrdinalIgnoreCase));
+            return [.. found.Take(400).Select(p => new QuickPickItem(p.EndsWith(".w2ent", StringComparison.OrdinalIgnoreCase) ? "" : "", Path.GetFileName(p), Path.GetDirectoryName(p) ?? "", p))];
+        }, chosen =>
+        {
+            if (chosen.Tag is not string path) return;
+            var shape = new Shape($"{(path.EndsWith(".w2ent", StringComparison.OrdinalIgnoreCase) ? "Entity" : "Mesh")}: {Path.GetFileNameWithoutExtension(path)}", path, ShapeKind.Model);
+            _shown = shape;
+            ShowShapes(shape);
+            _ = ShowShapeAsync(shape);
+        }, "With nothing typed, the meshes and entities that use the material. A model that doesn't use it has it on everything.");
+    }
+
+    private void ShapeBox_DropDownOpened(object? sender, EventArgs e) => ShowShapes();
 
     private void SpinToggle_Click(object sender, RoutedEventArgs e)
     {
@@ -348,15 +433,16 @@ public partial class MaterialWindow : Window, IMessageHost
     // ---------------------------------------------------------------- what uses it
 
     /// <summary>
-    /// The files that use the material: from the Asset Browser's index of what uses what when one is open, else the
-    /// meshes and materials in the folders round it, where a material's meshes nearly always are. Each that's a mesh is
-    /// added to the shapes to preview on.
+    /// The files that use the material: from the Asset Browser's index of what uses what when one is open (and the
+    /// entities that use those meshes), else the meshes and materials in the folders round it, where a material's meshes
+    /// nearly always are. The meshes and entities are added to the models to preview on.
     /// </summary>
     private async Task FindUsersAsync()
     {
         string self = GamePath;
         UsedByNote.Text = "Looking for the files that use it…";
         var users = new List<string>();
+        var entities = new List<string>();
         bool everywhere = false;
         if (Application.Current.Windows.OfType<AssetBrowserWindow>().FirstOrDefault() is { } browser)
         {
@@ -364,6 +450,10 @@ public partial class MaterialWindow : Window, IMessageHost
             {
                 var index = await browser.ReferencesAsync(false);
                 users = [.. index.UsedBy(self).Select(u => u.Path).Distinct(StringComparer.OrdinalIgnoreCase)];
+                // the entities that are drawn with those meshes
+                entities = [.. users.Where(u => u.EndsWith(".w2mesh", StringComparison.OrdinalIgnoreCase)).Take(60)
+                    .SelectMany(m => index.UsedBy(m).Select(u => u.Path)).Where(u => u.EndsWith(".w2ent", StringComparison.OrdinalIgnoreCase))
+                    .Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase)];
                 everywhere = true;
             }
             catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or InvalidOperationException) { }
@@ -389,18 +479,15 @@ public partial class MaterialWindow : Window, IMessageHost
                 return found;
             });
         }
-        UsedByGrid.ItemsSource = users.Order(StringComparer.OrdinalIgnoreCase).Select(u => new UserRow(u)).ToList();
-        UsedByTab.Header = $"Used by ({users.Count:N0})";
+        _users = [.. users.Order(StringComparer.OrdinalIgnoreCase)];
+        _entities = entities;
+        UsedByGrid.ItemsSource = _users.Concat(_entities).Select(u => new UserRow(u)).ToList();
+        UsedByTab.Header = $"Used by ({_users.Count + _entities.Count:N0})";
         UsedByNote.Text = (users.Count == 0 ? "Nothing was found that uses it" : $"{Format.Count(users.Count, "file")} that use it")
-            + (everywhere ? ", from the Asset Browser's index of the whole game." : ", among the meshes and materials in the folders round it (open the Asset Browser to look through the whole game).")
-            + (users.Count > 0 ? " Double-click one to open it, or pick a mesh above to preview the material on it." : "");
-        var meshes = users.Where(u => u.EndsWith(".w2mesh", StringComparison.OrdinalIgnoreCase)).Take(40)
-            .Select(u => new Shape($"On {Path.GetFileNameWithoutExtension(u)}", u, true));
-        _syncing = true;
-        var selected = ShapeBox.SelectedItem;
-        ShapeBox.ItemsSource = Shapes.Concat(meshes).ToList();
-        ShapeBox.SelectedItem = selected;
-        _syncing = false;
+            + (entities.Count > 0 ? $", and {Format.Count(entities.Count, "entity", "entities")} drawn with those meshes" : "")
+            + (everywhere ? ", from the Asset Browser's index of the whole game." : ", among the meshes and materials in the folders round it (open the Asset Browser to look through the whole game, entities too).")
+            + (users.Count > 0 ? " Double-click one to open it, or pick a mesh or an entity in Preview on to see the material on it." : "");
+        ShowShapes();
     }
 
     private UserRow? PickedUser => UsedByGrid.SelectedItem as UserRow;
@@ -418,15 +505,15 @@ public partial class MaterialWindow : Window, IMessageHost
     private void PreviewOnUser_Click(object sender, RoutedEventArgs e)
     {
         if (PickedUser is not { } user) return;
-        if (!user.Path.EndsWith(".w2mesh", StringComparison.OrdinalIgnoreCase))
+        if (!user.Path.EndsWith(".w2mesh", StringComparison.OrdinalIgnoreCase) && !user.Path.EndsWith(".w2ent", StringComparison.OrdinalIgnoreCase))
         {
-            _ = ShowMessage(null, "Only a mesh can be previewed on: this is another material based on this one.", MessageKind.Info);
+            _ = ShowMessage(null, "Only a mesh or an entity can be previewed on: this is another material based on this one.", MessageKind.Info);
             return;
         }
-        var shape = (ShapeBox.ItemsSource as IEnumerable<Shape>)?.FirstOrDefault(s => s.Path.Equals(user.Path, StringComparison.OrdinalIgnoreCase))
-                    ?? new Shape($"On {Path.GetFileNameWithoutExtension(user.Path)}", user.Path, true);
-        ShapeBox.SelectedItem = shape;
-        if (!ReferenceEquals(ShapeBox.SelectedItem, shape)) _ = ShowShapeAsync(shape);
+        var shape = new Shape($"{(user.Path.EndsWith(".w2ent", StringComparison.OrdinalIgnoreCase) ? "Entity" : "Mesh")}: {Path.GetFileNameWithoutExtension(user.Path)}", user.Path, ShapeKind.Model);
+        _shown = shape;
+        ShowShapes(shape);
+        _ = ShowShapeAsync(shape);
     }
 
     private void CopyUser_Click(object sender, RoutedEventArgs e)
