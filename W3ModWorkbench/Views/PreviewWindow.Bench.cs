@@ -9,6 +9,7 @@ using W3ModWorkbench.Core.Projects;
 using W3ModWorkbench.Core.Scripts;
 using W3ModWorkbench.Core.Scripts.Navigation;
 using W3ModWorkbench.ViewModels;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -92,7 +93,7 @@ public partial class PreviewWindow
         _ = BuildBenchAsync();
     }
 
-    private static string BenchTitle => ProjectWorkspace.Current is { } project ? $"Script Bench · {project.Name}" : "Script Bench";
+    private static string BenchTitle => ProjectWorkspace.Current is { } project ? L.T("PreviewWindow.ScriptBench", project.Name) : L.T("PreviewWindow.ScriptBench2");
 
     private void UpdateBenchTitle()
     {
@@ -131,8 +132,8 @@ public partial class PreviewWindow
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
         {
-            mine = new BenchNode { Name = ProjectWorkspace.Current?.Name ?? "Your mod", Group = BenchGroup.Mine, IsHeading = true };
-            mine.Add(BenchNode.Note(BenchGroup.Mine, "Couldn't be read: " + ex.Message, ex.ToString()));
+            mine = new BenchNode { Name = ProjectWorkspace.Current?.Name ?? L.T("PreviewWindow.YourMod"), Group = BenchGroup.Mine, IsHeading = true };
+            mine.Add(BenchNode.Note(BenchGroup.Mine, L.T("PreviewWindow.CouldntRead", ex.Message), ex.ToString()));
         }
         var mods = ModsGroup(modsFolder);
         if (build != _benchBuild) return;
@@ -188,18 +189,18 @@ public partial class PreviewWindow
         {
             var none = new BenchNode
             {
-                Name = "Your mod", Group = BenchGroup.Mine, IsHeading = true,
-                ToolTip = "The open project's scripts, the ones you can change and compile",
+                Name = L.T("PreviewWindow.YourMod"), Group = BenchGroup.Mine, IsHeading = true,
+                ToolTip = L.T("PreviewWindow.OpenProjectsScriptsOnes"),
             };
-            none.Add(BenchNode.Note(BenchGroup.Mine, "No project open",
-                "Open or create a project from the main window's Project menu. Its scripts are listed here, and they're the ones you can change, override game scripts with and compile"));
+            none.Add(BenchNode.Note(BenchGroup.Mine, L.T("PreviewWindow.NoProjectOpen"),
+                L.T("PreviewWindow.OpenCreateProjectMain")));
             return none;
         }
         string scripts = Path.GetFullPath(project.ScriptsPath).TrimEnd('\\');
         var heading = new BenchNode
         {
             Name = project.Name, Group = BenchGroup.Mine, IsHeading = true, DiskPath = scripts,
-            ToolTip = $"Your mod's scripts, in {scripts}. These are the ones that can be changed, and the ones compiling compiles",
+            ToolTip = L.T("PreviewWindow.YourModsScriptsThese", scripts),
         };
         var files = archive.Entries.OfType<LooseScriptEntry>()
             .Where(e => e.IsScript && e.FullPath.StartsWith(scripts + "\\", StringComparison.OrdinalIgnoreCase))
@@ -212,9 +213,9 @@ public partial class PreviewWindow
             {
                 Name = Path.GetFileName(relative), Group = BenchGroup.Mine, Entry = entry, RelativePath = relative,
                 DiskPath = ((LooseScriptEntry)entry).FullPath, Key = ScriptWorkspace.FileFor(entry).Key,
-                Badge = overrides ? "OVERRIDE" : null,
+                Badge = overrides ? L.T("PreviewWindow.Override") : null,
                 ToolTip = overrides
-                    ? $"Overrides the game's scripts\\{relative}: compiled in its place, so what it leaves out still comes from the game's. Compare with the game's from the right-click menu"
+                    ? L.T("PreviewWindow.OverridesGamesScriptsCompiled", relative)
                     : ((LooseScriptEntry)entry).FullPath,
             };
         }, Disk);
@@ -231,7 +232,7 @@ public partial class PreviewWindow
         }
         BenchNode.Sort(heading);
         int count = heading.Files().Count();
-        if (count == 0) heading.Add(BenchNode.Note(BenchGroup.Mine, "No scripts yet", "Right-click here for New script, or override one of the game's scripts"));
+        if (count == 0) heading.Add(BenchNode.Note(BenchGroup.Mine, L.T("PreviewWindow.NoScriptsYet"), L.T("PreviewWindow.RightClickHereNew")));
         return heading;
     }
 
@@ -241,13 +242,13 @@ public partial class PreviewWindow
         var byPath = new Dictionary<string, BenchNode>(StringComparer.OrdinalIgnoreCase);
         var heading = new BenchNode
         {
-            Name = "Game scripts", Group = BenchGroup.Game, IsHeading = true, DiskPath = null,
-            ToolTip = gameScripts is null ? "The game's scripts weren't found. Set the game folder in Settings"
-                : $"The game's own scripts, in {gameScripts}. Read-only: right-click one to override it in your mod",
+            Name = L.T("PreviewWindow.GameScripts"), Group = BenchGroup.Game, IsHeading = true, DiskPath = null,
+            ToolTip = gameScripts is null ? L.T("PreviewWindow.GamesScriptsWerentFound")
+                : L.T("PreviewWindow.GamesOwnScriptsRead", gameScripts),
         };
         if (gameScripts is null || !Directory.Exists(gameScripts))
         {
-            heading.Add(BenchNode.Note(BenchGroup.Game, "The game's scripts weren't found", "Set the game folder in Settings (Ctrl+, in the main window)"));
+            heading.Add(BenchNode.Note(BenchGroup.Game, L.T("PreviewWindow.GamesScriptsWerentFound2"), L.T("PreviewWindow.SetGameFolderSettings")));
             return (heading, byPath, null);
         }
         var archive = ScriptFolder.Open(gameScripts);
@@ -258,7 +259,7 @@ public partial class PreviewWindow
             var node = new BenchNode
             {
                 Name = Path.GetFileName(relative), Group = BenchGroup.Game, Entry = entry, RelativePath = relative,
-                Key = ScriptWorkspace.FileFor(entry).Key, ToolTip = $"scripts\\{relative}, read-only",
+                Key = ScriptWorkspace.FileFor(entry).Key, ToolTip = L.T("PreviewWindow.ScriptsReadOnly", relative),
             };
             byPath[relative] = node;
             return node;
@@ -271,8 +272,8 @@ public partial class PreviewWindow
     {
         var heading = new BenchNode
         {
-            Name = "Installed mods", Group = BenchGroup.Mods, IsHeading = true,
-            ToolTip = "The mods in the game's mods folder, read-only. The built-in compiler compiles your scripts against them, so their classes and functions can be used",
+            Name = L.T("Common.InstalledMods"), Group = BenchGroup.Mods, IsHeading = true,
+            ToolTip = L.T("PreviewWindow.ModsGamesModsFolder"),
         };
         string[] mods;
         try
@@ -294,15 +295,15 @@ public partial class PreviewWindow
             var node = new BenchNode
             {
                 Name = name, Group = BenchGroup.Mods, DiskPath = mod, RelativePath = name,
-                Detail = (blob is not null ? "compiled" : "loose scripts") + (mine ? ", your mod's installed build" : ""),
-                ToolTip = blob is not null ? $"{blob}\nIts compiled scripts, decompiled. Read-only"
-                    : $"{loose}\nIts loose scripts. Read-only"
-                    + (mine ? "\nThis is your mod as installed: compiling leaves it out, as it's an older build of your scripts" : ""),
+                Detail = (blob is not null ? L.T("PreviewWindow.CompiledLabel") : L.T("PreviewWindow.LooseScripts")) + (mine ? L.T("PreviewWindow.YourModsInstalledBuild") : ""),
+                ToolTip = blob is not null ? L.T("PreviewWindow.CompiledScriptsDecompiledRead", blob)
+                    : L.T("PreviewWindow.LooseReadOnly", loose)
+                    + (mine ? L.T("PreviewWindow.YourModAsInstalled") : ""),
             };
             node.LoadLater(() => Task.Run(() => ModFiles(node, blob, loose)));
             heading.Add(node);
         }
-        if (heading.Children.Count == 0) heading.Add(BenchNode.Note(BenchGroup.Mods, modsFolder is null ? "The game folder isn't set" : "No mods with scripts"));
+        if (heading.Children.Count == 0) heading.Add(BenchNode.Note(BenchGroup.Mods, modsFolder is null ? L.T("Common.GameFolderIsntSet") : L.T("PreviewWindow.NoModsScripts")));
         return heading;
     }
 
@@ -315,7 +316,7 @@ public partial class PreviewWindow
             // all.ws repeats every other file
             var files = archive.Entries.Where(e => e.Path.EndsWith(".ws", StringComparison.OrdinalIgnoreCase) && !e.Path.EndsWith(@"\all.ws", StringComparison.OrdinalIgnoreCase))
                 .Select(e => (e.Path.StartsWith(@"scripts\", StringComparison.OrdinalIgnoreCase) ? e.Path[8..] : e.Path, e));
-            BenchNode.Fill(holder, files, (relative, entry) => ModFile(mod, relative, entry, "decompiled from its blob"));
+            BenchNode.Fill(holder, files, (relative, entry) => ModFile(mod, relative, entry, L.T("PreviewWindow.DecompiledBlob")));
         }
         else
         {
@@ -330,16 +331,16 @@ public partial class PreviewWindow
         {
             foreach (var node in children.SelectMany(c => c.IsFile ? [c] : c.Files())) Remember(node);
         });
-        return children.Count > 0 ? children : [BenchNode.Note(BenchGroup.Mods, "No scripts")];
+        return children.Count > 0 ? children : [BenchNode.Note(BenchGroup.Mods, L.T("PreviewWindow.NoScripts"))];
     }
 
     private BenchNode ModFile(BenchNode mod, string relative, ArchiveEntry entry, string where) => new()
     {
         Name = Path.GetFileName(relative), Group = BenchGroup.Mods, Entry = entry, RelativePath = relative,
         Key = ScriptWorkspace.FileFor(entry).Key,
-        Badge = _gameByPath.ContainsKey(relative) ? "REPLACES" : null,
-        ToolTip = $"{mod.Name}: {relative}\n{where}. Read-only"
-            + (_gameByPath.ContainsKey(relative) ? "\nShips a copy of the game's file of the same path, which replaces it" : ""),
+        Badge = _gameByPath.ContainsKey(relative) ? L.T("PreviewWindow.Replaces") : null,
+        ToolTip = L.T("PreviewWindow.ModFileReadOnly", mod.Name, relative, where)
+            + (_gameByPath.ContainsKey(relative) ? L.T("PreviewWindow.ShipsGameCopy") : ""),
     };
 
     // ---------------------------------------------------------------- the filter
@@ -388,8 +389,8 @@ public partial class PreviewWindow
                 copy.FolderAt(folder).Add(match.CopyFile());
             }
             BenchNode.Sort(copy);
-            if (matches.Count > most) copy.Add(BenchNode.Note(root.Group, $"and {matches.Count - most:N0} more: type more of the name"));
-            if (matches.Count == 0) copy.Add(BenchNode.Note(root.Group, root.Group == BenchGroup.Mods ? "No match in the mods expanded so far" : "No match"));
+            if (matches.Count > most) copy.Add(BenchNode.Note(root.Group, L.T("PreviewWindow.MoreTypeMoreName", matches.Count - most)));
+            if (matches.Count == 0) copy.Add(BenchNode.Note(root.Group, root.Group == BenchGroup.Mods ? L.T("PreviewWindow.NoMatchModsExpanded") : L.T("PreviewWindow.NoMatch")));
             ExpandAll(copy);
             filtered.Add(copy);
         }
@@ -482,7 +483,7 @@ public partial class PreviewWindow
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
         {
-            await BenchMessage.Show($"{node.Name} could not be read", ex.Message, MessageKind.Warning, primary: "OK");
+            await BenchMessage.Show(L.T("PreviewWindow.CouldNotRead", node.Name), ex.Message, MessageKind.Warning, primary: L.T("Common.OK"));
         }
     }
 
@@ -510,7 +511,7 @@ public partial class PreviewWindow
         }
         catch (Exception ex)
         {
-            await BenchMessage.Show($"{file.Path} could not be read", ex.Message, MessageKind.Warning, primary: "OK");
+            await BenchMessage.Show(L.T("PreviewWindow.CouldNotRead2", file.Path), ex.Message, MessageKind.Warning, primary: L.T("Common.OK"));
             return;
         }
         var workspace = _gameArchive is { } game && _benchMain is { } main ? ScriptWorkspace.For(game, main.OpenArchives) : null;
@@ -600,43 +601,43 @@ public partial class PreviewWindow
         var project = ProjectWorkspace.Current;
         if (node.IsFile)
         {
-            Add("Open", "", () => _ = OpenBenchNodeAsync(node), gesture: "Enter");
+            Add(L.T("Common.Open"), "", () => _ = OpenBenchNodeAsync(node), gesture: "Enter");
             if (node.Group == BenchGroup.Mine && node.Badge is not null)
-                Add("Compare with the game's", "", () => _ = CompareWithGameAsync(node),
-                    tip: "Opens the game's file beside yours with the lines that differ marked");
+                Add(L.T("PreviewWindow.CompareGames"), "", () => _ = CompareWithGameAsync(node),
+                    tip: L.T("PreviewWindow.OpensGamesFileBeside"));
             if (node.Group is BenchGroup.Game or BenchGroup.Mods)
             {
                 Separate();
                 string target = project is null ? "" : Path.Combine(project.ScriptsPath, node.RelativePath);
                 if (project is not null && File.Exists(target))
-                    Add("Open your copy", "", () => _ = OpenMineAsync(target), tip: $"Your mod has {project.ScriptsFolder}\\{node.RelativePath} already");
+                    Add(L.T("PreviewWindow.OpenYourCopy"), "", () => _ = OpenMineAsync(target), tip: L.T("PreviewWindow.YourModHasAlready", project.ScriptsFolder, node.RelativePath));
                 else
-                    Add("Copy to project", "", () => _ = CopyNodeToProjectAsync(node), project is not null,
-                        tip: project is null ? "Open a project first: the copy goes in its scripts folder"
-                            : $"Copies the file to {project.ScriptsFolder}\\{node.RelativePath} in {project.Name}, where it's yours to change, and opens it"
-                            + (node.Group == BenchGroup.Game || _gameByPath.ContainsKey(node.RelativePath) ? ". It's compiled in place of the game's file of the same path" : ""));
+                    Add(L.T("Common.CopyProject"), "", () => _ = CopyNodeToProjectAsync(node), project is not null,
+                        tip: project is null ? L.T("PreviewWindow.OpenProjectFirstCopy")
+                            : L.T("PreviewWindow.CopiesFileTo", project.ScriptsFolder, node.RelativePath, project.Name)
+                            + (node.Group == BenchGroup.Game || _gameByPath.ContainsKey(node.RelativePath) ? L.T("PreviewWindow.CompiledInPlace") : ""));
             }
         }
         if (node.Group == BenchGroup.Mine && node.DiskPath is not null && !node.IsFile)
         {
             Separate();
-            Add("New script…", "", () => _ = NewScriptAsync(node));
-            Add("New folder…", "", () => _ = NewFolderAsync(node));
+            Add(L.T("PreviewWindow.NewScript"), "", () => _ = NewScriptAsync(node));
+            Add(L.T("PreviewWindow.NewFolder"), "", () => _ = NewFolderAsync(node));
         }
         if (node.IsEditable && !node.IsHeading)
         {
             Separate();
-            Add("Rename…", "", () => _ = RenameAsync(node), gesture: "F2");
-            Add("Delete", "", () => _ = DeleteAsync(node), gesture: "Del", tip: "Moves it to the Recycle Bin");
+            Add(L.T("PreviewWindow.Rename2"), "", () => _ = RenameAsync(node), gesture: "F2");
+            Add(L.T("PreviewWindow.Delete2"), "", () => _ = DeleteAsync(node), gesture: "Del", tip: L.T("PreviewWindow.MovesRecycleBin"));
         }
         Separate();
         string? reveal = node.DiskPath ?? (node.Entry as LooseScriptEntry)?.FullPath
             ?? (node.Group == BenchGroup.Game && node.IsHeading ? _gameScripts : null)
             ?? (node.Group == BenchGroup.Game && _gameScripts is not null && node.RelativePath.Length > 0 ? Path.Combine(_gameScripts, node.RelativePath) : null);
         if (reveal is not null && (File.Exists(reveal) || Directory.Exists(reveal)))
-            Add("Show in Explorer", "", () => { if (!ShellReveal.Show([reveal])) ShellReveal.Open(reveal); });
+            Add(L.T("Common.ShowExplorer"), "", () => { if (!ShellReveal.Show([reveal])) ShellReveal.Open(reveal); });
         if (node.IsFile)
-            Add("Copy path", "", () => Clipboard.SetText(node.DiskPath ?? (node.Entry as LooseScriptEntry)?.FullPath ?? node.RelativePath));
+            Add(L.T("Common.CopyPath"), "", () => Clipboard.SetText(node.DiskPath ?? (node.Entry as LooseScriptEntry)?.FullPath ?? node.RelativePath));
         if (BenchMenu.Items.Count == 0) e.Handled = true;
         else if (BenchMenu.Items[^1] is Separator last) BenchMenu.Items.Remove(last);
     }
@@ -674,7 +675,7 @@ public partial class PreviewWindow
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or Core.Projects.ProtectedFileException)
         {
-            await BenchMessage.Show($"{source.Name} could not be copied into the project", ex.Message, MessageKind.Warning, primary: "OK");
+            await BenchMessage.Show(L.T("PreviewWindow.CouldNotCopiedInto", source.Name), ex.Message, MessageKind.Warning, primary: L.T("Common.OK"));
             return;
         }
         await main.ReloadProjectAsync();
@@ -694,10 +695,10 @@ public partial class PreviewWindow
     private async Task NewScriptAsync(BenchNode folder)
     {
         if (folder.DiskPath is not { } dir || _benchMain is not { } main) return;
-        string? name = await AskNameAsync($"New script in {(folder.IsHeading ? "the scripts folder" : folder.RelativePath)}", "", text =>
+        string? name = await AskNameAsync(L.T("PreviewWindow.NewScriptIn", folder.IsHeading ? L.T("PreviewWindow.TheScriptsFolder") : folder.RelativePath), "", text =>
         {
             string file = text.EndsWith(".ws", StringComparison.OrdinalIgnoreCase) ? text : text + ".ws";
-            return NameProblem(file) ?? (File.Exists(Path.Combine(dir, file)) ? $"{file} is there already" : null);
+            return NameProblem(file) ?? (File.Exists(Path.Combine(dir, file)) ? L.T("PreviewWindow.ThereAlready", file) : null);
         });
         if (name is null) return;
         string path = Path.Combine(dir, name.EndsWith(".ws", StringComparison.OrdinalIgnoreCase) ? name : name + ".ws");
@@ -708,7 +709,7 @@ public partial class PreviewWindow
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            await BenchMessage.Show($"{Path.GetFileName(path)} could not be made", ex.Message, MessageKind.Warning, primary: "OK");
+            await BenchMessage.Show(L.T("PreviewWindow.CouldNotMade", Path.GetFileName(path)), ex.Message, MessageKind.Warning, primary: L.T("Common.OK"));
             return;
         }
         await main.ReloadProjectAsync();
@@ -718,8 +719,8 @@ public partial class PreviewWindow
     private async Task NewFolderAsync(BenchNode folder)
     {
         if (folder.DiskPath is not { } dir) return;
-        string? name = await AskNameAsync($"New folder in {(folder.IsHeading ? "the scripts folder" : folder.RelativePath)}", "",
-            text => NameProblem(text) ?? (Directory.Exists(Path.Combine(dir, text)) ? $"{text} is there already" : null));
+        string? name = await AskNameAsync(L.T("PreviewWindow.NewFolderIn", folder.IsHeading ? L.T("PreviewWindow.TheScriptsFolder") : folder.RelativePath), "",
+            text => NameProblem(text) ?? (Directory.Exists(Path.Combine(dir, text)) ? L.T("PreviewWindow.ThereAlready2", text) : null));
         if (name is null) return;
         try
         {
@@ -727,7 +728,7 @@ public partial class PreviewWindow
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            await BenchMessage.Show($"{name} could not be made", ex.Message, MessageKind.Warning, primary: "OK");
+            await BenchMessage.Show(L.T("PreviewWindow.CouldNotMade2", name), ex.Message, MessageKind.Warning, primary: L.T("Common.OK"));
             return;
         }
         folder.IsExpanded = true;
@@ -738,12 +739,12 @@ public partial class PreviewWindow
     {
         if (node.DiskPath is not { } path || _benchMain is not { } main) return;
         string dir = Path.GetDirectoryName(path)!;
-        string? name = await AskNameAsync($"Rename {node.Name}", node.Name, text =>
+        string? name = await AskNameAsync(L.T("PreviewWindow.Rename", node.Name), node.Name, text =>
             text.Equals(node.Name, StringComparison.Ordinal) ? "" : NameProblem(text)
-            ?? (node.IsFile && !text.EndsWith(".ws", StringComparison.OrdinalIgnoreCase) ? "A script's name ends in .ws" : null)
-            ?? (!text.Equals(node.Name, StringComparison.OrdinalIgnoreCase) && (File.Exists(Path.Combine(dir, text)) || Directory.Exists(Path.Combine(dir, text))) ? $"{text} is there already" : null));
+            ?? (node.IsFile && !text.EndsWith(".ws", StringComparison.OrdinalIgnoreCase) ? L.T("PreviewWindow.ScriptsNameEndsWs") : null)
+            ?? (!text.Equals(node.Name, StringComparison.OrdinalIgnoreCase) && (File.Exists(Path.Combine(dir, text)) || Directory.Exists(Path.Combine(dir, text))) ? L.T("PreviewWindow.ThereAlready2", text) : null));
         if (name is null || name == node.Name) return;
-        if (!await CloseTabsUnderAsync(path, "renamed")) return;
+        if (!await CloseTabsUnderAsync(path, renaming: true)) return;
         string target = Path.Combine(dir, name);
         try
         {
@@ -752,7 +753,7 @@ public partial class PreviewWindow
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            await BenchMessage.Show($"{node.Name} could not be renamed", ex.Message, MessageKind.Warning, primary: "OK");
+            await BenchMessage.Show(L.T("PreviewWindow.CouldNotRenamed", node.Name), ex.Message, MessageKind.Warning, primary: L.T("Common.OK"));
             return;
         }
         await main.ReloadProjectAsync();
@@ -763,11 +764,11 @@ public partial class PreviewWindow
     {
         if (node.DiskPath is not { } path || _benchMain is not { } main) return;
         int files = node.IsFile ? 1 : node.Files().Count();
-        string what = node.IsFile ? node.Name : files == 0 ? $"the folder {node.Name}" : $"the folder {node.Name} and its {Format.Count(files, "script")}";
-        if (!await BenchMessage.Show($"Delete {what}?", "It goes to the Recycle Bin, where it can be restored from." + (node.Badge is not null ? " The game's own file is used again in its place." : ""),
-                MessageKind.Question, primary: "Delete", secondary: "Cancel"))
+        string what = node.IsFile ? node.Name : files == 0 ? L.T("PreviewWindow.Folder", node.Name) : L.T("PreviewWindow.Folder2", node.Name, L.T("Count.Script", files));
+        if (!await BenchMessage.Show(L.T("PreviewWindow.Delete", what), L.T("PreviewWindow.RecycleBin") + (node.Badge is not null ? L.T("PreviewWindow.GameFileAgain") : ""),
+                MessageKind.Question, primary: L.T("PreviewWindow.Delete2"), secondary: L.T("Common.Cancel")))
             return;
-        if (!await CloseTabsUnderAsync(path, "deleted")) return;
+        if (!await CloseTabsUnderAsync(path, renaming: false)) return;
         try
         {
             if (node.IsFile)
@@ -777,7 +778,7 @@ public partial class PreviewWindow
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or OperationCanceledException)
         {
-            await BenchMessage.Show($"{node.Name} could not be deleted", ex.Message, MessageKind.Warning, primary: "OK");
+            await BenchMessage.Show(L.T("PreviewWindow.CouldNotDeleted", node.Name), ex.Message, MessageKind.Warning, primary: L.T("Common.OK"));
             return;
         }
         RemoveEmptyFolders(Path.GetDirectoryName(path));
@@ -805,7 +806,7 @@ public partial class PreviewWindow
     }
 
     /// <summary>Closes the tabs of files at or under a path before it's renamed or deleted; false when one has changes and the answer was to keep them.</summary>
-    private async Task<bool> CloseTabsUnderAsync(string path, string happening)
+    private async Task<bool> CloseTabsUnderAsync(string path, bool renaming)
     {
         string full = Path.GetFullPath(path);
         bool Under(PreviewDocument d) => d.Item.DiskPath is { } disk
@@ -814,9 +815,10 @@ public partial class PreviewWindow
         var unsaved = docs.Where(d => d.IsDirty).ToList();
         if (unsaved.Count > 0)
         {
-            var choice = await BenchMessage.Ask($"Save the changes to {Names(unsaved)} first?",
-                $"{(unsaved.Count == 1 ? "Its tab is" : "Their tabs are")} closed before {(docs.Count == 1 ? "it's" : "they're")} {happening}.",
-                MessageKind.Question, "Save", "Don't save");
+            var choice = await BenchMessage.Ask(L.T("PreviewWindow.SaveChangesFirst", Names(unsaved)),
+                (unsaved.Count == 1 ? L.T("PreviewWindow.ItsTabIsClosed") : L.T("PreviewWindow.TheirTabsAreClosed"))
+                + L.T(renaming ? "PreviewWindow.BeforeRenamed" : "PreviewWindow.BeforeDeleted", docs.Count),
+                MessageKind.Question, L.T("Common.Save"), L.T("Common.DontSave"));
             if (choice == MessageChoice.Cancel || choice == MessageChoice.Primary && !SaveAll(unsaved)) return false;
         }
         foreach (var doc in docs)
@@ -828,9 +830,9 @@ public partial class PreviewWindow
     }
 
     private static string? NameProblem(string name) =>
-        name.Length == 0 ? "Type a name"
-        : name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 ? "A name can't have \\ / : * ? \" < > or | in it"
-        : name.Trim() != name || name.EndsWith('.') ? "A name can't start or end with a space, or end with a dot"
+        name.Length == 0 ? L.T("PreviewWindow.TypeName")
+        : name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 ? L.T("PreviewWindow.NameCantHave")
+        : name.Trim() != name || name.EndsWith('.') ? L.T("PreviewWindow.NameCantStartEnd")
         : null;
 
     // ---------------------------------------------------------------- naming, in the bar above the tree
@@ -895,23 +897,23 @@ public partial class PreviewWindow
         BenchCompileButton.IsEnabled = project is not null && compiler is not null && _compile is null;
         if (project is null)
         {
-            BenchStatusText.Text = "No project open. The game's and the installed mods' scripts can be read here; open or create a project from the main window to write your own.";
+            BenchStatusText.Text = L.T("PreviewWindow.NoProjectOpenGames");
             BenchStatusText.ToolTip = null;
             return;
         }
         int scripts = _mine?.Files().Count() ?? 0, overrides = _mine?.Files().Count(f => f.Badge is not null) ?? 0;
         int mods = _mods?.Children.Count(c => !c.IsNote && !(c.Detail?.Contains("your mod") ?? false)) ?? 0;
         string against = compiler?.Kind == CompilerKind.WccLite
-            ? "REDkit's copy of the game's scripts (r4data\\scripts, with whatever else is in it)"
-            : $"the game's scripts and {Format.Count(mods, "installed mod")}";
-        string with = compiler is null ? "nothing to compile with: set wcc_lite or the game folder in Settings"
-            : compiler.Kind == CompilerKind.WccLite ? "REDkit's wcc_lite" : "the built-in compiler";
-        BenchStatusText.Text = $"Compiles {project.ScriptsFolder} ({Format.Count(scripts, "script")}"
-            + (overrides > 0 ? $", {overrides} overriding the game's" : "") + $") against {against}, with {with}.";
-        BenchStatusText.ToolTip = $"Your scripts: {project.ScriptsPath}\nThe game's scripts: {(compiler?.GameScripts ?? _gameScripts ?? "not found")}"
-            + (compiler?.ModsFolder is { } modsFolder && compiler.Kind == CompilerKind.BuiltIn ? $"\nInstalled mods: {modsFolder} (your own mod's installed build is left out)" : "")
-            + $"\n\nCompile checks the scripts and lists what's wrong. Build puts them in the mod as content\\precompiled.rsblob"
-            + (project.BuildLooseScripts == true ? ", with the .ws files beside it in content\\scripts" : "") + " (Project properties). The compiler is chosen in Settings";
+            ? L.T("PreviewWindow.REDkitsCopyGamesScripts")
+            : L.T("PreviewWindow.GamesScripts", L.T("Count.InstalledMod", mods));
+        string with = compiler is null ? L.T("PreviewWindow.NothingCompileSetWcc")
+            : compiler.Kind == CompilerKind.WccLite ? L.T("PreviewWindow.REDkitsWccLite") : L.T("PreviewWindow.BuiltCompiler");
+        BenchStatusText.Text = L.T("PreviewWindow.Compiles", project.ScriptsFolder, L.T("Count.Script", scripts),
+            overrides > 0 ? L.T("PreviewWindow.Overriding", overrides) : "", against, with);
+        BenchStatusText.ToolTip = L.T("PreviewWindow.CompileFolders", project.ScriptsPath, compiler?.GameScripts ?? _gameScripts ?? L.T("PreviewWindow.NotFound"))
+            + (compiler?.ModsFolder is { } modsFolder && compiler.Kind == CompilerKind.BuiltIn ? L.T("PreviewWindow.InstalledModsFolder", modsFolder) : "")
+            + L.T("PreviewWindow.CompileChecks")
+            + (project.BuildLooseScripts == true ? L.T("PreviewWindow.WithLooseScripts") : "") + L.T("PreviewWindow.CompilerInSettings");
     }
 
     private void BenchCompile_Click(object sender, RoutedEventArgs e) => _ = BenchCompileAsync();

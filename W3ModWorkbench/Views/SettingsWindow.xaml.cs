@@ -211,15 +211,29 @@ public partial class SettingsWindow : Window, IMessageHost
             {
                 Style = (Style)FindResource("Swatch"),
                 GroupName = "Preset",
-                Tag = preset.Name,
+                Tag = ThemeName(preset.Name),
                 Content = Swatch(preset, dark),
                 IsChecked = preset.Name == _preset,
-                ToolTip = preset.Accent is null ? L.T("Settings.Appearance.ThemeWindowsTip") : L.T("Settings.Appearance.ThemeSchoolTip", preset.Name),
+                ToolTip = preset.Accent is null ? L.T("Settings.Appearance.ThemeWindowsTip") : L.T("Settings.Appearance.ThemeSchoolTip", ThemeName(preset.Name)),
             };
             button.Checked += (_, _) => Preset_Checked(preset);
             PresetPanel.Children.Add(button);
         }
     }
+
+    /// <summary>A theme's name as shown: the witcher schools' names, translated where a language has its own.</summary>
+    private static string ThemeName(string name) => name switch
+    {
+        "Windows" => L.T("Settings.Appearance.ThemeWindows"),
+        "Wolf" => L.T("Settings.Appearance.ThemeWolf"),
+        "Cat" => L.T("Settings.Appearance.ThemeCat"),
+        "Griffin" => L.T("Settings.Appearance.ThemeGriffin"),
+        "Bear" => L.T("Settings.Appearance.ThemeBear"),
+        "Viper" => L.T("Settings.Appearance.ThemeViper"),
+        "Manticore" => L.T("Settings.Appearance.ThemeManticore"),
+        "Graphite" => L.T("Settings.Appearance.ThemeGraphite"),
+        _ => name,
+    };
 
     /// <summary>A small picture of a theme: its background, with a bar in its accent colour and a plain one.</summary>
     private static Border Swatch(ThemePreset preset, bool dark)

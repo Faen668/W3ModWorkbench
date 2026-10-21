@@ -4,6 +4,7 @@ using Microsoft.Win32;
 using W3ModWorkbench.Core.Scripts;
 using W3ModWorkbench.Core.Scripts.Navigation;
 using W3ModWorkbench.ViewModels;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -14,8 +15,13 @@ namespace W3ModWorkbench;
 /// </summary>
 public partial class PreviewWindow
 {
-    private const string Everywhere = "Everywhere", MineScope = "Your mod", GameScope = "Game scripts",
-        ModsScope = "Installed mods", RedkitScope = "REDkit scripts", ChooseFolder = "A folder…";
+    // where to look, by the names the list shows
+    private static string Everywhere => L.T("PreviewWindow.ScopeEverywhere");
+    private static string MineScope => L.T("PreviewWindow.ScopeMine");
+    private static string GameScope => L.T("PreviewWindow.ScopeGame");
+    private static string ModsScope => L.T("PreviewWindow.ScopeMods");
+    private static string RedkitScope => L.T("PreviewWindow.ScopeRedkit");
+    private static string ChooseFolder => L.T("PreviewWindow.ScopeFolder");
 
     /// <summary>The folder picked with A folder…, offered in the list from then on.</summary>
     private string? _findFolder;
@@ -72,7 +78,7 @@ public partial class PreviewWindow
         }
         var dialog = new OpenFolderDialog
         {
-            Title = "Search the scripts in a folder",
+            Title = L.T("PreviewWindow.SearchScriptsFolder"),
             InitialDirectory = _findFolder ?? (Directory.Exists(App.Settings.LastOpenFolder) ? App.Settings.LastOpenFolder : ""),
         };
         if (dialog.ShowDialog(this) == true)
@@ -106,15 +112,15 @@ public partial class PreviewWindow
         // the tree's own files, so a match opens in the tab the tree would open
         List<ScriptFile> Listed(BenchNode? group) =>
             group is null ? [] : [.. group.Files().Where(n => n.Entry is not null).Select(n => ScriptWorkspace.FileFor(n.Entry!))];
-        var mine = scope is Everywhere or MineScope ? Listed(_mine) : [];
-        var game = scope is Everywhere or GameScope ? Listed(_game) : [];
-        string? mods = scope is Everywhere or ModsScope ? _modsFolder : null;
+        var mine = scope == Everywhere || scope == MineScope ? Listed(_mine) : [];
+        var game = scope == Everywhere || scope == GameScope ? Listed(_game) : [];
+        string? mods = scope == Everywhere || scope == ModsScope ? _modsFolder : null;
         string? folder = scope == RedkitScope ? RedkitScripts() : scope == _findFolder ? _findFolder : null;
         var unsaved = AllDocuments.Where(d => d.IsDirty && d.Item.Script is not null)
             .GroupBy(d => d.Item.Script!.Key).ToDictionary(g => g.Key, g => g.First().Text, StringComparer.OrdinalIgnoreCase);
-        string where = scope == Everywhere ? "your mod, the game's scripts and the installed mods" : scope == _findFolder ? Path.GetFileName(scope) : scope;
+        string where = scope == Everywhere ? L.T("PreviewWindow.YourModGamesScripts") : scope == _findFolder ? Path.GetFileName(scope) : scope;
 
-        ShowResults(Current, FindTitle, $"Looking for '{text}' in {where}…", cancel =>
+        ShowResults(Current, FindTitle, L.T("PreviewWindow.Looking", text, where), cancel =>
         {
             var files = new List<ScriptFile>(mine);
             files.AddRange(game);
@@ -122,11 +128,11 @@ public partial class PreviewWindow
             if (folder is not null) files.AddRange(FolderScripts(folder));
             files = [.. files.Where(f => pass(UnderScripts(f.Path)))];
             var hits = ScriptSearch.Text(pattern, files, unsaved, cancel);
-            return (ResultRow.ByFile(hits), $"{Summary(hits, "match", "matches")}  ·  {files.Count:N0} scripts searched");
+            return (ResultRow.ByFile(hits), L.T("PreviewWindow.ScriptsSearched", Summary(hits), files.Count));
         }, mine.Count + game.Count == 0 && mods is null && folder is null
-            ? scope == MineScope ? "No project is open, so there are no scripts of yours to search. Open or create one from the main window."
-              : "The game's scripts weren't found. Set the game folder in Settings, or pick a folder in Look in."
-            : $"Nothing matches '{text}' in {where}" + (Results.FileFilter.Length > 0 ? $" (files: {Results.FileFilter})." : "."));
+            ? scope == MineScope ? L.T("PreviewWindow.NoProjectOpenSo")
+              : L.T("PreviewWindow.GamesScriptsWerentFound3")
+            : L.T("PreviewWindow.NothingMatchesIn", text, where) + (Results.FileFilter.Length > 0 ? L.T("PreviewWindow.FilesFilter", Results.FileFilter) : "."));
     }
 
     /// <summary>A script's path under its scripts folder, as the Files box matches it: game\player\r4Player.ws.</summary>

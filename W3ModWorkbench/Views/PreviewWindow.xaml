@@ -1,9 +1,10 @@
 <Window x:Class="W3ModWorkbench.PreviewWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:l="clr-namespace:W3ModWorkbench.Localisation"
         xmlns:local="clr-namespace:W3ModWorkbench"
         xmlns:vm="clr-namespace:W3ModWorkbench.ViewModels"
-        Title="Preview" Icon="pack://application:,,,/W3ModWorkbench;component/Assets/app.ico"
+        Title="{l:T Common.Preview2}" Icon="pack://application:,,,/W3ModWorkbench;component/Assets/app.ico"
         Width="1000" Height="760" MinWidth="520" MinHeight="320"
         WindowStartupLocation="CenterOwner" PreviewKeyDown="Window_PreviewKeyDown" PreviewKeyUp="Window_PreviewKeyUp">
     <Grid>
@@ -20,19 +21,19 @@
     <!-- Script Bench: the project's scripts, the game's and the installed mods' -->
     <DockPanel x:Name="BenchPanel" Visibility="Collapsed" Margin="12,12,0,14">
         <DockPanel DockPanel.Dock="Top" Margin="0,0,0,8">
-            <Button DockPanel.Dock="Right" Click="BenchCollapse_Click" Padding="8,5" Margin="4,0,0,0" ToolTip="Collapse every folder">
+            <Button DockPanel.Dock="Right" Click="BenchCollapse_Click" Padding="8,5" Margin="4,0,0,0" ToolTip="{l:T PreviewWindow.CollapseEveryFolder}">
                 <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE8C5;" VerticalAlignment="Center" />
             </Button>
-            <Button DockPanel.Dock="Right" Click="BenchLocate_Click" Padding="8,5" Margin="4,0,0,0" ToolTip="Show the file in front in the tree">
+            <Button DockPanel.Dock="Right" Click="BenchLocate_Click" Padding="8,5" Margin="4,0,0,0" ToolTip="{l:T PreviewWindow.ShowFileFrontTree}">
                 <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE81D;" VerticalAlignment="Center" />
             </Button>
-            <Button DockPanel.Dock="Right" Click="BenchRefresh_Click" Padding="8,5" ToolTip="Read the scripts again">
+            <Button DockPanel.Dock="Right" Click="BenchRefresh_Click" Padding="8,5" ToolTip="{l:T PreviewWindow.ReadScriptsAgain}">
                 <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE72C;" VerticalAlignment="Center" />
             </Button>
             <Grid Margin="0,0,4,0">
                 <TextBox x:Name="BenchFilter" TextChanged="BenchFilter_TextChanged" PreviewKeyDown="BenchFilter_PreviewKeyDown"
-                         ToolTip="Show only the scripts whose name or folder has this in it (Esc clears it)" />
-                <TextBlock Text="Filter scripts" IsHitTestVisible="False" Margin="11,0,0,0" VerticalAlignment="Center" Opacity="0.5">
+                         ToolTip="{l:T PreviewWindow.ShowOnlyScriptsWhose}" />
+                <TextBlock Text="{l:T PreviewWindow.FilterScripts}" IsHitTestVisible="False" Margin="11,0,0,0" VerticalAlignment="Center" Opacity="0.5">
                     <TextBlock.Style>
                         <Style TargetType="TextBlock">
                             <Setter Property="Visibility" Value="Collapsed" />
@@ -54,7 +55,7 @@
                 <TextBox x:Name="BenchNameBox" PreviewKeyDown="BenchNameBox_PreviewKeyDown" />
                 <TextBlock x:Name="BenchNameProblem" Visibility="Collapsed" Margin="0,6,0,0" TextWrapping="Wrap"
                            Foreground="{DynamicResource SystemFillColorCriticalBrush}" />
-                <TextBlock Margin="0,6,0,0" Opacity="0.6" FontSize="11" Text="Enter to accept, Esc to cancel" />
+                <TextBlock Margin="0,6,0,0" Opacity="0.6" FontSize="11" Text="{l:T PreviewWindow.EnterAcceptEscCancel}" />
             </StackPanel>
         </Border>
         <TreeView x:Name="BenchTree" MouseDoubleClick="BenchTree_MouseDoubleClick" PreviewKeyDown="BenchTree_PreviewKeyDown"
@@ -112,42 +113,42 @@
         <!-- the file in the tab in use -->
         <DockPanel Margin="0,0,0,10" LastChildFill="True">
             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
-                <Button x:Name="BackButton" Click="Back_Click" ToolTip="Back to where you jumped from (Alt+Left)" Padding="10,6">
+                <Button x:Name="BackButton" Click="Back_Click" ToolTip="{l:T PreviewWindow.BackWhereYouJumped}" Padding="10,6">
                     <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE72B;" VerticalAlignment="Center" />
                 </Button>
-                <Button x:Name="ForwardButton" Margin="4,0,0,0" Click="Forward_Click" ToolTip="Forward again (Alt+Right)" Padding="10,6">
+                <Button x:Name="ForwardButton" Margin="4,0,0,0" Click="Forward_Click" ToolTip="{l:T PreviewWindow.ForwardAgainAltRight}" Padding="10,6">
                     <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE72A;" VerticalAlignment="Center" />
                 </Button>
-                <Button x:Name="HistoryButton" Margin="4,0,12,0" Click="History_Click" ToolTip="The places you jumped from" Padding="10,6">
+                <Button x:Name="HistoryButton" Margin="4,0,12,0" Click="History_Click" ToolTip="{l:T PreviewWindow.PlacesYouJumped}" Padding="10,6">
                     <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE81C;" VerticalAlignment="Center" />
                 </Button>
                 <!-- the commands that otherwise only have keys -->
                 <Button x:Name="GoToSymbolButton" Click="GoToSymbol_Click" Padding="10,6" ToolTipService.ShowOnDisabled="True"
-                        ToolTip="Go to symbol: any class, function, field or enum value in the scripts (Ctrl+T)">
+                        ToolTip="{l:T PreviewWindow.GoSymbolAnyClass}">
                     <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE8FD;" VerticalAlignment="Center" />
                 </Button>
                 <Button x:Name="FindInFilesButton" Margin="4,0,0,0" Click="FindInFiles_Click" Padding="10,6"
-                        ToolTip="Find in files (Ctrl+Shift+F)">
+                        ToolTip="{l:T PreviewWindow.FindFilesCtrlShift}">
                     <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE721;" VerticalAlignment="Center" />
                 </Button>
                 <Button x:Name="SnippetButton" Margin="4,0,0,0" Click="Snippet_Click" Padding="10,6" ToolTipService.ShowOnDisabled="True"
-                        ToolTip="Insert snippet: common WitcherScript patterns, and your own (Ctrl+J)">
+                        ToolTip="{l:T PreviewWindow.InsertSnippetCommonWitcherScript}">
                     <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE943;" VerticalAlignment="Center" />
                 </Button>
                 <Button x:Name="StubButton" Margin="4,0,0,0" Click="Stub_Click" Padding="10,6"
-                        ToolTip="Stub generator: write a wrap, a replacement or an addition for one of the game's functions, ready to paste (Ctrl+Shift+W). Starts on the name at the cursor">
+                        ToolTip="{l:T PreviewWindow.StubGeneratorWriteWrap}">
                     <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE70F;" VerticalAlignment="Center" />
                 </Button>
                 <Button x:Name="BuildButton" Margin="4,0,0,0" Click="Build_Click" Padding="10,6" ToolTipService.ShowOnDisabled="True"
-                        ToolTip="Build the mod (Ctrl+Shift+B)">
+                        ToolTip="{l:T PreviewWindow.BuildModCtrlShift}">
                     <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE90F;" VerticalAlignment="Center" />
                 </Button>
                 <Rectangle x:Name="ScriptToolsDivider" Width="1" Margin="12,6" Fill="{DynamicResource DividerStrokeColorDefaultBrush}" />
                 <Button x:Name="SplitButton" Click="Split_Click">
                     <Button.ContextMenu>
                         <ContextMenu>
-                            <MenuItem x:Name="SplitRightItem" Header="Split side by side" IsCheckable="True" Click="SplitRight_Click" />
-                            <MenuItem x:Name="SplitDownItem" Header="Split top and bottom" IsCheckable="True" Click="SplitDown_Click" />
+                            <MenuItem x:Name="SplitRightItem" Header="{l:T PreviewWindow.SplitSideSide}" IsCheckable="True" Click="SplitRight_Click" />
+                            <MenuItem x:Name="SplitDownItem" Header="{l:T PreviewWindow.SplitTopBottom}" IsCheckable="True" Click="SplitDown_Click" />
                         </ContextMenu>
                     </Button.ContextMenu>
                     <StackPanel Orientation="Horizontal">
@@ -156,23 +157,23 @@
                     </StackPanel>
                 </Button>
                 <Button x:Name="EditButton" Margin="6,0,0,0" Click="Edit_Click" Visibility="Collapsed"
-                        ToolTip="Decompiled scripts are read-only. Save the mod's scripts to a folder to edit and compile them">
+                        ToolTip="{l:T PreviewWindow.DecompiledScriptsReadOnly}">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE70F;" VerticalAlignment="Center" />
-                        <TextBlock Margin="8,0,0,0" Text="Edit as project" />
+                        <TextBlock Margin="8,0,0,0" Text="{l:T PreviewWindow.EditProject}" />
                     </StackPanel>
                 </Button>
-                <Button Margin="6,0,0,0" Click="Copy_Click" ToolTip="Copy the whole text">
+                <Button Margin="6,0,0,0" Click="Copy_Click" ToolTip="{l:T PreviewWindow.CopyWholeText}">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE8C8;" VerticalAlignment="Center" />
-                        <TextBlock Margin="8,0,0,0" Text="Copy" />
+                        <TextBlock Margin="8,0,0,0" Text="{l:T Common.Copy}" />
                     </StackPanel>
                 </Button>
                 <Button x:Name="SaveButton" Margin="6,0,0,0" Click="Save_Click" Style="{DynamicResource AccentButtonStyle}"
-                        ToolTip="Save this file (Ctrl+S)" ToolTipService.ShowOnDisabled="True">
+                        ToolTip="{l:T PreviewWindow.SaveFileCtrl}" ToolTipService.ShowOnDisabled="True">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE74E;" VerticalAlignment="Center" />
-                        <TextBlock x:Name="SaveText" Margin="8,0,0,0" Text="Save as" />
+                        <TextBlock x:Name="SaveText" Margin="8,0,0,0" Text="{l:T Common.Save2}" />
                     </StackPanel>
                 </Button>
             </StackPanel>
@@ -193,11 +194,11 @@
         <!-- Script Bench with no tab open -->
         <StackPanel x:Name="BenchEmpty" Grid.Row="1" Visibility="Collapsed" VerticalAlignment="Center" HorizontalAlignment="Center" MaxWidth="460">
             <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE943;" FontSize="40" Opacity="0.35" HorizontalAlignment="Center" />
-            <TextBlock Margin="0,14,0,0" FontSize="16" FontWeight="SemiBold" HorizontalAlignment="Center" Text="Open a script from the tree" />
+            <TextBlock Margin="0,14,0,0" FontSize="16" FontWeight="SemiBold" HorizontalAlignment="Center" Text="{l:T PreviewWindow.OpenScriptTree}" />
             <TextBlock Margin="0,8,0,0" TextWrapping="Wrap" TextAlignment="Center" Opacity="0.7"
-                       Text="Your mod's scripts can be changed and are the ones compiled. The game's and the installed mods' are read-only: right-click one of the game's to override it in your mod." />
+                       Text="{l:T PreviewWindow.YourModsScriptsCan}" />
             <TextBlock Margin="0,12,0,0" TextWrapping="Wrap" TextAlignment="Center" Opacity="0.55" FontSize="12"
-                       Text="Ctrl+T goes to any class or function, Ctrl+Shift+F finds in files, F7 compiles." />
+                       Text="{l:T PreviewWindow.CtrlTGoesAny}" />
         </StackPanel>
 
         <!-- references, changes, the type hierarchy and find in files, under the files -->
@@ -214,10 +215,10 @@
             Background="{DynamicResource LayerFillColorDefaultBrush}" BorderBrush="{DynamicResource DividerStrokeColorDefaultBrush}" BorderThickness="0,1,0,0">
         <DockPanel>
             <Button x:Name="BenchCompileButton" DockPanel.Dock="Right" Click="BenchCompile_Click" Padding="10,4" ToolTipService.ShowOnDisabled="True"
-                    ToolTip="Compile the project's scripts to check them, listing every error with a link to its line (F7). Build puts the compiled scripts in the mod">
+                    ToolTip="{l:T PreviewWindow.CompileProjectsScriptsCheck}">
                 <StackPanel Orientation="Horizontal">
                     <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE9F5;" VerticalAlignment="Center" />
-                    <TextBlock Margin="8,0,0,0" Text="Compile" />
+                    <TextBlock Margin="8,0,0,0" Text="{l:T PreviewWindow.Compile}" />
                 </StackPanel>
             </Button>
             <TextBlock x:Name="BenchStatusText" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Margin="0,0,12,0" />

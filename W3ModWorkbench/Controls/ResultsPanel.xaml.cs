@@ -6,6 +6,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using W3ModWorkbench.Core.Scripts.Navigation;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -282,13 +283,21 @@ public partial class ResultsPanel : UserControl
         if (rows.Count > 0) List.ScrollIntoView(rows[0]);
     }
 
+    /// <summary>Whether a title is one made from a string of the tables: it starts as that string does, before its first placeholder.</summary>
+    private static bool Starts(string title, string key)
+    {
+        string text = L.T(key, "\u0001");
+        int at = text.IndexOf('\u0001');
+        return title.StartsWith(at < 0 ? text : text[..at], StringComparison.Ordinal);
+    }
+
     private void SetTitle(string title, string summary)
     {
         TitleText.Text = title;
-        TitleIcon.Text = title.StartsWith("References") ? "" // link
-            : title.StartsWith("Changes") ? "" // edit
-            : title.StartsWith("Hierarchy") ? "" // folder tree
-            : title.StartsWith("Compile") ? "" // play
+        TitleIcon.Text = Starts(title, "PreviewDocument.References") ? "" // link
+            : Starts(title, "PreviewDocument.Changes") ? "" // edit
+            : Starts(title, "PreviewDocument.Hierarchy") ? "" // folder tree
+            : Starts(title, "PreviewWindow.Compile") ? "" // play
             : ""; // search
         SummaryText.Text = summary;
         SummaryBadge.Visibility = summary.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
@@ -302,7 +311,7 @@ public partial class ResultsPanel : UserControl
         if (selected is not null) List.SelectedItem = selected;
         bool anyOpen = _rows.Any(r => r.IsHeader && !r.IsCollapsed);
         FoldIcon.Text = anyOpen ? "" : ""; // collapse, expand
-        FoldButton.ToolTip = anyOpen ? "Fold every group" : "Unfold every group";
+        FoldButton.ToolTip = anyOpen ? L.T("ResultsPanel.FoldEveryGroup") : L.T("ResultsPanel.UnfoldEveryGroup");
     }
 
     private void Toggle(ResultRow heading)
@@ -324,7 +333,7 @@ public partial class ResultsPanel : UserControl
     /// </summary>
     public void SetActions(params (string Label, Action Run)[] actions) => SetActions(ModsNote, actions);
 
-    private const string ModsNote = "Only the open archives and the game's scripts were searched. Mods in the game's mods folder can be searched too:";
+    private static string ModsNote => L.T("ResultsPanel.ModsNote");
 
     /// <summary>Buttons in the strip under the list, after <paramref name="note"/> saying what they're for.</summary>
     public void SetActions(string note, params (string Label, Action Run)[] actions)
@@ -346,7 +355,7 @@ public partial class ResultsPanel : UserControl
         FindBar.Visibility = Visibility.Visible;
         if (!string.IsNullOrEmpty(text)) FindBox.Text = text;
         if (_rows.Count == 0 && Busy.Visibility != Visibility.Visible)
-            ShowRows("Find in files", "", [], "Type what to look for and press Enter. Look in says where: your mod, the game's scripts, the installed mods (compiled ones decompiled), REDkit's scripts or any folder.");
+            ShowRows(L.T("ResultsPanel.FindFiles"), "", [], L.T("ResultsPanel.TypeWhatLookPress"));
         Dispatcher.BeginInvoke(() =>
         {
             FindBox.Focus();
@@ -430,7 +439,7 @@ public partial class ResultsPanel : UserControl
         }
         catch (ArgumentException ex)
         {
-            ShowRows("Find in files", "", [], "That isn't a valid regular expression: " + ex.Message);
+            ShowRows(L.T("ResultsPanel.FindFiles"), "", [], L.T("ResultsPanel.IsntValidRegularExpression", ex.Message));
             return;
         }
         FindRequested?.Invoke(regex, text);

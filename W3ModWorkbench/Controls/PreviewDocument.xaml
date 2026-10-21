@@ -1,6 +1,7 @@
 <UserControl x:Class="W3ModWorkbench.PreviewDocument"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:l="clr-namespace:W3ModWorkbench.Localisation"
              xmlns:local="clr-namespace:W3ModWorkbench"
              xmlns:avalonEdit="http://icsharpcode.net/sharpdevelop/avalonedit"
              xmlns:search="clr-namespace:ICSharpCode.AvalonEdit.Search;assembly=ICSharpCode.AvalonEdit">
@@ -87,19 +88,19 @@
                             <StackPanel Orientation="Horizontal">
                                 <TextBox Name="PART_searchTextBox" Width="230" VerticalContentAlignment="Center"
                                          Text="{Binding SearchPattern, RelativeSource={RelativeSource TemplatedParent}, UpdateSourceTrigger=PropertyChanged}" />
-                                <ToggleButton Style="{StaticResource SearchToggle}" Content="Aa" ToolTip="Match case"
+                                <ToggleButton Style="{StaticResource SearchToggle}" Content="{l:T Common.Aa}" ToolTip="{l:T Common.MatchCase}"
                                               IsChecked="{Binding MatchCase, RelativeSource={RelativeSource TemplatedParent}}" Margin="6,0,0,0" />
-                                <ToggleButton Style="{StaticResource SearchToggle}" Content="ab" ToolTip="Whole words only"
+                                <ToggleButton Style="{StaticResource SearchToggle}" Content="{l:T Common.Ab}" ToolTip="{l:T Common.WholeWordsOnly}"
                                               IsChecked="{Binding WholeWords, RelativeSource={RelativeSource TemplatedParent}}" />
-                                <ToggleButton Style="{StaticResource SearchToggle}" Content=".*" ToolTip="Regular expression"
+                                <ToggleButton Style="{StaticResource SearchToggle}" Content=".*" ToolTip="{l:T Common.RegularExpression}"
                                               IsChecked="{Binding UseRegex, RelativeSource={RelativeSource TemplatedParent}}" />
-                                <Button Style="{StaticResource SearchIconButton}" Command="search:SearchCommands.FindPrevious" ToolTip="Previous match (Shift+F3)" Margin="8,0,0,0">
+                                <Button Style="{StaticResource SearchIconButton}" Command="search:SearchCommands.FindPrevious" ToolTip="{l:T Common.PreviousMatchShiftF3}" Margin="8,0,0,0">
                                     <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE70E;" FontSize="12" />
                                 </Button>
-                                <Button Style="{StaticResource SearchIconButton}" Command="search:SearchCommands.FindNext" ToolTip="Next match (F3)">
+                                <Button Style="{StaticResource SearchIconButton}" Command="search:SearchCommands.FindNext" ToolTip="{l:T Common.NextMatchF3}">
                                     <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE70D;" FontSize="12" />
                                 </Button>
-                                <Button Style="{StaticResource SearchIconButton}" Command="search:SearchCommands.CloseSearchPanel" ToolTip="Close (Esc)">
+                                <Button Style="{StaticResource SearchIconButton}" Command="search:SearchCommands.CloseSearchPanel" ToolTip="{l:T Common.CloseEsc}">
                                     <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE711;" FontSize="11" />
                                 </Button>
                                 <!-- AvalonEdit looks this part up; the options live in the toggles instead -->
@@ -128,10 +129,10 @@
                         BorderBrush="{DynamicResource DividerStrokeColorDefaultBrush}">
                     <DockPanel>
                         <ToggleButton x:Name="OutlineToggle" DockPanel.Dock="Right" Padding="8,2" MinHeight="0" BorderThickness="0" Focusable="False"
-                                      ToolTip="Show or hide the outline beside the text (Ctrl+Shift+O)" Click="Outline_Click">
+                                      ToolTip="{l:T PreviewDocument.ShowHideOutlineBeside}" Click="Outline_Click">
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE8FD;" FontSize="12" VerticalAlignment="Center" Margin="0,3,0,0" />
-                                <TextBlock Text="Outline" Margin="6,0,0,0" FontSize="12.5" VerticalAlignment="Center" />
+                                <TextBlock Text="{l:T Common.Outline}" Margin="6,0,0,0" FontSize="12.5" VerticalAlignment="Center" />
                             </StackPanel>
                         </ToggleButton>
                         <StackPanel x:Name="Crumbs" Orientation="Horizontal" VerticalAlignment="Center" />
@@ -153,33 +154,33 @@
                         <!-- only scripts keep this menu: other files get none -->
                         <avalonEdit:TextEditor.ContextMenu>
                             <ContextMenu Opened="ContextMenu_Opened">
-                                <MenuItem Header="Go to definition" InputGestureText="F12" Click="GoToDefinition_Click" />
-                                <MenuItem Header="Open definition to the side" InputGestureText="Ctrl+F12" Click="GoToDefinitionSide_Click" />
-                                <MenuItem Header="Find all references" InputGestureText="Shift+F12" Click="FindReferences_Click" />
-                                <MenuItem Header="Who else changes this" InputGestureText="Ctrl+Shift+F12" Click="Changes_Click"
-                                          ToolTip="The mods that wrap, replace or override a function, or add to a class" />
-                                <MenuItem Header="Show type hierarchy" InputGestureText="Shift+Alt+H" Click="Hierarchy_Click" />
-                                <MenuItem Header="Show usage graph" Click="UsageGraph_Click"
-                                          ToolTip="A graph of what uses this function, variable or type, and what uses those in turn" />
-                                <MenuItem Header="Create a wrap or replace stub…" Click="Stub_Click"
-                                          ToolTip="Opens the stub generator on the function under the caret, to wrap or replace it in your own mod" />
+                                <MenuItem Header="{l:T PreviewDocument.GoDefinition}" InputGestureText="F12" Click="GoToDefinition_Click" />
+                                <MenuItem Header="{l:T PreviewDocument.OpenDefinitionSide}" InputGestureText="Ctrl+F12" Click="GoToDefinitionSide_Click" />
+                                <MenuItem Header="{l:T PreviewDocument.FindAllReferences}" InputGestureText="Shift+F12" Click="FindReferences_Click" />
+                                <MenuItem Header="{l:T PreviewDocument.WhoElseChanges}" InputGestureText="Ctrl+Shift+F12" Click="Changes_Click"
+                                          ToolTip="{l:T PreviewDocument.ModsWrapReplaceOverride}" />
+                                <MenuItem Header="{l:T PreviewDocument.ShowTypeHierarchy}" InputGestureText="Shift+Alt+H" Click="Hierarchy_Click" />
+                                <MenuItem Header="{l:T PreviewDocument.ShowUsageGraph}" Click="UsageGraph_Click"
+                                          ToolTip="{l:T PreviewDocument.GraphWhatUsesFunction}" />
+                                <MenuItem Header="{l:T PreviewDocument.CreateWrapReplaceStub}" Click="Stub_Click"
+                                          ToolTip="{l:T PreviewDocument.OpensStubGeneratorFunction}" />
                                 <Separator />
-                                <MenuItem x:Name="RenameMenuItem" Header="Rename…" InputGestureText="F2" Click="Rename_Click"
-                                          ToolTip="Renames a function, variable or type your project declares, everywhere the project uses it" />
-                                <MenuItem x:Name="SnippetMenuItem" Header="Insert snippet…" InputGestureText="Ctrl+J" Click="Snippet_Click"
-                                          ToolTip="Common WitcherScript patterns, and your own. Typing a snippet's name and pressing Tab inserts it too." />
-                                <MenuItem x:Name="CompleteMenuItem" Header="Complete the name" InputGestureText="Ctrl+Space" Click="Complete_Click" />
+                                <MenuItem x:Name="RenameMenuItem" Header="{l:T PreviewDocument.Rename}" InputGestureText="F2" Click="Rename_Click"
+                                          ToolTip="{l:T PreviewDocument.RenamesFunctionVariableType}" />
+                                <MenuItem x:Name="SnippetMenuItem" Header="{l:T PreviewDocument.InsertSnippet}" InputGestureText="Ctrl+J" Click="Snippet_Click"
+                                          ToolTip="{l:T PreviewDocument.CommonWitcherScriptPatternsYour}" />
+                                <MenuItem x:Name="CompleteMenuItem" Header="{l:T PreviewDocument.CompleteName}" InputGestureText="Ctrl+Space" Click="Complete_Click" />
                                 <Separator />
-                                <MenuItem x:Name="BackMenuItem" Header="Back" InputGestureText="Alt+Left" Click="Back_Click" />
-                                <MenuItem x:Name="ForwardMenuItem" Header="Forward" InputGestureText="Alt+Right" Click="Forward_Click" />
-                                <MenuItem Header="Go to symbol in file…" Click="GoToSymbolInFile_Click" />
+                                <MenuItem x:Name="BackMenuItem" Header="{l:T PreviewDocument.Back}" InputGestureText="Alt+Left" Click="Back_Click" />
+                                <MenuItem x:Name="ForwardMenuItem" Header="{l:T PreviewDocument.Forward}" InputGestureText="Alt+Right" Click="Forward_Click" />
+                                <MenuItem Header="{l:T PreviewDocument.GoSymbolFile}" Click="GoToSymbolInFile_Click" />
                                 <Separator />
-                                <MenuItem x:Name="CompareGameMenuItem" Header="Compare with game version" Click="CompareGame_Click" />
-                                <MenuItem x:Name="CompareOpenMenuItem" Header="Compare with an open file…" Click="CompareOpen_Click" />
-                                <MenuItem x:Name="NextDiffMenuItem" Header="Next difference" InputGestureText="F8" Click="NextDiff_Click" />
-                                <MenuItem x:Name="ClearDiffMenuItem" Header="Stop comparing" Click="ClearDiff_Click" />
+                                <MenuItem x:Name="CompareGameMenuItem" Header="{l:T PreviewDocument.CompareGameVersion}" Click="CompareGame_Click" />
+                                <MenuItem x:Name="CompareOpenMenuItem" Header="{l:T PreviewDocument.CompareOpenFile}" Click="CompareOpen_Click" />
+                                <MenuItem x:Name="NextDiffMenuItem" Header="{l:T PreviewDocument.NextDifference}" InputGestureText="F8" Click="NextDiff_Click" />
+                                <MenuItem x:Name="ClearDiffMenuItem" Header="{l:T PreviewDocument.StopComparing}" Click="ClearDiff_Click" />
                                 <Separator />
-                                <MenuItem Header="Copy" Command="ApplicationCommands.Copy" />
+                                <MenuItem Header="{l:T Common.Copy}" Command="ApplicationCommands.Copy" />
                             </ContextMenu>
                         </avalonEdit:TextEditor.ContextMenu>
                     </avalonEdit:TextEditor>

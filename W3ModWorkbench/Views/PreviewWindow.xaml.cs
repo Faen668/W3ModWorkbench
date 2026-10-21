@@ -10,6 +10,7 @@ using W3ModWorkbench.Core;
 using W3ModWorkbench.Core.Projects;
 using W3ModWorkbench.Core.Scripts;
 using W3ModWorkbench.Core.Scripts.Navigation;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -301,7 +302,7 @@ public partial class PreviewWindow : Window, IMessageHost
             VerticalAlignment = VerticalAlignment.Stretch,
             Background = Brushes.Transparent,
             Focusable = false,
-            ToolTip = "Drag to resize",
+            ToolTip = L.T("PreviewWindow.DragResize"),
         };
         for (int i = 0; i < 3; i++)
         {
@@ -316,10 +317,10 @@ public partial class PreviewWindow : Window, IMessageHost
     {
         bool split = _panes.Count > 1, down = SplitsDown;
         SplitIcon.Text = split ? "" : down ? "" : ""; // close pane, dock bottom, dock right
-        SplitText.Text = split ? "Unsplit" : "Split";
+        SplitText.Text = split ? L.T("PreviewWindow.Unsplit") : L.T("PreviewWindow.Split");
         SplitButton.ToolTip = split
-            ? "Put every tab back in one group (Ctrl+\\)"
-            : $"Move this file into a second group of tabs {(down ? "below" : "beside")} the others (Ctrl+\\). Right-click to choose the direction";
+            ? L.T("PreviewWindow.PutEveryTabBack")
+            : down ? L.T("PreviewWindow.SplitBelow") : L.T("PreviewWindow.SplitBeside");
         SplitRightItem.IsChecked = !down;
         SplitDownItem.IsChecked = down;
     }
@@ -556,24 +557,24 @@ public partial class PreviewWindow : Window, IMessageHost
 
         // pinned tabs stay when the others are closed in bulk
         var unpinned = docs.Where(d => !pane.IsPinned(d)).ToList();
-        Add("Close", () => CloseDocument(doc), gesture: "Ctrl+W");
-        Add("Close others", () => CloseDocuments(unpinned.Where(d => d != doc)), unpinned.Any(d => d != doc));
-        Add("Close to the right", () => CloseDocuments(docs.Skip(index + 1).Where(unpinned.Contains)),
+        Add(L.T("Common.Close"), () => CloseDocument(doc), gesture: "Ctrl+W");
+        Add(L.T("PreviewWindow.CloseOthers"), () => CloseDocuments(unpinned.Where(d => d != doc)), unpinned.Any(d => d != doc));
+        Add(L.T("PreviewWindow.CloseRight"), () => CloseDocuments(docs.Skip(index + 1).Where(unpinned.Contains)),
             docs.Skip(index + 1).Any(unpinned.Contains));
-        Add("Close all", () => CloseDocuments(unpinned), unpinned.Count > 0);
-        Add("Reopen closed tab", ReopenClosed, CanReopen, "Ctrl+Shift+T");
+        Add(L.T("PreviewWindow.CloseAll"), () => CloseDocuments(unpinned), unpinned.Count > 0);
+        Add(L.T("PreviewWindow.ReopenClosedTab"), ReopenClosed, CanReopen, "Ctrl+Shift+T");
         menu.Items.Add(new Separator());
-        Add(pane.IsPinned(doc) ? "Unpin" : "Pin", () => pane.SetPinned(doc, !pane.IsPinned(doc)));
+        Add(pane.IsPinned(doc) ? L.T("PreviewWindow.Unpin") : L.T("PreviewWindow.Pin"), () => pane.SetPinned(doc, !pane.IsPinned(doc)));
         menu.Items.Add(new Separator());
-        Add(_panes.Count > 1 ? "Open in the other group" : SplitsDown ? "Open below" : "Open to the side", () => OpenBeside(doc));
-        Add(_panes.Count > 1 ? "Move to the other group" : SplitsDown ? "Move below" : "Move to the side",
+        Add(_panes.Count > 1 ? L.T("PreviewWindow.OpenOtherGroup") : SplitsDown ? L.T("PreviewWindow.OpenBelow") : L.T("PreviewWindow.OpenSide"), () => OpenBeside(doc));
+        Add(_panes.Count > 1 ? L.T("PreviewWindow.MoveOtherGroup") : SplitsDown ? L.T("PreviewWindow.MoveBelow") : L.T("PreviewWindow.MoveSide"),
             () => MoveDocument(doc, OtherPane(pane), -1), _panes.Count > 1 || docs.Count > 1);
-        Add("Move to a new window", () => MoveToNewWindow(doc), AllDocuments.Count() > 1);
+        Add(L.T("PreviewWindow.MoveNewWindow"), () => MoveToNewWindow(doc), AllDocuments.Count() > 1);
         menu.Items.Add(new Separator());
-        Add("Copy path", () => Clipboard.SetText(doc.Item.Path));
-        Add("Open in external editor", () => OpenExternally(doc));
-        if (doc.IsEditable) Add("Save", () => doc.Save(), doc.IsDirty, "Ctrl+S");
-        Add("Save as…", () => doc.SaveAs());
+        Add(L.T("Common.CopyPath"), () => Clipboard.SetText(doc.Item.Path));
+        Add(L.T("PreviewWindow.OpenExternalEditor"), () => OpenExternally(doc));
+        if (doc.IsEditable) Add(L.T("Common.Save"), () => doc.Save(), doc.IsDirty, "Ctrl+S");
+        Add(L.T("Common.Save3"), () => doc.SaveAs());
     }
 
     /// <summary>
@@ -588,15 +589,15 @@ public partial class PreviewWindow : Window, IMessageHost
             {
                 ExternalEditor.Open(disk);
                 if (doc.IsDirty)
-                    _ = doc.ShowCard("Opened the saved file", $"The changes to {doc.FileName} here aren't saved yet, so the other editor shows the file as it was last saved.",
-                        MessageKind.Info, primary: "OK");
+                    _ = doc.ShowCard(L.T("PreviewWindow.OpenedSavedFile"), L.T("PreviewWindow.ChangesHereArentSaved", doc.FileName),
+                        MessageKind.Info, primary: L.T("Common.OK"));
             }
             else
                 ExternalEditor.OpenCopy(doc.Item.Source, doc.Item.Path, doc.Item.Data);
         }
         catch (Exception ex)
         {
-            _ = doc.ShowCard($"{doc.FileName} could not be opened in an external editor", ex.Message, MessageKind.Warning, primary: "OK");
+            _ = doc.ShowCard(L.T("PreviewWindow.CouldNotOpenedExternal", doc.FileName), ex.Message, MessageKind.Warning, primary: L.T("Common.OK"));
         }
     }
 
@@ -642,7 +643,7 @@ public partial class PreviewWindow : Window, IMessageHost
         }
         catch (Exception ex)
         {
-            _ = from.ShowCard($"{file.Path} could not be read", ex.Message, MessageKind.Warning, primary: "OK");
+            _ = from.ShowCard(L.T("PreviewWindow.CouldNotRead2", file.Path), ex.Message, MessageKind.Warning, primary: L.T("Common.OK"));
             return;
         }
         var doc = CreateDocument(new PreviewItem(file.Path, file.Source, data, file, from.Item.Workspace));
@@ -733,12 +734,12 @@ public partial class PreviewWindow : Window, IMessageHost
             {
                 var (doc, offset) = e.Place;
                 var (line, text) = doc.LineAt(offset);
-                string closed = doc.Host is null && FindOpen(doc.Item.Key) is null ? "  ·  closed, opens again" : "";
+                string closed = doc.Host is null && FindOpen(doc.Item.Key) is null ? L.T("PreviewWindow.ClosedOpensAgain") : "";
                 return new QuickPickItem(e.Back ? "" : "", $"{doc.FileName} : {line}", $"{text.Trim()}  ·  {doc.Item.Source}{closed}", e.Place);
             })
             .ToList();
         if (entries.Count == 0) return;
-        ShowPicker("Go back to…", query => [.. entries.Where(i => Matches(i, query))], item =>
+        ShowPicker(L.T("PreviewWindow.GoBack"), query => [.. entries.Where(i => Matches(i, query))], item =>
         {
             var (doc, offset) = ((PreviewDocument Doc, int Offset))item.Tag!;
             if (Current is { } here && here != doc) Jumped((here, here.CaretOffset));
@@ -765,7 +766,7 @@ public partial class PreviewWindow : Window, IMessageHost
     {
         if (ScriptDocument() is not { } doc)
         {
-            _ = Current?.ShowCard(null, "Go to symbol works from a script. Open a .ws file first.", MessageKind.Info, autoClose: true);
+            _ = Current?.ShowCard(null, L.T("PreviewWindow.GoSymbolWorksScript"), MessageKind.Info, autoClose: true);
             return;
         }
         if (await doc.FinderAsync() is not { } finder) return;
@@ -773,10 +774,10 @@ public partial class PreviewWindow : Window, IMessageHost
             .Where(s => s.Kind is not (SymbolKind.Local or SymbolKind.Parameter))
             .DistinctBy(s => (s.File.Key, s.Offset))
             .ToList();
-        ShowPicker("Go to symbol: a name, or Class.name", query => SymbolMatches(symbols, query), item =>
+        ShowPicker(L.T("PreviewWindow.GoSymbolNameClass"), query => SymbolMatches(symbols, query), item =>
         {
             if (item.Tag is ScriptSymbol symbol && doc.Host is not null) _ = NavigateAsync(doc, symbol, toSide: false);
-        }, "Searches the open archives, the game's scripts and any mod scripts already read.");
+        }, L.T("PreviewWindow.SearchesOpenArchivesGames"));
     }
 
     /// <summary>The best matches for a name, or for Class.name: the whole name first, then names starting with it, then the rest.</summary>
@@ -865,12 +866,12 @@ public partial class PreviewWindow : Window, IMessageHost
         {
             var inner = ex is AggregateException { InnerException: { } e } ? e : ex;
             Results.ShowRows(title, "", [], inner is System.Text.RegularExpressions.RegexMatchTimeoutException
-                ? "The search took too long and was stopped. Try a simpler pattern."
-                : "The search failed: " + inner.Message);
+                ? L.T("PreviewWindow.SearchTookTooLong")
+                : L.T("PreviewWindow.SearchFailed", inner.Message));
         }
     }
 
-    private const string FindTitle = "Find in files";
+    private static string FindTitle => L.T("ResultsPanel.FindFiles");
 
     private void OpenResultsPanel()
     {
@@ -923,25 +924,26 @@ public partial class PreviewWindow : Window, IMessageHost
         }
         if (ScriptDocument() is not { } doc)
         {
-            Results.ShowRows(FindTitle, "", [], "Find in files searches from a script. Open a .ws file first.");
+            Results.ShowRows(FindTitle, "", [], L.T("PreviewWindow.FindFilesSearchesScript"));
             return;
         }
         if (await doc.FinderAsync() is not { } finder) return;
         var layers = finder.Layers;
         var file = doc.Item.Script!;
-        ShowResults(doc, FindTitle, $"Looking for '{text}'…", cancel =>
+        ShowResults(doc, FindTitle, L.T("PreviewWindow.Looking2", text), cancel =>
         {
             var hits = ScriptSearch.Text(pattern, file, layers, cancel);
-            return (ResultRow.ByFile(hits), Summary(hits, "match", "matches"));
-        }, $"Nothing matches '{text}' in the scripts searched.");
+            return (ResultRow.ByFile(hits), Summary(hits));
+        }, L.T("PreviewWindow.NothingMatchesScriptsSearched", text));
     }
 
     /// <summary>"12 references in 4 files", noting when the list stopped at the most it shows.</summary>
-    public static string Summary(IReadOnlyCollection<ScriptHit> hits, string one, string many)
+    /// <param name="what">The key of what the hits are, with a form for each number: matches, unless said.</param>
+    public static string Summary(IReadOnlyCollection<ScriptHit> hits, string what = "PreviewWindow.Matches")
     {
         int files = hits.Select(h => h.File.Key).Distinct().Count();
-        string text = $"{hits.Count} {(hits.Count == 1 ? one : many)} in {files} {(files == 1 ? "file" : "files")}";
-        return hits.Count >= ScriptSearch.MaxHits ? $"{text} (stopped at the first {ScriptSearch.MaxHits})" : text;
+        string text = L.T("PreviewWindow.MatchesInFiles", L.T(what, hits.Count), L.T("PreviewWindow.InFiles", files));
+        return hits.Count >= ScriptSearch.MaxHits ? L.T("PreviewWindow.StoppedFirst", text, ScriptSearch.MaxHits) : text;
     }
 
     // ---------------------------------------------------------------- comparing
@@ -958,14 +960,14 @@ public partial class PreviewWindow : Window, IMessageHost
     public void PickFileToCompare(PreviewDocument doc)
     {
         var others = OtherFiles(doc).ToList();
-        ShowPicker($"Compare {doc.FileName} with…", query =>
+        ShowPicker(L.T("PreviewWindow.Compare", doc.FileName), query =>
             [.. others.Where(d => query.Length == 0 || d.Item.Path.Contains(query, StringComparison.OrdinalIgnoreCase)
                     || d.Item.Source.Contains(query, StringComparison.OrdinalIgnoreCase))
                 .Select(d => new QuickPickItem("", d.FileName, $"{d.Item.Path}  ·  {d.Item.Source}", d))],
             item =>
             {
                 if (item.Tag is PreviewDocument other) _ = CompareAsync(doc, other);
-            }, "The file picked is shown as the older version, on the other side.");
+            }, L.T("PreviewWindow.FilePickedShownOlder"));
     }
 
     /// <summary>Opens <paramref name="older"/> beside <paramref name="doc"/>, or finds it there, and compares the two.</summary>
@@ -982,7 +984,7 @@ public partial class PreviewWindow : Window, IMessageHost
             }
             catch (Exception ex)
             {
-                _ = doc.ShowCard($"{older.Path} could not be read", ex.Message, MessageKind.Warning, primary: "OK");
+                _ = doc.ShowCard(L.T("PreviewWindow.CouldNotRead2", older.Path), ex.Message, MessageKind.Warning, primary: L.T("Common.OK"));
                 return;
             }
             if (!_panes.Contains(target)) return;
@@ -1031,12 +1033,10 @@ public partial class PreviewWindow : Window, IMessageHost
         int changed = newKinds.Count(k => k == DiffKind.Changed), added = newKinds.Count(k => k == DiffKind.Added);
         int removed = oldKinds.Count(k => k == DiffKind.Removed);
         string message = changed + added + removed == 0
-            ? "They're the same, apart from spaces at the ends of lines."
-            : $"{Count(changed, "changed")}, {Count(added, "added")} and {Count(removed, "removed")} compared with {older.FileName}. "
-              + "F8 and Shift+F8 step through the differences.";
-        _ = newer.ShowCard(changed + added + removed == 0 ? $"Same as {older.FileName}" : "Differences marked", message, MessageKind.Info, primary: "OK");
+            ? L.T("PreviewWindow.TheyreSameApartSpaces")
+            : L.T("PreviewWindow.LinesCompared", L.T("PreviewWindow.LinesChanged", changed), L.T("PreviewWindow.LinesAdded", added), L.T("PreviewWindow.LinesRemoved", removed), older.FileName);
+        _ = newer.ShowCard(changed + added + removed == 0 ? L.T("PreviewWindow.Same", older.FileName) : L.T("PreviewWindow.DifferencesMarked"), message, MessageKind.Info, primary: L.T("Common.OK"));
 
-        static string Count(int n, string what) => $"{n} {(n == 1 ? "line" : "lines")} {what}";
     }
 
     /// <summary>Takes the marks off a file and the file it was compared with.</summary>
@@ -1063,17 +1063,17 @@ public partial class PreviewWindow : Window, IMessageHost
             if (_isBench) UpdateBenchTitle();
             return;
         }
-        Title = $"{(doc.IsDirty ? "● " : "")}{doc.FileName} - {(_isBench ? BenchTitle : "Preview")}";
+        Title = $"{(doc.IsDirty ? "● " : "")}{doc.FileName} - {(_isBench ? BenchTitle : L.T("Common.Preview2"))}";
         FileNameText.Text = doc.FileName;
         DetailText.Text = doc.Detail;
 
         // only the project's files are saved in place; anything else is saved as a copy
         bool own = doc.IsEditable && doc.InProject;
-        SaveText.Text = own ? "Save" : "Save as";
+        SaveText.Text = own ? L.T("Common.Save") : L.T("Common.Save2");
         SaveButton.IsEnabled = !own || doc.IsDirty;
-        SaveButton.ToolTip = !own ? "Save a copy of this file (Ctrl+S)"
-            : doc.IsDirty ? "Save the changes to this file (Ctrl+S). Ctrl+Shift+S saves every file"
-            : "No changes to save";
+        SaveButton.ToolTip = !own ? L.T("PreviewWindow.SaveCopyFileCtrl")
+            : doc.IsDirty ? L.T("PreviewWindow.SaveChangesFileCtrl")
+            : L.T("PreviewWindow.NoChangesSave");
         EditButton.Visibility = CanEditAsProject(doc) ? Visibility.Visible : Visibility.Collapsed;
         var scriptTools = _isBench || doc.Item.IsScript ? Visibility.Visible : Visibility.Collapsed;
         foreach (var tool in new UIElement[] { BackButton, ForwardButton, HistoryButton, GoToSymbolButton, FindInFilesButton, SnippetButton, StubButton, BuildButton, ScriptToolsDivider })
@@ -1081,14 +1081,14 @@ public partial class PreviewWindow : Window, IMessageHost
         GoToSymbolButton.IsEnabled = ScriptDocument() is not null;
         SnippetButton.IsEnabled = doc.CanNavigate;
         BuildButton.IsEnabled = ProjectWorkspace.Current is not null;
-        BuildButton.ToolTip = ProjectWorkspace.Current is null ? "Build the mod (Ctrl+Shift+B). Open a project to build it" : "Build the mod (Ctrl+Shift+B)";
+        BuildButton.ToolTip = ProjectWorkspace.Current is null ? L.T("PreviewWindow.BuildModCtrlShift2") : L.T("PreviewWindow.BuildModCtrlShift");
 
         // a project's file says so, with the project's name, beside the file name
         var owner = ProjectOf(doc);
         bool project = owner is not null;
         ProjectBadge.Visibility = project ? Visibility.Visible : Visibility.Collapsed;
-        ProjectBadgeText.Text = owner is null ? "" : $"PROJECT · {owner.Owner.ToUpperInvariant()}";
-        ProjectBadge.ToolTip = owner is null ? null : $"In the project {owner.Owner}: its files can be edited, saved and compiled\n{owner.Project?.FilePath}";
+        ProjectBadgeText.Text = owner is null ? "" : L.T("PreviewWindow.Project", owner.Owner.ToUpperInvariant());
+        ProjectBadge.ToolTip = owner is null ? null : L.T("PreviewWindow.ProjectFilesCanEdited", owner.Owner, owner.Project?.FilePath);
     }
 
     /// <summary>A file's changes were saved, or it was changed after a save: its tab and, when it's in use, the header show it.</summary>
@@ -1144,7 +1144,7 @@ public partial class PreviewWindow : Window, IMessageHost
     /// <summary>The names of some files, for a message: "a.ws, b.ws and 3 more".</summary>
     public static string Names(IReadOnlyList<PreviewDocument> docs) =>
         docs.Count <= 4 ? string.Join(", ", docs.Select(d => d.FileName))
-            : string.Join(", ", docs.Take(3).Select(d => d.FileName)) + $" and {docs.Count - 3} more";
+            : L.T("PreviewWindow.More", string.Join(", ", docs.Take(3).Select(d => d.FileName)), docs.Count - 3);
 
     /// <summary>The window is closing with changes not saved: one file asks for itself, several are asked about together.</summary>
     private async Task ConfirmCloseWindowAsync()
@@ -1159,8 +1159,8 @@ public partial class PreviewWindow : Window, IMessageHost
         else
         {
             if (Current is not { } doc) return;
-            var choice = await doc.Ask($"Save the changes to {unsaved.Count} files?", Names(unsaved) + ". The changes are lost if you don't save them.",
-                MessageKind.Question, "Save all", "Don't save");
+            var choice = await doc.Ask(L.T("PreviewWindow.SaveChangesFiles", unsaved.Count), L.T("PreviewWindow.ChangesLostIfYou", Names(unsaved)),
+                MessageKind.Question, L.T("PreviewWindow.SaveAll"), L.T("Common.DontSave"));
             close = choice == MessageChoice.Secondary || choice == MessageChoice.Primary && SaveAll(unsaved);
         }
         if (!close) return;
@@ -1236,7 +1236,7 @@ public partial class PreviewWindow : Window, IMessageHost
         if (doc.Item.Script is not { } script || doc.Item.Workspace?.ArchiveOf(script) is not ScriptArchive blob
             || Application.Current.MainWindow is not MainWindow main) return;
 
-        var dialog = new OpenFolderDialog { Title = $"Choose the project folder for {blob.Owner}. Its scripts go in a scripts folder inside it" };
+        var dialog = new OpenFolderDialog { Title = L.T("PreviewWindow.ChooseProjectFolderScripts", blob.Owner) };
         if (dialog.ShowDialog(this) != true) return;
         await SaveAsProjectAsync(doc, blob, main, dialog.FolderName);
     }
@@ -1246,20 +1246,20 @@ public partial class PreviewWindow : Window, IMessageHost
     {
         if (FileSafety.Protection(Path.Combine(folder, "_")) is { } protection)
         {
-            _ = doc.ShowCard("Choose a folder of your own", protection + " A project goes somewhere of your own, such as Documents.", MessageKind.Warning, primary: "OK");
+            _ = doc.ShowCard(L.T("PreviewWindow.ChooseFolderYourOwn"), L.T("PreviewWindow.ProjectGoesSomewhereYour", protection), MessageKind.Warning, primary: L.T("Common.OK"));
             return;
         }
         string scripts = Path.Combine(folder, "scripts");
         if (Directory.Exists(scripts) && Directory.EnumerateFileSystemEntries(scripts).Any())
         {
-            _ = doc.ShowCard("That folder has a scripts folder already",
-                $"Choose an empty folder, or one without a scripts folder, so nothing in {scripts} is overwritten.", MessageKind.Warning, primary: "OK");
+            _ = doc.ShowCard(L.T("PreviewWindow.FolderHasScriptsFolder"),
+                L.T("PreviewWindow.ChooseEmptyFolderOne", scripts), MessageKind.Warning, primary: L.T("Common.OK"));
             return;
         }
         if (WorkbenchProject.FileIn(folder) is { } existing)
         {
-            _ = doc.ShowCard("That folder is a project already",
-                $"{Path.GetFileName(existing)} is in it. Choose another folder for {blob.Owner}.", MessageKind.Warning, primary: "OK");
+            _ = doc.ShowCard(L.T("PreviewWindow.FolderProjectAlready"),
+                L.T("PreviewWindow.ChooseAnotherFolder", Path.GetFileName(existing), blob.Owner), MessageKind.Warning, primary: L.T("Common.OK"));
             return;
         }
 
@@ -1279,7 +1279,7 @@ public partial class PreviewWindow : Window, IMessageHost
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            _ = doc.ShowCard("The scripts could not be saved", ex.Message, MessageKind.Warning, primary: "OK");
+            _ = doc.ShowCard(L.T("PreviewWindow.ScriptsCouldNotSaved"), ex.Message, MessageKind.Warning, primary: L.T("Common.OK"));
             return;
         }
 
@@ -1290,15 +1290,14 @@ public partial class PreviewWindow : Window, IMessageHost
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            _ = doc.ShowCard("The project could not be made", ex.Message, MessageKind.Warning, primary: "OK");
+            _ = doc.ShowCard(L.T("PreviewWindow.ProjectCouldNotMade"), ex.Message, MessageKind.Warning, primary: L.T("Common.OK"));
             return;
         }
         if (!await main.OpenProjectAsync(made.FilePath) || main.ProjectArchive is not { } project) return;
         main.CloseArchive(blob.FilePath);
         foreach (var window in OpenWindows.ToList()) window.SwapForProject(blob, project, main);
-        _ = Current?.ShowCard($"{blob.Owner} is a project now",
-            $"{entries.Count} scripts were saved to {scripts} and {Path.GetFileName(made.FilePath)} keeps track of them. The tabs show the project's files: they can be edited and saved. "
-            + "Compile builds them into a .rsblob with REDkit's wcc_lite, or the built-in compiler.", MessageKind.Info, primary: "OK");
+        _ = Current?.ShowCard(L.T("PreviewWindow.ProjectNow", blob.Owner),
+            L.T("PreviewWindow.ScriptsWereSavedKeeps", entries.Count, scripts, Path.GetFileName(made.FilePath)), MessageKind.Info, primary: L.T("Common.OK"));
     }
 
     /// <summary>Puts the project's version of each of the blob's files open here in its place, keeping the caret and scroll.</summary>
@@ -1343,7 +1342,7 @@ public partial class PreviewWindow : Window, IMessageHost
             doc?.ShowCard(title, message, kind, primary: primary, secondary: secondary) ?? BenchMessage.Show(title, message, kind, primary, secondary);
         if (CurrentCompiler() is not { } compiler)
         {
-            _ = Card("Nothing to compile with", "Set REDkit's wcc_lite.exe in Settings (it's in REDkit's bin\\x64_RedKit folder), or set the game folder there so the built-in compiler can read the game's scripts.",
+            _ = Card(L.T("PreviewWindow.NothingCompile"), L.T("PreviewWindow.SetREDkitsWccLite"),
                 MessageKind.Info, "OK");
             return;
         }
@@ -1351,9 +1350,9 @@ public partial class PreviewWindow : Window, IMessageHost
         var unsaved = UnsavedDocuments().Where(d => ProjectOf(d)?.FilePath.Equals(project.FilePath, StringComparison.OrdinalIgnoreCase) == true).ToList();
         if (unsaved.Count > 0)
         {
-            if (!await Card(unsaved.Count == 1 ? $"Save {unsaved[0].FileName} first?" : $"Save {unsaved.Count} files first?",
-                    $"{(compiler.Kind == CompilerKind.WccLite ? "wcc_lite" : "The compiler")} compiles the files as they are on disk. " + (unsaved.Count == 1 ? "" : Names(unsaved) + " have changes."),
-                    MessageKind.Question, "Save and compile", "Cancel"))
+            if (!await Card(unsaved.Count == 1 ? L.T("PreviewWindow.SaveFirst", unsaved[0].FileName) : L.T("PreviewWindow.SaveFilesFirst", unsaved.Count),
+                    L.T(compiler.Kind == CompilerKind.WccLite ? "PreviewWindow.WccCompilesDisk" : "PreviewWindow.CompilerCompilesDisk") + (unsaved.Count == 1 ? "" : L.T("PreviewWindow.HaveChanges", Names(unsaved))),
+                    MessageKind.Question, L.T("PreviewWindow.SaveCompile"), L.T("Common.Cancel")))
                 return;
             if (!SaveAll(unsaved)) return;
         }
@@ -1367,10 +1366,10 @@ public partial class PreviewWindow : Window, IMessageHost
                 && Directory.Exists(dir) ? dir : definition.Root;
             var dialog = new SaveFileDialog
             {
-                Title = $"Where should {project.Owner}'s compiled scripts go?",
+                Title = L.T("PreviewWindow.WhereShouldCompiledScripts", project.Owner),
                 FileName = "precompiled.rsblob",
                 InitialDirectory = start,
-                Filter = "Compiled scripts (*.rsblob)|*.rsblob",
+                Filter = L.T("PreviewWindow.CompiledScriptsRsblobRsblob"),
             };
             if (dialog.ShowDialog(this) != true) return;
             output = dialog.FileName;
@@ -1381,7 +1380,7 @@ public partial class PreviewWindow : Window, IMessageHost
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                _ = Card("The project could not be saved", $"Compiling goes ahead, but {Path.GetFileName(definition.FilePath)} wasn't updated with where the scripts go. {ex.Message}", MessageKind.Warning, "OK");
+                _ = Card(L.T("PreviewWindow.ProjectCouldNotSaved"), L.T("PreviewWindow.CompilingGoesAheadBut", Path.GetFileName(definition.FilePath), ex.Message), MessageKind.Warning, "OK");
             }
         }
 
@@ -1390,12 +1389,12 @@ public partial class PreviewWindow : Window, IMessageHost
         _resultsFrom = doc;
         foreach (var window in OpenWindows) window.UpdateHeader();
         UpdateBenchStatus();
-        string title = $"Compile {project.Owner}";
+        string title = L.T("PreviewWindow.Compile2", project.Owner);
         OpenResultsPanel();
         if (Results.IsFind) Results.HideFind();
         Results.SetActions();
-        Results.ShowBusy(title, compiler.Kind == CompilerKind.WccLite ? "Starting wcc_lite…" : "Starting the built-in compiler…");
-        string slow = compiler.Kind == CompilerKind.WccLite ? "  It takes about a minute." : "";
+        Results.ShowBusy(title, compiler.Kind == CompilerKind.WccLite ? L.T("PreviewWindow.StartingWccLite") : L.T("PreviewWindow.StartingBuiltCompiler"));
+        string slow = compiler.Kind == CompilerKind.WccLite ? L.T("PreviewWindow.TakesAboutMinute") : "";
         var progress = new Progress<string>(text =>
         {
             if (_resultsShowing == cancel) Results.ShowBusy(title, text + slow);
@@ -1412,7 +1411,7 @@ public partial class PreviewWindow : Window, IMessageHost
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
         {
-            if (_resultsShowing == cancel) Results.ShowRows(title, "Failed", [], $"{compiler.Name} couldn't be run: " + ex.Message);
+            if (_resultsShowing == cancel) Results.ShowRows(title, L.T("PreviewWindow.Failed"), [], L.T("PreviewWindow.CouldntRun", compiler.Name, ex.Message));
         }
         finally
         {
@@ -1462,7 +1461,7 @@ public partial class PreviewWindow : Window, IMessageHost
         host.BringForward();
         host._resultsShowing = result;
         host._resultsFrom = doc;
-        host.ShowCompileResult($"Build {project.Owner}", project, result, output, TimeSpan.Zero, compiler);
+        host.ShowCompileResult(L.T("PreviewWindow.Build", project.Owner), project, result, output, TimeSpan.Zero, compiler);
     }
 
     /// <summary>A view of one of the open project's scripts: an open one, or its first script opened for it. Null when it has none.</summary>
@@ -1474,7 +1473,7 @@ public partial class PreviewWindow : Window, IMessageHost
         if (open is not null) return open;
         if (archive.Entries.OfType<LooseScriptEntry>().FirstOrDefault(e => e.IsScript) is not { } entry)
         {
-            await main.ShowMessage("The project has no scripts yet", $"Add .ws files to {archive.FilePath} and they're compiled with the project.", MessageKind.Info);
+            await main.ShowMessage(L.T("PreviewWindow.ProjectHasNoScripts"), L.T("PreviewWindow.AddWsFilesTheyre", archive.FilePath), MessageKind.Info);
             return null;
         }
         var item = main.PreviewItemFor(entry, await Task.Run(() => entry.Read(null)));
@@ -1499,8 +1498,8 @@ public partial class PreviewWindow : Window, IMessageHost
             {
                 IsHeader = true,
                 Glyph = ResultRow.FileGlyph,
-                Before = group.Key.Length == 0 ? "File not named" : Path.GetFileName(group.Key),
-                Detail = group.Key.Length == 0 ? $"    {compiler.Name} didn't say which file, and it couldn't be worked out. The line numbers are right"
+                Before = group.Key.Length == 0 ? L.T("PreviewWindow.FileNotNamed") : Path.GetFileName(group.Key),
+                Detail = group.Key.Length == 0 ? L.T("PreviewWindow.DidntSayWhichFile", compiler.Name)
                     : folder.Length > 0 ? "    " + folder : "",
                 Count = list.Count.ToString(),
             });
@@ -1515,7 +1514,7 @@ public partial class PreviewWindow : Window, IMessageHost
                     IsCode = true,
                     LineText = m.Line.ToString(),
                     Before = m.Text.Replace("\n", "  "),
-                    Label = (m.IsError ? "error" : "warning") + (m.Guessed ? ", file guessed" : ""),
+                    Label = (m.IsError ? L.T("PreviewWindow.Error") : L.T("PreviewWindow.Warning")) + (m.Guessed ? L.T("PreviewWindow.FileGuessed") : ""),
                     File = file,
                     Offset = offset,
                     Length = length,
@@ -1525,20 +1524,20 @@ public partial class PreviewWindow : Window, IMessageHost
 
         string seconds = took.TotalSeconds < 10 ? $"{took.TotalSeconds:0.0} s" : $"{took.TotalSeconds:0} s";
         string summary = result.Success
-            ? warnings == 0 ? $"Compiled in {seconds}" : $"Compiled in {seconds}, {Format.Count(warnings, "warning")}"
-            : errors > 0 ? $"Failed: {Format.Count(errors, "error")}" + (warnings > 0 ? $", {Format.Count(warnings, "warning")}" : "")
-            : "Failed";
-        string empty = result.Success ? check ? "Compiled with no warnings. Build puts the compiled scripts in the mod." : $"Compiled with no warnings, and saved to {output}."
-            : result.Failure ?? $"{compiler.Name} didn't compile the scripts.";
+            ? warnings == 0 ? L.T("PreviewWindow.Compiled", seconds) : L.T("PreviewWindow.Compiled2", seconds, L.T("Count.Warning", warnings))
+            : errors > 0 ? L.T("PreviewWindow.FailedCount", L.T("Count.Error", errors)) + (warnings > 0 ? $", {L.T("Count.Warning", warnings)}" : "")
+            : L.T("PreviewWindow.Failed");
+        string empty = result.Success ? check ? L.T("PreviewWindow.CompiledNoWarningsBuild") : L.T("PreviewWindow.CompiledNoWarningsSaved", output)
+            : result.Failure ?? L.T("PreviewWindow.DidntCompileScripts", compiler.Name);
         Results.ShowRows(title, summary, rows, empty);
 
         var actions = new List<(string, Action)>();
         if (result.Success && !check)
-            actions.Add(("Show in folder", () => Process.Start("explorer.exe", $"/select,\"{output}\"")));
+            actions.Add((L.T("PreviewWindow.ShowFolder"), () => Process.Start("explorer.exe", $"/select,\"{output}\"")));
         string logName = compiler.Kind == CompilerKind.WccLite ? "wcc_lite.log" : "compiler.log";
-        actions.Add(("Show log", () => ShowAlone(new PreviewItem(logName, title, System.Text.Encoding.UTF8.GetBytes(result.Log)), this)));
-        Results.SetActions(result.Success ? (check ? "Checked, nothing kept" : $"Saved to {output}") + (compiler.Kind == CompilerKind.BuiltIn ? ", compiled by the built-in compiler" : "")
-            : compiler.Kind == CompilerKind.WccLite ? "Nothing was saved. wcc_lite's own log has every line it wrote:" : "Nothing was saved. The compiler's log lists any game scripts it couldn't read:", [.. actions]);
+        actions.Add((L.T("PreviewWindow.ShowLog"), () => ShowAlone(new PreviewItem(logName, title, System.Text.Encoding.UTF8.GetBytes(result.Log)), this)));
+        Results.SetActions(result.Success ? (check ? L.T("PreviewWindow.CheckedNothingKept") : L.T("PreviewWindow.Saved", output)) + (compiler.Kind == CompilerKind.BuiltIn ? L.T("PreviewWindow.CompiledBuiltCompiler") : "")
+            : compiler.Kind == CompilerKind.WccLite ? L.T("PreviewWindow.NothingSavedWccLites") : L.T("PreviewWindow.NothingSavedCompilersLog"), [.. actions]);
     }
 
 
@@ -1676,5 +1675,5 @@ public partial class PreviewWindow : Window, IMessageHost
     private void Window_PreviewKeyUp(object sender, KeyEventArgs e) => Current?.HandleKeyUp(e);
 
     public Task ShowMessage(string? title, string message, MessageKind kind) =>
-        Current?.ShowCard(title, message, kind, primary: "OK") ?? (_isBench ? BenchMessage.Show(title, message, kind, primary: "OK") : Task.CompletedTask);
+        Current?.ShowCard(title, message, kind, primary: L.T("Common.OK")) ?? (_isBench ? BenchMessage.Show(title, message, kind, primary: L.T("Common.OK")) : Task.CompletedTask);
 }

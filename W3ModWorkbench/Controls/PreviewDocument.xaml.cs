@@ -18,6 +18,7 @@ using W3ModWorkbench.Core.Projects;
 using W3ModWorkbench.Core.Scripts;
 using W3ModWorkbench.Core.Scripts.Navigation;
 using W3ModWorkbench.Highlighting;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -236,7 +237,7 @@ public partial class PreviewDocument : UserControl
 
     /// <summary>The line under the file name in the window: where it comes from, its path and its size.</summary>
     public string Detail => $"{Item.Source}  ·  {Item.Path}  ·  {Format.Bytes(_size)}"
-        + (IsDirty ? "  ·  not saved" : Item.IsScript && !IsEditable ? "  ·  read-only" : IsEditable && !InProject ? "  ·  read-only, not in the project" : "");
+        + (IsDirty ? L.T("PreviewDocument.NotSaved") : Item.IsScript && !IsEditable ? L.T("PreviewDocument.ReadOnly") : IsEditable && !InProject ? L.T("PreviewDocument.ReadOnlyNotProject") : "");
 
     public string Text => Editor.Text;
 
@@ -402,7 +403,7 @@ public partial class PreviewDocument : UserControl
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            _ = ShowCard($"{FileName} could not be saved", ex.Message, MessageKind.Warning, primary: "OK");
+            _ = ShowCard(L.T("PreviewDocument.CouldNotSaved", FileName), ex.Message, MessageKind.Warning, primary: L.T("Common.OK"));
             return false;
         }
         _size = data.Length;
@@ -421,7 +422,7 @@ public partial class PreviewDocument : UserControl
     public async Task<bool> ConfirmCloseAsync()
     {
         if (!IsDirty) return true;
-        return await Ask($"Save the changes to {FileName}?", "They're lost if you don't save them.", MessageKind.Question, "Save", "Don't save") switch
+        return await Ask(L.T("PreviewDocument.SaveChanges", FileName), L.T("PreviewDocument.TheyreLostIfYou"), MessageKind.Question, L.T("Common.Save"), L.T("Common.DontSave")) switch
         {
             MessageChoice.Primary => Save(),
             MessageChoice.Secondary => true,
@@ -443,25 +444,25 @@ public partial class PreviewDocument : UserControl
         string? why = Item.Protection;
         if (why is not null || !host.CanEditAsProject(this) && Item.GamePath is not null && host.CanCopyToProject(this))
         {
-            if (await ShowCard(why is not null ? "This file is read-only" : "Files in archives are read-only",
-                    (why ?? "It's inside a bundle or compiled scripts, which are never changed.") + " A copy in your project, at the same game path, is what a mod changes.",
-                    MessageKind.Info, primary: "Copy to project", secondary: "Close", anchor: at))
+            if (await ShowCard(why is not null ? L.T("PreviewDocument.FileReadOnly") : L.T("PreviewDocument.FilesArchivesReadOnly"),
+                    L.T("PreviewDocument.CopyIsWhatModChanges", why ?? L.T("PreviewDocument.InsideBundleCompiledScripts")),
+                    MessageKind.Info, primary: L.T("Common.CopyProject"), secondary: L.T("Common.Close"), anchor: at))
                 _ = host.CopyToProjectAsync(this);
             return;
         }
         if (host.CanEditAsProject(this))
         {
-            if (await ShowCard("Decompiled scripts are read-only",
-                    "Save the mod's scripts to a folder to edit them. That folder is then a script project: its files can be changed, saved and compiled.",
-                    MessageKind.Info, primary: "Edit as project", secondary: "Close", anchor: at))
+            if (await ShowCard(L.T("PreviewDocument.DecompiledScriptsReadOnly"),
+                    L.T("PreviewDocument.SaveModsScriptsFolder"),
+                    MessageKind.Info, primary: L.T("PreviewDocument.EditProject"), secondary: L.T("Common.Close"), anchor: at))
                 _ = host.EditAsProjectAsync(this);
         }
         else if (Item.Script is not null)
-            _ = ShowCard("This script is read-only",
-                "Only your project's scripts can be changed. Copy it to the project from Script Bench's tree (right-click it), or open a project with Project > Open project in the main window.",
-                MessageKind.Info, primary: "OK", anchor: at);
+            _ = ShowCard(L.T("PreviewDocument.ScriptReadOnly"),
+                L.T("PreviewDocument.OnlyYourProjectsScripts"),
+                MessageKind.Info, primary: L.T("Common.OK"), anchor: at);
         else
-            _ = ShowCard(null, "Files inside bundles are read-only. Save as makes a copy you can change.", MessageKind.Info, anchor: at, autoClose: true);
+            _ = ShowCard(null, L.T("PreviewDocument.FilesInsideBundlesRead"), MessageKind.Info, anchor: at, autoClose: true);
     }
 
     /// <summary>
@@ -475,26 +476,26 @@ public partial class PreviewDocument : UserControl
         {
             if (Item.IsScript)
             {
-                if (await ShowCard($"{FileName} isn't in {project.Name}",
-                        $"Only the project's scripts can be changed. Copy it into {project.ScriptsFolder} to change it there; this file is left as it is.",
-                        MessageKind.Question, primary: "Copy to project", secondary: "Close"))
+                if (await ShowCard(L.T("PreviewDocument.Isnt", FileName, project.Name),
+                        L.T("PreviewDocument.OnlyProjectsScriptsCan", project.ScriptsFolder),
+                        MessageKind.Question, primary: L.T("Common.CopyProject"), secondary: L.T("Common.Close")))
                     await host.CopyToProjectAsync(this);
             }
-            else if (await ShowCard($"{FileName} isn't in {project.Name}",
-                         "Only the project's files can be changed. Add it to the project to change it with the project's other files.",
-                         MessageKind.Question, primary: "Add to project", secondary: "Close"))
+            else if (await ShowCard(L.T("PreviewDocument.Isnt", FileName, project.Name),
+                         L.T("PreviewDocument.OnlyProjectsFilesCan"),
+                         MessageKind.Question, primary: L.T("Common.AddProject"), secondary: L.T("Common.Close")))
                 await host.AddToProjectAsync(this);
         }
         else if (Item.IsScript)
         {
-            if (await ShowCard("This script isn't in a project",
-                    "Only a project's scripts can be changed. A project (a .w3bench file) keeps the mod's scripts folder, its other files and how it's built; make one from this script's folder to change it.",
-                    MessageKind.Question, primary: "Create project…", secondary: "Close"))
+            if (await ShowCard(L.T("PreviewDocument.ScriptIsntProject"),
+                    L.T("PreviewDocument.OnlyProjectsScriptsCan2"),
+                    MessageKind.Question, primary: L.T("PreviewDocument.CreateProject"), secondary: L.T("Common.Close")))
                 await host.CreateProjectForAsync(this);
         }
         else
-            _ = ShowCard("This file is read-only", "Only a project's files can be changed. Open a project and add it, or Save as makes a copy of your own.",
-                MessageKind.Info, primary: "OK");
+            _ = ShowCard(L.T("PreviewDocument.FileReadOnly"), L.T("PreviewDocument.OnlyProjectsFilesCan2"),
+                MessageKind.Info, primary: L.T("Common.OK"));
     }
 
     /// <summary>Saves the text somewhere else: as it is now for a project's file, otherwise exactly as it was read.</summary>
@@ -503,9 +504,9 @@ public partial class PreviewDocument : UserControl
         string ext = Path.GetExtension(Item.Path);
         var dialog = new SaveFileDialog
         {
-            Title = "Save file",
+            Title = L.T("PreviewDocument.SaveFile"),
             FileName = Item.Name,
-            Filter = ext.Length > 0 ? $"{ext.TrimStart('.').ToUpperInvariant()} file (*{ext})|*{ext}|All files (*.*)|*.*" : "All files (*.*)|*.*",
+            Filter = ext.Length > 0 ? L.T("PreviewDocument.FileAllFiles", ext.TrimStart('.').ToUpperInvariant(), ext) : L.T("PreviewDocument.AllFiles"),
         };
         if (dialog.ShowDialog(Window.GetWindow(this)) != true) return false;
         try
@@ -516,7 +517,7 @@ public partial class PreviewDocument : UserControl
         }
         catch (Exception ex)
         {
-            _ = ShowCard("The file could not be saved", ex.Message, MessageKind.Warning, primary: "OK");
+            _ = ShowCard(L.T("Common.FileCouldNotSaved"), ex.Message, MessageKind.Warning, primary: L.T("Common.OK"));
             return false;
         }
     }
@@ -814,7 +815,7 @@ public partial class PreviewDocument : UserControl
         ClosePeek();
         if (!_workspace.IsReady)
         {
-            _ = ShowCard(null, "Reading the scripts…", MessageKind.Busy, anchor: offset);
+            _ = ShowCard(null, L.T("PreviewDocument.ReadingScripts"), MessageKind.Busy, anchor: offset);
             Cursor = Cursors.AppStarting;
             await _workspace.Ready;
             ClearValue(CursorProperty);
@@ -840,10 +841,10 @@ public partial class PreviewDocument : UserControl
         {
             string text = Editor.Document.GetText(word.Start, word.Length);
             if (_workspace.GameScriptsFolder is null)
-                _ = ShowCard($"No definition found for '{text}'", "The game's scripts weren't found. Set the game folder in Settings to look there too.",
-                    MessageKind.Info, primary: "OK", anchor: word.Start);
+                _ = ShowCard(L.T("PreviewDocument.NoDefinitionFound", text), L.T("PreviewDocument.GamesScriptsWerentFound"),
+                    MessageKind.Info, primary: L.T("Common.OK"), anchor: word.Start);
             else
-                ShowNotFound(finder, text, word.Start, $"No definition found for '{text}'");
+                ShowNotFound(finder, text, word.Start, L.T("PreviewDocument.NoDefinitionFound", text));
         }
     }
 
@@ -854,10 +855,9 @@ public partial class PreviewDocument : UserControl
     private void ShowNotFound(DefinitionFinder finder, string text, int offset, string message)
     {
         if (finder.IsTypePosition(offset))
-            _ = ShowCard($"'{text}' may be a native engine type",
-                "Nothing in the open archives, the game's scripts or the installed mods declares it. The game may declare it in its engine code, "
-                + "or it may be in a script blob that isn't open yet.",
-                MessageKind.Info, primary: "OK", anchor: offset);
+            _ = ShowCard(L.T("PreviewDocument.MayNativeEngineType", text),
+                L.T("PreviewDocument.NothingOpenArchivesGames"),
+                MessageKind.Info, primary: L.T("Common.OK"), anchor: offset);
         else
             _ = ShowCard(null, message, MessageKind.Info, anchor: offset, autoClose: true);
     }
@@ -876,7 +876,7 @@ public partial class PreviewDocument : UserControl
             menu.Items.Add(item);
         }
         if (targets.Count > 30)
-            menu.Items.Add(new MenuItem { Header = $"…and {targets.Count - 30} more", IsEnabled = false });
+            menu.Items.Add(new MenuItem { Header = L.T("PreviewDocument.More", targets.Count - 30), IsEnabled = false });
         Place(menu, fromMouse);
         menu.IsOpen = true;
     }
@@ -965,7 +965,7 @@ public partial class PreviewDocument : UserControl
         if (_workspace is null || Item.Script is null) return null;
         if (!_workspace.IsReady)
         {
-            _ = ShowCard(null, "Reading the scripts…", MessageKind.Busy, anchor: Editor.CaretOffset);
+            _ = ShowCard(null, L.T("PreviewDocument.ReadingScripts"), MessageKind.Busy, anchor: Editor.CaretOffset);
             Cursor = Cursors.AppStarting;
             await _workspace.Ready;
             ClearValue(CursorProperty);
@@ -987,7 +987,7 @@ public partial class PreviewDocument : UserControl
             ? finder.Find(word.Start, word.Length)
             : [declared];
         if (targets.Count == 0 && !quiet)
-            _ = ShowCard(null, $"'{text}' doesn't lead to a declaration in the scripts searched.", MessageKind.Info, anchor: word.Start, autoClose: true);
+            _ = ShowCard(null, L.T("PreviewDocument.DoesntLeadDeclarationScripts", text), MessageKind.Info, anchor: word.Start, autoClose: true);
         return targets.Count == 0 ? null : (finder, targets, text, word.Start);
     }
 
@@ -1000,11 +1000,11 @@ public partial class PreviewDocument : UserControl
         var parsed = Parsed;
         var layers = finder.Layers;
         string what = targets[0].Kind is SymbolKind.Local or SymbolKind.Parameter ? word : targets[0].Title;
-        Host?.ShowResults(this, $"References to {what}", "Looking through every script…", cancel =>
+        Host?.ShowResults(this, L.T("PreviewDocument.References", what), L.T("PreviewDocument.LookingThroughEveryScript"), cancel =>
         {
             var hits = ScriptSearch.References(targets, parsed, layers, cancel);
-            return (ResultRow.ByFile(hits), PreviewWindow.Summary(hits, "reference", "references"));
-        }, $"Nothing in the scripts searched uses {what}.");
+            return (ResultRow.ByFile(hits), PreviewWindow.Summary(hits, "PreviewWindow.References"));
+        }, L.T("PreviewDocument.NothingScriptsSearchedUses", what));
     }
 
     /// <summary>
@@ -1018,12 +1018,12 @@ public partial class PreviewDocument : UserControl
         var target = found.Targets.FirstOrDefault(t => t.Kind is SymbolKind.Function or SymbolKind.Event || t.IsType);
         if (target is null)
         {
-            _ = ShowCard(null, "This works on functions, events and types.", MessageKind.Info, anchor: found.Start, autoClose: true);
+            _ = ShowCard(null, L.T("PreviewDocument.WorksFunctionsEventsTypes"), MessageKind.Info, anchor: found.Start, autoClose: true);
             return;
         }
         var finder = found.Finder;
         var workspace = _workspace!;
-        Host?.ShowResults(this, $"Changes to {target.Title}", "Looking for wraps, overrides and replacements…", _ =>
+        Host?.ShowResults(this, L.T("PreviewDocument.Changes", target.Title), L.T("PreviewDocument.LookingWrapsOverridesReplacements"), _ =>
         {
             var rows = new List<ResultRow>();
             int count = 0;
@@ -1037,12 +1037,12 @@ public partial class PreviewDocument : UserControl
             var files = workspace.LooseReplacementsOf(target.File);
             if (files.Count > 0)
             {
-                rows.Add(ResultRow.Heading("Whole file replaced by", files.Count));
-                rows.AddRange(files.Select(f => ResultRow.FromFile(f, label: "loose file")));
+                rows.Add(ResultRow.Heading(L.T("PreviewDocument.WholeFileReplaced"), files.Count));
+                rows.AddRange(files.Select(f => ResultRow.FromFile(f, label: L.T("PreviewDocument.LooseFile"))));
                 count += files.Count;
             }
-            return (rows, count == 1 ? "1 change" : $"{count} changes");
-        }, "Nothing in the scripts searched changes it.");
+            return (rows, count == 1 ? L.T("PreviewDocument.Change") : L.T("PreviewDocument.Changes2", count));
+        }, L.T("PreviewDocument.NothingScriptsSearchedChanges"));
     }
 
     /// <summary>Shift+Alt+H: a class's bases, subtypes and states, or a function's base versions and overrides.</summary>
@@ -1054,13 +1054,13 @@ public partial class PreviewDocument : UserControl
             || t.Kind is SymbolKind.Function or SymbolKind.Event && t.Owner is not null);
         if (target is null)
         {
-            _ = ShowCard(null, "The type hierarchy works on classes, states and the functions in them.", MessageKind.Info, anchor: found.Start, autoClose: true);
+            _ = ShowCard(null, L.T("PreviewDocument.TypeHierarchyWorksClasses"), MessageKind.Info, anchor: found.Start, autoClose: true);
             return;
         }
         var finder = found.Finder;
-        Host?.ShowResults(this, $"Hierarchy of {target.Title}", "Working out the hierarchy…", _ =>
+        Host?.ShowResults(this, L.T("PreviewDocument.Hierarchy", target.Title), L.T("PreviewDocument.WorkingOutHierarchy"), _ =>
         {
-            var rows = new List<ResultRow> { ResultRow.FromSymbol(target, depth: 0, label: "this one") };
+            var rows = new List<ResultRow> { ResultRow.FromSymbol(target, depth: 0, label: L.T("PreviewDocument.One")) };
             var related = finder.Hierarchy(target);
             foreach (var group in related.GroupBy(r => r.Group))
             {
@@ -1069,7 +1069,7 @@ public partial class PreviewDocument : UserControl
                 rows.AddRange(list.Select(r => ResultRow.FromSymbol(r.Symbol, depth: Math.Min(r.Depth, 12))));
             }
             int subtypes = related.Count(r => r.Group is "Subtypes" or "Overridden by");
-            return (rows, $"{related.Count(r => r.Group is "Base types" or "Overrides")} above, {subtypes} below");
+            return (rows, L.T("PreviewDocument.AboveBelow", related.Count(r => r.Group is "Base types" or "Overrides"), subtypes));
         }, "");
     }
 
@@ -1082,7 +1082,7 @@ public partial class PreviewDocument : UserControl
         var targets = found.Targets.Where(t => t.Kind is not (SymbolKind.Local or SymbolKind.Parameter)).ToList();
         if (targets.Count == 0)
         {
-            _ = ShowCard(null, "The usage graph works on functions, events, variables and types, not on locals and parameters.", MessageKind.Info,
+            _ = ShowCard(null, L.T("PreviewDocument.UsageGraphWorksFunctions"), MessageKind.Info,
                 anchor: found.Start, autoClose: true);
             return;
         }
@@ -1123,7 +1123,7 @@ public partial class PreviewDocument : UserControl
         (_crumbType, _crumbFunction) = (type, function);
 
         Crumbs.Children.Clear();
-        Crumbs.Children.Add(Crumb(type?.Symbol, type is null ? "(file)" : TypeTitle(type.Symbol), () => TypeChoices()));
+        Crumbs.Children.Add(Crumb(type?.Symbol, type is null ? L.T("PreviewDocument.File") : TypeTitle(type.Symbol), () => TypeChoices()));
         if (function is not null || type is not null)
         {
             Crumbs.Children.Add(new TextBlock { Text = "", FontSize = 9, Opacity = 0.5, Margin = new Thickness(4, 0, 4, 0),
@@ -1251,7 +1251,7 @@ public partial class PreviewDocument : UserControl
                 item.Click += (_, _) => GoToOwn(s);
                 menu.Items.Add(item);
             }
-            if (menu.Items.Count == 0) menu.Items.Add(new MenuItem { Header = "Nothing declared here", IsEnabled = false });
+            if (menu.Items.Count == 0) menu.Items.Add(new MenuItem { Header = L.T("PreviewDocument.NothingDeclaredHere"), IsEnabled = false });
             menu.IsOpen = true;
         };
         return button;
@@ -1278,11 +1278,11 @@ public partial class PreviewDocument : UserControl
     {
         if (Host is not { } host || Item.Script is null || !Item.IsScript) return;
         var symbols = Parsed.Symbols.OrderBy(s => s.Offset).ToList();
-        host.ShowPicker($"Go to symbol in {FileName}", query =>
+        host.ShowPicker(L.T("PreviewDocument.GoSymbol", FileName), query =>
         {
             var shown = query.Length == 0 ? symbols : symbols.Where(s => s.Name.Contains(query, StringComparison.OrdinalIgnoreCase)
                 || (s.OwnerTitle ?? s.Owner ?? "").Contains(query, StringComparison.OrdinalIgnoreCase));
-            return [.. shown.Take(400).Select(s => new QuickPickItem(DefinitionPeek.KindGlyph(s.Kind), s.Title, $"line {s.Line}", s))];
+            return [.. shown.Take(400).Select(s => new QuickPickItem(DefinitionPeek.KindGlyph(s.Kind), s.Title, L.T("PreviewDocument.Line", s.Line), s))];
         }, item =>
         {
             if (item.Tag is ScriptSymbol s) GoToOwn(s);
@@ -1430,7 +1430,7 @@ public partial class PreviewDocument : UserControl
             if (kinds[i] != DiffKind.Same && (i == 0 || kinds[i - 1] == DiffKind.Same)) blocks.Add(i);
         if (blocks.Count == 0)
         {
-            _ = ShowCard(null, "No differences: the files match.", MessageKind.Info, autoClose: true);
+            _ = ShowCard(null, L.T("PreviewDocument.NoDifferencesFilesMatch"), MessageKind.Info, autoClose: true);
             return;
         }
         int line = Editor.TextArea.Caret.Line - 1;
@@ -1498,7 +1498,7 @@ public partial class PreviewDocument : UserControl
     {
         if (Host is not { } host || Editor.IsReadOnly) return;
         var snippets = Snippets.All();
-        host.ShowPicker("Insert a snippet: type its name", query =>
+        host.ShowPicker(L.T("PreviewDocument.InsertSnippetTypeName"), query =>
         {
             var shown = query.Length == 0 ? snippets : snippets.Where(s => s.Prefix.Contains(query, StringComparison.OrdinalIgnoreCase)
                 || s.Title.Contains(query, StringComparison.OrdinalIgnoreCase));
@@ -1507,7 +1507,7 @@ public partial class PreviewDocument : UserControl
         }, item =>
         {
             if (item.Tag is Snippet s) InsertSnippet(s, Editor.SelectionStart, Editor.SelectionLength);
-        }, $"Type a name and press Tab in a script to insert one too. Add your own as .ws files in {Snippets.Folder}");
+        }, L.T("PreviewDocument.TypeNamePressTab", Snippets.Folder));
     }
 
     /// <summary>Puts a snippet in place of the text from <paramref name="offset"/>, indented like its line, and selects the first place to type.</summary>
@@ -1613,9 +1613,9 @@ public partial class PreviewDocument : UserControl
     public void InsertSnippet()
     {
         if (!CanNavigate)
-            _ = ShowCard(null, "Snippets go into scripts. Open a .ws file first.", MessageKind.Info, autoClose: true);
+            _ = ShowCard(null, L.T("PreviewDocument.SnippetsGoIntoScripts"), MessageKind.Info, autoClose: true);
         else if (Editor.IsReadOnly)
-            _ = ShowCard(null, "This file is read-only, so there's nowhere to put a snippet.", MessageKind.Info, autoClose: true);
+            _ = ShowCard(null, L.T("PreviewDocument.FileReadOnlySo"), MessageKind.Info, autoClose: true);
         else
             ShowSnippetPicker();
     }
@@ -1637,33 +1637,33 @@ public partial class PreviewDocument : UserControl
         if (local ? !IsEditable || Editor.IsReadOnly : !targets.All(t => Ours(t.File)))
         {
             var elsewhere = targets.FirstOrDefault(t => !Ours(t.File));
-            _ = ShowCard($"'{word}' can't be renamed here",
-                local ? "This file can't be edited: open it from a project to change it."
-                : $"It's declared in {elsewhere?.File.Source ?? "a file outside the open project"}. Only names your project declares are renamed, so nothing the game or another mod uses breaks.",
-                MessageKind.Info, primary: "OK", anchor: start);
+            _ = ShowCard(L.T("PreviewDocument.CantRenamedHere", word),
+                local ? L.T("PreviewDocument.FileCantEditedOpen")
+                : L.T("PreviewDocument.DeclaredElsewhere", elsewhere?.File.Source ?? L.T("PreviewDocument.FileOutsideProject")),
+                MessageKind.Info, primary: L.T("Common.OK"), anchor: start);
             return;
         }
 
         var target = targets[0];
         string what = local ? $"'{word}'" : target.Title;
-        host.ShowPicker($"New name for {what}", query =>
+        host.ShowPicker(L.T("PreviewDocument.NewName", what), query =>
         {
             string name = query.Trim();
             bool valid = name.Length > 0 && ScriptParser.IsWordStart(name[0]) && name.All(ScriptParser.IsWordChar);
-            if (!valid) return [new QuickPickItem("", name.Length == 0 ? "Type the new name" : $"'{name}' isn't a name", "Letters, digits and _, starting with a letter or _", null)];
-            if (name == word) return [new QuickPickItem("", "Type the new name", "It's the same as now", null)];
-            return [new QuickPickItem("", $"Rename to {name}", "Enter to see what changes", name)];
+            if (!valid) return [new QuickPickItem("", name.Length == 0 ? L.T("PreviewDocument.TypeNewName") : L.T("PreviewDocument.IsntName", name), L.T("PreviewDocument.LettersDigitsStartingLetter"), null)];
+            if (name == word) return [new QuickPickItem("", L.T("PreviewDocument.TypeNewName"), L.T("PreviewDocument.SameNow"), null)];
+            return [new QuickPickItem("", L.T("PreviewDocument.Rename2", name), L.T("PreviewDocument.EnterSeeWhatChanges"), name)];
         }, item =>
         {
             if (item.Tag is string name) _ = ApplyRenameAsync(finder, targets, word, name, start);
-        }, "Every use in the project's files is changed. Open files keep the change unsaved, so you can look it over; files that aren't open are saved.", text: word);
+        }, L.T("PreviewDocument.EveryUseProjectsFiles"), text: word);
     }
 
     private async Task ApplyRenameAsync(DefinitionFinder finder, IReadOnlyList<ScriptSymbol> targets, string oldName, string newName, int anchor)
     {
         var parsed = Parsed;
         var layers = finder.Layers;
-        _ = ShowCard(null, "Finding every use…", MessageKind.Busy, anchor: anchor);
+        _ = ShowCard(null, L.T("PreviewDocument.FindingEveryUse"), MessageKind.Busy, anchor: anchor);
         List<ScriptHit> hits;
         try
         {
@@ -1679,33 +1679,33 @@ public partial class PreviewDocument : UserControl
         int outside = hits.Count - ours.Count;
         if (hits.Count >= ScriptSearch.MaxHits)
         {
-            _ = ShowCard("Too many uses to rename", $"'{oldName}' is used in more than {ScriptSearch.MaxHits:N0} places.", MessageKind.Warning, primary: "OK");
+            _ = ShowCard(L.T("PreviewDocument.TooManyUsesRename"), L.T("PreviewDocument.UsedMoreThanPlaces", oldName, ScriptSearch.MaxHits), MessageKind.Warning, primary: L.T("Common.OK"));
             return;
         }
 
-        string files = Format.Count(ours.Select(h => h.File.Key).Distinct().Count(), "file");
-        string note = outside > 0 ? $"\n\n{Format.Count(outside, "use")} outside the project (in the game's or a mod's scripts) can't be changed and would stop compiling against the new name." : "";
+        string files = L.T("Count.File", ours.Select(h => h.File.Key).Distinct().Count());
+        string note = outside > 0 ? L.T("PreviewDocument.OutsideProjectGamesMods", L.T("Count.Use", outside)) : "";
         bool includeMaybe = true;
         if (maybe.Count > 0)
         {
-            var choice = await Ask($"Rename {oldName} to {newName}?",
-                $"{Format.Count(ours.Count, "place")} in {files}. In {Format.Count(maybe.Count, "place")} the type before the dot couldn't be worked out, so that may be another member with the same name.{note}",
-                MessageKind.Question, $"Rename all {ours.Count}", $"Only the {ours.Count - maybe.Count} certain");
+            var choice = await Ask(L.T("PreviewDocument.Rename3", oldName, newName),
+                L.T("PreviewDocument.TypeBeforeDotCouldnt", L.T("Count.Place", ours.Count), files, L.T("Count.Place", maybe.Count), note),
+                MessageKind.Question, L.T("PreviewDocument.RenameAll", ours.Count), L.T("PreviewDocument.OnlyCertain", ours.Count - maybe.Count));
             if (choice == MessageChoice.Cancel) return;
             includeMaybe = choice == MessageChoice.Primary;
         }
-        else if (!await ShowCard($"Rename {oldName} to {newName}?", $"{Format.Count(ours.Count, "place")} in {files}.{note}", MessageKind.Question, primary: "Rename", secondary: "Cancel"))
+        else if (!await ShowCard(L.T("PreviewDocument.Rename3", oldName, newName), L.T("PreviewDocument.In", L.T("Count.Place", ours.Count), files, note), MessageKind.Question, primary: L.T("PreviewDocument.Rename4"), secondary: L.T("Common.Cancel")))
             return;
 
         var changes = ours.Where(h => includeMaybe || h.Label != "maybe").ToList();
         var (changed, skipped, failed) = RenameIn(changes, oldName, newName);
         if (failed is not null)
         {
-            _ = ShowCard("Not every file could be changed", failed, MessageKind.Warning, primary: "OK");
+            _ = ShowCard(L.T("PreviewDocument.NotEveryFileCould"), failed, MessageKind.Warning, primary: L.T("Common.OK"));
             return;
         }
-        string summary = $"Renamed {Format.Count(changed.Count, "place")}" + (skipped > 0 ? $", skipped {skipped} that changed since they were read" : "");
-        Host?.ShowResults(this, $"Renamed {oldName} to {newName}", "", _ => (ResultRow.ByFile(changed), summary), "Nothing was renamed.");
+        string summary = L.T("PreviewDocument.Renamed", L.T("Count.Place", changed.Count), (skipped > 0 ? L.T("PreviewDocument.SkippedChangedSinceThey", skipped) : ""));
+        Host?.ShowResults(this, L.T("PreviewDocument.Renamed2", oldName, newName), "", _ => (ResultRow.ByFile(changed), summary), L.T("PreviewDocument.NothingRenamed"));
     }
 
     /// <summary>
@@ -1760,7 +1760,7 @@ public partial class PreviewDocument : UserControl
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                return (changed, skipped, $"{file.Path} could not be changed: {ex.Message}. The files before it in the list were renamed.");
+                return (changed, skipped, L.T("PreviewDocument.CouldNotChangedFiles", file.Path, ex.Message));
             }
         }
         foreach (var archive in archives) ScriptWorkspace.Reindex(archive);
@@ -1909,7 +1909,7 @@ public partial class PreviewDocument : UserControl
         {
             if (finder.MembersAfter(before) is not { } found) return;
             items.AddRange(found.Members.Select(s => new CompletionItem(s)));
-            items.AddRange(found.BuiltIn.Select(n => new CompletionItem(n, "array method")));
+            items.AddRange(found.BuiltIn.Select(n => new CompletionItem(n, L.T("PreviewDocument.ArrayMethod"))));
         }
         else
         {
@@ -2003,8 +2003,8 @@ public partial class PreviewDocument : UserControl
                 SymbolKind.Field => symbol.Type ?? "field",
                 SymbolKind.Function => symbol.Type is { } r ? $"function : {r}" : "function",
                 SymbolKind.Event => "event",
-                SymbolKind.EnumMember => symbol.Owner ?? "enum value",
-                SymbolKind.State => $"state in {symbol.Owner}",
+                SymbolKind.EnumMember => symbol.Owner ?? L.T("PreviewDocument.EnumValue"),
+                SymbolKind.State => L.T("PreviewDocument.State", symbol.Owner),
                 _ => symbol.Kind.ToString().ToLowerInvariant(),
             };
             Rank = symbol.Kind switch
@@ -2193,8 +2193,8 @@ public partial class PreviewDocument : UserControl
         ForwardMenuItem.IsEnabled = Host?.CanGoForward == true;
         CompareGameMenuItem.IsEnabled = GameVersion is not null;
         CompareGameMenuItem.ToolTip = GameVersion is null
-            ? "Only for a mod's loose copy of one of the game's scripts"
-            : "Opens the game's version beside this one and marks what the mod changed";
+            ? L.T("PreviewDocument.OnlyModsLooseCopy")
+            : L.T("PreviewDocument.OpensGamesVersionBeside");
         CompareOpenMenuItem.IsEnabled = Host?.HasOtherFiles(this) == true;
         SnippetMenuItem.IsEnabled = CompleteMenuItem.IsEnabled = !Editor.IsReadOnly;
         NextDiffMenuItem.Visibility = ClearDiffMenuItem.Visibility = HasDiff ? Visibility.Visible : Visibility.Collapsed;
