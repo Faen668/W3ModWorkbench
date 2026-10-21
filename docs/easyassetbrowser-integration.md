@@ -55,7 +55,7 @@ Notes:
 
 ## Paths in the lists that aren't in the game
 
-Of EAB's 57,411 paths, 3,388 aren't in the cooked game. 3,379 of them are REDkit-only source files (in REDkit's `r4data`, such as editor templates and community action points), which makes sense for a REDkit tool. The Workbench's Asset Browser lists the game's files, so for those it will say the file isn't in the game's files.
+Of EAB's 57,411 paths, 3,388 aren't in the cooked game. 3,379 of them are REDkit-only source files (in REDkit's `r4data`, such as editor templates and community action points), which makes sense for a REDkit tool. The Workbench's Asset Browser lists REDkit's files too, under a REDkit heading, once the user has set REDkit up in its Settings, so a link to one of those opens REDkit's copy. Without REDkit set up, it says the file isn't in the game's files.
 
 Only these 9 are in neither the game nor REDkit, and may be worth checking:
 
