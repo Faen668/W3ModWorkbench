@@ -440,13 +440,24 @@ public partial class PreviewDocument
         var menu = new ContextMenu();
         foreach (var refactor in found)
         {
-            var item = new MenuItem { Header = L.T("ScriptBench.Refactor." + refactor.Kind), ToolTip = L.T("ScriptBench.Refactor." + refactor.Kind + "Tip") };
+            var icon = new TextBlock { Text = RefactorGlyph(refactor.Kind), FontSize = 14 };
+            icon.SetResourceReference(TextBlock.FontFamilyProperty, "IconFont");
+            var item = new MenuItem { Header = L.T("ScriptBench.Refactor." + refactor.Kind), ToolTip = L.T("ScriptBench.Refactor." + refactor.Kind + "Tip"), Icon = icon };
             item.Click += (_, _) => ApplyRefactor(refactor, text);
             menu.Items.Add(item);
         }
         Place(menu, fromMouse: false);
         menu.IsOpen = true;
     }
+
+    /// <summary>A refactor's icon: a new variable or function as the outline shows one, otherwise folding code in or laying it out.</summary>
+    private static string RefactorGlyph(RefactorKind kind) => kind switch
+    {
+        RefactorKind.ExtractVariable => DefinitionPeek.KindGlyph(SymbolKind.Local),
+        RefactorKind.ExtractFunction or RefactorKind.ExtractMethod => DefinitionPeek.KindGlyph(SymbolKind.Function),
+        RefactorKind.InlineVariable or RefactorKind.JoinDeclaration or RefactorKind.CollapseSwitch or RefactorKind.CollapseIf => "\uE73F",
+        _ => "\uE740",
+    };
 
     /// <summary>Makes a refactor's edits as one change to undo, then renames its new name when it has one.</summary>
     private void ApplyRefactor(Refactor refactor, string expected)

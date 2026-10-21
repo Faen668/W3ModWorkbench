@@ -155,40 +155,91 @@
                         <avalonEdit:TextEditor.ContextMenu>
                             <!-- in the app's font: a menu takes the editor's code font otherwise -->
                             <ContextMenu Opened="ContextMenu_Opened" FontFamily="{x:Static SystemFonts.MessageFontFamily}" FontSize="14">
-                                <MenuItem Header="{l:T PreviewDocument.GoDefinition}" InputGestureText="F12" Click="GoToDefinition_Click" />
-                                <MenuItem Header="{l:T PreviewDocument.OpenDefinitionSide}" InputGestureText="Ctrl+F12" Click="GoToDefinitionSide_Click" />
-                                <MenuItem Header="{l:T PreviewDocument.FindAllReferences}" InputGestureText="Shift+F12" Click="FindReferences_Click" />
+                                <ContextMenu.Resources>
+                                    <Style x:Key="MenuIcon" TargetType="TextBlock">
+                                        <Setter Property="FontFamily" Value="{StaticResource IconFont}" />
+                                        <Setter Property="FontSize" Value="14" />
+                                        <Setter Property="VerticalAlignment" Value="Center" />
+                                    </Style>
+                                </ContextMenu.Resources>
+                                <MenuItem Header="{l:T PreviewDocument.GoDefinition}" InputGestureText="F12" Click="GoToDefinition_Click">
+                                    <MenuItem.Icon><TextBlock Style="{StaticResource MenuIcon}" Text="&#xE8AD;" /></MenuItem.Icon>
+                                </MenuItem>
+                                <MenuItem Header="{l:T PreviewDocument.OpenDefinitionSide}" InputGestureText="Ctrl+F12" Click="GoToDefinitionSide_Click">
+                                    <MenuItem.Icon><TextBlock Style="{StaticResource MenuIcon}" Text="&#xE90D;" /></MenuItem.Icon>
+                                </MenuItem>
+                                <MenuItem Header="{l:T PreviewDocument.FindAllReferences}" InputGestureText="Shift+F12" Click="FindReferences_Click">
+                                    <MenuItem.Icon><TextBlock Style="{StaticResource MenuIcon}" Text="&#xE721;" /></MenuItem.Icon>
+                                </MenuItem>
                                 <MenuItem Header="{l:T PreviewDocument.WhoElseChanges}" InputGestureText="Ctrl+Shift+F12" Click="Changes_Click"
-                                          ToolTip="{l:T PreviewDocument.ModsWrapReplaceOverride}" />
-                                <MenuItem Header="{l:T PreviewDocument.ShowTypeHierarchy}" InputGestureText="Shift+Alt+H" Click="Hierarchy_Click" />
+                                          ToolTip="{l:T PreviewDocument.ModsWrapReplaceOverride}">
+                                    <MenuItem.Icon><TextBlock Style="{StaticResource MenuIcon}" Text="&#xE7C4;" /></MenuItem.Icon>
+                                </MenuItem>
+                                <MenuItem Header="{l:T PreviewDocument.ShowTypeHierarchy}" InputGestureText="Shift+Alt+H" Click="Hierarchy_Click">
+                                    <MenuItem.Icon><TextBlock Style="{StaticResource MenuIcon}" Text="&#xE81E;" /></MenuItem.Icon>
+                                </MenuItem>
                                 <MenuItem Header="{l:T PreviewDocument.ShowUsageGraph}" Click="UsageGraph_Click"
-                                          ToolTip="{l:T PreviewDocument.GraphWhatUsesFunction}" />
+                                          ToolTip="{l:T PreviewDocument.GraphWhatUsesFunction}">
+                                    <MenuItem.Icon><TextBlock Style="{StaticResource MenuIcon}" Text="&#xF003;" /></MenuItem.Icon>
+                                </MenuItem>
                                 <MenuItem Header="{l:T PreviewDocument.CreateWrapReplaceStub}" Click="Stub_Click"
-                                          ToolTip="{l:T PreviewDocument.OpensStubGeneratorFunction}" />
+                                          ToolTip="{l:T PreviewDocument.OpensStubGeneratorFunction}">
+                                    <MenuItem.Icon><TextBlock Style="{StaticResource MenuIcon}" Text="&#xED0E;" /></MenuItem.Icon>
+                                </MenuItem>
                                 <Separator />
                                 <MenuItem x:Name="RenameMenuItem" Header="{l:T PreviewDocument.Rename}" InputGestureText="F2" Click="Rename_Click"
-                                          ToolTip="{l:T PreviewDocument.RenamesFunctionVariableType}" />
+                                          ToolTip="{l:T PreviewDocument.RenamesFunctionVariableType}">
+                                    <MenuItem.Icon><TextBlock Style="{StaticResource MenuIcon}" Text="&#xE8AC;" /></MenuItem.Icon>
+                                </MenuItem>
                                 <MenuItem x:Name="SnippetMenuItem" Header="{l:T PreviewDocument.InsertSnippet}" InputGestureText="Ctrl+J" Click="Snippet_Click"
-                                          ToolTip="{l:T PreviewDocument.CommonWitcherScriptPatternsYour}" />
-                                <MenuItem x:Name="CompleteMenuItem" Header="{l:T PreviewDocument.CompleteName}" InputGestureText="Ctrl+Space" Click="Complete_Click" />
+                                          ToolTip="{l:T PreviewDocument.CommonWitcherScriptPatternsYour}">
+                                    <MenuItem.Icon><TextBlock Style="{StaticResource MenuIcon}" Text="&#xE943;" /></MenuItem.Icon>
+                                </MenuItem>
+                                <MenuItem x:Name="CompleteMenuItem" Header="{l:T PreviewDocument.CompleteName}" InputGestureText="Ctrl+Space" Click="Complete_Click">
+                                    <MenuItem.Icon><TextBlock Style="{StaticResource MenuIcon}" Text="&#xE8D3;" /></MenuItem.Icon>
+                                </MenuItem>
                                 <MenuItem x:Name="RefactorMenuItem" Header="{l:T ScriptBench.Menu.Refactor}" InputGestureText="Ctrl+." Click="Refactor_Click"
-                                          ToolTip="{l:T ScriptBench.Menu.RefactorTip}" />
+                                          ToolTip="{l:T ScriptBench.Menu.RefactorTip}">
+                                    <MenuItem.Icon><TextBlock Style="{StaticResource MenuIcon}" Text="&#xE90F;" /></MenuItem.Icon>
+                                </MenuItem>
                                 <MenuItem x:Name="FormatMenuItem" Header="{l:T ScriptBench.Menu.Format}" InputGestureText="Shift+Alt+F" Click="Format_Click"
-                                          ToolTip="{l:T ScriptBench.Menu.FormatTip}" />
+                                          ToolTip="{l:T ScriptBench.Menu.FormatTip}">
+                                    <MenuItem.Icon><TextBlock Style="{StaticResource MenuIcon}" Text="&#xE8E4;" /></MenuItem.Icon>
+                                </MenuItem>
                                 <Separator />
-                                <MenuItem x:Name="BackMenuItem" Header="{l:T PreviewDocument.Back}" InputGestureText="Alt+Left" Click="Back_Click" />
-                                <MenuItem x:Name="ForwardMenuItem" Header="{l:T PreviewDocument.Forward}" InputGestureText="Alt+Right" Click="Forward_Click" />
-                                <MenuItem Header="{l:T PreviewDocument.GoSymbolFile}" Click="GoToSymbolInFile_Click" />
+                                <MenuItem x:Name="BackMenuItem" Header="{l:T PreviewDocument.Back}" InputGestureText="Alt+Left" Click="Back_Click">
+                                    <MenuItem.Icon><TextBlock Style="{StaticResource MenuIcon}" Text="&#xE72B;" /></MenuItem.Icon>
+                                </MenuItem>
+                                <MenuItem x:Name="ForwardMenuItem" Header="{l:T PreviewDocument.Forward}" InputGestureText="Alt+Right" Click="Forward_Click">
+                                    <MenuItem.Icon><TextBlock Style="{StaticResource MenuIcon}" Text="&#xE72A;" /></MenuItem.Icon>
+                                </MenuItem>
+                                <MenuItem Header="{l:T PreviewDocument.GoSymbolFile}" Click="GoToSymbolInFile_Click">
+                                    <MenuItem.Icon><TextBlock Style="{StaticResource MenuIcon}" Text="&#xE8FD;" /></MenuItem.Icon>
+                                </MenuItem>
                                 <MenuItem Header="{l:T ScriptBench.Menu.FindInFile}" InputGestureText="Ctrl+F" Click="FindInFile_Click"
-                                          ToolTip="{l:T ScriptBench.Menu.FindInFileTip}" />
+                                          ToolTip="{l:T ScriptBench.Menu.FindInFileTip}">
+                                    <MenuItem.Icon><TextBlock Style="{StaticResource MenuIcon}" Text="&#xE773;" /></MenuItem.Icon>
+                                </MenuItem>
                                 <Separator />
-                                <MenuItem x:Name="CompareGameMenuItem" Header="{l:T PreviewDocument.CompareGameVersion}" Click="CompareGame_Click" />
-                                <MenuItem x:Name="CompareOpenMenuItem" Header="{l:T PreviewDocument.CompareOpenFile}" Click="CompareOpen_Click" />
-                                <MenuItem x:Name="NextDiffMenuItem" Header="{l:T PreviewDocument.NextDifference}" InputGestureText="F8" Click="NextDiff_Click" />
-                                <MenuItem x:Name="PreviousDiffMenuItem" Header="{l:T ScriptBench.Menu.PreviousDifference}" InputGestureText="Shift+F8" Click="PreviousDiff_Click" />
-                                <MenuItem x:Name="ClearDiffMenuItem" Header="{l:T PreviewDocument.StopComparing}" Click="ClearDiff_Click" />
+                                <MenuItem x:Name="CompareGameMenuItem" Header="{l:T PreviewDocument.CompareGameVersion}" Click="CompareGame_Click">
+                                    <MenuItem.Icon><TextBlock Style="{StaticResource MenuIcon}" Text="&#xE8F1;" /></MenuItem.Icon>
+                                </MenuItem>
+                                <MenuItem x:Name="CompareOpenMenuItem" Header="{l:T PreviewDocument.CompareOpenFile}" Click="CompareOpen_Click">
+                                    <MenuItem.Icon><TextBlock Style="{StaticResource MenuIcon}" Text="&#xE8A0;" /></MenuItem.Icon>
+                                </MenuItem>
+                                <MenuItem x:Name="NextDiffMenuItem" Header="{l:T PreviewDocument.NextDifference}" InputGestureText="F8" Click="NextDiff_Click">
+                                    <MenuItem.Icon><TextBlock Style="{StaticResource MenuIcon}" Text="&#xE74B;" /></MenuItem.Icon>
+                                </MenuItem>
+                                <MenuItem x:Name="PreviousDiffMenuItem" Header="{l:T ScriptBench.Menu.PreviousDifference}" InputGestureText="Shift+F8" Click="PreviousDiff_Click">
+                                    <MenuItem.Icon><TextBlock Style="{StaticResource MenuIcon}" Text="&#xE74A;" /></MenuItem.Icon>
+                                </MenuItem>
+                                <MenuItem x:Name="ClearDiffMenuItem" Header="{l:T PreviewDocument.StopComparing}" Click="ClearDiff_Click">
+                                    <MenuItem.Icon><TextBlock Style="{StaticResource MenuIcon}" Text="&#xE711;" /></MenuItem.Icon>
+                                </MenuItem>
                                 <Separator />
-                                <MenuItem Header="{l:T Common.Copy}" Command="ApplicationCommands.Copy" />
+                                <MenuItem Header="{l:T Common.Copy}" Command="ApplicationCommands.Copy">
+                                    <MenuItem.Icon><TextBlock Style="{StaticResource MenuIcon}" Text="&#xE8C8;" /></MenuItem.Icon>
+                                </MenuItem>
                             </ContextMenu>
                         </avalonEdit:TextEditor.ContextMenu>
                     </avalonEdit:TextEditor>

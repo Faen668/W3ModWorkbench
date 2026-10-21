@@ -551,35 +551,40 @@ public partial class PreviewWindow : Window, IMessageHost
         var docs = pane.Documents;
         int index = docs.IndexOf(doc);
 
-        void Add(string header, Action action, bool enabled = true, string? gesture = null)
+        void Add(string header, string glyph, Action action, bool enabled = true, string? gesture = null)
         {
-            var item = new MenuItem { Header = header, IsEnabled = enabled, InputGestureText = gesture ?? "" };
+            var item = new MenuItem
+            {
+                Header = header, IsEnabled = enabled, InputGestureText = gesture ?? "",
+                Icon = new TextBlock { FontFamily = (FontFamily)FindResource("IconFont"), FontSize = 14, Text = glyph },
+            };
             item.Click += (_, _) => action();
             menu.Items.Add(item);
         }
 
         // pinned tabs stay when the others are closed in bulk
         var unpinned = docs.Where(d => !pane.IsPinned(d)).ToList();
-        Add(L.T("Common.Close"), () => CloseDocument(doc), gesture: "Ctrl+W");
-        Add(L.T("PreviewWindow.CloseOthers"), () => CloseDocuments(unpinned.Where(d => d != doc)), unpinned.Any(d => d != doc));
-        Add(L.T("PreviewWindow.CloseRight"), () => CloseDocuments(docs.Skip(index + 1).Where(unpinned.Contains)),
+        Add(L.T("Common.Close"), "\uE711", () => CloseDocument(doc), gesture: "Ctrl+W");
+        Add(L.T("PreviewWindow.CloseOthers"), "\uEA39", () => CloseDocuments(unpinned.Where(d => d != doc)), unpinned.Any(d => d != doc));
+        Add(L.T("PreviewWindow.CloseRight"), "\uE8B5", () => CloseDocuments(docs.Skip(index + 1).Where(unpinned.Contains)),
             docs.Skip(index + 1).Any(unpinned.Contains));
-        Add(L.T("PreviewWindow.CloseAll"), () => CloseDocuments(unpinned), unpinned.Count > 0);
-        Add(L.T("PreviewWindow.ReopenClosedTab"), ReopenClosed, CanReopen, "Ctrl+Shift+T");
+        Add(L.T("PreviewWindow.CloseAll"), "\uED62", () => CloseDocuments(unpinned), unpinned.Count > 0);
+        Add(L.T("PreviewWindow.ReopenClosedTab"), "\uE7A7", ReopenClosed, CanReopen, "Ctrl+Shift+T");
         menu.Items.Add(new Separator());
-        Add(pane.IsPinned(doc) ? L.T("PreviewWindow.Unpin") : L.T("PreviewWindow.Pin"), () => pane.SetPinned(doc, !pane.IsPinned(doc)));
+        Add(pane.IsPinned(doc) ? L.T("PreviewWindow.Unpin") : L.T("PreviewWindow.Pin"), pane.IsPinned(doc) ? "\uE77A" : "\uE718", () => pane.SetPinned(doc, !pane.IsPinned(doc)));
         menu.Items.Add(new Separator());
-        Add(_panes.Count > 1 ? L.T("PreviewWindow.OpenOtherGroup") : SplitsDown ? L.T("PreviewWindow.OpenBelow") : L.T("PreviewWindow.OpenSide"), () => OpenBeside(doc));
-        Add(_panes.Count > 1 ? L.T("PreviewWindow.MoveOtherGroup") : SplitsDown ? L.T("PreviewWindow.MoveBelow") : L.T("PreviewWindow.MoveSide"),
+        Add(_panes.Count > 1 ? L.T("PreviewWindow.OpenOtherGroup") : SplitsDown ? L.T("PreviewWindow.OpenBelow") : L.T("PreviewWindow.OpenSide"),
+            SplitsDown && _panes.Count == 1 ? "\uE90E" : "\uE90D", () => OpenBeside(doc));
+        Add(_panes.Count > 1 ? L.T("PreviewWindow.MoveOtherGroup") : SplitsDown ? L.T("PreviewWindow.MoveBelow") : L.T("PreviewWindow.MoveSide"), "\uE89F",
             () => MoveDocument(doc, OtherPane(pane), -1), _panes.Count > 1 || docs.Count > 1);
-        Add(L.T("PreviewWindow.MoveNewWindow"), () => MoveToNewWindow(doc), AllDocuments.Count() > 1);
+        Add(L.T("PreviewWindow.MoveNewWindow"), "\uE8A7", () => MoveToNewWindow(doc), AllDocuments.Count() > 1);
         menu.Items.Add(new Separator());
-        Add(L.T("Common.CopyPath"), () => Clipboard.SetText(doc.Item.Path));
-        Add(L.T("PreviewWindow.OpenExternalEditor"), () => OpenExternally(doc));
-        if (doc.IsEditable) Add(L.T("Common.Save"), () => doc.Save(), doc.IsDirty, "Ctrl+S");
+        Add(L.T("Common.CopyPath"), "\uE8C8", () => Clipboard.SetText(doc.Item.Path));
+        Add(L.T("PreviewWindow.OpenExternalEditor"), "\uE7AC", () => OpenExternally(doc));
+        if (doc.IsEditable) Add(L.T("Common.Save"), "\uE74E", () => doc.Save(), doc.IsDirty, "Ctrl+S");
         var unsaved = AllOpenDocuments().Where(d => d.IsDirty).ToList();
-        if (unsaved.Count > 0 || doc.IsEditable) Add(L.T("PreviewWindow.SaveAll"), () => SaveAll(unsaved), unsaved.Count > 0, "Ctrl+Shift+S");
-        Add(L.T("Common.Save3"), () => doc.SaveAs());
+        if (unsaved.Count > 0 || doc.IsEditable) Add(L.T("PreviewWindow.SaveAll"), "\uE78C", () => SaveAll(unsaved), unsaved.Count > 0, "Ctrl+Shift+S");
+        Add(L.T("Common.Save3"), "\uE792", () => doc.SaveAs());
     }
 
     /// <summary>

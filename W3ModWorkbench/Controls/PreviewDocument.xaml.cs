@@ -912,7 +912,9 @@ public partial class PreviewDocument : UserControl
             var header = new StackPanel();
             header.Children.Add(new TextBlock { Text = target.Title, FontWeight = FontWeights.SemiBold });
             header.Children.Add(new TextBlock { Text = $"{target.File.Path} : {target.Line}  ·  {target.File.Source}", Opacity = 0.65, FontSize = 12 });
-            var item = new MenuItem { Header = header };
+            var icon = new TextBlock { Text = DefinitionPeek.KindGlyph(target.Kind), FontSize = 14 };
+            icon.SetResourceReference(TextBlock.FontFamilyProperty, "IconFont");
+            var item = new MenuItem { Header = header, Icon = icon };
             item.Click += async (_, _) => await NavigateAsync(target, toSide);
             menu.Items.Add(item);
         }

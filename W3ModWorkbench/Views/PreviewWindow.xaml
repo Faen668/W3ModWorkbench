@@ -176,8 +176,12 @@
                 <Button x:Name="SplitButton" Click="Split_Click">
                     <Button.ContextMenu>
                         <ContextMenu>
-                            <MenuItem x:Name="SplitRightItem" Header="{l:T PreviewWindow.SplitSideSide}" IsCheckable="True" Click="SplitRight_Click" />
-                            <MenuItem x:Name="SplitDownItem" Header="{l:T PreviewWindow.SplitTopBottom}" IsCheckable="True" Click="SplitDown_Click" />
+                            <MenuItem x:Name="SplitRightItem" Header="{l:T PreviewWindow.SplitSideSide}" IsCheckable="True" Click="SplitRight_Click">
+                                <MenuItem.Icon><TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE90D;" FontSize="14" /></MenuItem.Icon>
+                            </MenuItem>
+                            <MenuItem x:Name="SplitDownItem" Header="{l:T PreviewWindow.SplitTopBottom}" IsCheckable="True" Click="SplitDown_Click">
+                                <MenuItem.Icon><TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE90E;" FontSize="14" /></MenuItem.Icon>
+                            </MenuItem>
                         </ContextMenu>
                     </Button.ContextMenu>
                     <StackPanel Orientation="Horizontal">
