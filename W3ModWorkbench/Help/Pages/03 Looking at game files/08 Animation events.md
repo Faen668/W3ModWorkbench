@@ -1,7 +1,7 @@
 ---
 title: Animation events
 icon: E8D6
-order: 8
+order: 9
 summary: The sounds, footsteps and effects timed to a set of animations, along a timeline, with the animation playing.
 keywords: w2animev animation events sounds footsteps timeline tracks
 windows: AnimEventsWindow

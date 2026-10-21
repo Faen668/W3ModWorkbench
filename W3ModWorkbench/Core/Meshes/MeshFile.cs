@@ -88,6 +88,9 @@ public sealed class MeshFile
     /// <summary>For each of <see cref="BoneNames"/>, the matrix that takes the mesh into the bone's space as it was bound.</summary>
     public Matrix4x4[] BoneInverseBinds { get; init; } = [];
 
+    /// <summary>For a cloth resource, what it takes to simulate it; null for a mesh, or cloth whose simulation couldn't be read.</summary>
+    public ClothAsset? Cloth { get; init; }
+
     /// <summary>
     /// Reads a mesh. <paramref name="buffer"/> reads one of its numbered <c>.buffer</c> files (1 for <c>.1.buffer</c>),
     /// or gives null when it isn't to be found.

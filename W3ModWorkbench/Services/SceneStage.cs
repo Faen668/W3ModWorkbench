@@ -28,6 +28,9 @@ public sealed class StageActor
     public required Matrix4x4[] Rest { get; init; }
     public required List<(int Bone, bool ByName)[]> Maps { get; init; }
 
+    /// <summary>The cloth among its meshes, simulated as the scene plays; null when it has none, or cloth isn't simulated.</summary>
+    public ClothRig? Cloth { get; init; }
+
     /// <summary>The animations the scene plays on it that were found, by name.</summary>
     public required Dictionary<string, AnimationClip> Clips { get; init; }
 
@@ -447,6 +450,7 @@ public static class SceneStage
                 Rig = rig,
                 Rest = rest,
                 Maps = parts.Select(p => Skinning.MapBones(p.Mesh, rig, rest)).ToList(),
+                Cloth = ClothRig.For([.. parts.Select(p => p.Mesh)]),
                 Clips = clips,
                 Motions = motions,
                 Face = face,
@@ -1236,16 +1240,20 @@ public static class SceneStage
         return Math.Clamp(clipFront + Math.Clamp(t, 0, 1) * (end - clipFront), 0, clip.Duration);
     }
 
-    /// <summary>Where every vertex of an actor's meshes is with its bones where <paramref name="model"/> has them.</summary>
-    public static Func<int, MeshChunk, Vector3[]?> Pose(StageActor actor, Matrix4x4[] model)
+    /// <summary>
+    /// Where every vertex of an actor's meshes is with its bones where <paramref name="model"/> has them; its cloth
+    /// simulated on to <paramref name="time"/>, when it's given.
+    /// </summary>
+    public static Func<int, MeshChunk, Vector3[]?> Pose(StageActor actor, Matrix4x4[] model, float? time = null)
     {
         var bones = actor.Parts.Select((p, i) => Skinning.BoneMatrices(p.Mesh, actor.Maps[i], actor.Rest, model)).ToList();
         var carried = Matrix4x4.Invert(actor.Rest[0], out var back) ? back * model[0] : Matrix4x4.Identity;
+        var cloth = time is float at ? actor.Cloth?.StepTo(at, p => p < bones.Count ? bones[p] : null) : null;
         return (part, chunk) =>
         {
             if (part >= bones.Count) return null;
             var (hung, offset) = actor.AttachedTo[part];
-            if (hung < 0 && Skinning.Pose(chunk, bones[part]) is { } skinned) return skinned;
+            if (hung < 0 && ClothPose.Skin(cloth, part, chunk, bones[part]) is { } skinned) return skinned;
             var placed = actor.Parts[part].Place * (hung >= 0 ? offset * model[hung] : carried);
             var positions = new Vector3[chunk.Positions.Length];
             for (int v = 0; v < positions.Length; v++) positions[v] = Vector3.Transform(chunk.Positions[v], placed);

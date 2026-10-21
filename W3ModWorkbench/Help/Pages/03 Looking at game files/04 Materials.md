@@ -1,7 +1,7 @@
 ---
 title: Materials
 icon: E790
-order: 4
+order: 5
 summary: Look at and change a material's textures, colours and numbers, previewed live on a sphere, a mesh or a whole character.
 keywords: material w2mi w2mg shader parameters texture colour preview used by based on
 windows: MaterialWindow

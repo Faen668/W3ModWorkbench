@@ -49,7 +49,7 @@ public partial class MeshWindow : Window, IMessageHost
         _readData = readData;
         _readBuffer = readBuffer;
         _locator = locator;
-        Title = L.T("MeshWindow.Mesh2", Path.GetFileName(path));
+        Title = ClothFile.IsCloth(path) ? L.T("MeshWindow.ClothTitle", Path.GetFileName(path)) : L.T("MeshWindow.Mesh2", Path.GetFileName(path));
         InfoText.Text = $"{path}   ·   {source}";
         FloorToggle.IsChecked = View.ShowFloor = App.Settings.ShowMeshFloor;
         InfoItem.IsChecked = App.Settings.ShowMeshInfo;
@@ -62,8 +62,8 @@ public partial class MeshWindow : Window, IMessageHost
         Loaded += async (_, _) => await LoadAsync();
     }
 
-    /// <summary>Whether a file's name says it's a mesh this window can show.</summary>
-    public static bool CanShow(string name) => name.EndsWith(".w2mesh", StringComparison.OrdinalIgnoreCase);
+    /// <summary>Whether a file's name says it's a mesh this window can show: a mesh, or a cloth resource, which REDkit opens as one.</summary>
+    public static bool CanShow(string name) => name.EndsWith(".w2mesh", StringComparison.OrdinalIgnoreCase) || ClothFile.IsCloth(name);
 
     /// <summary>
     /// Opens a mesh in a window of its own. <paramref name="data"/> is the .w2mesh; its buffers, materials and textures are
@@ -106,7 +106,8 @@ public partial class MeshWindow : Window, IMessageHost
         {
             (_mesh, materials) = await Task.Run(() =>
             {
-                var mesh = MeshFile.Read(_readData(), _readBuffer);
+                // a cloth resource's shape is its APEX asset: its own, or the one the game's collision cache keeps for it
+                var mesh = ClothFile.IsCloth(_path) ? ClothFile.Read(_readData(), () => _locator.ReadCollision(_path)) : MeshFile.Read(_readData(), _readBuffer);
                 return (mesh, mesh.Materials.Select(h => MeshMaterial.Resolve(mesh.File, h, _locator.ReadFile)).ToList());
             });
         }
@@ -149,6 +150,7 @@ public partial class MeshWindow : Window, IMessageHost
         ShowInfo();
         _ = ReadReportAsync(materials);
         _ = ReadCollisionAsync();
+        ShowCloth();
         foreach (var item in _materials) await ApplyAsync(item);
     }
 
@@ -398,6 +400,12 @@ public partial class MeshWindow : Window, IMessageHost
     /// <summary>Reads the mesh's collision from the game's collision caches, for the Collision tab and the overlay.</summary>
     private async Task ReadCollisionAsync()
     {
+        // a cloth resource's entry in the collision cache is its APEX asset; what it collides with is its bones' spheres
+        if (_mesh?.Cloth is { } cloth)
+        {
+            ShowClothCollision(cloth);
+            return;
+        }
         var data = await Task.Run(() => _locator.ReadCollision(_path));
         _collision = data is null ? null : await Task.Run(() => MeshCollision.Read(data));
         CollisionPanel.Children.Clear();
@@ -420,6 +428,11 @@ public partial class MeshWindow : Window, IMessageHost
 
     private async Task ShowCollisionAsync(bool on)
     {
+        if (_mesh?.Cloth is not null)
+        {
+            ShowClothShapes(on);
+            return;
+        }
         if (on && _collision is null) await ReadCollisionAsync();
         View.ShowCollision(on && _collision is { } c ? [.. c.Shapes.Select(s => (s.Vertices, s.Triangles))] : []);
     }
@@ -576,8 +589,9 @@ public partial class MeshWindow : Window, IMessageHost
 
     private void UpdateSave()
     {
-        SaveButton.IsEnabled = _materials.Any(m => m.NeedsSave);
-        Title = L.T("MeshWindow.Mesh4", (SaveButton.IsEnabled ? "• " : ""), Path.GetFileName(_path));
+        SaveButton.IsEnabled = _materials.Any(m => m.NeedsSave) || ClothNeedsSave;
+        Title = ClothFile.IsCloth(_path) ? L.T("MeshWindow.ClothTitle", (SaveButton.IsEnabled ? "• " : "") + Path.GetFileName(_path))
+            : L.T("MeshWindow.Mesh4", (SaveButton.IsEnabled ? "• " : ""), Path.GetFileName(_path));
     }
 
     /// <summary>The material a parameter shown in the list belongs to.</summary>
@@ -679,7 +693,7 @@ public partial class MeshWindow : Window, IMessageHost
     /// </summary>
     private async Task<bool> SaveAsync()
     {
-        if (_meshFile is null || !_materials.Any(m => m.NeedsSave)) return false;
+        if (_meshFile is null || !_materials.Any(m => m.NeedsSave) && !ClothNeedsSave) return false;
         if (await ProjectAsync() is not { } project) return false;
         var writes = new List<(string GamePath, byte[] Data)>();
         var inline = new Dictionary<int, List<MaterialParameter>>();
@@ -732,11 +746,15 @@ public partial class MeshWindow : Window, IMessageHost
                 }
             }
             byte[]? mesh = null;
-            if (inline.Count > 0 || slots.Count > 0)
+            if (inline.Count > 0 || slots.Count > 0) mesh = MaterialWriter.EditMesh(_meshFile, inline, slots);
+            // a cloth's simulation settings are the resource's own properties
+            if (ClothNeedsSave)
             {
-                mesh = MaterialWriter.EditMesh(_meshFile, inline, slots);
-                writes.Add((_path, mesh));
+                var (material, thickness) = (_clothMaterial!, _clothThickness);
+                var from = mesh ?? _readData();
+                mesh = await Task.Run(() => ClothSettings.Write(from, ClothSettings.Of(material, thickness)));
             }
+            if (mesh is not null) writes.Add((_path, mesh));
 
             foreach (var (gamePath, data) in writes)
             {
@@ -756,7 +774,8 @@ public partial class MeshWindow : Window, IMessageHost
                     FileSafety.CheckWrite(target);
                     if (await Task.Run(() => _readBuffer(buffer.Index)) is { } bytes) await File.WriteAllBytesAsync(target, bytes);
                 }
-                _meshFile = MeshFile.Read(mesh, _readBuffer);
+                _meshFile = ClothFile.IsCloth(_path) ? ClothFile.Read(mesh, () => _locator.ReadCollision(_path)) : MeshFile.Read(mesh, _readBuffer);
+                ClothSaved();
             }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or NotSupportedException)
@@ -787,9 +806,9 @@ public partial class MeshWindow : Window, IMessageHost
     protected override async void OnClosing(System.ComponentModel.CancelEventArgs e)
     {
         base.OnClosing(e);
-        if (_closeAsked || !_materials.Any(m => m.NeedsSave)) return;
+        if (_closeAsked || !_materials.Any(m => m.NeedsSave) && !ClothNeedsSave) return;
         e.Cancel = true;
-        var choice = await Message.Ask(L.T("MeshWindow.SaveChangesMaterials"), L.T("MeshWindow.TheyreLostIfWindow"),
+        var choice = await Message.Ask(ClothNeedsSave ? L.T("MeshWindow.ClothSaveChanges") : L.T("MeshWindow.SaveChangesMaterials"), L.T("MeshWindow.TheyreLostIfWindow"),
             MessageKind.Question, L.T("Common.SaveProject"), L.T("Common.DontSave"));
         if (choice == MessageChoice.Cancel || choice == MessageChoice.Primary && !await SaveAsync()) return;
         _closeAsked = true;

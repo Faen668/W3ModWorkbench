@@ -1,7 +1,7 @@
 ---
 title: CR2W files as JSON
 icon: E943
-order: 17
+order: 18
 summary: Turn game resources into JSON to read or edit, back again byte for byte, and change hundreds at once.
 keywords: cr2w json convert env w2mi w2ent bulk edit command line python resave 164 base64 embedded recipe recipes saved script batch bat automate again
 windows: Cr2wJsonWindow, JsonWindow

@@ -1,7 +1,7 @@
 ---
 title: The journal
 icon: E82D
-order: 15
+order: 16
 summary: The whole journal (quests, characters, bestiary, glossary) as one tree, with every entry's text.
 keywords: journal quests characters bestiary glossary tutorial places storybook objectives map pins script tag
 windows: JournalWindow

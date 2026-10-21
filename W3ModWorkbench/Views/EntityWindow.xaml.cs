@@ -681,6 +681,8 @@ public partial class EntityWindow : Window, IMessageHost
     }
 
     private Posing? _posing;
+    // the cloth among the look's meshes, simulated as the animation plays
+    private ClothRig? _cloth;
     private Cr2wFile? _animset;
     private string? _animsetPath;
     private AnimationClip? _clip;
@@ -699,6 +701,7 @@ public partial class EntityWindow : Window, IMessageHost
     {
         AnimationBar.Visibility = PlayBar.Visibility = Visibility.Collapsed;
         _posing = null;
+        _cloth = null;
         var meshes = parts.Select(p => p.Mesh).ToList();
         if (!meshes.Any(m => m.BoneNames.Length > 0)) return;
         // the body's skeleton, which animations play on, is the moving or animated component's; a dangle component's
@@ -712,7 +715,8 @@ public partial class EntityWindow : Window, IMessageHost
             // a face's sets move the face's own rig, not the body's
             .Where(r => !r.Contains(@"\mimics\", StringComparison.OrdinalIgnoreCase))
             .Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase).ToList();
-        if (rigs.Count == 0 || sets.Count == 0) return;
+        // with no animations it's posed only for its cloth, to fall into place as it stands
+        if (rigs.Count == 0 || sets.Count == 0 && !meshes.Any(m => m.Cloth is not null)) return;
         var posing = await Task.Run(() =>
         {
             Posing? best = null;
@@ -739,6 +743,9 @@ public partial class EntityWindow : Window, IMessageHost
         }, token).ContinueWith(t => t.IsCompletedSuccessfully ? t.Result : null, TaskScheduler.Default);
         if (posing is null || token.IsCancellationRequested) return;
         _posing = posing;
+        _cloth = ClothRig.For(posing.Meshes);
+        if (_clip is null) ShowRestCloth();
+        if (sets.Count == 0) return;
         AnimsetBox.ItemsSource = sets.Select(s => new CutsceneLinkItem(new CutsceneLink(s, L.T("Common.AnimationSet")))).ToList();
         AnimsetBox.DisplayMemberPath = nameof(CutsceneLinkItem.Name);
         AnimationBar.Visibility = PlayBar.Visibility = Visibility.Visible;
@@ -747,6 +754,16 @@ public partial class EntityWindow : Window, IMessageHost
         if (token.IsCancellationRequested) return;
         int index = _wanted is { } wanted ? sets.FindIndex(s => s.Equals(wanted.Set, StringComparison.OrdinalIgnoreCase)) : -1;
         AnimsetBox.SelectedIndex = Math.Max(0, index);
+    }
+
+    /// <summary>The meshes as they were bound, with their cloth fallen into place from there, when there's cloth and a rig.</summary>
+    private void ShowRestCloth()
+    {
+        if (_cloth is not { } rig || _posing is not { } posing) return;
+        var bones = posing.Meshes.Select((m, i) => Skinning.BoneMatrices(m, posing.Maps[i], posing.Rest, posing.Rest)).ToList();
+        rig.Forget();
+        var cloth = rig.Restart(p => p < bones.Count ? bones[p] : null);
+        View.Pose((part, chunk) => part < bones.Count && cloth.Moves(part) ? ClothPose.Skin(cloth, part, chunk, bones[part]) : null);
     }
 
     /// <summary>The animation to show, by its set and name: the one picked last, kept when the look changes.</summary>
@@ -931,7 +948,9 @@ public partial class EntityWindow : Window, IMessageHost
         posing.Rig.ToModel(_pose, model);
         for (int i = 0; i < model.Length; i++) model[i] *= _placing;
         var bones = posing.Meshes.Select((m, i) => Skinning.BoneMatrices(m, posing.Maps[i], posing.Rest, model)).ToList();
-        View.Pose((part, chunk) => part < bones.Count ? Skinning.Pose(chunk, bones[part]) : null);
+        // the cloth moves on with the animation, a step back past its end being a step on as it loops
+        var cloth = _cloth?.StepTo(time, p => p < bones.Count ? bones[p] : null, clip.Duration);
+        View.Pose((part, chunk) => part < bones.Count ? ClothPose.Skin(cloth, part, chunk, bones[part]) : null);
         if (_playing) CountFrame(System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds);
         TimeText.Text = L.T("EntityWindow.S", time, clip.Duration);
         TimeText.ToolTip = null;
@@ -1040,6 +1059,7 @@ public partial class EntityWindow : Window, IMessageHost
         _placing = Matrix4x4.Identity;
         _time = 0;
         View.Pose(null);
+        ShowRestCloth();
         ScrubSlider.IsEnabled = PlayButton.IsEnabled = false;
         _scrubbing = true;
         ScrubSlider.Value = 0;

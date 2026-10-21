@@ -256,6 +256,12 @@
                             <StackPanel x:Name="CollisionPanel" />
                         </ScrollViewer>
                     </TabItem>
+                    <!-- a cloth resource's simulation, as REDkit's Apex Cloth tab shows it, with a live preview -->
+                    <TabItem x:Name="ClothTab" Header="{l:T MeshWindow.ApexCloth}" Visibility="Collapsed">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="8,4">
+                            <StackPanel x:Name="ClothPanel" />
+                        </ScrollViewer>
+                    </TabItem>
                 </TabControl>
             </Border>
         </Grid>

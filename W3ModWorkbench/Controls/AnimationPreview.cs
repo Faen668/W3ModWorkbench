@@ -55,7 +55,11 @@ public sealed class AnimationPreview : Grid
     /// placed, and the bone a rigid piece hangs on (a sword on its slot) with where it is on it, or -1 for one that's skinned.
     /// </summary>
     private sealed record Posing(Skeleton Rig, Matrix4x4[] Rest, List<MeshFile> Meshes, List<(int Bone, bool ByName)[]> Maps,
-        List<Matrix4x4> Places, List<(int Bone, Matrix4x4 Offset)> AttachedTo);
+        List<Matrix4x4> Places, List<(int Bone, Matrix4x4 Offset)> AttachedTo)
+    {
+        /// <summary>The cloth among the meshes, simulated as the animation plays.</summary>
+        public ClothRig? Cloth { get; } = ClothRig.For(Meshes);
+    }
 
     private bool _showBones, _showNames;
     private string? _traced;
@@ -601,11 +605,13 @@ public sealed class AnimationPreview : Grid
         _posed = model;
         if (_showBones || _showNames) DrawSkeleton();
         var bones = posing.Meshes.Select((m, i) => Skinning.BoneMatrices(m, posing.Maps[i], posing.Rest, model)).ToList();
+        // the cloth moves on with the animation, a step back past its end being a step on as it loops
+        var cloth = posing.Cloth?.StepTo(time, p => p < bones.Count ? bones[p] : null, clip.Duration);
         _view.Pose((part, chunk) =>
         {
             if (part >= bones.Count) return null;
             var (hung, offset) = part < posing.AttachedTo.Count ? posing.AttachedTo[part] : (-1, Matrix4x4.Identity);
-            if (hung < 0 || hung >= model.Length) return Skinning.Pose(chunk, bones[part]);
+            if (hung < 0 || hung >= model.Length) return ClothPose.Skin(cloth, part, chunk, bones[part]);
             // a piece on a slot goes where the slot is on its bone, the view placing it as it places the part
             var place = posing.Places[part];
             var moved = place * offset * model[hung] * (Matrix4x4.Invert(place, out var back) ? back : Matrix4x4.Identity);

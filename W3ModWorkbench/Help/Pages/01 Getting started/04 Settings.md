@@ -81,6 +81,7 @@ Under the list, it says whether your game has that language's text and voices in
 
 - **Read properties from REDkit's source files**: cooking leaves out what the game doesn't need to run, which REDkit's copies keep. Turn it off to see exactly what the game reads. A mod's or your project's files always show their own. See [[Properties]].
 - **Texture detail in the 3D views**: the largest a texture is read for entities, scenes, cutscenes, rigs and animations. **Low** loads quickest and uses least memory, **Full** is as sharp as the game. **Medium** suits most; a scene with many actors at **Full** uses a lot of memory.
+- **Simulate cloth as the game does**: capes, skirts and coat tails swing and hang in the entity, scene, cutscene and animation views. Turn it off for a quicker view with a big cast; cloth then moves stiffly with the bones. See [[Cloth]].
 
 ## Privacy and online
 

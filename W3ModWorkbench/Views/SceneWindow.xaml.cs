@@ -620,7 +620,7 @@ public partial class SceneWindow : Window, IMessageHost
         RequestStagePose(() =>
         {
             var bones = StageBones(cast, tracks, idles, lips, at);
-            var posers = bones.ToDictionary(b => b.Key, b => SceneStage.Pose(b.Key, b.Value));
+            var posers = bones.ToDictionary(b => b.Key, b => SceneStage.Pose(b.Key, b.Value, at));
             var byName = bones.ToDictionary(b => b.Key.Name, b => (b.Key, b.Value), StringComparer.OrdinalIgnoreCase);
             var propAt = propParts.Select(p => p.Prop).Distinct().ToDictionary(p => p, p => SceneStage.PropPlace(p, propEvents, at,
                 name => byName.TryGetValue(name, out var found) ? (found.Key, found.Value) : null));

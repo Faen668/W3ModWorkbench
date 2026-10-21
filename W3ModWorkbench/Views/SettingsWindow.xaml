@@ -644,6 +644,15 @@
                                        Text="{l:T Settings.Viewers.TextureDetailHint}" />
                         </StackPanel>
                     </Border>
+
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource SectionTitle}" Text="{l:T Settings.Viewers.Cloth}" />
+                            <CheckBox x:Name="SimulateClothCheck" Content="{l:T Settings.Viewers.SimulateCloth}" Margin="0,4,0,0" />
+                            <TextBlock Style="{StaticResource Hint}"
+                                       Text="{l:T Settings.Viewers.SimulateClothHint}" />
+                        </StackPanel>
+                    </Border>
                 </StackPanel>
 
                 <!-- Privacy -->

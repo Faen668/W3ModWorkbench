@@ -21,6 +21,7 @@ public partial class App : Application
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        Core.Animation.ClothRig.Enabled = Settings.SimulateCloth;
         // run from a script (--to-json, --from-json, --edit): do the work and exit, with no window
         if (CommandLine.Handles(e.Args))
         {

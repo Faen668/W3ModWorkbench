@@ -1,7 +1,7 @@
 ---
 title: Sounds and voice lines
 icon: E767
-order: 9
+order: 10
 summary: Play any of the game's sounds, banks and voice lines, see what plays them, and save them as WAV.
 keywords: sound audio wem bnk bank voice speech wwise play wav event music
 windows: SoundWindow

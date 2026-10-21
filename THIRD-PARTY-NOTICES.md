@@ -322,3 +322,40 @@ CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
+
+## Cloth simulation: NVIDIA PhysX 3.4 and APEX 1.4
+
+The cloth simulation (`Core/Animation/ClothSimulation.cs`) is a C# port of the PhysX 3 software cloth solver that APEX runs (`SwSolverKernel`, `SwCollision`, `IterationState`, `PhaseConfig`), and the way APEX turns a clothing material into the solver's settings and places a render mesh on the simulated one (`Simulation.cpp`, `ClothingActorData.cpp`). The layouts of the APEX clothing asset's structs (`ClothingAssetParameters` 0.13, `ClothingPhysicalMeshParameters` 0.10, `ClothingGraphicalLodParameters` 0.4, `ClothingCookedPhysX3Param` 0.3, `ClothingMaterialLibraryParameters` 0.13) and of NxParameterized's binary format come from the same source.
+
+- Project: https://github.com/NVIDIAGameWorks/PhysX-3.4
+- Licence: BSD 3-Clause
+
+```
+Copyright (c) 2018 NVIDIA Corporation. All rights reserved.
+Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
+Copyright (c) 2001-2004 NovodeX AG. All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions
+are met:
+ * Redistributions of source code must retain the above copyright
+   notice, this list of conditions and the following disclaimer.
+ * Redistributions in binary form must reproduce the above copyright
+   notice, this list of conditions and the following disclaimer in the
+   documentation and/or other materials provided with the distribution.
+ * Neither the name of NVIDIA CORPORATION nor the names of its
+   contributors may be used to endorse or promote products derived
+   from this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS ``AS IS'' AND ANY
+EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY
+OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+```

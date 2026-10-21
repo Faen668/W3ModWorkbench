@@ -50,6 +50,9 @@ public sealed class CastMember
     /// <summary>Its voice tag, which says which of the cutscene's lines are its own.</summary>
     public string? VoiceTag { get; init; }
 
+    /// <summary>The cloth among its meshes, simulated as the cutscene plays; null when it has none, or cloth isn't simulated.</summary>
+    public ClothRig? Cloth { get; init; }
+
     /// <summary>The lip sync of each line it says, from when it says it: the cutscene's face animation leaves the lips to these.</summary>
     public List<(float Start, LipSync Lips)> Lines { get; set; } = [];
 
@@ -136,11 +139,21 @@ public static class CutsceneCast
                 ColoredBy = coloredBy,
                 Rest = rest,
                 Maps = parts.Select(p => Skinning.MapBones(p.Mesh, skinned, rest)).ToList(),
+                Cloth = ClothRig.For([.. parts.Select(p => p.Mesh)]) is { } clothRig ? Cued(clothRig, actor!) : null,
                 Carrier = Carrier(played, rig),
                 AttachedTo = attachedTo,
             });
         }
         return cast;
+    }
+
+    /// <summary>A cast member's cloth rig with the cutscene's cloth events for it: where it resets its cloth, and turns it off.</summary>
+    private static ClothRig Cued(ClothRig rig, CutsceneActor actor)
+    {
+        rig.Resets = [.. actor.Events.Where(e => e.ClassName == "CExtAnimCutsceneResetClothAndDangleEvent").Select(e => e.Start).Order()];
+        rig.Off = [.. actor.Events.Where(e => e.ClassName == "CExtAnimCutsceneDisableClothEvent").OrderBy(e => e.Start)
+            .Select(e => (e.Start, e.Source?["weight"] is float w ? w : 1f))];
+        return rig;
     }
 
     /// <summary>
@@ -291,11 +304,13 @@ public static class CutsceneCast
         rig.ToModel(pose, model);
         var bones = member.Parts.Select((p, i) => Skinning.BoneMatrices(p.Mesh, member.Maps[i], member.Rest, model)).ToList();
         var carried = Matrix4x4.Invert(member.Rest[member.Carrier], out var back) ? back * model[member.Carrier] : Matrix4x4.Identity;
+        // its cloth moves on to this time (a jump starts it over, settled where it's skinned to)
+        var cloth = member.Cloth?.StepTo(time, p => p < bones.Count ? bones[p] : null);
         return (part, chunk) =>
         {
             if (part >= bones.Count) return null;
             var (hung, offset) = member.AttachedTo[part];
-            if (hung < 0 && Skinning.Pose(chunk, bones[part]) is { } skinned) return skinned;
+            if (hung < 0 && ClothPose.Skin(cloth, part, chunk, bones[part]) is { } skinned) return skinned;
             // a piece on a slot goes where the slot is on its bone; a prop's mesh moves with the bone that carries it
             var placed = member.Parts[part].Place * (hung >= 0 ? offset * model[hung] : carried);
             var positions = new Vector3[chunk.Positions.Length];

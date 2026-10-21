@@ -1,7 +1,7 @@
 ---
 title: Communities
 icon: E716
-order: 14
+order: 15
 summary: Who lives somewhere and when: a community's entries, story phases and timetables.
 keywords: community w2comm spawnset timetable story phase action point npc schedule
 windows: CommunityWindow

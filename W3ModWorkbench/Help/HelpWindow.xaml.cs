@@ -43,7 +43,7 @@ public partial class HelpWindow : Window
 
     /// <summary>F1 in a window: the guide's page about it, or the start when there's none.</summary>
     public static void ShowHelpFor(Window window) =>
-        ShowHelp(window, HelpLibrary.ForWindow(window is PreviewWindow { IsBench: true } ? "PreviewWindow:bench" : window.GetType().Name)?.Title);
+        ShowHelp(window, HelpLibrary.ForWindow(window is PreviewWindow { IsBench: true } ? "PreviewWindow:bench" : window is MeshWindow { IsCloth: true } ? "MeshWindow:cloth" : window.GetType().Name)?.Title);
 
     private HelpWindow()
     {

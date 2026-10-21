@@ -1,7 +1,7 @@
 ---
 title: Entities
 icon: E77B
-order: 5
+order: 6
 summary: See a character, creature or object whole, in each of its looks, playing its animations, with every component it's made of.
 keywords: entity w2ent npc character appearance components animation dye colours inventory voicetags template
 windows: EntityWindow

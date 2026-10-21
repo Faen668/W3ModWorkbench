@@ -1,7 +1,7 @@
 ---
 title: Behaviour trees
 icon: E8F9
-order: 12
+order: 13
 summary: An NPC's AI as a tree you can fold, search and read node by node.
 keywords: behaviour behavior tree w2behtree ai npc nodes composite decorator condition task
 windows: BehTreeWindow

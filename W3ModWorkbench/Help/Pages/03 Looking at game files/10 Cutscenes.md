@@ -1,7 +1,7 @@
 ---
 title: Cutscenes
 icon: E714
-order: 10
+order: 11
 summary: Play a cutscene in 3D with its actors, faces, camera, music and voices, and look at every event along its timeline.
 keywords: cutscene w2cutscene timeline camera actors play music voices dialog events
 windows: CutsceneWindow

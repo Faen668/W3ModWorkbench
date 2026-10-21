@@ -1,7 +1,7 @@
 ---
 title: Rigs
 icon: E77B
-order: 7
+order: 8
 summary: A skeleton's bones in 3D and as a tree, with where each one sits.
 keywords: rig w2rig skeleton bones bone names axes hierarchy
 windows: RigWindow

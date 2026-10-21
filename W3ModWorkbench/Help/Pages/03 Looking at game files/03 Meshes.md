@@ -6,7 +6,7 @@ summary: See a model in 3D with its textures, look at its parts and materials, c
 keywords: mesh w2mesh 3d model lod chunk material texture export obj collision wireframe bones buffer
 windows: MeshWindow
 ---
-A **mesh** (`.w2mesh`) is a 3D model: a sword, a wall, a piece of armour, a monster's body. Double-click one, or highlight it and press {{Enter}}, to see it in 3D with its textures. The preview pane shows it too, smaller.
+A **mesh** (`.w2mesh`) is a 3D model: a sword, a wall, a piece of armour, a monster's body. Cloth (`.redcloth`) opens in the same viewer, with its simulation on an extra tab: see [[Cloth]]. Double-click one, or highlight it and press {{Enter}}, to see it in 3D with its textures. The preview pane shows it too, smaller.
 
 ![The griffin's mesh in the mesh viewer, with its parts and materials on the right](mesh-viewer.jpg)
 

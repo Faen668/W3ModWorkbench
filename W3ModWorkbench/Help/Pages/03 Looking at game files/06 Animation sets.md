@@ -1,7 +1,7 @@
 ---
 title: Animation sets
 icon: E714
-order: 6
+order: 7
 summary: Play any of the game's animations on a character, with its events, bones and the path a bone takes.
 keywords: animation w2anims anim set play bones skeleton trace events blend loop motion
 windows: AnimSetWindow

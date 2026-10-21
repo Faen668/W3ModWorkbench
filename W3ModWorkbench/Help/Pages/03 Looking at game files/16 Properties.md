@@ -1,7 +1,7 @@
 ---
 title: Properties
 icon: E946
-order: 16
+order: 17
 summary: Every object and property in any game resource, as REDkit lists them, and where the properties come from.
 keywords: properties objects resource layer w2l env particles redkit r4data cooked source file
 windows: PropertiesWindow

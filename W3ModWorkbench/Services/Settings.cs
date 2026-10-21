@@ -155,6 +155,9 @@ public sealed class Settings
     /// <summary>How many times a second the entity viewer poses an animation as it plays; 0 for as often as the screen draws.</summary>
     public int AnimationFps { get; set; } = 30;
 
+    /// <summary>Whether cloth (.redcloth: capes, skirts, coat tails) is simulated in the 3D views as it is in the game, rather than only skinned.</summary>
+    public bool SimulateCloth { get; set; } = true;
+
     /// <summary>The language of the game's text and voices the viewers start in: subtitles, lines, strings. A handle such as "en" or "de".</summary>
     public string GameLanguage { get; set; } = "en";
 
