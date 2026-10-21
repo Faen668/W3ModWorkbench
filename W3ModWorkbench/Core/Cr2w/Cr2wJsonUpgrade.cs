@@ -47,6 +47,11 @@ public static partial class Cr2wJson
         var upgrader = new Upgrader(from,
             (file["types"] as JsonObject ?? []).Where(t => t.Value is JsonValue).ToDictionary(t => t.Key, t => (string)t.Value!),
             legacy ? (file["dependencies"] as JsonArray ?? []).Select(n => (string?)n ?? "").ToList() : null);
+        // a behaviour graph's variables before 145, which the engine gives names and numbers when it loads them
+        if (from < FirstNamedVariables)
+            for (int i = 0; i < objects.Count; i++)
+                if (objects[i] is JsonObject { } graph && (string?)graph["$class"] == "CBehaviorGraph" && graph["$tail"] is JsonValue tail)
+                    graph["$tail"] = Convert.ToBase64String(NamedVariables(Convert.FromBase64String((string)tail!), objects, file, $"objects[{i}]"));
         for (int i = 0; i < objects.Count; i++)
         {
             if (objects[i] is not JsonObject node) continue;
@@ -82,6 +87,89 @@ public static partial class Cr2wJson
     /// <summary>A file's bytes saved as the newest version (see <see cref="UpgradeToLatest"/>).</summary>
     public static byte[] UpgradeToLatest(Cr2wFile file, out Cr2wUpgradeReport report) =>
         FromJson(UpgradeToLatest(ToJson(file, out _), out report));
+
+    /// <summary>The first version whose behaviour graphs keep their variables by name.</summary>
+    private const int FirstNamedVariables = 145;
+
+    /// <summary>
+    /// A behaviour graph's lists of its variables, kept before 145 as just the objects, made as 145 on keeps them:
+    /// <list type="bullet">
+    /// <item>Before 145: a u32 2, the variables (a compressed count and that many object numbers), a u32 1 and the
+    /// events (the same), then the vector variables and, from 139, the internal variables and internal vector
+    /// variables, as the variables are.</item>
+    /// <item>From 145: a u32 2, the variables, the events as before, then the other three, each list now the next
+    /// variable number, how many there are and each one's name (a number into the names) and object number.</item>
+    /// </list>
+    /// The engine numbers an older file's variables in each list as they come (their <c>varIndex</c>, which it saves
+    /// even when it's 0), and names each entry by its variable's name: the game's cooked copies of REDkit's older
+    /// graphs show both. It saves the entries in the order of its own name table, which is that of the names the
+    /// running game has registered and can't be told from the file; the order doesn't matter to it, as it reads them
+    /// into a map, so they're kept in the order they were.
+    /// </summary>
+    private static byte[] NamedVariables(byte[] bytes, JsonArray objects, JsonObject file, string path)
+    {
+        var names = file["names"] as JsonArray ?? throw new InvalidDataException("The JSON has no names.");
+        var lists = new List<List<int>>();
+        int at = 0;
+        bool ok = bytes.Length >= 4 && BitConverter.ToInt32(bytes) == 2;
+        at = 4;
+        while (ok && at < bytes.Length)
+        {
+            if (lists.Count == 1)
+            {
+                // the events' list starts with a u32 1
+                if (at + 4 > bytes.Length || BitConverter.ToInt32(bytes, at) != 1) { ok = false; break; }
+                at += 4;
+            }
+            if (!Upgrader.CompressedCount(bytes, ref at, out int count) || at + 4L * count > bytes.Length) { ok = false; break; }
+            lists.Add([.. Enumerable.Range(0, count).Select(i => BitConverter.ToInt32(bytes, at + 4 * i))]);
+            at += 4 * count;
+        }
+        if (!ok || lists.Count is not (3 or 5))
+            throw new NotSupportedException($"{path} is a behaviour graph whose lists of variables aren't in a form this can read, so the file can't be saved as {Cr2wFile.LastVersion}.");
+        while (lists.Count < 5) lists.Add([]);
+
+        var result = new List<byte>(bytes.Length * 2);
+        void U32(int value) => result.AddRange(BitConverter.GetBytes(value));
+        U32(2);
+        for (int list = 0; list < 5; list++)
+        {
+            if (list == 1)
+            {
+                // the events, as they were
+                U32(1);
+                result.AddRange(CompressedCountBytes(lists[1].Count));
+                foreach (int e in lists[1]) U32(e);
+                continue;
+            }
+            U32(lists[list].Count);
+            U32(lists[list].Count);
+            for (int i = 0; i < lists[list].Count; i++)
+            {
+                int number = lists[list][i];
+                if (number < 1 || number > objects.Count || objects[number - 1] is not JsonObject variable)
+                    throw new NotSupportedException($"{path} is a behaviour graph with a variable that isn't one of its objects, so the file can't be saved as {Cr2wFile.LastVersion}.");
+                // one without a name is kept under the empty name, as the engine keeps it
+                string name = (string?)variable["name"] ?? "";
+                int index = names.Select(n => (string?)n).ToList().IndexOf(name);
+                if (index < 0) { index = names.Count; names.Add(name); }
+                if (index > ushort.MaxValue) throw new NotSupportedException($"{path}: too many names to keep a variable's name in a behaviour graph.");
+                result.AddRange(BitConverter.GetBytes((ushort)index));
+                U32(number);
+                variable["varIndex"] = i;
+            }
+        }
+        return [.. result];
+    }
+
+    /// <summary>A count as the engine compresses it: six bits and more-follows in the first byte, then seven bits a byte.</summary>
+    private static byte[] CompressedCountBytes(int value)
+    {
+        if (value == 0) return [0x80]; // as the engine writes an empty list's
+        var bytes = new List<byte> { (byte)(value & 0x3F | (value > 0x3F ? 0x40 : 0)) };
+        for (value >>= 6; value > 0; value >>= 7) bytes.Add((byte)(value & 0x7F | (value > 0x7F ? 0x80 : 0)));
+        return [.. bytes];
+    }
 
     /// <summary>
     /// Properties the engine renamed, which it moves to their new name when it loads an older file: by class and old
@@ -237,9 +325,8 @@ public static partial class Cr2wJson
         /// <item>A node (an entity or a component) keeps two lists of the objects attached to it and below it, and up to
         /// 161 its transform in the world after them (64 bytes), which 162 stopped saving.</item>
         /// <item>A layer kept 11 to 13 bytes of nothing (zeros, and an empty list) until 159.</item>
-        /// <item>An entity template kept a list of files inside it until 155, which 164 always has empty; when they
-        /// are empty too (as most were) that's the same. Those with components in them can't be converted yet: the newer
-        /// engine keeps those inside the entity's own data.</item>
+        /// <item>An entity template kept a list of files inside it until 155, which 164 always has empty: the engine
+        /// no longer reads them (components of the older streaming, which the compiled data has in their place).</item>
         /// <item>An effect track item or a curve evaluator keeps the curves it holds; before 155 as a u32 count and
         /// always four of them, the unused ones 0, since as a u16 count and only those it has.</item>
         /// <item>An area's shape (in its node data) is version 3 before 155 and 4 since, the same otherwise.</item>
@@ -273,25 +360,32 @@ public static partial class Cr2wJson
                     && (bytes.Length < 13 || bytes[12] == 0x80)) return [];
                 return null;
             }
-            if (className == "CEntityTemplate")
+            if (DerivesFrom(className, "CEntityTemplate"))
             {
+                // (a character's template keeps the same, empty in every one of REDkit's, as the game's cooked ones)
                 if (bytes.Length == 4 && BitConverter.ToInt32(bytes) == 0) return bytes;
-                if (from > 154 || bytes.Length < 4) return null;
+                if (from > 155 || bytes.Length < 4) return null;
                 int count = BitConverter.ToInt32(bytes), at = 4;
+                bool components = false;
                 for (int i = 0; i < count; i++)
                 {
                     if (at + 4 > bytes.Length) return null;
                     int size = BitConverter.ToInt32(bytes, at);
                     at += 4;
                     if (size < 0 || at + (long)size > bytes.Length) return null;
-                    if (size > 0 && !IsEmptyCr2w(bytes.AsSpan(at, size)))
+                    if (size > 0)
                     {
-                        why = "its older form keeps compiled components in it, which the newer engine keeps in the entity's own data instead, and that move isn't done yet";
-                        return null;
+                        // each a CR2W file of components (of the older streaming), which the engine doesn't read any more
+                        int? objects = Cr2wObjects(bytes.AsSpan(at, size));
+                        if (objects is null) return null;
+                        components |= objects > 0;
                     }
                     at += size;
                 }
-                return at == bytes.Length ? [0, 0, 0, 0] : null;
+                if (at != bytes.Length) return null;
+                if (components)
+                    Note($"template parts {className}", $"A {className} kept components of the older streaming in files of its own after its properties, which the engine no longer reads: the game's cooked copies of all of REDkit's 27 such templates have none of them but those its compiled data (flatCompiledData) has too. They're left out, as the engine leaves them out.");
+                return [0, 0, 0, 0];
             }
             switch (className)
             {
@@ -302,7 +396,17 @@ public static partial class Cr2wJson
                     int mips = BitConverter.ToInt32(bytes, 4);
                     long at = 8;
                     for (int m = 0; m < mips && at + 16 <= bytes.Length; m++) at += 16 + (uint)BitConverter.ToInt32(bytes, (int)at + 12);
-                    return mips >= 0 && at + 4 == bytes.Length ? bytes : null;
+                    if (mips >= 0 && at + 4 == bytes.Length) return bytes;
+                    // a few of REDkit's 163 textures (20) end with a low-resolution copy of their smallest mips instead
+                    // of the u32 0: its size, a u32 16, then those bytes. No 164 texture has one (REDkit's 760 and the
+                    // game's all end with the 0), so it's left out, the mips themselves kept, as every 164 texture is
+                    if (mips >= 0 && at + 8 <= bytes.Length && BitConverter.ToInt32(bytes, (int)at + 4) == 16
+                        && at + 8 + (uint)BitConverter.ToInt32(bytes, (int)at) == bytes.Length)
+                    {
+                        Note($"low mips {className}", $"A {className} kept a low-resolution copy of its smallest mips after them, which version {Cr2wFile.LastVersion} textures don't have; it's left out (the mips themselves are kept).");
+                        return [.. bytes.AsSpan(0, (int)at), 0, 0, 0, 0];
+                    }
+                    return null;
                 }
                 case "CFoliageResource":
                 {
@@ -341,14 +445,130 @@ public static partial class Cr2wJson
                     for (int block = 0; block < 2 && at + 4 <= bytes.Length; block++) at += 4 + (uint)BitConverter.ToInt32(bytes, (int)at);
                     return at == bytes.Length ? bytes : null;
                 }
+                case "CMaterialGraph":
+                {
+                    // its pixel and vertex shaders' parameters, each a compressed count and that many of (type, register,
+                    // name as a number into the names, which saving as 164 keeps in order), then how many compiled
+                    // shaders it has and each one's 20-byte key; the same in 163 and 164, and the game's cooked graphs
+                    // have the same parameters (with no shaders)
+                    int at = 0;
+                    for (int list = 0; list < 2; list++)
+                    {
+                        if (!CompressedCount(bytes, ref at, out int count) || at + 4L * count > bytes.Length) return null;
+                        at += 4 * count;
+                    }
+                    return at + 4 <= bytes.Length && at + 4 + 20L * BitConverter.ToUInt32(bytes, at) == bytes.Length ? bytes : null;
+                }
+                case "CBehaviorGraph":
+                {
+                    // its variables' lists as 145 on keep them (see NamedVariables), which 164 keeps alike: a u32 2, the
+                    // variables, a u32 1 and the events, then the vector, internal and internal vector variables
+                    int at = 0;
+                    if (bytes.Length < 4 || BitConverter.ToInt32(bytes) != 2) return null;
+                    at = 4;
+                    for (int list = 0; list < 5; list++)
+                    {
+                        if (list == 1)
+                        {
+                            if (at + 4 > bytes.Length || BitConverter.ToInt32(bytes, at) != 1) return null;
+                            at += 4;
+                            if (!CompressedCount(bytes, ref at, out int events) || at + 4L * events > bytes.Length) return null;
+                            at += 4 * events;
+                            continue;
+                        }
+                        if (at + 8 > bytes.Length) return null;
+                        int next = BitConverter.ToInt32(bytes, at), count = BitConverter.ToInt32(bytes, at + 4);
+                        at += 8;
+                        if (count < 0 || next < count || at + 6L * count > bytes.Length) return null;
+                        at += 6 * count;
+                    }
+                    return at == bytes.Length ? bytes : null;
+                }
+                case "CBehaviorGraphBlendMultipleNode":
+                {
+                    // where each input blends: a compressed count, then each its input number (u32) and value (float),
+                    // the same in every version
+                    int at = 0;
+                    return CompressedCount(bytes, ref at, out int count) && at + 8L * count == bytes.Length ? bytes : null;
+                }
+                case "CPhysicsDestructionResource":
+                {
+                    // a mesh's data (as CMesh's), then how many chunks it breaks into and each one's record: its size
+                    // (counting itself), then what it keeps. 164 added 13 bytes to the end of each record (46 bytes
+                    // before, 59 since), which the engine gives the same values when it loads an older one: the game's
+                    // cooked copies of REDkit's 88 older destruction files show every one of their 5,117 records so
+                    int at = MeshData(bytes);
+                    if (at < 0 || at + 4 > bytes.Length) return null;
+                    int count = BitConverter.ToInt32(bytes, at);
+                    var result = new List<byte>(bytes.Length + 13 * Math.Max(count, 0));
+                    result.AddRange(bytes.AsSpan(0, at + 4));
+                    at += 4;
+                    for (int i = 0; i < count; i++)
+                    {
+                        if (at + 4 > bytes.Length) return null;
+                        int size = BitConverter.ToInt32(bytes, at);
+                        if (size == DestructionChunk && at + size <= bytes.Length) result.AddRange(bytes.AsSpan(at, size));
+                        else if (size == OldDestructionChunk && at + size <= bytes.Length)
+                        {
+                            result.AddRange(BitConverter.GetBytes(DestructionChunk));
+                            result.AddRange(bytes.AsSpan(at + 4, size - 4));
+                            result.AddRange(DestructionChunkAdded);
+                        }
+                        else return null;
+                        at += size;
+                    }
+                    return at == bytes.Length ? [.. result] : null;
+                }
+                case "CMesh":
+                    // its own data, the same in every version (see MeshData)
+                    return MeshData(bytes) == bytes.Length ? bytes : null;
+                case "CCookedExplorations":
+                    // the cooked explorations: their size, "EXPL", the size again, and their own version (2), the same in
+                    // 162 to 164, as the game's cooked copies of all ten of REDkit's have them
+                    return bytes.Length >= 16 && BitConverter.ToInt32(bytes) == bytes.Length - 4 && BitConverter.ToUInt32(bytes, 4) == 0x4C505845
+                        && BitConverter.ToInt32(bytes, 12) == 2 ? bytes : null;
+                case "CWayPointsCollectionsSet":
+                    // its collections: how many, each a GUID and an object number, the same as the game's cooked copies
+                    return bytes.Length >= 4 && bytes.Length == 4 + 20L * BitConverter.ToUInt32(bytes) ? bytes : null;
+                case "CWayPointsCollection":
+                    // its waypoints: their size, then them, the same as the game's cooked copies of all 1,301 of REDkit's
+                    return bytes.Length >= 4 && BitConverter.ToInt32(bytes) == bytes.Length - 4 ? bytes : null;
+                case "CAnimPointCloudLookAtParam":
+                {
+                    // its triangles: a compressed count, each three u16s, the same as the game's cooked copies (92)
+                    int at = 0;
+                    return CompressedCount(bytes, ref at, out int triangles) && at + 6L * triangles == bytes.Length ? bytes : null;
+                }
+                case "CAnimationBufferUncompressed":
+                    // the animation's own data, the same in 159 and 164 (the same three animations, saved in each,
+                    // keep the same bytes); the game cooks these into compressed ones, so it has none to compare with
+                    return from >= 159 ? bytes : null;
+                case "CClipMap":
+                    // its terrain tiles: how many, then each one's object number (a u32), as REDkit's 164 worlds keep them
+                    return bytes.Length >= 4 && bytes.Length == 4 + 4L * BitConverter.ToUInt32(bytes) ? bytes : null;
+                case "CUmbraTile":
+                    // an occlusion tile's objects: how many, each 12 bytes (an id and an index), then 20 bytes of its
+                    // settings, the same in every version and as the game's cooked tiles have them
+                    return bytes.Length >= 24 && bytes.Length == 24 + 12L * BitConverter.ToUInt32(bytes) ? bytes : null;
+                case "CUmbraScene":
+                    // the occlusion grid: its size a side, a tile's size, how many tiles, then each tile's corner (four
+                    // floats) and id, 20 bytes, the same in every version
+                    return bytes.Length >= 12 && BitConverter.ToUInt32(bytes, 8) == (ulong)BitConverter.ToUInt32(bytes) * BitConverter.ToUInt32(bytes)
+                        && bytes.Length == 12 + 20L * BitConverter.ToUInt32(bytes, 8) ? bytes : null;
                 case "CTextureArray":
                     if (bytes.Length == 20) return bytes;
-                    why = "its older form keeps the textures' data in it, which the newer one doesn't";
+                    // before 144 an array kept its own copy of its textures' data (its size, a magic number, 98ABC777,
+                    // and the rest); every one of REDkit's newer arrays keeps 20 bytes of zeros instead, the cooked
+                    // data being made from the textures it lists (bitmaps), so it's made that
+                    if (bytes.Length >= 8 && BitConverter.ToUInt32(bytes, 4) == 0x98ABC777 && BitConverter.ToUInt32(bytes) == bytes.Length - 8)
+                    {
+                        Note($"array data {className}", $"A {className} kept its own copy of its textures' data, which newer arrays don't (the game makes it from the textures the array lists); it's left out.");
+                        return new byte[20];
+                    }
+                    why = "its older form keeps the textures' data in it, in a form this doesn't know";
                     return null;
                 case "CCubeTexture":
-                    if (bytes.Length >= 4 && BitConverter.ToUInt32(bytes) == 0xFFFFFFFF) return bytes;
-                    why = "it's in an older form than REDkit's own cube maps, which isn't known yet";
-                    return null;
+                    return CubeTexture(bytes);
             }
             if (className == "CCurve")
                 // its points, 48 bytes each, as in every version
@@ -358,6 +578,14 @@ public static partial class Cr2wJson
                 // the curves an effect track item or a curve evaluator holds: a u16, how many, and those objects;
                 // before 155 how many was a u32 and there were always four, the unused ones 0
                 if (bytes.Length >= 4 && bytes.Length == 4 + 4 * BitConverter.ToUInt16(bytes, 2)) return bytes;
+                if (bytes.Length >= 4 && bytes[3] == 1)
+                {
+                    // or the curves themselves rather than objects (flagged 1 after how many): each a u16, how many
+                    // samples, and those floats; as all 1,138 of the game's cooked 164 effect items keep them
+                    int at = 4;
+                    for (int i = 0; i < bytes[2] && at + 2 <= bytes.Length; i++) at += 2 + 4 * BitConverter.ToUInt16(bytes, at);
+                    return at == bytes.Length ? bytes : null;
+                }
                 if (from > 154 || bytes.Length != 22) return null;
                 int count = BitConverter.ToInt32(bytes, 2);
                 if (count is < 0 or > 4) return null;
@@ -365,7 +593,110 @@ public static partial class Cr2wJson
                     if ((BitConverter.ToInt32(bytes, 6 + i * 4) != 0) != (i < count)) return null;
                 return [bytes[0], bytes[1], (byte)count, 0, .. bytes.AsSpan(6, count * 4)];
             }
+            if (DerivesFrom(className, "CBehaviorGraphContainerNode"))
+                return BehaviorContainer(className, bytes) ? bytes : null;
             return SameTail.Contains(className) ? bytes : null;
+        }
+
+        /// <summary>The size of a mesh's own data after its properties (see CMesh in <see cref="Tail"/>), or -1 when it doesn't fit.</summary>
+        private static int MeshData(byte[] bytes)
+        {
+            // its LODs (a compressed count, each its chunks, a compressed count of u16s, and its distance, a float), then
+            // its bones' names (u16s, numbers into the names, which saving as 164 keeps in order), their matrices (64
+            // bytes each) and two lists of 4 bytes each a bone; the same in every version, and as the game's cooked
+            // meshes keep them
+            int at = 0;
+            if (!CompressedCount(bytes, ref at, out int lods)) return -1;
+            for (int lod = 0; lod < lods; lod++)
+            {
+                if (!CompressedCount(bytes, ref at, out int chunks) || at + 2L * chunks + 4 > bytes.Length) return -1;
+                at += 2 * chunks + 4;
+            }
+            foreach (int size in (ReadOnlySpan<int>)[2, 64, 4, 4])
+            {
+                if (!CompressedCount(bytes, ref at, out int count) || at + (long)size * count > bytes.Length) return -1;
+                at += size * count;
+            }
+            return at;
+        }
+
+        /// <summary>
+        /// A cube map's data as 164 keeps it: an id (-1 or 0 where it isn't cooked), a u16 0, its format (u16), its edge
+        /// (u16), how many mips (a byte) and a 0, the data's size, a u32 -1, then the data, each face's mips one after
+        /// another (face by face; it's cooking that puts them mip by mip). That's the form of 159 on and of all 46 of the
+        /// game's cooked cube maps; it's null when the data isn't one of the forms below.
+        /// <list type="bullet">
+        /// <item>142 to 151 have the same without the -1 after the size, which is put in.</item>
+        /// <item>120 to 140 kept it another way: the size of the rest, a magic number (98ABC666), a 0, the format, the
+        /// edge, the mips and the size again (u32s), where each face's mips are (offset and size, face by face), the data
+        /// and a u32 0. The data is the same, so the header is made the newer way around it. The game's cooked copies
+        /// of REDkit's four such cube maps have the same data, laid out mip by mip, but for a few pixels they were
+        /// made again from.</item>
+        /// </list>
+        /// </summary>
+        private static byte[]? CubeTexture(byte[] bytes)
+        {
+            if (bytes.Length < 16) return null;
+            uint size = BitConverter.ToUInt32(bytes, 12);
+            if (bytes.Length == 20 + (long)size && BitConverter.ToUInt32(bytes, 16) == 0xFFFFFFFF) return bytes;
+            if (bytes.Length == 16 + (long)size) return [.. bytes.AsSpan(0, 16), 0xFF, 0xFF, 0xFF, 0xFF, .. bytes.AsSpan(16)];
+            if (bytes.Length < 28 || BitConverter.ToUInt32(bytes, 4) != OldCubeMagic || BitConverter.ToUInt32(bytes) != bytes.Length - 8) return null;
+            int format = BitConverter.ToInt32(bytes, 12), edge = BitConverter.ToInt32(bytes, 16), mips = BitConverter.ToInt32(bytes, 20);
+            if (format is < 0 or > 0xFFFF || edge is < 1 or > 0xFFFF || mips is < 1 or > 32) return null;
+            // the faces' mips must follow one another, face by face, from the end of the table to the u32 0 at the end
+            int start = 28 + 6 * mips * 8, at = start;
+            for (int i = 0; i < 6 * mips; i++)
+            {
+                int offset = BitConverter.ToInt32(bytes, 28 + 8 * i) + 4, length = BitConverter.ToInt32(bytes, 32 + 8 * i);
+                if (offset != at || length < 0) return null;
+                at += length;
+            }
+            if (at + 4 != bytes.Length || BitConverter.ToInt32(bytes, at) != 0) return null;
+            var result = new List<byte>(at - start + 20);
+            result.AddRange(BitConverter.GetBytes(-1));
+            result.AddRange(BitConverter.GetBytes((ushort)0));
+            result.AddRange(BitConverter.GetBytes((ushort)format));
+            result.AddRange(BitConverter.GetBytes((ushort)edge));
+            result.Add((byte)mips);
+            result.Add(0);
+            result.AddRange(BitConverter.GetBytes(at - start));
+            result.AddRange(BitConverter.GetBytes(-1));
+            result.AddRange(bytes.AsSpan(start, at - start));
+            return [.. result];
+        }
+
+        /// <summary>The magic number cube maps before 142 start their data with.</summary>
+        private const uint OldCubeMagic = 0x98ABC666;
+
+        /// <summary>A destruction chunk's record's size before 164, and since.</summary>
+        private const int OldDestructionChunk = 46, DestructionChunk = 59;
+
+        /// <summary>What 164 added to the end of each destruction chunk's record, as the engine fills it in for an older one.</summary>
+        private static readonly byte[] DestructionChunkAdded = [0xFF, 0xFF, 0xFF, 0x7F, 0xFF, 0xFF, 0xFF, 0x7F, 0xFF, 0xFF, 0, 0, 0];
+
+        /// <summary>
+        /// Whether a behaviour graph's container node keeps what it does after its properties in the form every version
+        /// has (it's the same from 120 to 164): its child nodes (a compressed count and their object numbers), two lists
+        /// of names (each a compressed count and numbers into the names), then a state machine's states and transitions
+        /// (each listed as the nodes are), a u32 and its default state, or any other container's output node.
+        /// </summary>
+        private static bool BehaviorContainer(string className, byte[] bytes)
+        {
+            int at = 0;
+            bool List(int size)
+            {
+                if (!CompressedCount(bytes, ref at, out int count) || at + (long)size * count > bytes.Length) return false;
+                at += size * count;
+                return true;
+            }
+            if (!List(4) || !List(2) || !List(2)) return false;
+            if (DerivesFrom(className, "CBehaviorGraphStateMachineNode"))
+            {
+                if (!List(4) || !List(4)) return false;
+                at += 8;
+            }
+            else at += 4;
+            return at == bytes.Length;
         }
 
         /// <summary>
@@ -410,7 +741,7 @@ public static partial class Cr2wJson
         }
 
         /// <summary>A compressed count: six bits and more-follows in the first byte (an empty one sometimes written as -0), then seven bits a byte.</summary>
-        private static bool CompressedCount(byte[] bytes, ref int at, out int value)
+        internal static bool CompressedCount(byte[] bytes, ref int at, out int value)
         {
             value = 0;
             if (at >= bytes.Length) return false;
@@ -430,11 +761,11 @@ public static partial class Cr2wJson
             return (first & 0x80) == 0 || value == 0;
         }
 
-        /// <summary>Whether bytes are a CR2W file with no objects in it.</summary>
-        private static bool IsEmptyCr2w(ReadOnlySpan<byte> data)
+        /// <summary>How many objects a CR2W file has, or null when the bytes aren't one.</summary>
+        private static int? Cr2wObjects(ReadOnlySpan<byte> data)
         {
-            try { return Cr2wFile.IsCr2w(data) && Cr2wFile.Read(data.ToArray()).Exports.Count == 0; }
-            catch (InvalidDataException) { return false; }
+            try { return Cr2wFile.IsCr2w(data) ? Cr2wFile.Read(data.ToArray()).Exports.Count : null; }
+            catch (InvalidDataException) { return null; }
         }
 
         /// <summary>Whether a class is a node (CNode or one derived from it: entities and components).</summary>
@@ -470,7 +801,7 @@ public static partial class Cr2wJson
                     : EngineType(oldClass, stored) ?? EngineType(className, stored) ?? throw new InvalidDataException($"The type of {oldClass}.{stored} isn't known.");
                 string name = key;
                 bool moved = false;
-                if (dependencies is not null && Renamed.TryGetValue((className, stored), out var renamed) && !node.ContainsKey(renamed.Name))
+                if (Renamed.TryGetValue((className, stored), out var renamed) && !node.ContainsKey(renamed.Name))
                 {
                     // moved to its new name, as a struct of the new type with the fields that type has
                     node.Remove(key);
@@ -499,7 +830,7 @@ public static partial class Cr2wJson
                 if (!Types.TryAdd(typeKey, newType) && Types[typeKey] != newType) newLocal[name] = newType;
             }
             // only where something of the struct is left (one with nothing left isn't saved at all)
-            if (dependencies is not null && Filled.TryGetValue(className, out var filled) && node.Any(p => !p.Key.StartsWith('$')))
+            if (Filled.TryGetValue(className, out var filled) && node.Any(p => !p.Key.StartsWith('$')))
                 foreach (var (property, json) in filled)
                     if (!node.ContainsKey(property))
                     {
@@ -617,6 +948,13 @@ public static partial class Cr2wJson
             string? engine = EngineType(className, property);
             if (engine is null) return translated;
             if (Kind(engine) == Kind(translated)) return engine;
+            if (HeldAlike(engine) == HeldAlike(translated))
+            {
+                // the engine converts it when it loads the file and saves it as its own type, as the game's cooked
+                // copies of REDkit's older files show; the JSON holds both the same way, so it's written as that
+                Note($"converted {className}.{property}", $"{className}.{property} is {oldType} in the file but {engine} in the engine; it's saved as {engine}, as the engine saves it.");
+                return engine;
+            }
             Note($"retyped {className}.{property}", $"{className}.{property} is {oldType} in the file but {engine} in the engine; it's kept as {translated} (the engine converts it when it loads the file).");
             return translated;
         }
@@ -717,6 +1055,10 @@ public static partial class Cr2wJson
     }
 
     /// <summary>What kind of value a type is, whatever the numbers in it: two types of one kind are stored alike.</summary>
+    private static string HeldAlike(string type) =>
+        // a buffer either kind is its size and bytes; text, 8-bit, wide or a name, is a string in the JSON
+        Regex.Replace(Kind(type), @"(?<=^|[:,])(SharedDataBuffer|StringAnsi|CName)$", m => m.Value == "SharedDataBuffer" ? "DataBuffer" : "String");
+
     private static string Kind(string type) =>
         Regex.Replace(Translate(type), @"array:\d+,\d+,", "array:").Replace("ptr:", "handle:", StringComparison.Ordinal).Replace("soft:", "handle:", StringComparison.Ordinal);
 }
