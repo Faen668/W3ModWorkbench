@@ -19,7 +19,7 @@ public partial class MainWindow
     // ---------------------------------------------------------------- reading
 
     /// <summary>A file's bytes, read off the UI thread.</summary>
-    private static Task<byte[]> ReadAsync(ArchiveEntry entry) => Task.Run(() =>
+    internal static Task<byte[]> ReadAsync(ArchiveEntry entry) => Task.Run(() =>
     {
         if (!entry.Archive.ReadsFromDisk) return entry.Read(null);
         using var fs = new FileStream(entry.Archive.FilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);

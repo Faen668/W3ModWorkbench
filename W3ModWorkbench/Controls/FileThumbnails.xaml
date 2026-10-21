@@ -1,0 +1,77 @@
+<UserControl x:Class="W3ModWorkbench.FileThumbnails"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:W3ModWorkbench"
+             xmlns:vm="clr-namespace:W3ModWorkbench.ViewModels"
+             xmlns:sys="clr-namespace:System;assembly=System.Runtime"
+             IsVisibleChanged="UserControl_IsVisibleChanged">
+    <UserControl.Resources>
+        <DataTemplate x:Key="ThumbCell" DataType="{x:Type vm:EntryItem}">
+            <Border x:Name="Cell" Margin="2" Padding="4,4,4,2" CornerRadius="6" BorderThickness="2" BorderBrush="Transparent" Background="Transparent"
+                    ToolTip="{Binding ToolTip}">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+                    <Border Width="{Binding Tag, RelativeSource={RelativeSource AncestorType=ContentControl}}"
+                            Height="{Binding Tag, RelativeSource={RelativeSource AncestorType=ContentControl}}"
+                            CornerRadius="4" ClipToBounds="True" Background="{DynamicResource ControlFillColorSecondaryBrush}">
+                        <Grid>
+                            <Image Source="{Binding Thumbnail}" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality" />
+                            <TextBlock Text="{Binding Glyph}" FontFamily="{StaticResource IconFont}" FontSize="30" Opacity="0.45"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding HasThumbnail}" Value="True">
+                                                <Setter Property="Visibility" Value="Collapsed" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                            <!-- sized with the thumbnails: small, medium and large; only where files can be checked -->
+                            <CheckBox x:Name="ThumbCheck" IsChecked="{Binding IsChecked, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                      Visibility="{Binding ShowChecks, RelativeSource={RelativeSource AncestorType=local:FileThumbnails}, Converter={StaticResource BoolToVisibility}}"
+                                      HorizontalAlignment="Left" VerticalAlignment="Top" Margin="4,2,0,0" MinWidth="0" Padding="0" Focusable="False">
+                                <CheckBox.LayoutTransform>
+                                    <ScaleTransform ScaleX="0.85" ScaleY="0.85" />
+                                </CheckBox.LayoutTransform>
+                            </CheckBox>
+                        </Grid>
+                    </Border>
+                    <TextBlock Grid.Row="1" Text="{Binding Name}" FontSize="12" TextAlignment="Center" TextWrapping="Wrap"
+                               TextTrimming="CharacterEllipsis" MaxHeight="34" Margin="0,5,0,0" />
+                </Grid>
+            </Border>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                    <Setter TargetName="Cell" Property="BorderBrush" Value="{DynamicResource AccentFillColorDefaultBrush}" />
+                    <Setter TargetName="Cell" Property="Background" Value="{DynamicResource SubtleFillColorSecondaryBrush}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Tag, RelativeSource={RelativeSource AncestorType=ContentControl}}">
+                    <DataTrigger.Value><sys:Double>64</sys:Double></DataTrigger.Value>
+                    <Setter TargetName="ThumbCheck" Property="LayoutTransform">
+                        <Setter.Value><ScaleTransform ScaleX="0.65" ScaleY="0.65" /></Setter.Value>
+                    </Setter>
+                    <Setter TargetName="ThumbCheck" Property="Margin" Value="2,1,0,0" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Tag, RelativeSource={RelativeSource AncestorType=ContentControl}}">
+                    <DataTrigger.Value><sys:Double>160</sys:Double></DataTrigger.Value>
+                    <Setter TargetName="ThumbCheck" Property="LayoutTransform">
+                        <Setter.Value><ScaleTransform ScaleX="1.1" ScaleY="1.1" /></Setter.Value>
+                    </Setter>
+                    <Setter TargetName="ThumbCheck" Property="Margin" Value="6,4,0,0" />
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <!-- laid out by hand on a canvas, a cell at a fixed size, and only the cells in view are made -->
+    <ScrollViewer x:Name="Scroller" Focusable="True" Background="Transparent"
+                  VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                  ScrollChanged="Scroller_ScrollChanged" SizeChanged="Scroller_SizeChanged" PreviewKeyDown="Scroller_PreviewKeyDown">
+        <Canvas x:Name="ThumbCanvas" HorizontalAlignment="Left" VerticalAlignment="Top" />
+    </ScrollViewer>
+</UserControl>

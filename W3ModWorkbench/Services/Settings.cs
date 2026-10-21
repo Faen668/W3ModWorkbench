@@ -110,6 +110,11 @@ public sealed class Settings
     public bool ShowFilePreview { get; set; } = true;
     public double FilePreviewWidth { get; set; } = 380;
 
+    /// <summary>The same for the asset browser, which keeps its own: how it lists files, and its preview pane.</summary>
+    public string AssetFileView { get; set; } = "Details";
+    public bool ShowAssetPreview { get; set; }
+    public double AssetPreviewWidth { get; set; } = 380;
+
     /// <summary>Whether the mesh viewer draws a floor grid under the mesh, and shows what it's drawing over the view.</summary>
     public bool ShowMeshFloor { get; set; } = true;
     public bool ShowMeshInfo { get; set; } = true;

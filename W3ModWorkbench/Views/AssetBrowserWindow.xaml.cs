@@ -40,11 +40,11 @@ public partial class AssetBrowserWindow : Window
     private readonly MainWindow _main;
     private readonly Settings _settings = App.Settings;
     private readonly DispatcherTimer _searchTimer = new() { Interval = TimeSpan.FromMilliseconds(250) };
+    private readonly DispatcherTimer _previewTimer = new() { Interval = TimeSpan.FromMilliseconds(140) };
     private List<EntryItem> _shown = [];
     private string? _classFilter;
-    private bool _fillingClasses;
     private string? _typeFilter;
-    private bool _fillingTypes;
+    private bool _filling;
 
     private AssetBrowserWindow(MainWindow main)
     {
@@ -56,7 +56,24 @@ public partial class AssetBrowserWindow : Window
             _searchTimer.Stop();
             RefreshView();
         };
-        Closed += (_, _) => _instance = null;
+        _previewTimer.Tick += (_, _) =>
+        {
+            _previewTimer.Stop();
+            UpdatePreview();
+        };
+        FileThumbs.ContextMenu = FileGrid.ContextMenu;
+        FileThumbs.TextureFor = async item => await main.FindTextureForHeaderAsync(item);
+        FileThumbs.ItemOpened += item => OpenItem(item);
+        FileThumbs.SelectionChanged += QueuePreview;
+        PreviewPane.LocatorFor = main.LocatorFor;
+        PreviewPane.TextureFor = main.FindTextureForHeaderAsync;
+        ApplyView();
+        ApplyPreviewPane();
+        Closed += (_, _) =>
+        {
+            _instance = null;
+            PreviewPane.Stop();
+        };
         Loaded += async (_, _) => await LoadAsync();
     }
 
@@ -189,84 +206,144 @@ public partial class AssetBrowserWindow : Window
         _searchTimer.Start();
     }
 
-    /// <summary>Shows the files of the folder picked (all of them under it), of the class picked, matching the search.</summary>
+    /// <summary>Shows the files of the folder picked (all of them under it), matching the search, of the type and the class picked.</summary>
     private void RefreshView()
     {
         if (_root is null) return;
         var folder = FolderTree.SelectedItem as FolderNode ?? _root;
         List<EntryItem> scope = [.. folder.AllFiles()];
-        FillClassChoices(scope);
-        FillTypeChoices(scope);
-        IEnumerable<EntryItem> items = scope;
-        if (_classFilter is { } resourceClass) items = items.Where(i => i.ResourceClass == resourceClass);
-        if (_typeFilter is { } type) items = items.Where(i => TypeOf(i).Equals(type, StringComparison.OrdinalIgnoreCase));
-        if (MainWindow.BuildMatcher(SearchBox.Text) is { } match) items = items.Where(match);
-        _shown = [.. items];
-        FileGrid.ItemsSource = _shown;
+        var result = FileFilterResult.Apply(scope, SearchBox.Text, _typeFilter, _classFilter);
+        FillChoices(result);
+        _shown = result.Shown;
+        BindFiles();
+        NoMatchesText.Text = result.NoMatches(_typeFilter, _classFilter);
         NoMatchesText.Visibility = _shown.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-        StatusText.Text = $"{_shown.Count:N0} of {scope.Count:N0} files in {(folder == _root ? "the game's files" : folder == _mods ? "the installed mods" : folder == _modDlc ? "the mods installed as DLC" : folder.FullPath)}   ·   {_root.Archive.Name}"
-            + "   ·   Double-click to open; what it loads comes from its own mod, then the game.";
+        string where = folder == _root ? "the game's files" : folder == _mods ? "the installed mods" : folder == _modDlc ? "the mods installed as DLC" : folder.FullPath;
+        StatusText.Text = $"{_shown.Count:N0} of {scope.Count:N0} files in {where}" + (result.Describe.Length > 0 ? $" match {result.Describe}" : "")
+            + $"   ·   {_root.Archive.Name}   ·   Double-click to open; what it loads comes from its own mod, then the game.";
+        QueuePreview();
     }
 
-    /// <summary>Lists the classes the files in view hold, with how many of each, keeping the one picked.</summary>
-    private void FillClassChoices(IReadOnlyList<EntryItem> scope)
+    /// <summary>Lists the file types and the classes the other filters leave, with how many of each, keeping those picked.</summary>
+    private void FillChoices(FileFilterResult result)
     {
-        var counts = new Dictionary<string, int>(StringComparer.Ordinal);
-        foreach (var item in scope)
-            if (item.ResourceClass is { } name) counts[name] = counts.GetValueOrDefault(name) + 1;
-        if (_classFilter is not null) counts.TryAdd(_classFilter, 0);
-        var choices = new List<ClassChoice> { new(null, scope.Count) };
-        choices.AddRange(counts.OrderBy(c => c.Key, StringComparer.OrdinalIgnoreCase).Select(c => new ClassChoice(c.Key, c.Value)));
-        _fillingClasses = true;
+        var types = FileFilterResult.Choices(result.Types, result.AnyType, _typeFilter);
+        var classes = FileFilterResult.Choices(result.Classes, result.AnyClass, _classFilter);
+        _filling = true;
         try
         {
-            ClassBox.ItemsSource = choices;
-            ClassBox.SelectedItem = choices.First(c => c.Class == _classFilter);
+            FileTypeBox.ItemsSource = types;
+            FileTypeBox.SelectedItem = types.First(c => string.Equals(c.Class, _typeFilter, StringComparison.OrdinalIgnoreCase));
+            ClassBox.ItemsSource = classes;
+            ClassBox.SelectedItem = classes.First(c => c.Class == _classFilter);
         }
         finally
         {
-            _fillingClasses = false;
-        }
-    }
-
-    /// <summary>A file's type: its extension, or "(none)".</summary>
-    private static string TypeOf(EntryItem item) => Path.GetExtension(item.Name) is { Length: > 0 } ext ? ext.ToLowerInvariant() : "(none)";
-
-    /// <summary>Lists the file types in view, with how many of each, keeping the one picked.</summary>
-    private void FillTypeChoices(IReadOnlyList<EntryItem> scope)
-    {
-        var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-        foreach (var item in scope) counts[TypeOf(item)] = counts.GetValueOrDefault(TypeOf(item)) + 1;
-        if (_typeFilter is not null) counts.TryAdd(_typeFilter, 0);
-        var choices = new List<ClassChoice> { new(null, scope.Count) };
-        choices.AddRange(counts.OrderBy(c => c.Key, StringComparer.OrdinalIgnoreCase).Select(c => new ClassChoice(c.Key, c.Value)));
-        _fillingTypes = true;
-        try
-        {
-            FileTypeBox.ItemsSource = choices;
-            FileTypeBox.SelectedItem = choices.First(c => string.Equals(c.Class, _typeFilter, StringComparison.OrdinalIgnoreCase));
-        }
-        finally
-        {
-            _fillingTypes = false;
+            _filling = false;
         }
     }
 
     private void FileTypeBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (_fillingTypes || FileTypeBox.SelectedItem is not ClassChoice choice || choice.Class == _typeFilter) return;
+        if (_filling || FileTypeBox.SelectedItem is not ClassChoice choice || choice.Class == _typeFilter) return;
         _typeFilter = choice.Class;
         RefreshView();
     }
 
     private void ClassBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (_fillingClasses || ClassBox.SelectedItem is not ClassChoice choice || choice.Class == _classFilter) return;
+        if (_filling || ClassBox.SelectedItem is not ClassChoice choice || choice.Class == _classFilter) return;
         _classFilter = choice.Class;
         RefreshView();
     }
 
-    private List<EntryItem> Highlighted() => [.. FileGrid.SelectedItems.OfType<EntryItem>()];
+    private List<EntryItem> Highlighted() => ThumbsMode ? FileThumbs.Selected : [.. FileGrid.SelectedItems.OfType<EntryItem>()];
+
+    private bool FilesFocused => FileGrid.IsKeyboardFocusWithin || FileThumbs.IsKeyboardFocusWithin;
+
+    // ---------------------------------------------------------------- view and preview pane
+
+    private bool ThumbsMode => _settings.AssetFileView is "Small" or "Medium" or "Large";
+
+    /// <summary>Gives the list that's showing the files, and none to the other, so a hidden list isn't kept up to date.</summary>
+    private void BindFiles()
+    {
+        if (ThumbsMode)
+        {
+            FileGrid.ItemsSource = null;
+            FileThumbs.Show(_shown);
+        }
+        else
+        {
+            FileThumbs.Show([]);
+            FileGrid.ItemsSource = _shown;
+        }
+    }
+
+    private void ApplyView()
+    {
+        FileGrid.Visibility = ThumbsMode ? Visibility.Collapsed : Visibility.Visible;
+        FileThumbs.Visibility = ThumbsMode ? Visibility.Visible : Visibility.Collapsed;
+        FileThumbs.ThumbnailSize = FileThumbnails.SizeOf(_settings.AssetFileView);
+        BindFiles();
+    }
+
+    private void SetView(string view)
+    {
+        if (_settings.AssetFileView == view) return;
+        var selected = Highlighted();
+        _settings.AssetFileView = view;
+        _settings.Save();
+        ApplyView();
+        if (ThumbsMode) FileThumbs.Select(selected);
+        else
+            foreach (var item in selected) FileGrid.SelectedItems.Add(item);
+        QueuePreview();
+    }
+
+    private void View_Click(object sender, RoutedEventArgs e) =>
+        MainWindow.ShowViewMenu(ViewButton, _settings.AssetFileView, _settings.ShowAssetPreview, SetView, TogglePreviewPane);
+
+    private void TogglePreviewPane()
+    {
+        _settings.ShowAssetPreview = !_settings.ShowAssetPreview;
+        _settings.Save();
+        ApplyPreviewPane();
+    }
+
+    private void ApplyPreviewPane()
+    {
+        bool show = _settings.ShowAssetPreview;
+        PreviewPane.Visibility = PreviewSplitter.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+        PreviewSplitterColumn.Width = new GridLength(show ? 8 : 0);
+        PreviewColumn.MinWidth = show ? 240 : 0;
+        PreviewColumn.Width = new GridLength(show ? Math.Max(240, _settings.AssetPreviewWidth) : 0);
+        UpdatePreview();
+    }
+
+    private void PreviewSplitter_DragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e)
+    {
+        _settings.AssetPreviewWidth = PreviewColumn.ActualWidth;
+        _settings.Save();
+    }
+
+    private void FileGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!ThumbsMode) QueuePreview();
+    }
+
+    /// <summary>Shows what's highlighted in the preview pane once the highlight settles, when the pane is on.</summary>
+    private void QueuePreview()
+    {
+        _previewTimer.Stop();
+        if (_settings.ShowAssetPreview) _previewTimer.Start();
+    }
+
+    private void UpdatePreview()
+    {
+        if (_settings.ShowAssetPreview) _ = PreviewPane.ShowAsync(Highlighted());
+        else PreviewPane.Stop();
+    }
 
     // ---------------------------------------------------------------- opening
 
@@ -351,17 +428,22 @@ public partial class AssetBrowserWindow : Window
 
     private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key == Key.Escape && SearchBox.IsKeyboardFocused && SearchBox.Text.Length > 0)
+        if (Keyboard.Modifiers == ModifierKeys.Alt && (e.Key == Key.System ? e.SystemKey : e.Key) == Key.P)
+        {
+            TogglePreviewPane();
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Escape && SearchBox.IsKeyboardFocused && SearchBox.Text.Length > 0)
         {
             SearchBox.Clear();
             e.Handled = true;
         }
-        else if (e.Key == Key.Enter && FileGrid.IsKeyboardFocusWithin && Highlighted().FirstOrDefault() is { } item)
+        else if (e.Key == Key.Enter && FilesFocused && Highlighted().FirstOrDefault() is { } item)
         {
             OpenItem(item);
             e.Handled = true;
         }
-        else if (e.Key == Key.C && Keyboard.Modifiers == ModifierKeys.Control && FileGrid.IsKeyboardFocusWithin)
+        else if (e.Key == Key.C && Keyboard.Modifiers == ModifierKeys.Control && FilesFocused)
         {
             _main.Act(FileAction.CopyPath, Highlighted());
             e.Handled = true;
@@ -490,6 +572,12 @@ public partial class AssetBrowserWindow : Window
         if (_shown.FirstOrDefault(i => i.Path.Equals(path, StringComparison.OrdinalIgnoreCase)) is not { } file)
         {
             StatusText.Text = $"{path} isn't in the game's files. It may have come from a mod that's no longer installed.";
+            return;
+        }
+        if (ThumbsMode)
+        {
+            FileThumbs.Select([file]);
+            FileThumbs.Focus();
             return;
         }
         FileGrid.SelectedItem = file;

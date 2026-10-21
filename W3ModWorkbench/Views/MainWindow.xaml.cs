@@ -31,7 +31,6 @@ public partial class MainWindow : Window, IMessageHost
     private readonly ObservableCollection<FolderNode> _tree = [];
     private readonly DispatcherTimer _searchTimer;
     private readonly DispatcherTimer _previewTimer;
-    private CancellationTokenSource? _previewCts;
     private readonly Settings _settings = App.Settings;
     private List<EntryItem> _shown = [];
     private int _checkedCount;
@@ -63,6 +62,11 @@ public partial class MainWindow : Window, IMessageHost
 
         UpdateProjectUi();
         FileThumbs.ContextMenu = FileGrid.ContextMenu;
+        FileThumbs.TextureFor = async item => await FindTextureForHeaderAsync(item);
+        FileThumbs.ItemOpened += OpenItem;
+        FileThumbs.SelectionChanged += FileThumbs_SelectionChanged;
+        PreviewPane.LocatorFor = LocatorFor;
+        PreviewPane.TextureFor = FindTextureForHeaderAsync;
         _previewTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(140) };
         _previewTimer.Tick += (_, _) => { _previewTimer.Stop(); _ = UpdatePreviewAsync(); };
         ApplyView();
@@ -980,20 +984,12 @@ public partial class MainWindow : Window, IMessageHost
         List<EntryItem> scope = FolderTree.SelectedItem is FolderNode node
             ? [.. node.AllFiles()]
             : [.. _roots.SelectMany(r => r.AllFiles())];
-        FillClassChoices(scope);
-        FillTypeChoices(scope);
+        var result = FileFilterResult.Apply(scope, SearchBox.Text, _typeFilter, _classFilter);
+        FillChoices(result);
 
-        IEnumerable<EntryItem> items = scope;
-        if (_classFilter is { } resourceClass)
-            items = items.Where(i => i.ResourceClass == resourceClass);
-        if (_typeFilter is { } type)
-            items = items.Where(i => TypeOf(i).Equals(type, StringComparison.OrdinalIgnoreCase));
-        var match = BuildMatcher(SearchBox.Text);
-        if (match is not null)
-            items = items.Where(match);
-
-        _shown = [.. items];
+        _shown = result.Shown;
         BindFiles();
+        NoMatchesText.Text = result.NoMatches(_typeFilter, _classFilter);
         NoMatchesText.Visibility = _shown.Count == 0 && _roots.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
         ExtractShownButton.IsEnabled = _shown.Count > 0;
         ExtractShownText.Text = _shown.Count > 0 ? $"Extract shown ({_shown.Count:N0})" : "Extract shown";
@@ -1107,7 +1103,7 @@ public partial class MainWindow : Window, IMessageHost
     /// What finds a file's buffers, materials and textures: the archives open here, those beside it, and the game's.
     /// Of the installed mods only the file's own is looked in, so what it uses comes from its mod and then the game.
     /// </summary>
-    private ResourceLocator LocatorFor(ArchiveEntry entry) => new(OpenArchives(), entry.Archive, GameLocator.Resolve(null), ProjectFiles, otherMods: false);
+    internal ResourceLocator LocatorFor(ArchiveEntry entry) => new(OpenArchives(), entry.Archive, GameLocator.Resolve(null), ProjectFiles, otherMods: false);
 
     /// <summary>Reads a cached texture's resource (its .xbm, .w2cube or .texarray) from the bundles, for the texture viewer's properties.</summary>
     private Func<byte[]?> ResourceReader(TextureEntry texture)
@@ -1268,7 +1264,7 @@ public partial class MainWindow : Window, IMessageHost
     }
 
     /// <summary>The texture an .xbm in a bundle describes, from a cache that's open, the one beside the bundle or the game's. Null when none has it.</summary>
-    private async Task<TextureEntry?> FindTextureForHeaderAsync(EntryItem item)
+    internal async Task<TextureEntry?> FindTextureForHeaderAsync(EntryItem item)
     {
         var open = _roots.Select(r => r.Archive).OfType<TextureCacheArchive>().ToList();
         string owner = item.Entry.Archive.Owner;
@@ -1470,113 +1466,27 @@ public partial class MainWindow : Window, IMessageHost
 
     private bool FilesFocused => FileGrid.IsKeyboardFocusWithin || FileThumbs.IsKeyboardFocusWithin;
 
-    private int _perRow = 1;
-    private EntryItem? _anchor;
-
-    private int ThumbnailSize => _settings.FileView switch { "Small" => 64, "Large" => 160, _ => 96 };
-
     /// <summary>Gives the list that's showing the files, and none to the other, so a hidden list isn't kept up to date.</summary>
     private void BindFiles()
     {
         if (ThumbsMode)
         {
             FileGrid.ItemsSource = null;
-            foreach (var item in _shown.Where(i => i.IsSelected && !ReferenceEquals(_anchor, i))) item.IsSelected = false;
-            if (FileThumbs.IsVisible) RebuildRows();
+            FileThumbs.Show(_shown);
         }
         else
         {
+            FileThumbs.Show([]);
             FileGrid.ItemsSource = _shown;
         }
     }
-
-    // Thumbnails are placed by hand: every cell is the same size, so where a file goes follows from its number, and only
-    // the cells in view are made, from a pool. Nothing in the layout depends on what a cell holds, so it can't loop.
-    private readonly Dictionary<int, ContentControl> _liveCells = [];
-    private readonly Stack<ContentControl> _cellPool = new();
-
-    private const double ThumbPadding = 8;
-
-    private int CellWidth => ThumbnailSize + 22;
-
-    private int CellHeight => ThumbnailSize + 60;
-
-    private void RebuildRows()
-    {
-        foreach (var cell in _liveCells.Values) ReleaseCell(cell);
-        _liveCells.Clear();
-        FileThumbs.ScrollToVerticalOffset(0);
-        LayoutThumbs();
-    }
-
-    private void ReleaseCell(ContentControl cell)
-    {
-        ThumbCanvas.Children.Remove(cell);
-        cell.Content = null;
-        _cellPool.Push(cell);
-    }
-
-    private ContentControl NewCell()
-    {
-        if (_cellPool.Count > 0) return _cellPool.Pop();
-        var cell = new ContentControl { ContentTemplate = (DataTemplate)FindResource("ThumbCell"), Focusable = false };
-        cell.MouseLeftButtonDown += Cell_MouseLeftButtonDown;
-        cell.MouseRightButtonDown += Cell_MouseRightButtonDown;
-        return cell;
-    }
-
-    /// <summary>Puts each file in view where it goes, makes the cells that are missing and gives back the ones that scrolled away.</summary>
-    private void LayoutThumbs()
-    {
-        if (!ThumbsMode || !FileThumbs.IsVisible) return;
-        double width = FileThumbs.ViewportWidth > 0 ? FileThumbs.ViewportWidth : Math.Max(0, FileThumbs.ActualWidth - 18);
-        double height = FileThumbs.ViewportHeight > 0 ? FileThumbs.ViewportHeight : FileThumbs.ActualHeight;
-        _perRow = Math.Max(1, (int)((width - 2 * ThumbPadding) / CellWidth));
-        int count = _shown.Count;
-        int rows = (count + _perRow - 1) / _perRow;
-        ThumbCanvas.Width = _perRow * CellWidth + 2 * ThumbPadding;
-        ThumbCanvas.Height = rows * CellHeight + 2 * ThumbPadding;
-
-        double top = FileThumbs.VerticalOffset;
-        int firstRow = Math.Max(0, (int)((top - ThumbPadding) / CellHeight) - 1);
-        int lastRow = Math.Min(rows - 1, (int)((top + height) / CellHeight) + 1);
-        int first = firstRow * _perRow, last = Math.Min(count - 1, (lastRow + 1) * _perRow - 1);
-        if (count == 0 || last < first) { first = 0; last = -1; }
-
-        foreach (var (index, cell) in _liveCells.Where(c => c.Key < first || c.Key > last).ToList())
-        {
-            _liveCells.Remove(index);
-            ReleaseCell(cell);
-        }
-        for (int i = first; i <= last; i++)
-        {
-            if (!_liveCells.TryGetValue(i, out var cell))
-            {
-                cell = NewCell();
-                cell.Tag = (double)ThumbnailSize;
-                cell.Width = CellWidth;
-                cell.Height = CellHeight;
-                cell.Content = _shown[i];
-                ThumbCanvas.Children.Add(cell);
-                _liveCells[i] = cell;
-                RequestThumbnail(_shown[i], cell);
-            }
-            Canvas.SetLeft(cell, ThumbPadding + i % _perRow * CellWidth);
-            Canvas.SetTop(cell, ThumbPadding + i / _perRow * CellHeight);
-        }
-    }
-
-    private void FileThumbs_ScrollChanged(object sender, ScrollChangedEventArgs e) => LayoutThumbs();
-
-    private void FileThumbs_SizeChanged(object sender, SizeChangedEventArgs e) => LayoutThumbs();
 
     private void ApplyView()
     {
         FileGrid.Visibility = ThumbsMode ? Visibility.Collapsed : Visibility.Visible;
         FileThumbs.Visibility = ThumbsMode ? Visibility.Visible : Visibility.Collapsed;
-        FileThumbs.Tag = (double)ThumbnailSize;
+        FileThumbs.ThumbnailSize = FileThumbnails.SizeOf(_settings.FileView);
         BindFiles();
-        if (ThumbsMode) Dispatcher.BeginInvoke(DispatcherPriority.Loaded, RebuildRows);
     }
 
     private void SetView(string view)
@@ -1585,11 +1495,7 @@ public partial class MainWindow : Window, IMessageHost
         var selected = Highlighted();
         _settings.FileView = view;
         ApplyView();
-        if (ThumbsMode)
-        {
-            foreach (var item in _shown) item.IsSelected = false;
-            foreach (var item in selected) item.IsSelected = true;
-        }
+        if (ThumbsMode) FileThumbs.Select(selected);
         else
             foreach (var item in selected) FileGrid.SelectedItems.Add(item);
         QueueStatusUpdate();
@@ -1597,99 +1503,23 @@ public partial class MainWindow : Window, IMessageHost
         _previewTimer.Start();
     }
 
-    // ---------------------------------------------------------------- thumbnail selection
-
-    /// <summary>Highlights the files for thumbnails, which keep their own selection: just these, or these added to it.</summary>
-    private void SelectThumbs(IEnumerable<EntryItem> items, bool add = false)
+    private void FileThumbs_SelectionChanged()
     {
-        var set = items.ToHashSet();
-        foreach (var item in _shown)
-            if (set.Contains(item)) item.IsSelected = true;
-            else if (!add && item.IsSelected) item.IsSelected = false;
         _previewTimer.Stop();
         _previewTimer.Start();
     }
 
-    private void Cell_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
-    {
-        if ((sender as ContentControl)?.Content is not EntryItem item || e.OriginalSource is CheckBox || FindParent<CheckBox>(e.OriginalSource as DependencyObject) is not null) return;
-        FileThumbs.Focus();
-        if (e.ClickCount == 2)
-        {
-            OpenItem(item);
-            e.Handled = true;
-            return;
-        }
-        var mods = Keyboard.Modifiers;
-        if (mods == ModifierKeys.Control)
-        {
-            item.IsSelected = !item.IsSelected;
-            _anchor = item;
-            _previewTimer.Stop();
-            _previewTimer.Start();
-        }
-        else if (mods == ModifierKeys.Shift && _anchor is not null)
-        {
-            int a = _shown.IndexOf(_anchor), b = _shown.IndexOf(item);
-            if (a < 0) a = b;
-            SelectThumbs(_shown.Skip(Math.Min(a, b)).Take(Math.Abs(a - b) + 1));
-        }
-        else
-        {
-            SelectThumbs([item]);
-            _anchor = item;
-        }
-        e.Handled = true;
-    }
+    private void View_Click(object sender, RoutedEventArgs e) =>
+        ShowViewMenu(ViewButton, _settings.FileView, _settings.ShowFilePreview, SetView, TogglePreviewPane);
 
-    /// <summary>A right-click on a file that isn't highlighted highlights just it, so the menu acts on what was clicked.</summary>
-    private void Cell_MouseRightButtonDown(object sender, MouseButtonEventArgs e)
+    /// <summary>The View menu, here and in the asset browser: the files as a list or as thumbnails, and the preview pane on or off.</summary>
+    internal static void ShowViewMenu(UIElement button, string current, bool preview, Action<string> setView, Action togglePreview)
     {
-        if ((sender as ContentControl)?.Content is not EntryItem item) return;
-        FileThumbs.Focus();
-        if (!item.IsSelected)
-        {
-            SelectThumbs([item]);
-            _anchor = item;
-        }
-    }
-
-    /// <summary>The keys of the thumbnail view: arrows move by a file or a row, Shift extends, Ctrl+A selects all.</summary>
-    private void FileThumbs_PreviewKeyDown(object sender, KeyEventArgs e)
-    {
-        if (_shown.Count == 0) return;
-        if (e.Key == Key.A && Keyboard.Modifiers == ModifierKeys.Control)
-        {
-            SelectThumbs(_shown);
-            e.Handled = true;
-            return;
-        }
-        int step = e.Key switch { Key.Left => -1, Key.Right => 1, Key.Up => -_perRow, Key.Down => _perRow, _ => 0 };
-        if (step == 0 && e.Key is not (Key.Home or Key.End)) return;
-        if (Keyboard.Modifiers is not (ModifierKeys.None or ModifierKeys.Shift)) return;
-        int current = _anchor is null ? -1 : _shown.IndexOf(_anchor);
-        int target = e.Key == Key.Home ? 0 : e.Key == Key.End ? _shown.Count - 1 : Math.Clamp(current < 0 ? 0 : current + step, 0, _shown.Count - 1);
-        if (Keyboard.Modifiers == ModifierKeys.Shift && current >= 0)
-            SelectThumbs(_shown.Skip(Math.Min(current, target)).Take(Math.Abs(current - target) + 1));
-        else
-        {
-            SelectThumbs([_shown[target]]);
-            _anchor = _shown[target];
-        }
-        if (Keyboard.Modifiers == ModifierKeys.None) _anchor = _shown[target];
-        double rowTop = ThumbPadding + target / _perRow * CellHeight;
-        if (rowTop < FileThumbs.VerticalOffset) FileThumbs.ScrollToVerticalOffset(rowTop - ThumbPadding);
-        else if (rowTop + CellHeight > FileThumbs.VerticalOffset + FileThumbs.ViewportHeight) FileThumbs.ScrollToVerticalOffset(rowTop + CellHeight - FileThumbs.ViewportHeight + ThumbPadding);
-        e.Handled = true;
-    }
-
-    private void View_Click(object sender, RoutedEventArgs e)
-    {
-        var menu = new ContextMenu { PlacementTarget = ViewButton, Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom };
+        var menu = new ContextMenu { PlacementTarget = button, Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom };
         void Choice(string header, string view)
         {
-            var item = new MenuItem { Header = header, IsCheckable = true, IsChecked = _settings.FileView == view };
-            item.Click += (_, _) => SetView(view);
+            var item = new MenuItem { Header = header, IsCheckable = true, IsChecked = current == view };
+            item.Click += (_, _) => setView(view);
             menu.Items.Add(item);
         }
         Choice("Details", "Details");
@@ -1697,8 +1527,8 @@ public partial class MainWindow : Window, IMessageHost
         Choice("Medium thumbnails", "Medium");
         Choice("Large thumbnails", "Large");
         menu.Items.Add(new Separator());
-        var pane = new MenuItem { Header = "Preview pane", InputGestureText = "Alt+P", IsCheckable = true, IsChecked = _settings.ShowFilePreview };
-        pane.Click += (_, _) => TogglePreviewPane();
+        var pane = new MenuItem { Header = "Preview pane", InputGestureText = "Alt+P", IsCheckable = true, IsChecked = preview };
+        pane.Click += (_, _) => togglePreview();
         menu.Items.Add(pane);
         menu.IsOpen = true;
     }
@@ -1717,7 +1547,7 @@ public partial class MainWindow : Window, IMessageHost
         PreviewColumn.MinWidth = show ? 240 : 0;
         PreviewColumn.Width = new GridLength(show ? Math.Max(240, _settings.FilePreviewWidth) : 0);
         if (show) _ = UpdatePreviewAsync();
-        else _previewCts?.Cancel();
+        else PreviewPane.Stop();
     }
 
     private void PreviewSplitter_DragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e) =>
@@ -1730,279 +1560,15 @@ public partial class MainWindow : Window, IMessageHost
         if (_settings.ShowFilePreview) _previewTimer.Start();
     }
 
-    /// <summary>Makes a thumbnail for a picture file the first time its cell is built, and only while the cell is still showing it.</summary>
-    private async void RequestThumbnail(EntryItem item, ContentControl cell)
+    /// <summary>Shows the file highlighted in the list in the preview pane, when it's on.</summary>
+    private Task UpdatePreviewAsync()
     {
-        if (item.ThumbnailRequested || !item.CanHaveThumbnail) return;
-        item.ThumbnailRequested = true;
-        bool Wanted() => ReferenceEquals(cell.Content, item);
-        // an .xbm in a bundle shows the texture it describes, found in a cache under the same path
-        ArchiveEntry? source = item.IsTextureHeader ? await FindTextureForHeaderAsync(item) : item.Entry;
-        if (source is null) return;
-        var picture = await EntryImages.LoadAsync(source, 192, wanted: Wanted);
-        if (picture is not null) item.Thumbnail = picture.Image;
-        else if (!Wanted()) item.ThumbnailRequested = false;
-    }
-
-    private const int MaxPreviewText = 200_000;
-
-    /// <summary>Puts text in the preview editor, coloured as WitcherScript or XML when the file is one.</summary>
-    private void SetPreviewText(string text, string? name)
-    {
-        var view = PreviewText.TextArea.TextView;
-        var document = SetPreviewDocument(new TextDocument(text));
-        bool dark = TryFindResource("TextFillColorPrimaryBrush") is SolidColorBrush b && 0.299 * b.Color.R + 0.587 * b.Color.G + 0.114 * b.Color.B > 128;
-        string ext = Path.GetExtension(name ?? "").ToLowerInvariant();
-        if (ext == ".ws") view.LineTransformers.Insert(0, new WitcherScriptColorizer(document, dark) { View = view });
-        else if (ext is ".xml" or ".xsd" or ".config") view.LineTransformers.Insert(0, new XmlColorizer(document, dark) { View = view });
-        PreviewText.ScrollToHome();
-    }
-
-    /// <summary>
-    /// Swaps the preview editor's document, taking the colourers off with the old one: a colourer reads its own
-    /// document, and left on it colours the new one's lines with the old one's offsets.
-    /// </summary>
-    private TextDocument SetPreviewDocument(TextDocument document)
-    {
-        var view = PreviewText.TextArea.TextView;
-        foreach (var old in view.LineTransformers.Where(t => t is WitcherScriptColorizer or XmlColorizer).ToList()) view.LineTransformers.Remove(old);
-        PreviewText.Document = document;
-        return document;
-    }
-
-    private void ShowPreview(string glyph, string? message, EntryPicture? picture = null, string? text = null, string? name = null, MeshFile? mesh = null,
-        CutsceneFile? cutscene = null, Core.Scenes.SceneFile? scene = null)
-    {
-        PreviewScene.Visibility = scene is not null ? Visibility.Visible : Visibility.Collapsed;
-        if (!ReferenceEquals(PreviewScene.Scene, scene)) PreviewScene.Show(scene);
-        PreviewCutscene.Visibility = cutscene is not null ? Visibility.Visible : Visibility.Collapsed;
-        if (!ReferenceEquals(PreviewCutscene.Cutscene, cutscene)) PreviewCutscene.Show(cutscene);
-        PreviewMeshHost.Visibility = mesh is not null ? Visibility.Visible : Visibility.Collapsed;
-        if (!ReferenceEquals(PreviewMesh.Mesh, mesh)) PreviewMesh.Show(mesh);
-        PreviewImageHost.Visibility = picture is not null ? Visibility.Visible : Visibility.Collapsed;
-        PreviewImage.Source = picture?.Image;
-        PreviewText.Visibility = text is not null ? Visibility.Visible : Visibility.Collapsed;
-        if (text is not null) SetPreviewText(text, name);
-        else SetPreviewDocument(new TextDocument());
-        PreviewEmpty.Visibility = picture is null && text is null && mesh is null && cutscene is null && scene is null ? Visibility.Visible : Visibility.Collapsed;
-        PreviewEmptyGlyph.Text = glyph;
-        PreviewEmptyText.Text = message ?? "";
-    }
-
-    /// <summary>The preview's textures, smaller than the viewers', each read once for the file shown.</summary>
-    private static Func<string, Task<System.Windows.Media.Imaging.BitmapSource?>> PreviewTexture(ResourceLocator locator)
-    {
-        var read = new Dictionary<string, Task<System.Windows.Media.Imaging.BitmapSource?>>(StringComparer.OrdinalIgnoreCase);
-        return path =>
+        if (!_settings.ShowFilePreview)
         {
-            lock (read)
-            {
-                if (!read.TryGetValue(path, out var task)) read[path] = task = Task.Run(() => MeshTextures.Load(locator, path, 512));
-                return task;
-            }
-        };
-    }
-
-    /// <summary>Shows the file highlighted in the list, when there's just one: a picture for textures and picture files, text for text files, and what it is for the rest.</summary>
-    private async Task UpdatePreviewAsync()
-    {
-        _previewCts?.Cancel();
-        _previewCts = null;
-        if (!_settings.ShowFilePreview) return;
-        var items = Highlighted();
-        if (items.Count != 1)
-        {
-            PreviewName.Text = items.Count > 1 ? $"{items.Count:N0} files selected" : "";
-            PreviewDetail.Text = items.Count > 1 ? Format.Bytes(items.Sum(i => (long)i.Size)) + " in all" : "";
-            ShowPreview("\uE8A5", items.Count == 0 ? "Highlight a file to see it here." : "Highlight a single file to see it here.");
-            return;
+            PreviewPane.Stop();
+            return Task.CompletedTask;
         }
-        var item = items[0];
-        var cts = _previewCts = new CancellationTokenSource();
-        var token = cts.Token;
-        PreviewName.Text = item.Name;
-        string detail = (item.Kind is { } fileKind ? fileKind.Name + "  ·  " : "") + $"{item.Entry.FormatText}  ·  {item.SizeText}  ·  {item.Folder}";
-        PreviewDetail.Text = detail;
-        try
-        {
-            if (item.Entry is TextureEntry || TextureWindow.CanShow(item.Name))
-            {
-                var picture = await EntryImages.LoadAsync(item.Entry, 1024, token);
-                if (token.IsCancellationRequested) return;
-                if (picture is null) ShowPreview(item.Glyph, "This picture can't be shown yet.");
-                else
-                {
-                    ShowPreview(item.Glyph, null, picture);
-                    PreviewDetail.Text = detail + "  ·  " + picture.Info;
-                }
-            }
-            else if (IsTextureHeader(item))
-            {
-                ShowPreview(item.Glyph, "Looking for the texture's pixels…");
-                var texture = await FindTextureForHeaderAsync(item);
-                if (token.IsCancellationRequested) return;
-                var picture = texture is null ? null : await Task.Run(() => EntryImages.FromTexture(texture, 1024));
-                if (token.IsCancellationRequested) return;
-                if (picture is null) ShowPreview(item.Glyph, "Its pixels are in a texture.cache under the same path. Open the mod's texture.cache, or the game's, and they show here.");
-                else
-                {
-                    ShowPreview(item.Glyph, null, picture);
-                    PreviewDetail.Text = detail + "  ·  " + picture.Info;
-                }
-            }
-            else if (MeshWindow.CanShow(item.Name))
-            {
-                ShowPreview(item.Glyph, "Reading the mesh…");
-                var entry = item.Entry;
-                var locator = LocatorFor(entry);
-                var mesh = await Task.Run(() =>
-                {
-                    byte[] data;
-                    if (!entry.Archive.ReadsFromDisk) data = entry.Read(null);
-                    else
-                    {
-                        using var fs = new FileStream(entry.Archive.FilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-                        data = entry.Read(fs);
-                    }
-                    return MeshFile.Read(data, n => locator.ReadBuffer(entry.Path, n, entry.Archive));
-                }, token);
-                if (token.IsCancellationRequested) return;
-                ShowPreview(item.Glyph, null, mesh: mesh);
-                int triangles = MeshView.Drawn(mesh, 0).Sum(c => c.Triangles);
-                PreviewDetail.Text = detail + $"  ·  {triangles:N0} triangles, {mesh.LodCount} LOD{(mesh.LodCount == 1 ? "" : "s")}  ·  double-click to open";
-                // the colour textures, smaller than the viewer's, each put on as soon as it's read
-                for (int i = 0; i < mesh.Materials.Count; i++)
-                {
-                    int material = i;
-                    var (picture, look, leaveOut) = await Task.Run(() => LookTextures.ForMaterial(mesh, material, locator, PreviewTexture(locator)), token);
-                    if (token.IsCancellationRequested || !ReferenceEquals(PreviewMesh.Mesh, mesh)) return;
-                    if (leaveOut) PreviewMesh.LeaveOut(0, material);
-                    else PreviewMesh.SetTexture(material, picture, look);
-                }
-            }
-            else if (CutsceneWindow.CanShow(item.Name))
-            {
-                ShowPreview(item.Glyph, "Reading the cutscene…");
-                var entry = item.Entry;
-                CutsceneFile cutscene;
-                try
-                {
-                    byte[] data = await ReadAsync(entry);
-                    cutscene = await Task.Run(() => CutsceneFile.Read(data), token);
-                }
-                catch (InvalidDataException ex)
-                {
-                    if (!token.IsCancellationRequested) ShowPreview(item.Glyph, $"This cutscene could not be read.\n\n{ex.Message}\n\nIt can still be checked and extracted.");
-                    return;
-                }
-                if (token.IsCancellationRequested) return;
-                ShowPreview(item.Glyph, null, cutscene: cutscene);
-                PreviewDetail.Text = detail + "  ·  double-click to open";
-            }
-            else if (EntityWindow.CanShow(item.Name))
-            {
-                // its meshes put together, in its first appearance
-                ShowPreview(item.Glyph, "Reading the entity…");
-                var locator = LocatorFor(item.Entry);
-                Core.Entities.EntityFile entity;
-                List<(MeshFile Mesh, System.Numerics.Matrix4x4 Place)> parts;
-                List<Core.Entities.EntityComponent> drawnBy;
-                try
-                {
-                    byte[] data = await ReadAsync(item.Entry);
-                    entity = await Task.Run(() => Core.Entities.EntityFile.Read(data), token);
-                    var look = await Task.Run(() => entity.Look(entity.DefaultAppearance, locator.ReadFile), token);
-                    (parts, drawnBy, _, _) = await Task.Run(() => EntityWindow.ReadMeshes(look, locator, token), token);
-                }
-                catch (InvalidDataException ex)
-                {
-                    if (!token.IsCancellationRequested) ShowPreview(item.Glyph, $"This entity could not be read.\n\n{ex.Message}\n\nIt can still be checked and extracted.");
-                    return;
-                }
-                if (token.IsCancellationRequested) return;
-                string what = $"{entity.EntityClass ?? "Entity"}  ·  {Format.Count(entity.Components.Count, "component")}"
-                            + (entity.Appearances.Count > 0 ? $", {Format.Count(entity.Appearances.Count, "appearance")}" : "");
-                if (parts.Count == 0)
-                {
-                    ShowPreview(item.Glyph, $"{what}\n\nIt has no meshes to show. Double-click to see its components.");
-                    return;
-                }
-                ShowPreview(item.Glyph, null, mesh: parts[0].Mesh);
-                PreviewMesh.ShowParts(parts);
-                PreviewDetail.Text = detail + $"  ·  {what}, {Format.Count(parts.Count, "mesh", "meshes")}  ·  double-click to open";
-                var texture = PreviewTexture(locator);
-                for (int p = 0; p < parts.Count; p++)
-                {
-                    var coloring = LookTextures.Coloring(entity, entity.DefaultAppearance?.Name, drawnBy[p].Name);
-                    for (int m = 0; m < parts[p].Mesh.Materials.Count; m++)
-                    {
-                        int part = p, material = m;
-                        var mesh = parts[p].Mesh;
-                        var (picture, look, leaveOut) = await Task.Run(() => LookTextures.ForMaterial(mesh, material, locator, texture, coloring), token);
-                        if (token.IsCancellationRequested || !ReferenceEquals(PreviewMesh.Mesh, parts[0].Mesh)) return;
-                        if (leaveOut) PreviewMesh.LeaveOut(part, material);
-                        else PreviewMesh.SetTexture(part, material, picture, look);
-                    }
-                }
-            }
-            else if (SceneWindow.CanShow(item.Name))
-            {
-                ShowPreview(item.Glyph, "Reading the scene…");
-                Core.Scenes.SceneFile scene;
-                try
-                {
-                    byte[] data = await ReadAsync(item.Entry);
-                    scene = await Task.Run(() => Core.Scenes.SceneFile.Read(data), token);
-                }
-                catch (InvalidDataException ex)
-                {
-                    if (!token.IsCancellationRequested) ShowPreview(item.Glyph, $"This scene could not be read.\n\n{ex.Message}\n\nIt can still be checked and extracted.");
-                    return;
-                }
-                if (token.IsCancellationRequested) return;
-                // shown at once, then again with its lines in words once the game's strings are read
-                ShowPreview(item.Glyph, null, scene: scene);
-                PreviewDetail.Text = detail + "  ·  double-click to open";
-                var (text, note) = await SceneWindow.LinesAsync();
-                if (!token.IsCancellationRequested && ReferenceEquals(PreviewScene.Scene, scene)) PreviewScene.Show(scene, text ?? (_ => null), note);
-            }
-            else if (item.Entry is StringsEntry)
-                ShowPreview(item.Glyph, "Double-click to open it in the strings editor.");
-            else if (item.IsPreviewable)
-            {
-                if (item.Size > 4_000_000)
-                {
-                    ShowPreview(item.Glyph, "Too large to read here. Double-click to open it.");
-                    return;
-                }
-                var entry = item.Entry;
-                string text = await Task.Run(() =>
-                {
-                    byte[] data;
-                    if (!entry.Archive.ReadsFromDisk) data = entry.Read(null);
-                    else
-                    {
-                        using var fs = new FileStream(entry.Archive.FilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-                        data = entry.Read(fs);
-                    }
-                    string decoded = TextDecoding.Decode(data);
-                    return decoded.Length > MaxPreviewText ? decoded[..MaxPreviewText] + "\n…" : decoded;
-                }, token);
-                if (token.IsCancellationRequested) return;
-                ShowPreview(item.Glyph, null, text: text, name: item.Name);
-            }
-            else if (item.Kind is { } kind)
-                ShowPreview(item.Glyph, $"{kind.Name}\n\n{kind.Description}\n\nThere's no preview for this kind of file; check it and extract it.");
-            else
-                ShowPreview(item.Glyph, "No preview for this kind of file. Check it and extract it, or double-click for what the tool can do with it.");
-        }
-        catch (OperationCanceledException)
-        {
-        }
-        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or NotSupportedException)
-        {
-            if (!token.IsCancellationRequested) ShowPreview(item.Glyph, "It could not be read: " + ex.Message);
-        }
+        return PreviewPane.ShowAsync(Highlighted());
     }
 
     // ---------------------------------------------------------------- tools
