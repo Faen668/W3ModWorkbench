@@ -223,6 +223,20 @@
 
                     <Border Style="{StaticResource Card}">
                         <StackPanel>
+                            <TextBlock Style="{StaticResource SectionTitle}" Text="{l:T Settings.General.Recipes}" />
+                            <TextBlock Text="{l:T Settings.General.RecipesFolder}" Margin="0,4,0,6" />
+                            <Grid>
+                                <TextBox x:Name="RecipesBox" Style="{StaticResource PathBox}" />
+                                <Button Style="{StaticResource BrowseButton}" Click="BrowseRecipes_Click" ToolTip="{l:T Common.ChooseFolder}">
+                                    <TextBlock Style="{StaticResource Icon}" Text="&#xE8DA;" />
+                                </Button>
+                            </Grid>
+                            <TextBlock x:Name="RecipesHint" Style="{StaticResource Hint}" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
                             <TextBlock Style="{StaticResource SectionTitle}" Text="{l:T Settings.General.Copies}" />
                             <CheckBox x:Name="AskCopyCheck" Content="{l:T Settings.General.AskCopy}" Margin="0,4,0,0" />
                             <TextBlock Style="{StaticResource Hint}" Text="{l:T Settings.General.AskCopyHint}" />

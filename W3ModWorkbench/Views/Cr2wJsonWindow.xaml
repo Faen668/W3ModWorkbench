@@ -135,6 +135,46 @@
                 </DataTrigger>
             </DataTemplate.Triggers>
         </DataTemplate>
+
+        <!-- a saved recipe: its name, and what it does in a line -->
+        <DataTemplate x:Key="RecipeRow" DataType="{x:Type local:Cr2wRecipeRow}">
+            <Grid Margin="0,3" ToolTip="{Binding Tip}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock FontFamily="{StaticResource IconFont}" Text="{Binding Glyph}" Margin="0,2,10,0" VerticalAlignment="Top"
+                           Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}" />
+                <StackPanel Grid.Column="1">
+                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Text="{Binding Summary}" Opacity="0.65" FontSize="12" Margin="0,1,0,0" TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+            </Grid>
+        </DataTemplate>
+        <!-- the recipe list's rows: the chosen one a wash of the accent behind ordinary text, as the app's grids have -->
+        <Style x:Key="WashItem" TargetType="ListBoxItem" BasedOn="{StaticResource {x:Type ListBoxItem}}">
+            <Setter Property="Padding" Value="10,4" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Grid SnapsToDevicePixels="True" Background="Transparent" Margin="2,1">
+                            <Border x:Name="Hover" CornerRadius="4" Background="{DynamicResource ListBoxItemUnselectedBackgroundPointerOverThemeBrush}" Visibility="Collapsed" />
+                            <Border x:Name="Highlight" CornerRadius="4" Background="{DynamicResource AccentFillColorDefaultBrush}" Opacity="0" />
+                            <ContentPresenter Margin="{TemplateBinding Padding}" />
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Hover" Property="Visibility" Value="Visible" />
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Hover" Property="Visibility" Value="Collapsed" />
+                                <Setter TargetName="Highlight" Property="Opacity" Value="0.22" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Window.Resources>
 
     <Grid>
@@ -204,6 +244,8 @@
                                 </StackPanel>
                                 <DockPanel Margin="0,12,0,0">
                                     <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                                        <Button Content="{l:T Cr2wJsonWindow.SaveAsRecipe}" Padding="14,6" Margin="0,0,6,0" Click="ConvertSaveRecipe_Click"
+                                                ToolTip="{l:T Cr2wJsonWindow.SaveAsRecipeTip}" />
                                         <Button x:Name="ConvertStopButton" Content="{l:T Cr2wJsonWindow.Stop}" Padding="14,6" Margin="0,0,6,0" Click="Stop_Click" Visibility="Collapsed" />
                                         <Button x:Name="ConvertButton" Padding="18,6" Click="Convert_Click" Style="{DynamicResource AccentButtonStyle}">
                                             <StackPanel Orientation="Horizontal">
@@ -348,6 +390,8 @@
                                     </DockPanel>
                                     <DockPanel Margin="0,12,0,0">
                                         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                                            <Button Content="{l:T Cr2wJsonWindow.SaveAsRecipe}" Padding="14,6" Margin="0,0,6,0" Click="BulkSaveRecipe_Click"
+                                                    ToolTip="{l:T Cr2wJsonWindow.SaveAsRecipeTip}" />
                                             <Button x:Name="BulkStopButton" Content="{l:T Cr2wJsonWindow.Stop}" Padding="14,6" Margin="0,0,6,0" Click="Stop_Click" Visibility="Collapsed" />
                                             <Button x:Name="CheckButton" Content="{l:T Cr2wJsonWindow.Check}" Padding="14,6" Margin="0,0,6,0" Click="BulkCheck_Click"
                                                     ToolTip="{l:T Cr2wJsonWindow.TryEditsWithoutSaving}" />
@@ -378,6 +422,128 @@
                             </Border>
                         </StackPanel>
                     </ScrollViewer>
+                </TabItem>
+
+                <!-- ============================================================ recipes -->
+                <TabItem Header="{l:T Cr2wJsonWindow.Recipes}" Tag="&#xE8F1;">
+                    <!-- the recipes and the results share the window, whatever recipe is chosen; the splitter moves the line -->
+                    <!-- the recipes and the results share the window, whatever recipe is chosen; the splitter moves the line -->
+                    <Grid Margin="0,10,0,0">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="3*" MinHeight="280" />
+                            <RowDefinition Height="10" />
+                            <RowDefinition Height="*" MinHeight="100" />
+                        </Grid.RowDefinitions>
+
+                        <Border Style="{StaticResource Card}" Margin="0">
+                            <DockPanel>
+                                <DockPanel DockPanel.Dock="Top">
+                                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Top">
+                                        <Button Style="{StaticResource Small}" Content="{l:T Cr2wJsonWindow.RecipeImport}" Click="RecipeImport_Click"
+                                                ToolTip="{l:T Cr2wJsonWindow.RecipeImportTip}" />
+                                        <Button Style="{StaticResource Small}" Margin="0" Content="{l:T Cr2wJsonWindow.RecipeOpenFolder}" Click="RecipeFolder_Click"
+                                                ToolTip="{l:T Cr2wJsonWindow.RecipeOpenFolderTip}" />
+                                    </StackPanel>
+                                    <StackPanel>
+                                        <TextBlock Text="{l:T Cr2wJsonWindow.SavedRecipes}" Style="{StaticResource Heading}" />
+                                        <TextBlock Style="{StaticResource Note}" Text="{l:T Cr2wJsonWindow.RecipesNote}" />
+                                    </StackPanel>
+                                </DockPanel>
+
+                                <!-- what can be done with the chosen recipe, in one bar across the card -->
+                                <DockPanel x:Name="RecipeActions" DockPanel.Dock="Bottom" Margin="0,12,0,0" Visibility="Collapsed">
+                                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Bottom">
+                                        <Button x:Name="RecipeStopButton" Content="{l:T Cr2wJsonWindow.Stop}" Padding="14,6" Margin="0,0,6,0" Click="Stop_Click" Visibility="Collapsed" />
+                                        <Button x:Name="RecipeCheckButton" Content="{l:T Cr2wJsonWindow.Check}" Padding="14,6" Margin="0,0,6,0" Click="RecipeCheck_Click"
+                                                ToolTip="{l:T Cr2wJsonWindow.TryEditsWithoutSaving}" />
+                                        <Button x:Name="RecipeRunButton" Padding="18,6" Click="RecipeRun_Click" Style="{DynamicResource AccentButtonStyle}">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE768;" FontSize="13" VerticalAlignment="Center" />
+                                                <TextBlock Text="{l:T Cr2wJsonWindow.RecipeRun}" Margin="8,0,0,0" />
+                                            </StackPanel>
+                                        </Button>
+                                    </StackPanel>
+                                    <WrapPanel VerticalAlignment="Bottom" Margin="0,0,12,0">
+                                        <Button Style="{StaticResource Small}" Margin="0,6,6,0" Content="{l:T Cr2wJsonWindow.RecipeLoad}" Click="RecipeLoad_Click"
+                                                ToolTip="{l:T Cr2wJsonWindow.RecipeLoadTip}" />
+                                        <Button Style="{StaticResource Small}" Margin="0,6,6,0" Click="RecipePython_Click" ToolTip="{l:T Cr2wJsonWindow.RecipePythonTip}">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE943;" VerticalAlignment="Center" />
+                                                <TextBlock Text="{l:T Cr2wJsonWindow.RecipePython}" Margin="8,0,0,0" />
+                                            </StackPanel>
+                                        </Button>
+                                        <Button Style="{StaticResource Small}" Margin="0,6,6,0" Click="RecipeBatch_Click" ToolTip="{l:T Cr2wJsonWindow.RecipeBatchTip}">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE756;" VerticalAlignment="Center" />
+                                                <TextBlock Text="{l:T Cr2wJsonWindow.RecipeBatch}" Margin="8,0,0,0" />
+                                            </StackPanel>
+                                        </Button>
+                                        <Button Style="{StaticResource Small}" Margin="0,6,6,0" Content="{l:T Cr2wJsonWindow.RecipeCopyCommand}" Click="RecipeCopyCommand_Click"
+                                                ToolTip="{l:T Cr2wJsonWindow.RecipeCopyCommandTip}" />
+                                        <Button Style="{StaticResource Small}" Margin="0,6,6,0" Content="{l:T Cr2wJsonWindow.RecipeDelete}" Click="RecipeDelete_Click" />
+                                    </WrapPanel>
+                                </DockPanel>
+
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="280" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Grid>
+                                        <ListBox x:Name="RecipeList" ItemTemplate="{StaticResource RecipeRow}" ItemContainerStyle="{StaticResource WashItem}" SelectionChanged="RecipeList_SelectionChanged"
+                                                 KeyDown="RecipeList_KeyDown" MouseDoubleClick="RecipeList_DoubleClick" ScrollViewer.HorizontalScrollBarVisibility="Disabled" />
+                                        <TextBlock x:Name="RecipesEmpty" Margin="14" Opacity="0.65" TextWrapping="Wrap" IsHitTestVisible="False"
+                                                   Text="{l:T Cr2wJsonWindow.NoRecipesYet}" />
+                                    </Grid>
+
+                                    <TextBlock x:Name="RecipeNone" Grid.Column="1" Margin="18,4,0,0" Opacity="0.65" TextWrapping="Wrap"
+                                               Text="{l:T Cr2wJsonWindow.PickRecipe}" />
+                                    <DockPanel x:Name="RecipeDetails" Grid.Column="1" Margin="18,0,0,0" Visibility="Collapsed">
+                                        <DockPanel DockPanel.Dock="Top">
+                                            <TextBlock Text="{l:T Common.Name}" Style="{StaticResource Label}" />
+                                            <TextBox x:Name="RecipeNameBox" LostKeyboardFocus="RecipeText_LostFocus" KeyDown="RecipeNameBox_KeyDown" />
+                                        </DockPanel>
+                                        <DockPanel DockPanel.Dock="Top" Margin="0,6,0,0">
+                                            <TextBlock Text="{l:T Cr2wJsonWindow.RecipeNotes}" Style="{StaticResource Label}" VerticalAlignment="Top" Margin="0,6,0,0" />
+                                            <TextBox x:Name="RecipeNotesBox" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="34" MaxHeight="80"
+                                                     VerticalScrollBarVisibility="Auto" VerticalContentAlignment="Top" LostKeyboardFocus="RecipeText_LostFocus"
+                                                     ToolTip="{l:T Cr2wJsonWindow.RecipeNotesTip}" />
+                                        </DockPanel>
+                                        <!-- the steps as text to read, not wrapped: it scrolls when a path or an edit is long -->
+                                        <DockPanel Margin="0,10,0,0">
+                                            <TextBlock Text="{l:T Cr2wJsonWindow.RecipeSteps}" Style="{StaticResource Label}" VerticalAlignment="Top" Margin="0,6,0,0" />
+                                            <TextBlock x:Name="RecipeProblemsText" DockPanel.Dock="Bottom" TextWrapping="Wrap" Margin="0,6,0,0" Visibility="Collapsed"
+                                                       Foreground="{DynamicResource SystemFillColorCautionBrush}" />
+                                            <Border CornerRadius="4" BorderThickness="1" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+                                                    Background="{DynamicResource SubtleFillColorSecondaryBrush}">
+                                                <ScrollViewer x:Name="RecipeStepsScroller" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+                                                    <TextBlock x:Name="RecipeStepsText" FontFamily="Cascadia Mono, Consolas" Margin="10,8" />
+                                                </ScrollViewer>
+                                            </Border>
+                                        </DockPanel>
+                                    </DockPanel>
+                                </Grid>
+                            </DockPanel>
+                        </Border>
+
+                        <GridSplitter Grid.Row="1" Height="10" HorizontalAlignment="Stretch" Background="Transparent" ResizeBehavior="PreviousAndNext" />
+
+                        <Border Grid.Row="2" Style="{StaticResource Card}" Margin="0">
+                            <DockPanel>
+                                <DockPanel DockPanel.Dock="Top" Margin="0,0,0,6">
+                                    <Button DockPanel.Dock="Right" Style="{StaticResource Small}" Margin="0" Content="{l:T Common.ShowExplorer}" Click="RecipeReveal_Click"
+                                            ToolTip="{l:T Cr2wJsonWindow.ShowHighlightedResultsAll}" />
+                                    <TextBlock Text="{l:T Cr2wJsonWindow.Results}" Style="{StaticResource Heading}" VerticalAlignment="Center" />
+                                    <StackPanel VerticalAlignment="Center" Margin="16,0,12,0">
+                                        <TextBlock x:Name="RecipeStatus" Opacity="0.75" TextTrimming="CharacterEllipsis" />
+                                        <ProgressBar x:Name="RecipeProgress" Height="4" Margin="0,4,0,0" Visibility="Collapsed" />
+                                    </StackPanel>
+                                </DockPanel>
+                                <ListBox x:Name="RecipeResults" ItemTemplate="{StaticResource ResultRow}" SelectionMode="Extended"
+                                         MouseDoubleClick="Results_DoubleClick" ScrollViewer.HorizontalScrollBarVisibility="Disabled" />
+                            </DockPanel>
+                        </Border>
+                    </Grid>
                 </TabItem>
             </TabControl>
         </Grid>

@@ -36,6 +36,9 @@ public sealed class Settings
     public string Cr2wJsonOutput { get; set; } = "";
     public bool Cr2wJsonRecursive { get; set; } = true;
 
+    /// <summary>Where the CR2W and JSON window keeps its saved recipes; empty for %AppData%\W3ModWorkbench\recipes.</summary>
+    public string Cr2wRecipesFolder { get; set; } = "";
+
     /// <summary>Folders (ending in a backslash) and files bookmarked in the asset browser, by game path.</summary>
     public List<string> AssetBookmarks { get; set; } = [];
 

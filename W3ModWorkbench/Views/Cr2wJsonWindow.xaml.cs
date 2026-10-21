@@ -41,8 +41,18 @@ public sealed class Cr2wPathNode
     public List<Cr2wPathNode> Children { get; init; } = [];
 }
 
-/// <summary>A bulk edit waiting in the list, with how it reads.</summary>
-public sealed record Cr2wEditRow(Cr2wBulkEdit Edit, string Description);
+/// <summary>A bulk edit waiting in the list, with how it reads, and for a copy the file it copies from.</summary>
+public sealed record Cr2wEditRow(Cr2wBulkEdit Edit, string Description, string? Source = null);
+
+/// <summary>A saved recipe in the list: its name, and what it does in a line.</summary>
+public sealed class Cr2wRecipeRow(Cr2wRecipe recipe, string summary)
+{
+    public Cr2wRecipe Recipe { get; } = recipe;
+    public string Name => Recipe.Name;
+    public string Summary { get; } = summary;
+    public string Glyph => Recipe.Kind == Cr2wRecipeKind.Edit ? "" : "";
+    public string Tip => Recipe.FilePath ?? Recipe.Name;
+}
 
 /// <summary>
 /// Converts CR2W files to JSON and back, many at once, and makes the same edit to many files: a value copied from
@@ -54,6 +64,7 @@ public partial class Cr2wJsonWindow : Window, IMessageHost
     private readonly ObservableCollection<Cr2wInputRow> _convertInputs = [];
     private readonly ObservableCollection<Cr2wInputRow> _bulkInputs = [];
     private readonly ObservableCollection<Cr2wEditRow> _edits = [];
+    private readonly ObservableCollection<Cr2wRecipeRow> _recipes = [];
     private CancellationTokenSource? _cts;
 
     private Cr2wJsonWindow()
@@ -62,11 +73,18 @@ public partial class Cr2wJsonWindow : Window, IMessageHost
         ConvertList.ItemsSource = _convertInputs;
         BulkList.ItemsSource = _bulkInputs;
         EditsList.ItemsSource = _edits;
+        RecipeList.ItemsSource = _recipes;
         var settings = App.Settings;
         ConvertOutputBox.Text = BulkOutputBox.Text = settings.Cr2wJsonOutput;
         ConvertFolderRadio.IsChecked = settings.Cr2wJsonOutput.Length > 0;
         ConvertRecursiveCheck.IsChecked = BulkRecursiveCheck.IsChecked = settings.Cr2wJsonRecursive;
         Kind_Changed(this, null!);
+        LoadRecipes();
+        // the recipes folder may have been changed in Settings meanwhile
+        Activated += (_, _) =>
+        {
+            if (!RecipesFolder.Equals(_recipesFolder, StringComparison.OrdinalIgnoreCase)) LoadRecipes();
+        };
         Closed += (_, _) =>
         {
             _cts?.Cancel();
@@ -162,6 +180,11 @@ public partial class Cr2wJsonWindow : Window, IMessageHost
     private void Window_Drop(object sender, DragEventArgs e)
     {
         if (e.Data.GetData(DataFormats.FileDrop) is not string[] paths) return;
+        if (Tabs.SelectedIndex == 2)
+        {
+            ImportRecipes(paths.Where(p => p.EndsWith(Cr2wRecipe.Extension, StringComparison.OrdinalIgnoreCase)));
+            return;
+        }
         // dropped on the source box: that's the file to copy from
         if (Tabs.SelectedIndex == 1 && IsInside(e.OriginalSource as DependencyObject, SourceBox) && paths.Length == 1)
         {
@@ -234,11 +257,11 @@ public partial class Cr2wJsonWindow : Window, IMessageHost
 
     /// <summary>Runs a batch in the background with its progress shown, then lists what happened to each file.</summary>
     private async Task RunAsync(Button start, Button stop, ProgressBar bar, TextBlock status, ListBox results, bool dryRun, string doing,
-        Func<IProgress<Cr2wJsonProgress>, CancellationToken, List<Cr2wJsonResult>?> work, string noneFound)
+        Func<IProgress<Cr2wJsonProgress>, CancellationToken, List<Cr2wJsonResult>?> work, string noneFound, Action? done = null)
     {
         _cts = new CancellationTokenSource();
         var token = _cts.Token;
-        start.IsEnabled = CheckButton.IsEnabled = ApplyButton.IsEnabled = ConvertButton.IsEnabled = false;
+        start.IsEnabled = CheckButton.IsEnabled = ApplyButton.IsEnabled = ConvertButton.IsEnabled = RecipeRunButton.IsEnabled = RecipeCheckButton.IsEnabled = false;
         stop.Visibility = Visibility.Visible;
         bar.Visibility = Visibility.Visible;
         bar.IsIndeterminate = true;
@@ -260,22 +283,29 @@ public partial class Cr2wJsonWindow : Window, IMessageHost
                 status.Text = noneFound;
                 return;
             }
+            done?.Invoke();
             // failures first, then what was skipped, then the rest, each in the order the files were found
             results.ItemsSource = list.Select((r, i) => (Row: new Cr2wResultRow(r, dryRun), i))
                 .OrderBy(x => x.Row.Result.Ok ? x.Row.Result.Output is null ? 1 : 2 : 0).ThenBy(x => x.i).Select(x => x.Row).ToList();
-            int failed = list.Count(r => !r.Ok), skipped = list.Count(r => r.Ok && r.Output is null), done = list.Count - failed - skipped;
-            string verb = dryRun ? L.T("Cr2wJsonWindow.WouldSaved") : "saved";
-            status.Text = L.T("Cr2wJsonWindow.S", done, verb, (skipped > 0 ? L.T("Cr2wJsonWindow.Unchanged", skipped) : ""), (failed > 0 ? L.T("Cr2wJsonWindow.Failed", failed) : ""), (token.IsCancellationRequested ? L.T("Cr2wJsonWindow.Stopped") : ""), clock.Elapsed.TotalSeconds);
+            int failed = list.Count(r => !r.Ok), skipped = list.Count(r => r.Ok && r.Output is null), doneCount = list.Count - failed - skipped;
+            string verb = dryRun ? L.T("Cr2wJsonWindow.WouldSaved") : L.T("Cr2wJsonWindow.Saved");
+            status.Text = L.T("Cr2wJsonWindow.S", doneCount, verb, (skipped > 0 ? L.T("Cr2wJsonWindow.Unchanged", skipped) : ""), (failed > 0 ? L.T("Cr2wJsonWindow.Failed", failed) : ""), (token.IsCancellationRequested ? L.T("Cr2wJsonWindow.Stopped") : ""), clock.Elapsed.TotalSeconds);
         }
         catch (OperationCanceledException)
         {
             status.Text = L.T("Cr2wJsonWindow.Stopped2");
         }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or FormatException)
+        {
+            // a recipe whose copy source has gone, say
+            status.Text = ex.Message;
+        }
         finally
         {
             _cts.Dispose();
             _cts = null;
-            start.IsEnabled = CheckButton.IsEnabled = ApplyButton.IsEnabled = ConvertButton.IsEnabled = true;
+            start.IsEnabled = CheckButton.IsEnabled = ApplyButton.IsEnabled = ConvertButton.IsEnabled = RecipeRunButton.IsEnabled = true;
+            RecipeCheckButton.IsEnabled = SelectedRecipe?.Kind == Cr2wRecipeKind.Edit;
             stop.Visibility = Visibility.Collapsed;
             bar.Visibility = Visibility.Collapsed;
         }
@@ -290,6 +320,7 @@ public partial class Cr2wJsonWindow : Window, IMessageHost
 
     private void ConvertReveal_Click(object sender, RoutedEventArgs e) => Reveal(ConvertResults);
     private void BulkReveal_Click(object sender, RoutedEventArgs e) => Reveal(BulkResults);
+    private void RecipeReveal_Click(object sender, RoutedEventArgs e) => Reveal(RecipeResults);
 
     private static void Reveal(ListBox results)
     {
@@ -424,7 +455,8 @@ public partial class Cr2wJsonWindow : Window, IMessageHost
         try
         {
             var edit = MakeEdit();
-            _edits.Add(new Cr2wEditRow(edit, Describe(edit)));
+            string? source = edit.Kind == BulkEditKind.Copy ? Path.GetFullPath(SourceBox.Text.Trim()) : null;
+            _edits.Add(new Cr2wEditRow(edit, Describe(Cr2wRecipeEdit.From(edit, source)), source));
             PickerPanel.Visibility = Visibility.Collapsed;
         }
         catch (Exception ex) when (ex is FormatException or IOException or InvalidDataException or UnauthorizedAccessException)
@@ -478,13 +510,14 @@ public partial class Cr2wJsonWindow : Window, IMessageHost
         }
     }
 
-    private string Describe(Cr2wBulkEdit edit)
+    /// <summary>An edit in a line, as the list and a recipe's steps show it.</summary>
+    private static string Describe(Cr2wRecipeEdit edit)
     {
         string where = edit.ClassName.Length > 0 ? L.T("Cr2wJsonWindow.In", edit.ClassName) : "";
         string fields = edit.Fields.Count > 0 ? L.T("Cr2wJsonWindow.In2", string.Join(", ", edit.Fields)) : "";
         return edit.Kind switch
         {
-            BulkEditKind.Copy => L.T("Cr2wJsonWindow.Copy", edit.Path, Path.GetFileName(SourceBox.Text.Trim()), where),
+            BulkEditKind.Copy => L.T("Cr2wJsonWindow.Copy", edit.Path, Path.GetFileName(edit.Source ?? ""), where),
             BulkEditKind.Set => L.T("Cr2wJsonWindow.SetTo", edit.Path, Shorten(edit.Value?.ToJsonString() ?? "null"), where),
             BulkEditKind.Remove => L.T("Cr2wJsonWindow.Remove", edit.Path, where),
             BulkEditKind.Scale => L.T("Cr2wJsonWindow.MultiplyNumbersUnder", edit.Path, fields, edit.Amount.ToString(CultureInfo.InvariantCulture), where),
@@ -525,10 +558,474 @@ public partial class Cr2wJsonWindow : Window, IMessageHost
         await RunAsync(ApplyButton, BulkStopButton, BulkProgress, BulkStatus, BulkResults, dryRun, dryRun ? L.T("Cr2wJsonWindow.Checking") : L.T("Cr2wJsonWindow.Editing"), (progress, token) =>
         {
             // CR2W files and converted JSON files alike
-            var inputs = Cr2wJsonBatch.Inputs(paths, fromJson: false, recursive);
-            inputs.AddRange(Cr2wJsonBatch.Inputs(paths.Where(Directory.Exists), fromJson: true, recursive).Where(j => !inputs.Any(i => i.File.Equals(j.File, StringComparison.OrdinalIgnoreCase))));
+            var inputs = Cr2wRecipe.EditInputs(paths, recursive);
             return inputs.Count == 0 ? null : Cr2wJsonBatch.BulkEdit(inputs, edits, output, progress, token, dryRun);
         }, L.T("Cr2wJsonWindow.NoCR2WConvertedJson"));
+    }
+
+    // ---------------------------------------------------------------- recipes
+
+    private static string RecipesFolder => Cr2wRecipe.Folder(App.Settings.Cr2wRecipesFolder);
+
+    /// <summary>The folder the recipes list was read from.</summary>
+    private string _recipesFolder = "";
+
+    private Cr2wRecipe? SelectedRecipe => (RecipeList.SelectedItem as Cr2wRecipeRow)?.Recipe;
+
+    /// <summary>Reads the recipes folder again, keeping the recipe that was selected (or selecting <paramref name="select"/>).</summary>
+    private void LoadRecipes(string? select = null)
+    {
+        select ??= SelectedRecipe?.FilePath;
+        _recipesFolder = RecipesFolder;
+        _recipes.Clear();
+        foreach (var recipe in Cr2wRecipe.LoadAll(RecipesFolder)) _recipes.Add(new Cr2wRecipeRow(recipe, Summary(recipe)));
+        RecipesEmpty.Visibility = _recipes.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        RecipeList.SelectedItem = _recipes.FirstOrDefault(r => r.Recipe.FilePath?.Equals(select, StringComparison.OrdinalIgnoreCase) == true);
+        ShowRecipe();
+    }
+
+    private static string KindName(Cr2wRecipeKind kind) => kind switch
+    {
+        Cr2wRecipeKind.FromJson => L.T("Cr2wJsonWindow.JsonBackCR2W"),
+        Cr2wRecipeKind.Resave => L.T("Cr2wJsonWindow.ResaveVersion"),
+        Cr2wRecipeKind.Edit => L.T("Cr2wJsonWindow.BulkEdit"),
+        _ => L.T("Cr2wJsonWindow.CR2WJson2"),
+    };
+
+    /// <summary>A recipe in a line for the list: what it does, and to how many files and folders.</summary>
+    private static string Summary(Cr2wRecipe recipe)
+    {
+        var parts = new List<string> { KindName(recipe.Kind) };
+        if (recipe.Kind == Cr2wRecipeKind.Edit) parts.Add(L.T("Count.Edit", recipe.Edits.Count));
+        parts.Add(L.T("Count.FileOrFolder", recipe.Inputs.Count));
+        return string.Join("  ·  ", parts);
+    }
+
+    /// <summary>
+    /// The recipe's steps as aligned text for the steps box: a label column (what, files, save to, options, last run)
+    /// with the values lined up after it, then the edits, each its action and path with the details under them.
+    /// The columns are as wide as the longest label, so they stay aligned in any language.
+    /// </summary>
+    private static string Steps(Cr2wRecipe recipe)
+    {
+        static string Label(string key) => L.T(key).ToUpper(CultureInfo.CurrentUICulture);
+        var rows = new List<(string Label, string Value)> { (Label("Cr2wJsonWindow.StepWhat"), KindName(recipe.Kind)) };
+        for (int i = 0; i < recipe.Inputs.Count; i++) rows.Add((i == 0 ? Label("Cr2wJsonWindow.StepFiles") : "", recipe.Inputs[i]));
+        if (recipe.Recursive) rows.Add(("", L.T("Cr2wJsonWindow.StepSubfolders")));
+        rows.Add((Label("Cr2wJsonWindow.StepSaveTo"), !string.IsNullOrWhiteSpace(recipe.Output) ? recipe.Output
+            : recipe.Kind == Cr2wRecipeKind.Edit ? L.T("Cr2wJsonWindow.StepOverFiles") : L.T("Cr2wJsonWindow.StepBeside")));
+        var options = new List<string>();
+        if (recipe.Overwrite && recipe.Kind != Cr2wRecipeKind.Edit) options.Add(L.T("Cr2wJsonWindow.StepOverwrite"));
+        if (recipe.AsLatest && recipe.Kind == Cr2wRecipeKind.FromJson) options.Add(L.T("Cr2wJsonWindow.StepAs164"));
+        for (int i = 0; i < options.Count; i++) rows.Add((i == 0 ? Label("Cr2wJsonWindow.StepOptions") : "", options[i]));
+        rows.Add((Label("Cr2wJsonWindow.StepLastRun"), recipe.LastRun is { } ran ? ran.ToString("g", CultureInfo.CurrentCulture) : L.T("Cr2wJsonWindow.StepNeverRun")));
+
+        int labelWidth = rows.Max(r => r.Label.Length) + 3;
+        var s = new System.Text.StringBuilder();
+        foreach (var (label, value) in rows) s.Append(label.PadRight(labelWidth)).AppendLine(value);
+        if (recipe.Kind != Cr2wRecipeKind.Edit || recipe.Edits.Count == 0) return s.ToString().TrimEnd();
+
+        // each edit: its number, its action and its path, then its details a line each under the path
+        var edits = recipe.Edits.Select(e => (Action: L.T(e.Kind switch
+        {
+            BulkEditKind.Copy => "Cr2wJsonWindow.StepCopy",
+            BulkEditKind.Set => "Cr2wJsonWindow.StepSet",
+            BulkEditKind.Remove => "Cr2wJsonWindow.StepRemove",
+            BulkEditKind.Scale => "Cr2wJsonWindow.StepMultiply",
+            _ => "Cr2wJsonWindow.StepAdd",
+        }), Edit: e, Details: EditDetails(e))).ToList();
+        int number = recipe.Edits.Count.ToString(CultureInfo.InvariantCulture).Length;
+        int actionWidth = edits.Max(e => e.Action.Length) + 2;
+        int detailWidth = edits.SelectMany(e => e.Details).Select(d => d.Label.Length).DefaultIfEmpty(0).Max() + 3;
+        string indent = new(' ', 2 + number + 2 + actionWidth);
+        s.AppendLine().AppendLine(Label("Cr2wJsonWindow.StepEdits"));
+        for (int i = 0; i < edits.Count; i++)
+        {
+            s.Append("  ").Append((i + 1).ToString(CultureInfo.CurrentCulture).PadLeft(number)).Append("  ")
+                .Append(edits[i].Action.PadRight(actionWidth)).AppendLine(edits[i].Edit.Path);
+            foreach (var (label, value) in edits[i].Details) s.Append(indent).Append(label.PadRight(detailWidth)).AppendLine(value);
+        }
+        return s.ToString().TrimEnd();
+    }
+
+    /// <summary>What an edit needs besides its path, as labelled lines: where it copies from, the value, the amount, the properties, the class.</summary>
+    private static List<(string Label, string Value)> EditDetails(Cr2wRecipeEdit edit)
+    {
+        var details = new List<(string, string)>();
+        switch (edit.Kind)
+        {
+            case BulkEditKind.Copy: details.Add((L.T("Cr2wJsonWindow.StepFrom"), edit.Source ?? "")); break;
+            case BulkEditKind.Set: details.Add((L.T("Cr2wJsonWindow.StepTo"), edit.Value?.ToJsonString() ?? "null")); break;
+            case BulkEditKind.Scale: details.Add((L.T("Cr2wJsonWindow.StepBy"), Cr2wRecipe.Number(edit.Amount))); break;
+            case BulkEditKind.Offset: details.Add((L.T("Cr2wJsonWindow.StepAmount"), Cr2wRecipe.Number(edit.Amount))); break;
+        }
+        if (edit.Kind is BulkEditKind.Scale or BulkEditKind.Offset && edit.Fields.Count > 0) details.Add((L.T("Cr2wJsonWindow.StepIn"), string.Join(", ", edit.Fields)));
+        if (edit.ClassName.Length > 0) details.Add((L.T("Cr2wJsonWindow.StepOnly"), edit.ClassName));
+        return details;
+    }
+
+    private void RecipeList_SelectionChanged(object sender, SelectionChangedEventArgs e) => ShowRecipe();
+
+    private void ShowRecipe()
+    {
+        var recipe = SelectedRecipe;
+        RecipeDetails.Visibility = RecipeActions.Visibility = recipe is null ? Visibility.Collapsed : Visibility.Visible;
+        RecipeNone.Visibility = recipe is null && _recipes.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        if (recipe is null) return;
+        RecipeNameBox.Text = recipe.Name;
+        RecipeNotesBox.Text = recipe.Notes;
+        RecipeStepsText.Text = Steps(recipe);
+        RecipeStepsScroller.ScrollToHome();
+        var problems = recipe.Problems();
+        RecipeProblemsText.Text = string.Join("\n", problems);
+        RecipeProblemsText.Visibility = problems.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        RecipeCheckButton.IsEnabled = recipe.Kind == Cr2wRecipeKind.Edit && _cts is null;
+        RecipeCheckButton.Visibility = recipe.Kind == Cr2wRecipeKind.Edit ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    /// <summary>Saves a recipe made from a tab's form, and shows it in the recipes tab with its name ready to change.</summary>
+    private void AddRecipe(Cr2wRecipe recipe)
+    {
+        recipe.Name = Cr2wRecipe.UniqueName(recipe.Name, _recipes.Select(r => r.Recipe));
+        if (!TrySave(recipe)) return;
+        LoadRecipes(recipe.FilePath);
+        Tabs.SelectedIndex = 2;
+        RecipeStatus.Text = L.T("Cr2wJsonWindow.RecipeSaved", recipe.Name);
+        Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Input, () =>
+        {
+            RecipeNameBox.Focus();
+            RecipeNameBox.SelectAll();
+        });
+    }
+
+    private bool TrySave(Cr2wRecipe recipe)
+    {
+        try
+        {
+            recipe.Save(RecipesFolder);
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        {
+            _ = ShowMessage(L.T("Cr2wJsonWindow.RecipeCantSave"), ex.Message, MessageKind.Warning);
+            return false;
+        }
+    }
+
+    /// <summary>A name for a new recipe: what it does, and the first file or folder it works on.</summary>
+    private static string DefaultName(Cr2wRecipeKind kind, IEnumerable<string> inputs) =>
+        inputs.FirstOrDefault() is { } first ? L.T("Cr2wJsonWindow.RecipeDefaultName", KindName(kind), Path.GetFileName(first.TrimEnd('\\', '/')) is { Length: > 0 } name ? name : first) : KindName(kind);
+
+    private void ConvertSaveRecipe_Click(object sender, RoutedEventArgs e)
+    {
+        if (_convertInputs.Count == 0)
+        {
+            _ = ShowMessage(L.T("Cr2wJsonWindow.NothingSaveRecipe"), L.T("Cr2wJsonWindow.AddFilesFoldersFirst"), MessageKind.Info);
+            return;
+        }
+        string? output = OutputFolder(ConvertFolderRadio, ConvertOutputBox);
+        if (output == "") return;
+        var kind = ResaveRadio.IsChecked == true ? Cr2wRecipeKind.Resave : FromJsonRadio.IsChecked == true ? Cr2wRecipeKind.FromJson : Cr2wRecipeKind.ToJson;
+        var inputs = _convertInputs.Select(r => Path.GetFullPath(r.Path)).ToList();
+        AddRecipe(new Cr2wRecipe
+        {
+            Name = DefaultName(kind, inputs),
+            Kind = kind,
+            Inputs = inputs,
+            Recursive = ConvertRecursiveCheck.IsChecked == true,
+            Overwrite = OverwriteCheck.IsChecked == true,
+            AsLatest = kind == Cr2wRecipeKind.FromJson && AsLatestCheck.IsChecked == true,
+            Output = output,
+        });
+    }
+
+    private void BulkSaveRecipe_Click(object sender, RoutedEventArgs e)
+    {
+        if (_bulkInputs.Count == 0)
+        {
+            _ = ShowMessage(L.T("Cr2wJsonWindow.NothingSaveRecipe"), L.T("Cr2wJsonWindow.AddFilesFoldersEdit"), MessageKind.Info);
+            return;
+        }
+        var edits = _edits.Select(r => Cr2wRecipeEdit.From(r.Edit, r.Source)).ToList();
+        if (edits.Count == 0)
+        {
+            // the edit in the boxes, when it hasn't been added to the list
+            try
+            {
+                var edit = MakeEdit();
+                edits.Add(Cr2wRecipeEdit.From(edit, edit.Kind == BulkEditKind.Copy ? Path.GetFullPath(SourceBox.Text.Trim()) : null));
+            }
+            catch (Exception ex) when (ex is FormatException or IOException or InvalidDataException or UnauthorizedAccessException)
+            {
+                _ = ShowMessage(L.T("Cr2wJsonWindow.NoEditsMake"), L.T("Cr2wJsonWindow.AddEditListFirst", ex.Message), MessageKind.Info);
+                return;
+            }
+        }
+        string? output = OutputFolder(BulkFolderRadio, BulkOutputBox);
+        if (output == "") return;
+        var inputs = _bulkInputs.Select(r => Path.GetFullPath(r.Path)).ToList();
+        AddRecipe(new Cr2wRecipe
+        {
+            Name = DefaultName(Cr2wRecipeKind.Edit, inputs),
+            Kind = Cr2wRecipeKind.Edit,
+            Inputs = inputs,
+            Recursive = BulkRecursiveCheck.IsChecked == true,
+            Output = output,
+            Edits = edits,
+        });
+    }
+
+    /// <summary>The name and notes are saved as they're left; a new name renames the file.</summary>
+    private void RecipeText_LostFocus(object sender, KeyboardFocusChangedEventArgs e) => SaveRecipeText();
+
+    private void RecipeNameBox_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter) return;
+        SaveRecipeText();
+        e.Handled = true;
+    }
+
+    private void SaveRecipeText()
+    {
+        if (SelectedRecipe is not { } recipe) return;
+        string name = RecipeNameBox.Text.Trim(), notes = RecipeNotesBox.Text.TrimEnd();
+        if (name.Length == 0) name = recipe.Name;
+        if (name == recipe.Name && notes == recipe.Notes) return;
+        if (name != recipe.Name) name = Cr2wRecipe.UniqueName(name, _recipes.Select(r => r.Recipe).Where(r => r != recipe));
+        recipe.Name = name;
+        recipe.Notes = notes;
+        if (TrySave(recipe)) LoadRecipes(recipe.FilePath);
+    }
+
+    private void RecipeRun_Click(object sender, RoutedEventArgs e) => _ = RunRecipeAsync(dryRun: false);
+    private void RecipeCheck_Click(object sender, RoutedEventArgs e) => _ = RunRecipeAsync(dryRun: true);
+
+    private void RecipeList_DoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        if (e.OriginalSource is DependencyObject source && ItemsControl.ContainerFromElement(RecipeList, source) is ListBoxItem) _ = RunRecipeAsync(dryRun: false);
+    }
+
+    private async Task RunRecipeAsync(bool dryRun)
+    {
+        if (_cts is not null || SelectedRecipe is not { } recipe) return;
+        SaveRecipeText();
+        if (!dryRun && recipe.Kind == Cr2wRecipeKind.Edit && string.IsNullOrWhiteSpace(recipe.Output) && !await Message.Show(L.T("Cr2wJsonWindow.SaveOverFiles"),
+                L.T("Cr2wJsonWindow.EditsSavedIntoFiles"),
+                MessageKind.Question, primary: L.T("Cr2wJsonWindow.SaveOverThem"), secondary: L.T("Common.Cancel")))
+            return;
+        string doing = dryRun ? L.T("Cr2wJsonWindow.Checking") : recipe.Kind switch
+        {
+            Cr2wRecipeKind.Edit => L.T("Cr2wJsonWindow.Editing"),
+            Cr2wRecipeKind.Resave => L.T("Cr2wJsonWindow.Resaving"),
+            Cr2wRecipeKind.FromJson => L.T("Cr2wJsonWindow.ConvertingBack"),
+            _ => L.T("Cr2wJsonWindow.Converting"),
+        };
+        string noneFound = recipe.Kind switch
+        {
+            Cr2wRecipeKind.Edit => L.T("Cr2wJsonWindow.NoCR2WConvertedJson"),
+            Cr2wRecipeKind.FromJson => L.T("Cr2wJsonWindow.NoJsonFilesMade"),
+            _ => L.T("Cr2wJsonWindow.NoCR2WFilesWere"),
+        };
+        await RunAsync(RecipeRunButton, RecipeStopButton, RecipeProgress, RecipeStatus, RecipeResults, dryRun, doing,
+            (progress, token) => recipe.Run(progress, token, dryRun), noneFound, () =>
+            {
+                if (dryRun) return;
+                recipe.LastRun = DateTime.Now;
+                // only when it was the last run that changed: a failed save says so, and this isn't worth a message
+                try { recipe.Save(RecipesFolder); }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+                if (RecipeList.SelectedItem is Cr2wRecipeRow row && row.Recipe == recipe)
+                {
+                    int index = _recipes.IndexOf(row);
+                    _recipes[index] = new Cr2wRecipeRow(recipe, Summary(recipe));
+                    RecipeList.SelectedIndex = index;
+                }
+            });
+    }
+
+    /// <summary>Puts the recipe back in its tab's form, to change it or run it from there.</summary>
+    private async void RecipeLoad_Click(object sender, RoutedEventArgs e)
+    {
+        if (SelectedRecipe is not { } recipe) return;
+        if (recipe.Kind != Cr2wRecipeKind.Edit)
+        {
+            _convertInputs.Clear();
+            Add(_convertInputs, recipe.Inputs);
+            (recipe.Kind switch { Cr2wRecipeKind.FromJson => FromJsonRadio, Cr2wRecipeKind.Resave => ResaveRadio, _ => ToJsonRadio }).IsChecked = true;
+            AsLatestCheck.IsChecked = recipe.AsLatest;
+            ConvertRecursiveCheck.IsChecked = recipe.Recursive;
+            OverwriteCheck.IsChecked = recipe.Overwrite;
+            SetOutput(ConvertFolderRadio, ConvertBesideRadio, ConvertOutputBox, recipe.Output);
+            Tabs.SelectedIndex = 0;
+            return;
+        }
+        var rows = new List<Cr2wEditRow>();
+        var failed = new List<string>();
+        foreach (var saved in recipe.Edits)
+        {
+            try { rows.Add(new Cr2wEditRow(saved.ToEdit(), Describe(saved), saved.Source)); }
+            catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or FormatException)
+            {
+                failed.Add($"{Describe(saved)}: {ex.Message}");
+            }
+        }
+        _bulkInputs.Clear();
+        Add(_bulkInputs, recipe.Inputs);
+        _edits.Clear();
+        foreach (var row in rows) _edits.Add(row);
+        BulkRecursiveCheck.IsChecked = recipe.Recursive;
+        SetOutput(BulkFolderRadio, BulkInPlaceRadio, BulkOutputBox, recipe.Output);
+        Tabs.SelectedIndex = 1;
+        if (failed.Count > 0)
+            await ShowMessage(L.T("Cr2wJsonWindow.RecipeEditsNotLoaded", failed.Count), string.Join("\n\n", failed), MessageKind.Warning);
+    }
+
+    private static void SetOutput(RadioButton intoFolder, RadioButton other, TextBox box, string? output)
+    {
+        if (string.IsNullOrWhiteSpace(output)) other.IsChecked = true;
+        else
+        {
+            intoFolder.IsChecked = true;
+            box.Text = output;
+        }
+    }
+
+    private void RecipePython_Click(object sender, RoutedEventArgs e) => Export(python: true);
+    private void RecipeBatch_Click(object sender, RoutedEventArgs e) => Export(python: false);
+
+    /// <summary>Writes the recipe as a Python script or a batch file that runs this copy of the app.</summary>
+    private async void Export(bool python)
+    {
+        if (SelectedRecipe is not { } recipe) return;
+        SaveRecipeText();
+        var dialog = new SaveFileDialog
+        {
+            Title = python ? L.T("Cr2wJsonWindow.RecipeExportPythonTitle") : L.T("Cr2wJsonWindow.RecipeExportBatchTitle"),
+            Filter = python ? L.T("Cr2wJsonWindow.PythonFilter") : L.T("Cr2wJsonWindow.BatchFilter"),
+            FileName = ScriptName(recipe.Name) + (python ? ".py" : ".bat"),
+            InitialDirectory = Directory.Exists(RecipesFolder) ? RecipesFolder : "",
+        };
+        if (dialog.ShowDialog(this) != true) return;
+        string program = Environment.ProcessPath ?? Path.Combine(AppContext.BaseDirectory, "W3ModWorkbench.exe");
+        try
+        {
+            string text = python ? Cr2wRecipeExport.ToPython(recipe, program) : Cr2wRecipeExport.ToBatch(recipe, program);
+            await File.WriteAllTextAsync(dialog.FileName, text, new System.Text.UTF8Encoding(false));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            await ShowMessage(L.T("Cr2wJsonWindow.RecipeCantExport"), ex.Message, MessageKind.Warning);
+            return;
+        }
+        if (await Message.Show(L.T("Cr2wJsonWindow.RecipeExported", Path.GetFileName(dialog.FileName)),
+                python ? L.T("Cr2wJsonWindow.RecipeExportedPython") : L.T("Cr2wJsonWindow.RecipeExportedBatch"),
+                MessageKind.Info, primary: L.T("Common.ShowExplorer"), secondary: L.T("Common.OK")))
+            ShellReveal.Show([dialog.FileName]);
+    }
+
+    /// <summary>A recipe's name as a script's file name: letters, digits and underscores.</summary>
+    private static string ScriptName(string name)
+    {
+        string result = new([.. name.Select(c => char.IsLetterOrDigit(c) ? char.ToLowerInvariant(c) : '_')]);
+        while (result.Contains("__")) result = result.Replace("__", "_");
+        result = result.Trim('_');
+        return result.Length == 0 ? "recipe" : result;
+    }
+
+    /// <summary>The recipe's command line, to paste into a terminal or a script of one's own.</summary>
+    private void RecipeCopyCommand_Click(object sender, RoutedEventArgs e)
+    {
+        if (SelectedRecipe is not { } recipe) return;
+        string program = Environment.ProcessPath ?? "W3ModWorkbench.exe";
+        string command = string.Join(" ", new[] { program }.Concat(Cr2wRecipeExport.Arguments(recipe)).Select(Cr2wRecipeExport.Cmd));
+        try
+        {
+            Clipboard.SetText(command);
+            RecipeStatus.Text = L.T("Common.CopiedClipboard");
+        }
+        catch (System.Runtime.InteropServices.ExternalException ex) { RecipeStatus.Text = ex.Message; }
+    }
+
+    private async void RecipeDelete_Click(object sender, RoutedEventArgs e)
+    {
+        if (SelectedRecipe is not { } recipe) return;
+        if (!await Message.Show(L.T("Cr2wJsonWindow.RecipeDeleteTitle", recipe.Name), L.T("Cr2wJsonWindow.RecipeDeleteMessage"),
+                MessageKind.Question, primary: L.T("Cr2wJsonWindow.RecipeDelete"), secondary: L.T("Common.Cancel")))
+            return;
+        try { recipe.Delete(); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            await ShowMessage(L.T("Cr2wJsonWindow.RecipeCantDelete"), ex.Message, MessageKind.Warning);
+            return;
+        }
+        int index = RecipeList.SelectedIndex;
+        LoadRecipes();
+        if (_recipes.Count > 0) RecipeList.SelectedIndex = Math.Min(index, _recipes.Count - 1);
+    }
+
+    private void RecipeList_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Delete) RecipeDelete_Click(sender, e);
+        else if (e.Key == Key.F2)
+        {
+            RecipeNameBox.Focus();
+            RecipeNameBox.SelectAll();
+        }
+        else if (e.Key == Key.Enter) _ = RunRecipeAsync(dryRun: false);
+        else return;
+        e.Handled = true;
+    }
+
+    private void RecipeFolder_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            Directory.CreateDirectory(RecipesFolder);
+            ShellReveal.Show([SelectedRecipe?.FilePath ?? RecipesFolder]);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        {
+            _ = ShowMessage(L.T("Cr2wJsonWindow.FolderCantUsed"), ex.Message, MessageKind.Warning);
+        }
+    }
+
+    private void RecipeImport_Click(object sender, RoutedEventArgs e)
+    {
+        if (PickFiles(L.T("Cr2wJsonWindow.RecipeImportTitle"), L.T("Cr2wJsonWindow.RecipeFilter")) is { } files) ImportRecipes(files);
+    }
+
+    /// <summary>Copies recipe files (someone else's, or kept elsewhere) into the recipes folder.</summary>
+    private void ImportRecipes(IEnumerable<string> files)
+    {
+        string? last = null;
+        var failed = new List<string>();
+        foreach (string file in files)
+        {
+            try
+            {
+                var recipe = Cr2wRecipe.Load(file);
+                if (Path.GetDirectoryName(recipe.FilePath)?.Equals(Path.GetFullPath(RecipesFolder).TrimEnd('\\'), StringComparison.OrdinalIgnoreCase) == true)
+                {
+                    last = recipe.FilePath;
+                    continue;
+                }
+                // a new recipe rather than the one read, which saving would move out of where it came from
+                var fresh = new Cr2wRecipe
+                {
+                    Name = Cr2wRecipe.UniqueName(recipe.Name, _recipes.Select(r => r.Recipe)), Notes = recipe.Notes, Kind = recipe.Kind, Inputs = recipe.Inputs,
+                    Recursive = recipe.Recursive, Overwrite = recipe.Overwrite, AsLatest = recipe.AsLatest, Output = recipe.Output, Edits = recipe.Edits, LastRun = recipe.LastRun,
+                };
+                fresh.Save(RecipesFolder);
+                last = fresh.FilePath;
+                _recipes.Add(new Cr2wRecipeRow(fresh, Summary(fresh)));
+            }
+            catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
+            {
+                failed.Add($"{Path.GetFileName(file)}: {ex.Message}");
+            }
+        }
+        LoadRecipes(last);
+        if (failed.Count > 0) _ = ShowMessage(L.T("Cr2wJsonWindow.RecipeImportFailed", failed.Count), string.Join("\n\n", failed), MessageKind.Warning);
     }
 
     // ---------------------------------------------------------------- window

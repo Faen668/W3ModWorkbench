@@ -13,25 +13,38 @@ namespace W3ModWorkbench;
 /// W3ModWorkbench.exe --to-json   &lt;files or folders…&gt; [--out folder] [--recursive] [--overwrite]
 /// W3ModWorkbench.exe --from-json &lt;files or folders…&gt; [--out folder] [--recursive] [--overwrite] [--as-164]
 /// W3ModWorkbench.exe --resave-164 &lt;files or folders…&gt; [--out folder] [--recursive] [--overwrite]
-/// W3ModWorkbench.exe --edit      &lt;files or folders…&gt; edits… [--class name] [--out folder] [--recursive]
+/// W3ModWorkbench.exe --edit      &lt;files or folders…&gt; edits… [--class name] [--out folder] [--recursive] [--check]
 ///   edits: --copy &lt;source file&gt; &lt;path&gt;   --set &lt;path&gt; &lt;json&gt;   --remove &lt;path&gt;
 ///          --scale &lt;path&gt; &lt;factor&gt;   --offset &lt;path&gt; &lt;amount&gt;   (--fields a,b after a scale or offset)
+///          --only-class &lt;name&gt; after an edit: that edit only to objects of the class
+/// W3ModWorkbench.exe --recipe    &lt;recipe file&gt; [--check]
 /// </code>
 /// </summary>
 public static class CommandLine
 {
-    private static readonly string[] Commands = ["--to-json", "--from-json", "--resave-164", "--edit", "--help-json"];
+    private static readonly string[] Commands = ["--to-json", "--from-json", "--resave-164", "--edit", "--recipe", "--help-json"];
 
     public static bool Handles(string[] args) => args.Length > 0 && Commands.Contains(args[0], StringComparer.OrdinalIgnoreCase);
 
     [DllImport("kernel32.dll")]
     private static extern bool AttachConsole(int processId);
 
+    [DllImport("kernel32.dll")]
+    private static extern IntPtr GetStdHandle(int handle);
+
+    [DllImport("kernel32.dll")]
+    private static extern uint GetFileType(IntPtr file);
+
+    /// <summary>Whether the output is going to a file or a pipe already: a script reading it (Python's subprocess, a redirect).</summary>
+    private static bool OutputRedirected() => GetFileType(GetStdHandle(-11)) is 1 or 3;
+
     /// <summary>Runs the command; the exit code is 0 when every file was done, 1 when some weren't, 2 for a command that can't run.</summary>
     public static int Run(string[] args)
     {
-        // a windowed program has no console of its own: write to the one it was started from, if any
-        AttachConsole(-1);
+        // a windowed program has no console of its own: write to the one it was started from, if any, unless the
+        // output is being read already (attaching would send it to the console instead)
+        if (!OutputRedirected()) AttachConsole(-1);
+        else Console.OutputEncoding = new System.Text.UTF8Encoding(false);
         var output = Console.Out;
         output.WriteLine();
         try
@@ -42,7 +55,7 @@ public static class CommandLine
             var paths = new List<string>();
             var edits = new List<Cr2wBulkEdit>();
             string? outputFolder = null, className = null;
-            bool recursive = false, overwrite = false, asLatest = false;
+            bool recursive = false, overwrite = false, asLatest = false, check = false;
             for (int i = 1; i < args.Length; i++)
             {
                 string a = args[i];
@@ -54,6 +67,14 @@ public static class CommandLine
                     case "--overwrite": overwrite = true; break;
                     case "--as-164": asLatest = true; break;
                     case "--class": className = Next(); break;
+                    case "--check": check = true; break;
+                    case "--only-class":
+                    {
+                        string only = Next();
+                        if (edits.Count == 0) throw new ArgumentException("--only-class goes after an edit.");
+                        edits[^1] = With(edits[^1], className: only);
+                        break;
+                    }
                     case "--copy":
                     {
                         string source = Next();
@@ -83,8 +104,7 @@ public static class CommandLine
                         string fields = Next();
                         if (edits.Count == 0 || edits[^1].Kind is not (BulkEditKind.Scale or BulkEditKind.Offset))
                             throw new ArgumentException("--fields goes after a --scale or --offset.");
-                        var last = edits[^1];
-                        edits[^1] = new Cr2wBulkEdit { Kind = last.Kind, Path = last.Path, Amount = last.Amount, Fields = fields.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries) };
+                        edits[^1] = With(edits[^1], fields: fields.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
                         break;
                     }
                     default:
@@ -93,33 +113,31 @@ public static class CommandLine
                         break;
                 }
             }
+            if (check && command is not ("--edit" or "--recipe")) throw new ArgumentException("--check goes with --edit or --recipe: converting has nothing to try first.");
+            if (command == "--recipe")
+            {
+                if (paths.Count != 1) throw new ArgumentException("--recipe takes one recipe file.");
+                var recipe = Cr2wRecipe.Load(Path.GetFullPath(paths[0]));
+                if (check && recipe.Kind != Cr2wRecipeKind.Edit) throw new ArgumentException("--check goes with a recipe of edits: converting has nothing to try first.");
+                output.WriteLine(recipe.Name);
+                return Report(output, recipe.Run(dryRun: check), check,
+                    recipe.Kind == Cr2wRecipeKind.FromJson ? NoJson : recipe.Kind == Cr2wRecipeKind.Edit ? NoEditable : NoCr2w);
+            }
             if (paths.Count == 0) throw new ArgumentException("Give the files or folders to work on. Run --help-json for the options.");
             if (className is not null)
-                edits = [.. edits.Select(e => new Cr2wBulkEdit { Kind = e.Kind, Path = e.Path, ClassName = className, Source = e.Source, Value = e.Value, Amount = e.Amount, Fields = e.Fields })];
+                edits = [.. edits.Select(e => e.ClassName.Length > 0 ? e : With(e, className: className))];
             if (command == "--edit" && edits.Count == 0) throw new ArgumentException("--edit needs an edit: --copy, --set, --remove, --scale or --offset.");
 
-            var inputs = Cr2wJsonBatch.Inputs(paths, fromJson: command == "--from-json", recursive);
-            if (inputs.Count == 0)
-            {
-                output.WriteLine(command == "--from-json" ? "No converted JSON files were found there." : "No CR2W files were found there.");
-                return 1;
-            }
-            var results = command switch
+            // an edit takes converted JSON files from folders too, as the window does
+            var inputs = command == "--edit" ? Cr2wRecipe.EditInputs(paths, recursive) : Cr2wJsonBatch.Inputs(paths, fromJson: command == "--from-json", recursive);
+            var results = inputs.Count == 0 ? null : command switch
             {
                 "--to-json" => Cr2wJsonBatch.ToJson(inputs, outputFolder, overwrite),
                 "--from-json" => Cr2wJsonBatch.FromJson(inputs, outputFolder, overwrite, asLatest: asLatest),
                 "--resave-164" => Cr2wJsonBatch.ResaveAsLatest(inputs, outputFolder, overwrite),
-                _ => Cr2wJsonBatch.BulkEdit(inputs, edits, outputFolder),
+                _ => Cr2wJsonBatch.BulkEdit(inputs, edits, outputFolder, dryRun: check),
             };
-            foreach (var r in results)
-            {
-                if (!r.Ok) output.WriteLine($"FAILED  {r.Input}: {r.Error}");
-                else if (r.Output is null) output.WriteLine($"skipped {r.Input}: {r.Note}");
-                else output.WriteLine($"ok      {r.Output}{(r.Note is null ? "" : $"  ({r.Note})")}");
-            }
-            int failed = results.Count(r => !r.Ok);
-            output.WriteLine($"{results.Count(r => r.Ok && r.Output is not null)} written, {results.Count(r => r.Ok && r.Output is null)} skipped, {failed} failed.");
-            return failed == 0 ? 0 : 1;
+            return Report(output, results, check, command == "--from-json" ? NoJson : command == "--edit" ? NoEditable : NoCr2w);
         }
         catch (Exception ex) when (ex is ArgumentException or FormatException or IOException or InvalidDataException or UnauthorizedAccessException)
         {
@@ -131,6 +149,42 @@ public static class CommandLine
             output.Flush();
         }
     }
+
+    private const string NoJson = "No converted JSON files were found there.";
+    private const string NoCr2w = "No CR2W files were found there.";
+    private const string NoEditable = "No CR2W or converted JSON files were found there.";
+
+    /// <summary>Writes what happened to each file and the totals; the exit code is 0 when every file was done.</summary>
+    private static int Report(TextWriter output, List<Cr2wJsonResult>? results, bool check, string noneFound)
+    {
+        if (results is null)
+        {
+            output.WriteLine(noneFound);
+            return 1;
+        }
+        foreach (var r in results)
+        {
+            if (!r.Ok) output.WriteLine($"FAILED  {r.Input}: {r.Error}");
+            else if (r.Output is null) output.WriteLine($"skipped {r.Input}: {r.Note}");
+            else output.WriteLine($"{(check ? "would  " : "ok     ")} {r.Output}{(r.Note is null ? "" : $"  ({r.Note})")}");
+        }
+        int failed = results.Count(r => !r.Ok);
+        output.WriteLine($"{results.Count(r => r.Ok && r.Output is not null)} {(check ? "would be written" : "written")}, {results.Count(r => r.Ok && r.Output is null)} skipped, {failed} failed.");
+        return failed == 0 ? 0 : 1;
+    }
+
+    /// <summary>An edit with its class or its fields changed.</summary>
+    private static Cr2wBulkEdit With(Cr2wBulkEdit e, string? className = null, IReadOnlyList<string>? fields = null) => new()
+    {
+        Kind = e.Kind,
+        Path = e.Path,
+        ClassName = className ?? e.ClassName,
+        Source = e.Source,
+        Value = e.Value,
+        Amount = e.Amount,
+        Fields = fields ?? e.Fields,
+        AddMissing = e.AddMissing,
+    };
 
     /// <summary>A value for --set: JSON when it reads as JSON (1.5, true, "text", {…}), else the text itself.</summary>
     private static JsonNode? ParseValue(string text)
@@ -147,6 +201,7 @@ public static class CommandLine
           --resave-164 <files or folders…> Save older CR2W files (REDkit's go back to version 120) as version 164,
                                            as the engine would after loading them (under --out, or over themselves with --overwrite)
           --edit      <files or folders…>  Make edits to CR2W or JSON files; they're written over themselves, or under --out
+          --recipe    <recipe file>        Run a recipe saved in the CR2W and JSON window (a .w3recipe.json file)
 
         Options
           --out <folder>     Write the results under this folder, keeping the folders they were in
@@ -154,6 +209,7 @@ public static class CommandLine
           --overwrite        Replace files that are there already (to and from JSON, and resaving)
           --as-164           With --from-json: write files of older versions as version 164
           --class <name>     Edit only objects of this class (CEnvironmentDefinition)
+          --check            With --edit or --recipe: try the edits and say what would change, saving nothing
 
         Edits, made in order; a path is property names from an object down, with [n] for an item of a list
           --copy <source> <path>     The source file's value at the path, into every file
@@ -162,10 +218,12 @@ public static class CommandLine
           --scale <path> <factor>    Multiply the numbers under the path...
           --offset <path> <amount>   ...or add to them
           --fields <a,b>             After --scale or --offset: only numbers in these properties (value, X, Y, Z)
+          --only-class <name>        After an edit: make that edit only to objects of this class
 
         Examples
           W3ModWorkbench.exe --to-json "D:\envs" -r --out "D:\envs json"
           W3ModWorkbench.exe --edit "D:\mymod\envs" -r --copy "D:\envs\my_look.env" envParams.m_toneMapping
           W3ModWorkbench.exe --edit "D:\mymod\envs" -r --scale envParams.m_globalFog.fogDensity 0.8 --fields value
+          W3ModWorkbench.exe --recipe "%AppData%\W3ModWorkbench\recipes\Night fog.w3recipe.json" --check
         """;
 }

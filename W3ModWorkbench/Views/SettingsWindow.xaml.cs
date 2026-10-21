@@ -77,6 +77,8 @@ public partial class SettingsWindow : Window, IMessageHost
         KeepStructureCheck.IsChecked = settings.KeepStructure;
         OpenWhenDoneCheck.IsChecked = settings.OpenWhenDone;
         AskCopyCheck.IsChecked = settings.AskWhichCopy;
+        RecipesBox.Text = settings.Cr2wRecipesFolder;
+        RecipesHint.Text = L.T("Settings.General.RecipesHint", Core.Cr2w.Cr2wRecipe.DefaultFolder);
 
         // Appearance
         (settings.Theme switch { "Light" => ThemeLight, "Dark" => ThemeDark, _ => ThemeSystem }).IsChecked = true;
@@ -325,6 +327,11 @@ public partial class SettingsWindow : Window, IMessageHost
     private void BrowseOutput_Click(object sender, RoutedEventArgs e)
     {
         if (Pick(L.T("Settings.General.OutputPick"), OutputBox.Text) is { } folder) OutputBox.Text = folder;
+    }
+
+    private void BrowseRecipes_Click(object sender, RoutedEventArgs e)
+    {
+        if (Pick(L.T("Settings.General.RecipesPick"), Core.Cr2w.Cr2wRecipe.Folder(RecipesBox.Text)) is { } folder) RecipesBox.Text = folder;
     }
 
     // ---------------------------------------------------------------- game and tools
@@ -632,6 +639,7 @@ public partial class SettingsWindow : Window, IMessageHost
         _settings.KeepStructure = KeepStructureCheck.IsChecked == true;
         _settings.OpenWhenDone = OpenWhenDoneCheck.IsChecked == true;
         _settings.AskWhichCopy = AskCopyCheck.IsChecked == true;
+        _settings.Cr2wRecipesFolder = RecipesBox.Text.Trim();
         _settings.GameFolder = GameFolderBox.Text.Trim();
         GameScripts.GameFolder = _settings.GameFolder;
         _settings.GameDocumentsFolder = DocumentsBox.Text.Trim();
