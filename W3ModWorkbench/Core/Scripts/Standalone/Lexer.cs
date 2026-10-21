@@ -18,10 +18,10 @@ public sealed class ScriptSyntaxException(string message, int line) : Exception(
 
 public static class Lexer
 {
-    // longest first, so "+=" wins over "+"
+    // longest first, so "+=" wins over "+". WitcherScript has no ++ or --: wcc_lite reads them as two + or two -.
     private static readonly string[] Puncts =
     [
-        "++", "--", "+=", "-=", "*=", "/=", "%=", "&=", "|=", "==", "!=", "<=", ">=", "&&", "||",
+        "+=", "-=", "*=", "/=", "%=", "&=", "|=", "==", "!=", "<=", ">=", "&&", "||",
         "{", "}", "(", ")", "[", "]", ";", ":", ",", ".", "=", "<", ">", "+", "-", "*", "/", "%", "!", "&", "|", "^", "~", "?", "@",
     ];
 

@@ -10,12 +10,13 @@ namespace W3ModWorkbench.Core.Scripts.Standalone;
 /// </summary>
 public static class InstalledMods
 {
-    public static List<SourceFile> Read(string modsFolder, Action<string> note, CancellationToken cancel)
+    /// <param name="except">A mod's folder name to leave out: the project's own, whose installed copy is an older build of what's being compiled.</param>
+    public static List<SourceFile> Read(string modsFolder, Action<string> note, CancellationToken cancel, string? except = null)
     {
         string[] mods;
         try
         {
-            mods = Directory.GetDirectories(modsFolder);
+            mods = [.. Directory.GetDirectories(modsFolder).Where(m => except is null || !Path.GetFileName(m).Equals(except, StringComparison.OrdinalIgnoreCase))];
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {

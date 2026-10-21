@@ -62,6 +62,8 @@ public sealed partial class FunctionCompiler
     private readonly List<int?> _labels = [];
     private readonly List<LoopLabels> _loops = [];
     private int _line;
+    // what's wrong, statement by statement: like wcc_lite, a function is compiled through to the end to find all of it
+    private readonly List<CompileException> _errors = [];
 
     private FunctionCompiler(Symbols symbols, Tables tables, FunctionDecl decl, string? thisClass, Wrap wrap,
         Dictionary<string, Ty> parms, Dictionary<string, Ty> locals, Ty returnType)
@@ -85,7 +87,10 @@ public sealed partial class FunctionCompiler
 
         var parms = new Dictionary<string, Ty>();
         foreach (var p in decl.Params) parms[p.Name] = symbols.Resolve(p.Type);
-        var ret = decl.ReturnType is { } rt ? symbols.Resolve(rt) : Ty.Void;
+        // an event returns a bool, and a wrapper what it wraps, whether or not it says so
+        var ret = decl.ReturnType is { } rt ? symbols.Resolve(rt)
+            : decl.Specifiers.IsEvent ? Ty.Bool
+            : wrap.Target?.ReturnType ?? Ty.Void;
 
         var localMap = new Dictionary<string, Ty>();
         foreach (var (name, ty) in locals) localMap[name] = ty;
@@ -95,8 +100,11 @@ public sealed partial class FunctionCompiler
         if (body.Count > 0)
         {
             foreach (var statement in body) compiler.GenStmt(statement);
+            if (compiler._errors.Count > 0) throw new CompileErrorsException(compiler._errors);
             compiler.Add(Op.Nop);
         }
+        else if (decl.Body is null && decl.Specifiers.IsImport && (thisClass is null || decl.Annotation is { Kind: AnnotationKind.AddMethod }))
+            compiler.GenImportCall(decl);
         return new CompiledBody { Code = compiler.Finish(), Locals = locals };
     }
 
@@ -246,6 +254,18 @@ public sealed partial class FunctionCompiler
 
     private void GenStmt(Stmt statement)
     {
+        try
+        {
+            GenStatement(statement);
+        }
+        catch (CompileException ex)
+        {
+            _errors.Add(ex);
+        }
+    }
+
+    private void GenStatement(Stmt statement)
+    {
         int line = statement.Line;
         _line = line;
         switch (statement.Kind)
@@ -258,7 +278,7 @@ public sealed partial class FunctionCompiler
                         Breakpoint(line);
                         Add(Op.Assign);
                         Add(new Ins(Op.LocalVar) { A = _tables.Name(name) });
-                        GenAs(init, ty);
+                        GenAs(init, ty, strictly: true);
                     }
                 break;
             case ExprStmt e:
@@ -366,11 +386,13 @@ public sealed partial class FunctionCompiler
                 break;
             }
             case ReturnStmt r:
+                if (r.Value is { } returned && _returnType.Kind == TyKind.Void && TypeOf(returned).Kind != TyKind.Void) throw Fail($"Function '{_functionName}' can't return a value");
+                if (r.Value is null && _returnType.Kind != TyKind.Void) throw Fail($"Function '{_functionName}' should return a value");
                 Add(Op.Return);
                 if (r.Value is { } value)
                 {
                     var source = TypeOf(value);
-                    foreach (var conversion in ConvertInstructions(source, _returnType)) Add(conversion);
+                    foreach (var conversion in ConvertInstructions(source, _returnType, implicitly: true)) Add(conversion);
                     Breakpoint(line);
                     Gen(value);
                 }
@@ -480,28 +502,32 @@ public sealed partial class FunctionCompiler
         if (_symbols.EnumMembers.TryGetValue(name, out string? enumName))
             return new EnumConstant(enumName, _symbols.Enums[enumName].ValueOf(name) ?? 0);
         if (GlobalObjectOf(name) is { } global) return new GlobalObject(global.Op, Ty.Class(global.Class));
-        throw Fail($"unknown name '{name}'");
+        throw Fail($"I dont know any '{name}'");
     }
 
-    private Ty ThisType() => Ty.Class(_thisClass ?? throw Fail("'this' outside a class"));
+    private Ty ThisType() => Ty.Class(_thisClass ?? throw Fail("'this' has no sense outside class scope"));
 
     private string ParentClass()
     {
-        string cls = _thisClass ?? throw Fail("'super' outside a class");
+        string cls = _thisClass ?? throw Fail("'super' is valid only inside function in class");
         return _symbols.Classes.GetValueOrDefault(cls)?.Parent ?? throw Fail($"{cls} has no parent class");
     }
 
     private string StateMachine()
     {
-        string cls = _thisClass ?? throw Fail("'parent' outside a state");
-        return _symbols.Classes.GetValueOrDefault(cls)?.StateMachine ?? throw Fail($"'parent' used outside a state ({cls})");
+        string cls = _thisClass ?? throw Fail("'parent' has no sense outside class");
+        return _symbols.Classes.GetValueOrDefault(cls)?.StateMachine ?? throw Fail($"Class '{cls}' is not a state and therefore 'parent' has no sense");
     }
 
     private FieldInfo FieldOf(Ty ty, string name)
     {
-        if (ty.Kind is not (TyKind.Class or TyKind.Struct)) throw Fail($"'{name}' is not a member of {ty}");
-        return _symbols.FindField(ty.Name, name) ?? throw Fail($"{ty.Name} has no member '{name}'");
+        if (ty.Kind is not (TyKind.Class or TyKind.Struct) || _symbols.FindField(ty.Name, name) is not { } field)
+            throw Fail($"'{name}' is not a member of '{ReferenceName(ty)}'");
+        return field;
     }
+
+    /// <summary>How wcc_lite names the type of something it reads a member of: a reference to it, a class's by its handle.</summary>
+    private static string ReferenceName(Ty ty) => ty.Kind == TyKind.Class ? $"&handle:{ty.Name}" : $"&{ty.RttiName}";
 
     private Ty TypeOf(Expr expr)
     {
@@ -591,14 +617,14 @@ public sealed partial class FunctionCompiler
                     return new MethodCallee(method, Receiver.ImplicitThis, null);
                 if (_symbols.Functions.TryGetValue(name, out var function)) return new GlobalCallee(function);
                 if (_symbols.Classes.TryGetValue(name, out var cls) && cls.IsStruct) return new ConstructorCallee(name);
-                throw Fail($"unknown function '{name}'");
+                throw Fail($"Could not find function '{name}'");
             }
             case Member m:
             {
                 if (m.Object.Kind is SuperExpr)
                 {
                     string parent = ParentClass();
-                    var method = _symbols.FindMethod(parent, m.Name) ?? throw Fail($"unknown method super.{m.Name}");
+                    var method = _symbols.FindMethod(parent, m.Name) ?? throw Fail($"Could not find function '{m.Name}'");
                     return new MethodCallee(method, Receiver.Super, null);
                 }
                 var objectType = TypeOf(m.Object);
@@ -607,7 +633,7 @@ public sealed partial class FunctionCompiler
                 if (objectType.Kind == TyKind.Class)
                 {
                     var method = _symbols.FindMethod(objectType.Name, m.Name)
-                        ?? throw Fail($"{objectType.Name} has no method '{m.Name}'");
+                        ?? throw Fail($"Could not find function '{m.Name}'");
                     return new MethodCallee(method, Receiver.Object, m.Object);
                 }
                 throw Fail($"can't call '{m.Name}' on {objectType}");
@@ -657,13 +683,59 @@ public sealed partial class FunctionCompiler
 
         if (op is "==" or "!=")
             return new TestPlan(op == "==", left.Kind == TyKind.Null ? right : left);
-        throw Fail($"there is no operator {op} for {left} and {right}");
+        throw Fail($"Unable to find suitable operator '{op}' for given types ({left.RttiName}, {right.RttiName})");
     }
 
-    private List<Ins> ConvertInstructions(Ty from, Ty to)
+    /// <summary>
+    /// Whether wcc_lite converts one type to another without a cast, as measured against it: numbers widen to each
+    /// other only upwards from int and byte, anything simple becomes a string, an object goes up its class tree, and
+    /// none of the others go without being asked.
+    /// </summary>
+    private bool IsImplicit(Ty from, Ty to) => (from.Kind, to.Kind) switch
+    {
+        (TyKind.Null, TyKind.Class) => true,
+        (TyKind.Class, TyKind.Class) => _symbols.IsSubclass(from.Name, to.Name),
+        (TyKind.Class, TyKind.Bool or TyKind.String) => true,
+        (TyKind.Int, TyKind.Float or TyKind.Byte or TyKind.Bool or TyKind.String or TyKind.Enum) => true,
+        (TyKind.Byte, TyKind.Int or TyKind.Float or TyKind.Bool or TyKind.String) => true,
+        (TyKind.Float, TyKind.Bool or TyKind.String) => true,
+        (TyKind.Bool, TyKind.String) => true,
+        (TyKind.String, TyKind.Bool) => true,
+        (TyKind.Name, TyKind.String) => true,
+        (TyKind.Enum, TyKind.Int or TyKind.String) => true,
+        (TyKind.Enum, TyKind.Enum) => from.Name == to.Name,
+        // not measured: left as they were
+        (TyKind.Array, TyKind.Array) or (TyKind.Map, TyKind.Map) or (TyKind.Struct, TyKind.Struct) => true,
+        (TyKind.Primitive, _) or (_, TyKind.Primitive) or (_, TyKind.Void) => true,
+        _ => false,
+    };
+
+    /// <summary>Whether wcc_lite converts one type to another when a cast is written, and not without.</summary>
+    private bool IsExplicitOnly(Ty from, Ty to) => (from.Kind, to.Kind) switch
+    {
+        (TyKind.Float or TyKind.Bool or TyKind.String, TyKind.Int or TyKind.Byte) => true,
+        (TyKind.Bool or TyKind.String, TyKind.Float) => true,
+        (TyKind.Name, TyKind.Bool) => true,
+        (TyKind.Class, TyKind.Class) => _symbols.IsSubclass(to.Name, from.Name),
+        _ => false,
+    };
+
+    /// <summary>A type as wcc_lite's messages name it: an object's by its handle.</summary>
+    private static string MessageName(Ty ty) => ty.Kind == TyKind.Class ? $"handle:{ty.Name}" : ty.RttiName;
+
+    /// <param name="implicitly">Without a cast written: only the conversions wcc_lite makes by itself are allowed.</param>
+    /// <param name="fromVariable">The value is a variable's, which wcc_lite's messages name as a reference (<c>&amp;Float</c>).</param>
+    private List<Ins> ConvertInstructions(Ty from, Ty to, bool implicitly = false, bool fromVariable = false)
     {
         var result = new List<Ins>();
         if (from == to) return result;
+        if (implicitly && !IsImplicit(from, to))
+        {
+            string source = (fromVariable ? "&" : "") + MessageName(from), target = MessageName(to);
+            throw Fail(IsExplicitOnly(from, to)
+                ? $"No implicit cast exists for converting '{source}' to '{target}'"
+                : $"Unable to convert from '{source}' to '{target}'");
+        }
         Ins Plain(Op op) => new(op);
         Ins Typed(Op op, string enumName) => new(op) { A = _tables.ImportType(Ty.Enum(enumName), _symbols) };
 
@@ -708,7 +780,7 @@ public sealed partial class FunctionCompiler
             case (TyKind.Struct, TyKind.Struct): break;
             case (TyKind.Primitive, _) or (_, TyKind.Primitive): break;
             case (_, TyKind.Void): break;
-            default: throw Fail($"{from} can't be converted to {to}");
+            default: throw Fail($"No implicit cast exists for converting '{from.RttiName}' to '{to.RttiName}'");
         }
         return result;
     }

@@ -32,8 +32,10 @@ public sealed record CompilerChoice(CompilerKind Kind, string? WccLite, string G
         + "or set the game folder there so the built-in compiler can find the game's scripts";
 
     /// <summary>Compiles the project's .ws files and, when they compile, saves the blob to <paramref name="output"/>.</summary>
-    public Task<CompileResult> CompileAsync(string scriptsFolder, string output, IProgress<string>? progress, CancellationToken cancel) =>
+    /// <param name="ownMod">The project's mod's folder name, so the built-in compiler leaves its installed copy out.</param>
+    public Task<CompileResult> CompileAsync(string scriptsFolder, string output, IProgress<string>? progress, CancellationToken cancel,
+        string? ownMod = null) =>
         Kind == CompilerKind.WccLite
             ? ScriptCompiler.CompileAsync(WccLite!, scriptsFolder, output, progress, cancel)
-            : StandaloneCompiler.CompileAsync(scriptsFolder, GameScripts, output, progress, cancel, ModsFolder);
+            : StandaloneCompiler.CompileAsync(scriptsFolder, GameScripts, output, progress, cancel, ModsFolder, ownMod);
 }

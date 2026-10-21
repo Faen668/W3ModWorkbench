@@ -84,6 +84,7 @@ public sealed class Parser
 
     private Annotation? ParseAnnotation()
     {
+        int line = Cur.Line;
         if (!EatPunct("@")) return null;
         var kind = Identifier() switch
         {
@@ -99,12 +100,18 @@ public sealed class Parser
             if (!IsPunct(")")) cls = Identifier(); // `@wrapMethod()` is how a global function is wrapped
             ExpectPunct(")");
         }
-        return new Annotation(kind, cls);
+        return new Annotation(kind, cls, line);
     }
 
     private Item ParseItem()
     {
         var annotation = ParseAnnotation();
+        // what replaces or wraps a function takes the function's own modifiers, so none may be written; only checked in
+        // code being compiled, as the declarations read from other mods' blobs are written with them
+        if (!_skipBodies && annotation?.Kind is AnnotationKind.ReplaceMethod or AnnotationKind.WrapMethod
+            && !(Cur.Kind == TokKind.Ident && Cur.Text == "function"))
+            throw new ScriptSyntaxException(
+                $"syntax error, unexpected {(Cur.Kind == TokKind.Ident ? "TOKEN_" + Cur.Text.ToUpperInvariant() : $"'{Cur.Text}'")}, expecting TOKEN_FUNCTION, near '{Cur.Text}'", Cur.Line);
         var cls = new ClassDecl();
         var fn = new FunctionSpecifiers();
         var field = new FieldSpecifiers();
@@ -286,8 +293,10 @@ public sealed class Parser
         string name = Identifier();
         ExpectPunct("{");
         var members = new List<(string, long?)>();
+        var lines = new List<int>();
         while (!EatPunct("}"))
         {
+            lines.Add(Cur.Line);
             string member = Identifier();
             long? value = null;
             if (EatPunct("="))
@@ -304,12 +313,13 @@ public sealed class Parser
                 break;
             }
         }
-        return new EnumDecl { Name = name, Members = members };
+        return new EnumDecl { Name = name, Members = members, Lines = lines };
     }
 
     private FieldDecl ParseField(FieldSpecifiers specifiers)
     {
         if (!EatKeyword("var")) throw Error("expected 'var'");
+        int line = Cur.Line;
         var names = new List<string> { Identifier() };
         while (EatPunct(",")) names.Add(Identifier());
         ExpectPunct(":");
@@ -317,7 +327,7 @@ public sealed class Parser
         Expr? init = null;
         if (EatPunct("=")) init = ParseExpr();
         ExpectPunct(";");
-        return new FieldDecl { Names = names, Type = type, Specifiers = specifiers, Initializer = init };
+        return new FieldDecl { Names = names, Type = type, Specifiers = specifiers, Initializer = init, Line = line };
     }
 
     private TypeRef ParseTypeRef()
@@ -340,6 +350,7 @@ public sealed class Parser
         if (EatKeyword("event")) specs.IsEvent = true;
         else if (!EatKeyword("function")) throw Error("expected 'function'");
 
+        int line = Cur.Line;
         string name = Identifier();
         ExpectPunct("(");
         var parms = new List<Param>();
@@ -367,8 +378,10 @@ public sealed class Parser
         TypeRef? returnType = EatPunct(":") ? ParseTypeRef() : null;
 
         List<Stmt>? body;
+        bool usesWrapped = false;
         if (IsPunct("{"))
         {
+            int start = _pos;
             if (_skipBodies)
             {
                 SkipBraces();
@@ -376,13 +389,15 @@ public sealed class Parser
             }
             else
                 body = ParseBlock();
+            for (int i = start; i < _pos && !usesWrapped; i++)
+                usesWrapped = _tokens[i].Kind == TokKind.Ident && _tokens[i].Text == "wrappedMethod";
         }
         else
         {
             ExpectPunct(";");
             body = null;
         }
-        return new FunctionDecl { Name = name, Specifiers = specs, Params = parms, ReturnType = returnType, Body = body };
+        return new FunctionDecl { Name = name, Specifiers = specs, Params = parms, ReturnType = returnType, Body = body, Line = line, UsesWrappedMethod = usesWrapped };
     }
 
     private List<Stmt> ParseBlock()
@@ -577,6 +592,8 @@ public sealed class Parser
 
     private Expr UnaryExpr()
     {
+        // a unary + changes nothing (so ++x reads as +(+x), as wcc_lite reads it)
+        if (EatPunct("+")) return UnaryExpr();
         foreach (string op in new[] { "!", "-", "~" })
         {
             if (EatPunct(op))
@@ -632,12 +649,6 @@ public sealed class Parser
                 var idx = ParseExpr();
                 ExpectPunct("]");
                 expr = new Expr(new Index(expr, idx), Cur.Line);
-            }
-            else if (IsPunct("++") || IsPunct("--"))
-            {
-                // x++ and x-- are x += 1 and x -= 1
-                string op = Advance().Text == "++" ? "+=" : "-=";
-                expr = new Expr(new Assign(op, expr, new Expr(new IntLit(1), PrevLine)), PrevLine);
             }
             else
                 return expr;

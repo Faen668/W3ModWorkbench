@@ -76,7 +76,7 @@ public static class ModBuilder
                 try
                 {
                     string compiledBlob = Path.Combine(temp, "precompiled.rsblob");
-                    compiled = compiler.CompileAsync(project.ScriptsPath, compiledBlob, progress, cancel).GetAwaiter().GetResult();
+                    compiled = compiler.CompileAsync(project.ScriptsPath, compiledBlob, progress, cancel, Path.GetFileName(mod)).GetAwaiter().GetResult();
                     if (compiled.Success) File.Copy(compiledBlob, Path.Combine(content, "precompiled.rsblob"));
                 }
                 finally

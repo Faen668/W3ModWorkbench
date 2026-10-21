@@ -122,8 +122,10 @@ public sealed class Assembler
         w.U32(1); // format version
         w.String("x64");
         w.String("1048625");
-        w.U32(0x7ea54400);
-        w.U32(0x045ee5ed);
+        // when it was compiled, in UTC, as wcc_lite stamps it: year, month and day; hour, minute, second and millisecond
+        var now = DateTime.UtcNow;
+        w.U32((uint)(now.Year << 20 | now.Month << 15 | now.Day << 10));
+        w.U32((uint)(now.Hour << 22 | now.Minute << 16 | now.Second << 10 | now.Millisecond));
         w.String("Release");
 
         WriteArray(w, enumDefs, WriteEnum);
@@ -167,9 +169,9 @@ public sealed class Assembler
     // ---- ordering and planning ----
 
     /// <summary>
-    /// The order the compiler lists classes in. Classes that extend nothing come first, in the order they were written;
-    /// then the ones that extend the game's classes, grouped by the class they extend (in the order the game declares
-    /// those). Each class is followed by the project's classes that extend it.
+    /// The order wcc_lite lists classes in. The ones that extend the game's or the engine's classes come first, grouped
+    /// by the class they extend (in the order wcc_lite made those: <see cref="ClassInfo.Rank"/>), then the ones that
+    /// extend nothing, in the order they were written. Each class is followed by the project's classes that extend it.
     /// </summary>
     private List<(string File, ClassDecl Decl)> ClassOrder(List<(string File, ClassDecl Decl)> classes)
     {
@@ -192,7 +194,7 @@ public sealed class Assembler
                     index = parent;
                     continue;
                 }
-                if (ParentKey(classes[index].Decl) is not { } outside) return -1;
+                if (ParentKey(classes[index].Decl) is not { } outside) return int.MaxValue - 1;
                 return _symbols.Classes.TryGetValue(outside, out var info) ? info.Rank : int.MaxValue;
             }
             return int.MaxValue;
@@ -275,14 +277,15 @@ public sealed class Assembler
 
         if (decl.Annotation is not { } annotation)
         {
-            plans.Global.Add(Plan(0x2 | (decl.Specifiers.IsExec ? 0x100 : 0) | KindFlags(decl.Specifiers)));
+            // an import gets a body that calls the engine's function, which wcc_lite marks as it marks a method without one
+            plans.Global.Add(Plan(0x2 | (decl.Specifiers.IsExec ? 0x100 : 0) | (decl.Body is null ? 0x200 : 0) | KindFlags(decl.Specifiers)));
             return;
         }
 
         switch (annotation.Kind, annotation.Class)
         {
             case (AnnotationKind.AddMethod, { } cls):
-                plans.Add.Add(Plan(0x80000 | VisibilityFlags(decl.Specifiers.Visibility) | KindFlags(decl.Specifiers), cls));
+                plans.Add.Add(Plan(0x80000 | VisibilityFlags(decl.Specifiers.Visibility) | KindFlags(decl.Specifiers) | (decl.Body is null ? 0x200 : 0), cls));
                 break;
             case (AnnotationKind.WrapMethod, { } cls):
             {
@@ -314,6 +317,11 @@ public sealed class Assembler
         try
         {
             plan.Compiled = FunctionCompiler.Compile(_symbols, _tables, plan.Decl, plan.ThisClass, plan.Wrap);
+        }
+        catch (CompileErrorsException ex)
+        {
+            // in wcc_lite's words, which name what's wrong but not the function
+            foreach (var error in ex.Errors) Problem(plan.File, error.Line, error.Message);
         }
         catch (CompileException ex)
         {

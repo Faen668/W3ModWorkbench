@@ -14,10 +14,14 @@ public sealed partial class FunctionCompiler
         _ => false,
     };
 
-    private void GenAs(Expr expr, Ty target)
+    /// <param name="strictly">
+    /// Where wcc_lite allows only the conversions it makes by itself: a value assigned, passed or returned. An operator's
+    /// operands and a condition convert as they need to.
+    /// </param>
+    private void GenAs(Expr expr, Ty target, bool strictly = false)
     {
         var source = TypeOf(expr);
-        foreach (var conversion in ConvertInstructions(source, target)) Add(conversion);
+        foreach (var conversion in ConvertInstructions(source, target, implicitly: strictly, fromVariable: strictly && IsVariable(expr))) Add(conversion);
         Gen(expr);
     }
 
@@ -176,12 +180,28 @@ public sealed partial class FunctionCompiler
             return;
         }
         var parms = info.Params;
-        if (args.Count > parms.Count) throw Fail($"too many arguments ({args.Count} for {parms.Count})");
+        if (args.Count > parms.Count) throw Fail($"Function '{info.Name}' does not take {args.Count} param(s)");
         for (int i = 0; i < parms.Count; i++)
         {
-            if (i < args.Count && args[i] is { } arg) GenAs(arg, parms[i].Type);
+            if (i < args.Count && args[i] is { } arg) GenAs(arg, parms[i].Type, strictly: true);
             else Add(Op.Nop);
         }
+    }
+
+    /// <summary>
+    /// An import a mod declares, global or added to a class, as wcc_lite compiles it: <c>return Self(params…);</c>,
+    /// the call on the line the declaration starts on (its annotation's, when it has one).
+    /// </summary>
+    private void GenImportCall(FunctionDecl decl)
+    {
+        Add(Op.Return);
+        int end = NewLabel();
+        int at = Add(new Ins(Op.FinalFunc) { B = decl.Annotation is { Line: > 0 } a ? a.Line : decl.Line, C = FuncRef.Current });
+        JumpTo(at, Slot.First, end);
+        foreach (var p in decl.Params) Add(new Ins(Op.ParamVar) { A = _tables.Name(p.Name) });
+        Add(Op.ParamEnd);
+        Place(end);
+        Add(Op.Nop);
     }
 
     private void GenCall(Expr callee, List<Expr?> args, int line)
@@ -396,7 +416,7 @@ public sealed partial class FunctionCompiler
         {
             Add(Op.Assign);
             Gen(target);
-            GenAs(value, targetType);
+            GenAs(value, targetType, strictly: true);
             return;
         }
 
@@ -420,6 +440,6 @@ public sealed partial class FunctionCompiler
             });
             return;
         }
-        throw Fail($"there is no operator {op} for {targetType} and {valueType}");
+        throw Fail($"Unable to find suitable operator '{op}' for given types ({targetType.RttiName}, {valueType.RttiName})");
     }
 }

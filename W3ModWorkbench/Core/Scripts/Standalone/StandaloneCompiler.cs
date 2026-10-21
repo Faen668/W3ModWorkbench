@@ -12,27 +12,28 @@ namespace W3ModWorkbench.Core.Scripts.Standalone;
 public static class StandaloneCompiler
 {
     /// <summary>
-    /// The game's .ws sources the compile reads declarations from: REDkit's r4data\scripts when it's there, otherwise the
-    /// game's own content\content0\scripts.
+    /// The game's .ws sources the compile reads declarations from: the game's own content\content0\scripts, otherwise
+    /// REDkit's r4data\scripts. The game's come first because r4data\scripts is where modders copy the mods theirs
+    /// depend on (REDkit can't look anywhere else), and those are installed mods, read from the mods folder.
     /// </summary>
     public static string? FindGameScripts(string? wccLite, string? gameFolder)
     {
-        if (!string.IsNullOrWhiteSpace(wccLite) && ScriptCompiler.GameScriptsFor(wccLite) is { } redkit) return redkit;
         if (!string.IsNullOrWhiteSpace(gameFolder))
         {
             string scripts = Path.Combine(gameFolder, "content", "content0", "scripts");
             if (Directory.Exists(scripts)) return scripts;
         }
-        return null;
+        return !string.IsNullOrWhiteSpace(wccLite) ? ScriptCompiler.GameScriptsFor(wccLite) : null;
     }
 
     /// <param name="modsFolder">The game's mods folder, when there is one: the other mods' classes and functions can be used by the project.</param>
+    /// <param name="ownMod">The project's own mod's folder name, left out of the installed mods: it's an older build of the same scripts.</param>
     public static Task<CompileResult> CompileAsync(string scriptsFolder, string gameScripts, string output,
-        IProgress<string>? progress, CancellationToken cancel, string? modsFolder = null) =>
-        Task.Run(() => Compile(scriptsFolder, gameScripts, output, progress, cancel, modsFolder), cancel);
+        IProgress<string>? progress, CancellationToken cancel, string? modsFolder = null, string? ownMod = null) =>
+        Task.Run(() => Compile(scriptsFolder, gameScripts, output, progress, cancel, modsFolder, ownMod), cancel);
 
     public static CompileResult Compile(string scriptsFolder, string gameScripts, string output,
-        IProgress<string>? progress, CancellationToken cancel, string? modsFolder = null)
+        IProgress<string>? progress, CancellationToken cancel, string? modsFolder = null, string? ownMod = null)
     {
         var log = new System.Text.StringBuilder();
         var messages = new List<CompileMessage>();
@@ -69,7 +70,7 @@ public static class StandaloneCompiler
             if (modsFolder is not null && Directory.Exists(modsFolder))
             {
                 progress?.Report("Reading the installed mods…");
-                installed = InstalledMods.Read(modsFolder, note => { lock (log) log.AppendLine(note); }, cancel);
+                installed = InstalledMods.Read(modsFolder, note => { lock (log) log.AppendLine(note); }, cancel, ownMod);
             }
 
             progress?.Report("Reading your scripts…");
@@ -93,10 +94,13 @@ public static class StandaloneCompiler
             var rtti = Rtti.LoadBuiltIn();
             var vanillaFiles = vanilla.OfType<SourceFile>().ToList();
             var symbols = new Symbols();
-            symbols.AddEnums(installed, true); // the project's own come last, so they win
-            symbols.AddEnums(project, true);
+            // the game's and the engine's enums, then the mods' added to them as wcc_lite adds a mod's: the installed ones, then the project's
             symbols.AddEnums(vanillaFiles, true);
             symbols.AddRttiEnums(rtti);
+            symbols.ExtendEnums(installed, null);
+            var enumProblems = new List<CompileMessage>();
+            symbols.ExtendEnums(project, (file, line, text) => enumProblems.Add(new CompileMessage(true, file.Path, line, text)));
+            if (enumProblems.Count > 0) return Failed(enumProblems, log);
             symbols.AddTypeNames(project);
             symbols.AddTypeNames(vanillaFiles);
             symbols.AddTypeNames(installed);
@@ -109,6 +113,9 @@ public static class StandaloneCompiler
             symbols.AddRttiProperties(rtti);
             symbols.AddRttiFunctions(rtti);
             if (membersProblem.Count > 0) return Failed(membersProblem, log);
+            var extensionProblems = Extensions.Check(symbols, project);
+            if (extensionProblems.Count > 0)
+                return Failed([.. extensionProblems.Select(p => new CompileMessage(true, p.File, Math.Max(p.Line, 1), p.Text))], log);
             cancel.ThrowIfCancellationRequested();
 
             byte[] blob;

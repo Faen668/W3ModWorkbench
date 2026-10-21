@@ -12,7 +12,8 @@ public enum Visibility { Default, Public, Protected, Private }
 
 public enum AnnotationKind { AddField, AddMethod, WrapMethod, ReplaceMethod }
 
-public sealed record Annotation(AnnotationKind Kind, string? Class);
+/// <param name="Line">The line the annotation is on, which is where wcc_lite says a problem with it is.</param>
+public sealed record Annotation(AnnotationKind Kind, string? Class, int Line = 0);
 
 public sealed class FieldSpecifiers
 {
@@ -27,6 +28,8 @@ public sealed class FieldDecl
     public required FieldSpecifiers Specifiers { get; init; }
     public Annotation? Annotation { get; set; }
     public Expr? Initializer { get; init; }
+    /// <summary>The line the first name is on.</summary>
+    public int Line { get; init; }
     /// <summary>An autobind field, which the game fills in itself when the object is made.</summary>
     public bool IsBinding { get; init; }
     /// <summary>What an autobind field is bound to: <c>single</c>, or the name of the component.</summary>
@@ -51,6 +54,10 @@ public sealed class FunctionDecl
     public TypeRef? ReturnType { get; init; }
     public List<Stmt>? Body { get; init; }
     public Annotation? Annotation { get; set; }
+    /// <summary>The line the function's name is on.</summary>
+    public int Line { get; init; }
+    /// <summary>Whether its body names <c>wrappedMethod</c>, which a @wrapMethod's must.</summary>
+    public bool UsesWrappedMethod { get; init; }
 }
 
 public sealed record DefaultAssignment(string Field, Expr Value);
@@ -70,6 +77,8 @@ public sealed class EnumDecl
 {
     public required string Name { get; init; }
     public required List<(string Name, long? Value)> Members { get; init; }
+    /// <summary>The line each member is on, in the order of <see cref="Members"/>.</summary>
+    public List<int> Lines { get; init; } = [];
 }
 
 public abstract record Item;

@@ -76,8 +76,11 @@ public sealed class ClassInfo
     public string ShortName { get; init; } = "";
     public bool IsStruct { get; init; }
     public string? StateMachine { get; init; }
-    /// <summary>Where the class was declared among all the scripts read, which is the order the compiler lists them in.</summary>
-    public int Rank { get; init; }
+    /// <summary>
+    /// When wcc_lite made the class: the engine's come first, in the engine's order, as they're there before any script
+    /// is read; then the scripts' in the order they're read. The compiler lists a mod's classes by their parents' ranks.
+    /// </summary>
+    public int Rank { get; set; }
     public Dictionary<string, FieldInfo> Fields { get; } = [];
     public List<string> FieldOrder { get; } = [];
     public Dictionary<string, FunctionInfo> Methods { get; } = [];
@@ -128,6 +131,61 @@ public sealed class Symbols
                 }
                 foreach (var (member, _) in values) EnumMembers[member] = decl.Name;
                 Enums[decl.Name] = new EnumInfo { Name = decl.Name, Values = values, IsScript = isScript };
+            }
+    }
+
+    /// <summary>
+    /// Mods' enums, as wcc_lite takes a mod's: an enum the game hasn't got is defined, and one it has is extended. A
+    /// member it already has keeps its value (a value given must be the same), and a new one takes the next value free,
+    /// so mods adding to the same enum don't clash; a mod can't give a new one a value. The game's enums and the
+    /// engine's go in first. <paramref name="problem"/> hears what's wrong (null: values given are taken, as an
+    /// installed mod's compiled ones are).
+    /// </summary>
+    public void ExtendEnums(IEnumerable<SourceFile> files, Action<SourceFile, int, string>? problem)
+    {
+        foreach (var file in files)
+            foreach (var item in file.Items.OfType<EnumItem>())
+            {
+                var decl = item.Decl;
+                if (!Enums.TryGetValue(decl.Name, out var existing))
+                {
+                    AddEnums([new SourceFile(file.Path, [item])], true);
+                    continue;
+                }
+                var values = existing.Values.ToList();
+                var used = values.Select(v => v.Value).ToHashSet();
+                int next = used.Count == 0 ? 0 : used.Max() + 1;
+                for (int i = 0; i < decl.Members.Count; i++)
+                {
+                    var (name, value) = decl.Members[i];
+                    int line = i < decl.Lines.Count ? decl.Lines[i] : 1;
+                    int at = values.FindIndex(v => v.Name == name);
+                    if (at >= 0)
+                    {
+                        if (problem is not null && value is { } given && given != values[at].Value)
+                            problem(file, line, $"Enumerator '{name}' in '{decl.Name}' has an explicit value, but it does not match previous definition.");
+                        continue;
+                    }
+                    int v;
+                    if (value is { } explicitValue)
+                    {
+                        if (problem is not null)
+                        {
+                            problem(file, line, $"Enumerator '{name}' in '{decl.Name}' has an explicit value, that is forbidden for new enumerators defined in enum extensions (mods) to prevent conflicts.");
+                            continue;
+                        }
+                        v = (int)explicitValue;
+                    }
+                    else
+                    {
+                        while (used.Contains(next)) next++;
+                        v = next;
+                    }
+                    values.Add((name, v));
+                    used.Add(v);
+                    EnumMembers[name] = decl.Name;
+                }
+                Enums[decl.Name] = new EnumInfo { Name = decl.Name, Values = values, IsScript = existing.IsScript };
             }
     }
 
@@ -235,8 +293,8 @@ public sealed class Symbols
                     Functions.TryAdd(decl.Name, FunctionInfoOf(decl, null));
                 else if (annotation is { Kind: AnnotationKind.AddMethod, Class: { } cls })
                 {
-                    if (!Classes.TryGetValue(cls, out var target)) throw new CompileException($"@addMethod: unknown class {cls}");
-                    target.Methods[decl.Name] = FunctionInfoOf(decl, cls);
+                    // a class that isn't there is for the extensions' pass to say
+                    if (Classes.TryGetValue(cls, out var target)) target.Methods[decl.Name] = FunctionInfoOf(decl, cls);
                 }
                 break;
             }
@@ -275,6 +333,11 @@ public sealed class Symbols
                 Rank = Classes.Count,
             };
         }
+        // the engine's classes, the script-declared imports among them, before every script's
+        int engine = rtti.Classes.Count;
+        foreach (var info in Classes.Values) info.Rank += engine;
+        for (int i = 0; i < rtti.Classes.Count; i++)
+            if (Classes.TryGetValue(rtti.Classes[i].Name, out var native) && native.Rank >= engine) native.Rank = i;
     }
 
     public void AddRttiProperties(Rtti rtti)
@@ -459,6 +522,12 @@ public sealed class Symbols
 public sealed class CompileException(string message, int line = 0) : Exception(message)
 {
     public int Line { get; } = line;
+}
+
+/// <summary>Everything wrong with one function, in the order it's written.</summary>
+public sealed class CompileErrorsException(List<CompileException> errors) : Exception(errors[0].Message)
+{
+    public List<CompileException> Errors { get; } = errors;
 }
 
 public sealed record SourceFile(string Path, List<Item> Items);
