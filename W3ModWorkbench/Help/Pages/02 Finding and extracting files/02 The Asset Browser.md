@@ -38,7 +38,7 @@ Whatever you open finds the files it uses (textures, materials, animations) in *
 
 ## Bookmarks and recent files
 
-- Pick a folder and press the **star** beside Class to bookmark it, or right-click files and choose **Bookmark**. The **bookmarks** button lists them; pick one to go straight there. Bookmarks are kept between sessions.
+- Press the **star** beside Class to bookmark the file highlighted in the list (or the files, when several are), or the folder picked in the tree when no file is; it fills in when that is bookmarked already, and pressing it again takes the bookmark off. Right-clicking files and choosing **Bookmark** does the same. The **bookmarks** button lists folders and files; pick a folder to go there, or a file to go to its folder with the file highlighted. Bookmarks are kept between sessions.
 - **Recent** (the clock) lists the last 30 files you opened from the browser.
 
 ## What uses this file?

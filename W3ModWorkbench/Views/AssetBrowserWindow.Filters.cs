@@ -236,14 +236,14 @@ public partial class AssetBrowserWindow
         all.Click += (_, _) => SetHiddenSources([]);
         var only = new MenuItem { Header = L.T("AssetBrowserWindow.BaseGameOnly"), Icon = Glyph("") };
         only.Click += (_, _) => SetHiddenSources(counts.Keys.Where(k => k != BaseSource));
-        var noDlc = new MenuItem { Header = L.T("AssetBrowserWindow.ExpansionsOnly"), ToolTip = L.T("AssetBrowserWindow.HeartsStoneBloodWine") };
+        var noDlc = new MenuItem { Header = L.T("AssetBrowserWindow.ExpansionsOnly"), Icon = Glyph(""), ToolTip = L.T("AssetBrowserWindow.HeartsStoneBloodWine") };
         noDlc.Click += (_, _) => SetHiddenSources(counts.Keys.Where(k => k is not ("ep1" or "bob")));
         menu.Items.Add(all);
         menu.Items.Add(only);
         menu.Items.Add(noDlc);
         menu.Items.Add(new Separator());
 
-        var free = new MenuItem { Header = L.T("AssetBrowserWindow.FreeDLC") };
+        var free = new MenuItem { Header = L.T("AssetBrowserWindow.FreeDLC"), Icon = Glyph("") };
         foreach (var (source, count) in counts.OrderBy(c => SourceOrder(c.Key)))
         {
             var item = new MenuItem
@@ -267,8 +267,8 @@ public partial class AssetBrowserWindow
         {
             int freeCount = counts.Where(c => c.Key is not (BaseSource or "ep1" or "bob")).Sum(c => c.Value);
             free.Header = Counted(L.T("AssetBrowserWindow.FreeDLC"), freeCount);
-            var freeAll = new MenuItem { Header = L.T("AssetBrowserWindow.ShowThemAll"), StaysOpenOnClick = false };
-            var freeNone = new MenuItem { Header = L.T("AssetBrowserWindow.HideThemAll"), StaysOpenOnClick = false };
+            var freeAll = new MenuItem { Header = L.T("AssetBrowserWindow.ShowThemAll"), Icon = Glyph(""), StaysOpenOnClick = false };
+            var freeNone = new MenuItem { Header = L.T("AssetBrowserWindow.HideThemAll"), Icon = Glyph(""), StaysOpenOnClick = false };
             var freeSources = counts.Keys.Where(k => k is not (BaseSource or "ep1" or "bob")).ToList();
             freeAll.Click += (_, _) => SetHiddenSources(_hiddenSources.Except(freeSources, StringComparer.OrdinalIgnoreCase));
             freeNone.Click += (_, _) => SetHiddenSources(_hiddenSources.Union(freeSources, StringComparer.OrdinalIgnoreCase));

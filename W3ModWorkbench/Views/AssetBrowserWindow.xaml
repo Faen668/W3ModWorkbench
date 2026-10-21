@@ -214,7 +214,7 @@
             </Grid.ColumnDefinitions>
             <Border Style="{StaticResource Card}" Padding="2,6">
                 <TreeView x:Name="FolderTree" BorderThickness="0" Background="Transparent" VirtualizingPanel.IsVirtualizing="False"
-                          SelectedItemChanged="FolderTree_SelectedItemChanged">
+                          SelectedItemChanged="FolderTree_SelectedItemChanged" PreviewMouseLeftButtonDown="FolderTree_PreviewMouseLeftButtonDown">
                     <TreeView.ItemContainerStyle>
                         <Style TargetType="TreeViewItem" BasedOn="{StaticResource {x:Type TreeViewItem}}">
                             <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
@@ -266,11 +266,21 @@
                         </DataGrid.Columns>
                         <DataGrid.ContextMenu>
                             <ContextMenu>
-                                <MenuItem Header="{l:T Common.Open}" InputGestureText="Enter" Click="Open_Click" FontWeight="SemiBold" />
-                                <MenuItem x:Name="OpenCopyItem" Header="{l:T AssetBrowserWindow.OpenAnotherCopy}" Click="OpenCopy_Click" />
-                                <MenuItem Header="{l:T Common.Preview2}" Click="Preview_Click" />
-                                <MenuItem Header="{l:T Common.Properties}" Click="Properties_Click" />
-                                <MenuItem Header="{l:T Common.OpenJson}" Click="Json_Click" />
+                                <MenuItem Header="{l:T Common.Open}" InputGestureText="Enter" Click="Open_Click" FontWeight="SemiBold">
+                                    <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE8E5;" FontWeight="Normal" /></MenuItem.Icon>
+                                </MenuItem>
+                                <MenuItem x:Name="OpenCopyItem" Header="{l:T AssetBrowserWindow.OpenAnotherCopy}" Click="OpenCopy_Click">
+                                    <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE7AC;" /></MenuItem.Icon>
+                                </MenuItem>
+                                <MenuItem Header="{l:T Common.Preview2}" Click="Preview_Click">
+                                    <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE890;" /></MenuItem.Icon>
+                                </MenuItem>
+                                <MenuItem Header="{l:T Common.Properties}" Click="Properties_Click">
+                                    <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE713;" /></MenuItem.Icon>
+                                </MenuItem>
+                                <MenuItem Header="{l:T Common.OpenJson}" Click="Json_Click">
+                                    <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE943;" /></MenuItem.Icon>
+                                </MenuItem>
                                 <Separator />
                                 <MenuItem Header="{l:T Common.CopyProject}" Click="CopyToProject_Click">
                                     <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE8C8;" /></MenuItem.Icon>
@@ -278,8 +288,12 @@
                                 <MenuItem Header="{l:T AssetBrowserWindow.ExtractHighlighted}" Click="Extract_Click">
                                     <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE896;" /></MenuItem.Icon>
                                 </MenuItem>
-                                <MenuItem x:Name="BookmarkItem" Header="{l:T AssetBrowserWindow.Bookmark}" Click="BookmarkFiles_Click" />
-                                <MenuItem Header="{l:T AssetBrowserWindow.OtherCopiesFile}" Click="Copies_Click" />
+                                <MenuItem x:Name="BookmarkItem" Header="{l:T AssetBrowserWindow.Bookmark}" Click="BookmarkFiles_Click">
+                                    <MenuItem.Icon><TextBlock x:Name="BookmarkItemGlyph" Style="{StaticResource IconText}" Text="&#xE734;" /></MenuItem.Icon>
+                                </MenuItem>
+                                <MenuItem Header="{l:T AssetBrowserWindow.OtherCopiesFile}" Click="Copies_Click">
+                                    <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE8F1;" /></MenuItem.Icon>
+                                </MenuItem>
                                 <MenuItem Header="{l:T AssetBrowserWindow.WhatUsesFile}" Click="WhatUses_Click"
                                           ToolTip="{l:T AssetBrowserWindow.FilesReferEntityMesh}">
                                     <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE71B;" /></MenuItem.Icon>
@@ -290,14 +304,27 @@
                                 </MenuItem>
                                 <Separator />
                                 <MenuItem Header="{l:T Common.Copy}">
-                                    <MenuItem Header="{l:T Common.Path}" InputGestureText="Ctrl+C" Click="CopyPath_Click" />
-                                    <MenuItem Header="{l:T Common.Name}" Click="CopyName_Click" />
-                                    <MenuItem Header="{l:T Common.Folder}" Click="CopyFolder_Click" />
-                                    <MenuItem Header="{l:T AssetBrowserWindow.LocationDisk}" Click="CopyLocation_Click" />
+                                    <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE77F;" /></MenuItem.Icon>
+                                    <MenuItem Header="{l:T Common.Path}" InputGestureText="Ctrl+C" Click="CopyPath_Click">
+                                        <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE7C3;" /></MenuItem.Icon>
+                                    </MenuItem>
+                                    <MenuItem Header="{l:T Common.Name}" Click="CopyName_Click">
+                                        <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE8AC;" /></MenuItem.Icon>
+                                    </MenuItem>
+                                    <MenuItem Header="{l:T Common.Folder}" Click="CopyFolder_Click">
+                                        <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE8B7;" /></MenuItem.Icon>
+                                    </MenuItem>
+                                    <MenuItem Header="{l:T AssetBrowserWindow.LocationDisk}" Click="CopyLocation_Click">
+                                        <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xEDA2;" /></MenuItem.Icon>
+                                    </MenuItem>
                                     <MenuItem Header="{l:T AssetBrowserWindow.LinkOpenW3Mod}" Click="CopyAppLink_Click"
-                                              ToolTip="{l:T AssetBrowserWindow.W3modworkbenchLinkShowsFile}" />
+                                              ToolTip="{l:T AssetBrowserWindow.W3modworkbenchLinkShowsFile}">
+                                        <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE71B;" /></MenuItem.Icon>
+                                    </MenuItem>
                                 </MenuItem>
-                                <MenuItem Header="{l:T Common.ShowExplorer}" Click="Reveal_Click" />
+                                <MenuItem Header="{l:T Common.ShowExplorer}" Click="Reveal_Click">
+                                    <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xEC50;" /></MenuItem.Icon>
+                                </MenuItem>
                             </ContextMenu>
                         </DataGrid.ContextMenu>
                     </DataGrid>

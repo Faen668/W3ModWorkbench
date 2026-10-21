@@ -69,6 +69,7 @@ public partial class AssetBrowserWindow : Window
         FileThumbs.TextureFor = async item => await main.FindTextureForHeaderAsync(item);
         FileThumbs.ItemOpened += item => OpenItem(item);
         FileThumbs.SelectionChanged += QueuePreview;
+        FileThumbs.SelectionChanged += FilesHighlightChanged;
         PreviewPane.LocatorFor = main.LocatorFor;
         PreviewPane.TextureFor = main.FindTextureForHeaderAsync;
         ApplyView();
@@ -214,6 +215,7 @@ public partial class AssetBrowserWindow : Window
     private void FolderTree_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
     {
         RefreshView();
+        _starForFiles = false;
         UpdateBookmarkButton();
     }
 
@@ -372,7 +374,16 @@ public partial class AssetBrowserWindow : Window
 
     private void FileGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (!ThumbsMode) QueuePreview();
+        if (ThumbsMode) return;
+        QueuePreview();
+        FilesHighlightChanged();
+    }
+
+    /// <summary>A file highlighted turns the star to it; none, back to the folder.</summary>
+    private void FilesHighlightChanged()
+    {
+        _starForFiles = Highlighted().Count > 0;
+        UpdateBookmarkButton();
     }
 
     /// <summary>Shows what's highlighted in the preview pane once the highlight settles, when the pane is on.</summary>
@@ -442,7 +453,9 @@ public partial class AssetBrowserWindow : Window
         }
         OpenCopyItem.Visibility = items.Count == 1 && CopiesOf(items[0]).Count > 1 ? Visibility.Visible : Visibility.Collapsed;
         EabDetailsItem.Visibility = _settings.EasyAssetBrowserOn && Eab is not null ? Visibility.Visible : Visibility.Collapsed;
-        BookmarkItem.Header = items.All(i => IsBookmarked(i.Path)) ? L.T("AssetBrowserWindow.RemoveBookmark") : L.T("AssetBrowserWindow.Bookmark");
+        bool marked = items.All(i => IsBookmarked(i.Path));
+        BookmarkItem.Header = marked ? L.T("AssetBrowserWindow.RemoveBookmark") : L.T("AssetBrowserWindow.Bookmark");
+        BookmarkItemGlyph.Text = marked ? "" : "";
     }
 
     private void Open_Click(object sender, RoutedEventArgs e)
@@ -514,14 +527,30 @@ public partial class AssetBrowserWindow : Window
 
     private bool IsBookmarked(string path) => _settings.AssetBookmarks.Contains(path, StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Whether the star bookmarks the files highlighted in the list (they were picked last) rather than the folder in the tree.
+    /// </summary>
+    private bool _starForFiles;
+
+    /// <summary>What the star bookmarks: the files highlighted (up to 50), else the folder picked in the tree, else nothing.</summary>
+    private List<string> StarTargets()
+    {
+        if (_starForFiles && Highlighted() is { Count: > 0 } items) return [.. items.Take(50).Select(i => i.Path)];
+        return CurrentFolderBookmark is { } folder ? [folder] : [];
+    }
+
     private void UpdateBookmarkButton()
     {
-        string? folder = CurrentFolderBookmark;
-        BookmarkButton.IsEnabled = folder is not null;
-        bool marked = folder is not null && IsBookmarked(folder);
+        var targets = StarTargets();
+        BookmarkButton.IsEnabled = targets.Count > 0;
+        bool marked = targets.Count > 0 && targets.All(IsBookmarked);
         BookmarkGlyph.Text = marked ? "" : "";
-        BookmarkButton.ToolTip = folder is null ? L.T("AssetBrowserWindow.PickFolderBookmark")
-            : marked ? L.T("AssetBrowserWindow.TakeOffBookmarks", folder) : L.T("AssetBrowserWindow.BookmarkComeBackBookmarks", folder);
+        BookmarkButton.ToolTip = targets.Count switch
+        {
+            0 => L.T("AssetBrowserWindow.PickFolderBookmark"),
+            1 => marked ? L.T("AssetBrowserWindow.TakeOffBookmarks", targets[0]) : L.T("AssetBrowserWindow.BookmarkComeBackBookmarks", targets[0]),
+            _ => marked ? L.T("AssetBrowserWindow.TakeFilesOffBookmarks", targets.Count) : L.T("AssetBrowserWindow.BookmarkFilesHighlighted", targets.Count),
+        };
     }
 
     private void ToggleBookmark(string path)
@@ -532,17 +561,23 @@ public partial class AssetBrowserWindow : Window
         UpdateBookmarkButton();
     }
 
-    private void Bookmark_Click(object sender, RoutedEventArgs e)
+    /// <summary>Off when they all are bookmarked, otherwise on for those that aren't.</summary>
+    private void ToggleBookmarks(List<string> paths)
     {
-        if (CurrentFolderBookmark is { } folder) ToggleBookmark(folder);
-    }
-
-    private void BookmarkFiles_Click(object sender, RoutedEventArgs e)
-    {
-        // off when they all are bookmarked, otherwise on for those that aren't
-        var paths = Highlighted().Take(50).Select(i => i.Path).ToList();
         bool remove = paths.All(IsBookmarked);
         foreach (string path in paths.Where(p => IsBookmarked(p) == remove)) ToggleBookmark(path);
+    }
+
+    private void Bookmark_Click(object sender, RoutedEventArgs e) => ToggleBookmarks(StarTargets());
+
+    private void BookmarkFiles_Click(object sender, RoutedEventArgs e) => ToggleBookmarks([.. Highlighted().Take(50).Select(i => i.Path)]);
+
+    /// <summary>Clicking a folder in the tree, even the one already picked, turns the star back to it.</summary>
+    private void FolderTree_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (FindParent<TreeViewItem>(e.OriginalSource as DependencyObject) is null || !_starForFiles) return;
+        _starForFiles = false;
+        UpdateBookmarkButton();
     }
 
     private void Bookmarks_Click(object sender, RoutedEventArgs e)
