@@ -593,6 +593,9 @@ public partial class MainWindow : Window, IMessageHost
             menu.Items.Add(item);
             return item;
         }
+        Add("Script Bench", "Ctrl+Shift+E", () => PreviewWindow.OpenBench(this))
+            .ToolTip = "Where scripts are written and read: your project's, the game's and the installed mods', with what compiling reads spelled out";
+        menu.Items.Add(new Separator());
         Add("New project…", "Ctrl+Shift+N", () => _ = NewProjectAsync());
         Add("Open project…", "Ctrl+Shift+O", OpenProjectDialog);
         var recent = new MenuItem { Header = "Recent projects" };
@@ -613,7 +616,7 @@ public partial class MainWindow : Window, IMessageHost
         Add("Open the project folder", "", () => ProjectReveal_Click(this, new RoutedEventArgs()), project is not null);
         menu.Items.Add(new Separator());
         Add("Compile scripts", "", () => _ = PreviewWindow.CompileProjectAsync(this, chooseOutput: false), project is not null)
-            .ToolTip = "Compile the project's scripts to check them, listing any errors with links to their lines. Build compiles them into the mod as well";
+            .ToolTip = "Compile the project's scripts in Script Bench to check them, listing any errors with links to their lines. Build compiles them into the mod as well";
         Add("Compile scripts to…", "", () => _ = PreviewWindow.CompileProjectAsync(this, chooseOutput: true), project is not null);
         Add(project is null ? "Build mod" : $"Build {project.ModFolderName.Replace("_", "__")}", "Ctrl+Shift+B", () => _ = BuildModAsync(), project is not null);
         Add(project is null ? "Install mod…" : $"Install {project.ModFolderName.Replace("_", "__")}…", "", () => _ = InstallModAsync(), project is not null);
@@ -1990,6 +1993,11 @@ public partial class MainWindow : Window, IMessageHost
         else if (Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && e.Key == Key.L)
         {
             LoadOrderWindow.Open(this);
+            e.Handled = true;
+        }
+        else if (Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && e.Key == Key.E)
+        {
+            PreviewWindow.OpenBench(this);
             e.Handled = true;
         }
         else if (Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && e.Key == Key.B && ProjectWorkspace.Current is not null)

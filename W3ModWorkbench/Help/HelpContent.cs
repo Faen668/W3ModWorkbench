@@ -672,7 +672,19 @@ The XML editor and the strings editor don't interrupt typing. When you save a fi
 """),
 
         new(Basics, "Editing and compiling scripts", "\uE70F", """
-The preview is also a script editor. Scripts in a **project** can be changed and saved, with highlighting, go to definition, the definition popup and the outline all keeping up as you type, and a whole project can be compiled into a `precompiled.rsblob`, with REDkit's own compiler or, without REDkit, the one built into the tool.
+Scripts are written and read in **Script Bench**, a window of its own. Scripts in a **project** can be changed and saved, with highlighting, go to definition, the definition popup and the outline all keeping up as you type, and a whole project can be compiled into a `precompiled.rsblob`, with REDkit's own compiler or, without REDkit, the one built into the tool.
+
+## Script Bench
+
+Open it from **Project > Script Bench** (**Ctrl+Shift+E**); any script you open, from anywhere, opens in it too. On the left are the scripts it can reach, in three groups:
+
+- **Your mod**, the open project's scripts folder: the scripts you can change, and the ones compiling compiles. One that has the same path as one of the game's is marked **OVERRIDE**: it's compiled in place of the game's file, and what it leaves out still comes from the game's. **Compare with the game's** on its right-click menu shows the two side by side with the lines that differ marked. Right-click a folder for **New script** and **New folder**; a script or folder can be renamed (**F2**) and deleted (**Del**, to the Recycle Bin).
+- **Game scripts**, read-only. Right-click one and **Override in** your project copies it into your scripts folder at the same path and opens the copy, ready to change. One you've overridden already offers **Open your override**.
+- **Installed mods**, read-only: each mod in the game's mods folder with scripts, a compiled one decompiled from its blob, read when you first expand it. A file a mod ships at the same path as one of the game's is marked **REPLACES**.
+
+**Filter scripts** above the tree shows only the scripts whose name or folder has what you type in it, with their folders open (**Esc** clears it). The buttons beside it read everything again, show the file in front in the tree, and collapse every folder. **Enter** opens the script picked in the tree.
+
+The bar at the bottom says what **Compile** reads: your scripts folder (how many scripts, and how many override the game's), the game's scripts and the installed mods, and which compiler. Its tooltip has the folders.
 
 ## Projects
 
@@ -702,7 +714,7 @@ In testing, a decompiled mod compiled again without changes, though a mod that u
 
 ## Compiling
 
-**Project > Compile scripts** compiles the project's scripts into a `.rsblob` to check them or try them, with any errors listed under a preview, each opening its line. **Build** compiles them into the mod as well, so you don't need both. Two compilers can do it:
+**Compile** in Script Bench (**F7**, or **Project > Compile scripts**) compiles the project's scripts to check them, with any errors listed under the files, each opening its line. Nothing is kept: **Build** is what compiles them into the mod's `precompiled.rsblob`. **Project > Compile scripts to…** compiles them into a `.rsblob` of your choosing, to try them. Two compilers can do it:
 
 - **REDkit's `wcc_lite.exe`**, the same compiler REDkit uses to publish. REDkit is free on Steam and GOG for owners of the game: set wcc_lite in **Settings**, or let **Find automatically** look for it. It is used whenever it's set.
 - **The built-in compiler**, for when REDkit isn't installed. It reads the game's own scripts (from the game folder in **Settings**, or REDkit's, whichever is found) and the mods you have installed, so a project built on Shared Utils finds it there, and writes the same kind of blob in about a second. Tick **Always use the built-in compiler** in Settings to use it even when wcc_lite is set, which is handy while you're trying changes.
@@ -710,12 +722,12 @@ In testing, a decompiled mod compiled again without changes, though a mod that u
 Until one of them can run, compiling says why. You can still edit and save scripts without it.
 
 - Changed files are saved first, since both compilers read what's on disk. It asks before saving them.
-- The first time, it asks where the compiled blob goes, and keeps that in the project's `.w3bench` file (also in Project > Project properties). **Project > Compile scripts to…** asks again.
+- **Compile scripts to…** asks where the compiled blob goes the first time, and keeps that in the project's `.w3bench` file (also in Project > Project properties).
 - wcc_lite compiles the game's scripts and then yours on top, the way REDkit does, which takes about a minute. The built-in compiler only reads the game's scripts for what they declare, so it takes a second.
 - The built-in compiler checks your scripts the way the game's compiler does, but it is newer and less tested. Its output was compared with wcc_lite's on real mods and on about ten thousand of the game's own functions, and it matched on nearly all of them, but for a release, compile with wcc_lite when you can. Maps (`map<K, V>`) are supported, by the compiler and the decompiler.
 - Warnings and errors are listed under the files, grouped by file. Click one to go to its line. When it fails, nothing is written, so an older blob that works is left alone.
 - wcc_lite often leaves out which file a message is about when a project has more than one. The explorer works it out from the name the message mentions and the line it's on, and marks those **file guessed**. If it can't tell, the message is listed under **File not named**, with its line number.
-- **Show log** opens everything the compiler wrote, and **Show in folder** opens the folder the blob was saved to.
+- **Show log** opens everything the compiler wrote, and, after **Compile scripts to…**, **Show in folder** opens the folder the blob was saved to.
 """),
 
         new(Basics, "Editing strings", "\uE8D2", """

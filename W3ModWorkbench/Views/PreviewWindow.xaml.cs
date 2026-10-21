@@ -109,7 +109,14 @@ public partial class PreviewWindow : Window, IMessageHost
             host.ShowDocument(open);
             return;
         }
-        if (OpensTabs && OpenWindows.FirstOrDefault(w => w._takesTabs) is { } window)
+        // scripts are written and read in Script Bench
+        if (item.IsScript && BenchFor(owner) is { } bench)
+        {
+            bench.Add(CreateDocument(item));
+            bench.BringForward();
+            return;
+        }
+        if (OpensTabs && OpenWindows.FirstOrDefault(w => w._takesTabs && !w._isBench) is { } window)
         {
             window.Add(CreateDocument(item));
             window.BringForward();
@@ -135,7 +142,14 @@ public partial class PreviewWindow : Window, IMessageHost
         }
         var doc = CreateDocument(item);
         doc.Reveal(offset, length);
-        if (OpensTabs && OpenWindows.FirstOrDefault(w => w._takesTabs) is { } window)
+        if (item.IsScript && BenchFor(owner) is { } bench)
+        {
+            bench._opener = owner;
+            bench.Add(doc);
+            bench.BringForward();
+            return;
+        }
+        if (OpensTabs && OpenWindows.FirstOrDefault(w => w._takesTabs && !w._isBench) is { } window)
         {
             window._opener = owner;
             window.Add(doc);
@@ -876,7 +890,11 @@ public partial class PreviewWindow : Window, IMessageHost
     {
         if (row.File is not { } file) return;
         var from = _resultsFrom is { } d && d.Host == this && PaneOf(d) is not null ? d : Current;
-        if (from is null) return;
+        if (from is null)
+        {
+            if (_isBench) OpenBenchFile(file, row.Offset, row.Length);
+            return;
+        }
         _ = NavigateAsync(from, file, row.Offset, row.Length, toSide);
     }
 
@@ -1025,8 +1043,13 @@ public partial class PreviewWindow : Window, IMessageHost
 
     private void UpdateHeader()
     {
-        if (Current is not { } doc) return;
-        Title = $"{(doc.IsDirty ? "● " : "")}{doc.FileName} - Preview";
+        if (_isBench) BenchEmpty.Visibility = Current is null ? Visibility.Visible : Visibility.Collapsed;
+        if (Current is not { } doc)
+        {
+            if (_isBench) UpdateBenchTitle();
+            return;
+        }
+        Title = $"{(doc.IsDirty ? "● " : "")}{doc.FileName} - {(_isBench ? BenchTitle : "Preview")}";
         FileNameText.Text = doc.FileName;
         DetailText.Text = doc.Detail;
 
@@ -1272,32 +1295,38 @@ public partial class PreviewWindow : Window, IMessageHost
     private object? _resultsShowing;
 
     /// <summary>
-    /// Ctrl+Shift+B: saves the project's changed files, then compiles the project with wcc_lite (or the built-in compiler) into the file chosen for it
-    /// (asked the first time, or when <paramref name="chooseOutput"/>), and lists its warnings and errors under the files.
+    /// Saves the project's changed files, then compiles the project with wcc_lite (or the built-in compiler) into the file chosen for it
+    /// (asked the first time, or when <paramref name="chooseOutput"/>), and lists its warnings and errors under the files. A
+    /// <paramref name="check"/> compiles into a file of its own that isn't kept, only to say what's wrong: Script Bench's Compile.
     /// </summary>
-    private async Task CompileAsync(PreviewDocument doc, bool chooseOutput)
+    /// <param name="doc">The tab it's compiled from, which messages show in; null in Script Bench with no tab of the project's open.</param>
+    /// <param name="folder">The project's files, when there's no tab to tell them by.</param>
+    private async Task CompileAsync(PreviewDocument? doc, bool chooseOutput, ScriptFolder? folder = null, bool check = false)
     {
-        if (ProjectOf(doc) is not { } project || _compile is not null) return;
+        if ((doc is null ? folder : ProjectOf(doc)) is not { } project || _compile is not null) return;
+        Task<bool> Card(string title, string message, MessageKind kind, string primary, string? secondary = null) =>
+            doc?.ShowCard(title, message, kind, primary: primary, secondary: secondary) ?? BenchMessage.Show(title, message, kind, primary, secondary);
         if (CurrentCompiler() is not { } compiler)
         {
-            _ = doc.ShowCard("Nothing to compile with", "Set REDkit's wcc_lite.exe in Settings (it's in REDkit's bin\\x64_RedKit folder), or set the game folder there so the built-in compiler can read the game's scripts.",
-                MessageKind.Info, primary: "OK");
+            _ = Card("Nothing to compile with", "Set REDkit's wcc_lite.exe in Settings (it's in REDkit's bin\\x64_RedKit folder), or set the game folder there so the built-in compiler can read the game's scripts.",
+                MessageKind.Info, "OK");
             return;
         }
 
         var unsaved = UnsavedDocuments().Where(d => ProjectOf(d)?.FilePath.Equals(project.FilePath, StringComparison.OrdinalIgnoreCase) == true).ToList();
         if (unsaved.Count > 0)
         {
-            if (!await doc.ShowCard(unsaved.Count == 1 ? $"Save {unsaved[0].FileName} first?" : $"Save {unsaved.Count} files first?",
+            if (!await Card(unsaved.Count == 1 ? $"Save {unsaved[0].FileName} first?" : $"Save {unsaved.Count} files first?",
                     $"{(compiler.Kind == CompilerKind.WccLite ? "wcc_lite" : "The compiler")} compiles the files as they are on disk. " + (unsaved.Count == 1 ? "" : Names(unsaved) + " have changes."),
-                    MessageKind.Question, primary: "Save and compile", secondary: "Cancel"))
+                    MessageKind.Question, "Save and compile", "Cancel"))
                 return;
             if (!SaveAll(unsaved)) return;
         }
 
         var definition = project.Project!;
-        string? output = definition.CompileOutputPath;
-        if (chooseOutput || output is null || !Directory.Exists(Path.GetDirectoryName(output)))
+        string? output = check ? Path.Combine(Path.GetTempPath(), "W3ModWorkbench", "check-" + Guid.NewGuid().ToString("N"), "blob.rsblob")
+            : definition.CompileOutputPath;
+        if (!check && (chooseOutput || output is null || !Directory.Exists(Path.GetDirectoryName(output))))
         {
             string start = definition.CompileOutputPath is { } before && Path.GetDirectoryName(before) is { } dir
                 && Directory.Exists(dir) ? dir : definition.Root;
@@ -1317,7 +1346,7 @@ public partial class PreviewWindow : Window, IMessageHost
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                _ = doc.ShowCard("The project could not be saved", $"Compiling goes ahead, but {Path.GetFileName(definition.FilePath)} wasn't updated with where the scripts go. {ex.Message}", MessageKind.Warning, primary: "OK");
+                _ = Card("The project could not be saved", $"Compiling goes ahead, but {Path.GetFileName(definition.FilePath)} wasn't updated with where the scripts go. {ex.Message}", MessageKind.Warning, "OK");
             }
         }
 
@@ -1325,6 +1354,7 @@ public partial class PreviewWindow : Window, IMessageHost
         _resultsShowing = cancel;
         _resultsFrom = doc;
         foreach (var window in OpenWindows) window.UpdateHeader();
+        UpdateBenchStatus();
         string title = $"Compile {project.Owner}";
         OpenResultsPanel();
         if (Results.IsFind) Results.HideFind();
@@ -1338,8 +1368,8 @@ public partial class PreviewWindow : Window, IMessageHost
         var watch = Stopwatch.StartNew();
         try
         {
-            var result = await compiler.CompileAsync(project.FilePath, output, progress, cancel.Token);
-            ShowCompileResult(title, project, result, output, watch.Elapsed, compiler);
+            var result = await compiler.CompileAsync(project.FilePath, output!, progress, cancel.Token, Path.GetFileName(definition.BuiltModPath));
+            ShowCompileResult(title, project, result, output!, watch.Elapsed, compiler, check);
         }
         catch (OperationCanceledException)
         {
@@ -1353,6 +1383,20 @@ public partial class PreviewWindow : Window, IMessageHost
         {
             _compile = null;
             foreach (var window in OpenWindows) window.UpdateHeader();
+            UpdateBenchStatus();
+            if (check) TryDelete(Path.GetDirectoryName(output!)!);
+        }
+    }
+
+    private static void TryDelete(string folder)
+    {
+        try
+        {
+            if (Directory.Exists(folder)) Directory.Delete(folder, recursive: true);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // a check's left-over in the temp folder
         }
     }
 
@@ -1362,6 +1406,15 @@ public partial class PreviewWindow : Window, IMessageHost
     /// </summary>
     public static async Task CompileProjectAsync(MainWindow main, bool chooseOutput)
     {
+        if (!chooseOutput)
+        {
+            if (BenchFor(main) is { } bench)
+            {
+                bench.BringForward();
+                await bench.BenchCompileAsync();
+            }
+            return;
+        }
         if (await ProjectDocumentAsync(main) is not { Host: { } host } doc) return;
         host.BringForward();
         await host.CompileAsync(doc, chooseOutput);
@@ -1395,7 +1448,7 @@ public partial class PreviewWindow : Window, IMessageHost
     }
 
     /// <summary>The compiler's warnings and errors, grouped by file, each opening its line. The log is a button away.</summary>
-    private void ShowCompileResult(string title, ScriptFolder project, CompileResult result, string output, TimeSpan took, CompilerChoice compiler)
+    private void ShowCompileResult(string title, ScriptFolder project, CompileResult result, string output, TimeSpan took, CompilerChoice compiler, bool check = false)
     {
         if (Results.Visibility != Visibility.Visible) OpenResultsPanel();
         int errors = result.Messages.Count(m => m.IsError), warnings = result.Messages.Count - errors;
@@ -1440,15 +1493,16 @@ public partial class PreviewWindow : Window, IMessageHost
             ? warnings == 0 ? $"Compiled in {seconds}" : $"Compiled in {seconds}, {Format.Count(warnings, "warning")}"
             : errors > 0 ? $"Failed: {Format.Count(errors, "error")}" + (warnings > 0 ? $", {Format.Count(warnings, "warning")}" : "")
             : "Failed";
-        string empty = result.Success ? $"Compiled with no warnings, and saved to {output}." : result.Failure ?? $"{compiler.Name} didn't compile the scripts.";
+        string empty = result.Success ? check ? "Compiled with no warnings. Build puts the compiled scripts in the mod." : $"Compiled with no warnings, and saved to {output}."
+            : result.Failure ?? $"{compiler.Name} didn't compile the scripts.";
         Results.ShowRows(title, summary, rows, empty);
 
         var actions = new List<(string, Action)>();
-        if (result.Success)
+        if (result.Success && !check)
             actions.Add(("Show in folder", () => Process.Start("explorer.exe", $"/select,\"{output}\"")));
         string logName = compiler.Kind == CompilerKind.WccLite ? "wcc_lite.log" : "compiler.log";
         actions.Add(("Show log", () => ShowAlone(new PreviewItem(logName, title, System.Text.Encoding.UTF8.GetBytes(result.Log)), this)));
-        Results.SetActions(result.Success ? $"Saved to {output}" + (compiler.Kind == CompilerKind.BuiltIn ? ", compiled by the built-in compiler" : "")
+        Results.SetActions(result.Success ? (check ? "Checked, nothing kept" : $"Saved to {output}") + (compiler.Kind == CompilerKind.BuiltIn ? ", compiled by the built-in compiler" : "")
             : compiler.Kind == CompilerKind.WccLite ? "Nothing was saved. wcc_lite's own log has every line it wrote:" : "Nothing was saved. The compiler's log lists any game scripts it couldn't read:", [.. actions]);
     }
 
@@ -1505,11 +1559,18 @@ public partial class PreviewWindow : Window, IMessageHost
         var mods = Keyboard.Modifiers;
         var doc = Current;
         if (Picker.IsOpen) return; // it has the keys while it's open
+        if (_isBench && BenchPanel.IsKeyboardFocusWithin && key is Key.Escape or Key.Enter or Key.F2 or Key.Delete) return; // the tree's and its boxes'
+        if (_isBench && key == Key.F7 && mods == ModifierKeys.None)
+        {
+            _ = BenchCompileAsync();
+            e.Handled = true;
+            return;
+        }
         if (key == Key.Escape)
         {
-            // in the results: closes them. In a file: a message first, then the search bar, then a window showing just one file
+            // in the results: closes them. In a file: a message first, then the search bar, then a window showing just one file (not Script Bench)
             if (Results.IsKeyboardFocusWithin) CloseResultsPanel();
-            else if (doc?.HandleEscape() != true && AllDocuments.Count() == 1) Close();
+            else if (doc?.HandleEscape() != true && AllDocuments.Count() == 1 && !_isBench) Close();
         }
         else if (key == Key.S && mods == ModifierKeys.Control)
             doc?.Save();
@@ -1557,5 +1618,5 @@ public partial class PreviewWindow : Window, IMessageHost
     private void Window_PreviewKeyUp(object sender, KeyEventArgs e) => Current?.HandleKeyUp(e);
 
     public Task ShowMessage(string? title, string message, MessageKind kind) =>
-        Current?.ShowCard(title, message, kind, primary: "OK") ?? Task.CompletedTask;
+        Current?.ShowCard(title, message, kind, primary: "OK") ?? (_isBench ? BenchMessage.Show(title, message, kind, primary: "OK") : Task.CompletedTask);
 }

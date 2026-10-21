@@ -397,6 +397,9 @@ public partial class PreviewDocument : UserControl
         return true;
     }
 
+    /// <summary>Forgets the changes, so the tab closes without asking: for a file about to be renamed or deleted.</summary>
+    public void DiscardChanges() => Editor.Document.UndoStack.MarkAsOriginalFile();
+
     /// <summary>
     /// Asks whether to save changes before the file closes. True when it can close: saved, or the changes
     /// are to be thrown away; false to keep it open.

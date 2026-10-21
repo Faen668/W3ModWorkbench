@@ -102,6 +102,9 @@ public sealed class Settings
     /// <summary>Compile with the built-in compiler even when wcc_lite is set. It needs only the game's scripts, and is quicker.</summary>
     public bool PreferBuiltInCompiler { get; set; }
 
+    /// <summary>The width of Script Bench's tree of scripts.</summary>
+    public double BenchTreeWidth { get; set; } = 300;
+
     /// <summary>Where the game strings search reads from: "Game" (the .w3strings files), "REDkit" (its strings database) or "File" (<see cref="StringsDatabasePath"/>).</summary>
     public string GameStringsSource { get; set; } = "Game";
 
