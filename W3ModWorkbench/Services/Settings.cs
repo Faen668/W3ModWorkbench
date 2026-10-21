@@ -45,6 +45,9 @@ public sealed class Settings
     /// <summary>Whether the asset browser's name and folder searches are regular expressions.</summary>
     public bool AssetSearchRegex { get; set; }
 
+    /// <summary>Whether the asset browser reads EasyAssetBrowser's categories and tags from its GitHub repository and shows them.</summary>
+    public bool UseEasyAssetBrowser { get; set; } = true;
+
     /// <summary>Whether opening a file from the asset browser that more than one archive has asks which copy to open.</summary>
     public bool AskWhichCopy { get; set; } = true;
 

@@ -138,6 +138,7 @@ public partial class AssetBrowserWindow
         }
         else if (FolderBox.Text.Split(' ', StringSplitOptions.RemoveEmptyEntries) is { Length: > 0 } words)
             tests.Add(i => words.All(w => i.Folder.Contains(w, StringComparison.OrdinalIgnoreCase)));
+        if (EabFilter(withCategory: false) is { } eab) tests.Add(eab);
         return tests.Count == 0 ? null : i => tests.All(t => t(i));
     }
 
@@ -148,6 +149,7 @@ public partial class AssetBrowserWindow
         if (RegexMode && _nameRegex is not null) on.Add($"name /{SearchBox.Text}/");
         if (FolderBox.Text.Trim() is { Length: > 0 } folder) on.Add(RegexMode ? $"folder /{folder}/" : $"folder \"{folder}\"");
         if (_hiddenSources.Count > 0) on.Add($"{_hiddenSources.Count} part{(_hiddenSources.Count == 1 ? "" : "s")} of the game hidden");
+        on.AddRange(DescribeEab());
         return on;
     }
 

@@ -53,6 +53,7 @@ public partial class AssetBrowserWindow : Window
         AskToggle.IsChecked = _settings.AskWhichCopy;
         RegexToggle.IsChecked = _settings.AssetSearchRegex;
         ApplySearchHints();
+        ApplyEab();
         _searchTimer.Tick += (_, _) =>
         {
             _searchTimer.Stop();
@@ -132,6 +133,7 @@ public partial class AssetBrowserWindow : Window
         _root.IsSelected = true;
         RefreshView();
         SearchBox.Focus();
+        await LoadEabAsync(false);
     }
 
     /// <summary>
@@ -219,7 +221,15 @@ public partial class AssetBrowserWindow : Window
         List<EntryItem> scope = [.. folder.AllFiles()];
         // the part of the game, folder and regular expressions first; the search box is one of those when it's a regex
         var extra = ExtraFilter();
-        var result = FileFilterResult.Apply(extra is null ? scope : [.. scope.Where(extra)], RegexMode ? "" : SearchBox.Text, _typeFilter, _classFilter);
+        string search = RegexMode ? "" : SearchBox.Text;
+        List<EntryItem> left = extra is null ? scope : [.. scope.Where(extra)];
+        var result = FileFilterResult.Apply(left, search, _typeFilter, _classFilter);
+        // the EAB categories count what the other filters leave; the one picked narrows the list, type and class
+        if (Eab is not null && _settings.UseEasyAssetBrowser)
+        {
+            FillEabCategories(result.Shown);
+            if (EabFilter(withCategory: true) is { } inCategory) result = FileFilterResult.Apply([.. left.Where(inCategory)], search, _typeFilter, _classFilter);
+        }
         FillChoices(result);
         _shown = result.Shown;
         BindFiles();
@@ -406,6 +416,7 @@ public partial class AssetBrowserWindow : Window
             return;
         }
         OpenCopyItem.Visibility = items.Count == 1 && CopiesOf(items[0]).Count > 1 ? Visibility.Visible : Visibility.Collapsed;
+        EabDetailsItem.Visibility = _settings.UseEasyAssetBrowser && Eab is not null ? Visibility.Visible : Visibility.Collapsed;
         BookmarkItem.Header = items.All(i => IsBookmarked(i.Path)) ? "Remove bookmark" : "Bookmark";
     }
 

@@ -1,0 +1,161 @@
+<Window x:Class="W3ModWorkbench.EabWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="EasyAssetBrowser" Icon="pack://application:,,,/W3ModWorkbench;component/Assets/app.ico"
+        Width="1100" Height="680" MinWidth="760" MinHeight="420"
+        WindowStartupLocation="CenterOwner" PreviewKeyDown="Window_PreviewKeyDown">
+    <Window.Resources>
+        <Style x:Key="IconText" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="{StaticResource IconFont}" />
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style x:Key="Card" TargetType="Border">
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}" />
+            <Setter Property="Background" Value="{DynamicResource CardBackgroundFillColorDefaultBrush}" />
+        </Style>
+        <Style x:Key="FieldName" TargetType="TextBlock">
+            <Setter Property="Opacity" Value="0.65" />
+            <Setter Property="Margin" Value="0,10,0,3" />
+        </Style>
+        <Style x:Key="CellText" TargetType="TextBlock">
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+            <Setter Property="Margin" Value="4,0" />
+        </Style>
+        <Style x:Key="DimCellText" TargetType="TextBlock" BasedOn="{StaticResource CellText}">
+            <Setter Property="Opacity" Value="0.7" />
+        </Style>
+        <!-- bold rather than in the accent colour, which the highlight is in too -->
+        <Style x:Key="ChangedCellText" TargetType="TextBlock" BasedOn="{StaticResource CellText}">
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="16,12,16,12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- whose data it is, and where it comes from -->
+        <DockPanel Margin="0,0,0,12">
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                <Button Padding="10,6" Click="Site_Click" ToolTip="Open EasyAssetBrowser's site in the browser">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Style="{StaticResource IconText}" Text="&#xE774;" />
+                        <TextBlock Margin="8,0,0,0" Text="Site" />
+                    </StackPanel>
+                </Button>
+                <Button Margin="8,0,0,0" Padding="10,6" Click="Repository_Click" ToolTip="Open EasyAssetBrowser's GitHub repository, where its tags are kept">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Style="{StaticResource IconText}" Text="&#xE8A7;" />
+                        <TextBlock Margin="8,0,0,0" Text="GitHub" />
+                    </StackPanel>
+                </Button>
+            </StackPanel>
+            <StackPanel>
+                <TextBlock Text="EasyAssetBrowser" FontSize="20" FontWeight="SemiBold" />
+                <TextBlock x:Name="SourceText" Margin="0,2,0,0" Opacity="0.7" TextWrapping="Wrap" />
+            </StackPanel>
+        </DockPanel>
+
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="3*" MinWidth="300" />
+                <ColumnDefinition Width="8" />
+                <ColumnDefinition Width="2*" MinWidth="300" />
+            </Grid.ColumnDefinitions>
+
+            <!-- the files, as EasyAssetBrowser lists them, with what's changed -->
+            <Border Style="{StaticResource Card}" ClipToBounds="True">
+                <DataGrid x:Name="Files" AutoGenerateColumns="False" IsReadOnly="True" HeadersVisibility="Column" GridLinesVisibility="None"
+                          BorderThickness="0" Background="Transparent" SelectionMode="Extended" SelectionUnit="FullRow" CanUserAddRows="False"
+                          SelectionChanged="Files_SelectionChanged">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="2*" MinWidth="120" ElementStyle="{StaticResource CellText}" />
+                        <DataGridTextColumn Header="EAB category" Binding="{Binding Category}" Width="110" ElementStyle="{StaticResource DimCellText}" />
+                        <DataGridTextColumn Header="EAB origin" Binding="{Binding Origin}" Width="90" ElementStyle="{StaticResource DimCellText}" />
+                        <DataGridTextColumn Header="EAB tags" Binding="{Binding TagsText}" Width="2*" MinWidth="120" ElementStyle="{StaticResource DimCellText}" />
+                        <DataGridTextColumn Header="Change" Binding="{Binding ChangeText}" Width="2*" MinWidth="90" ElementStyle="{StaticResource ChangedCellText}" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </Border>
+            <GridSplitter Grid.Column="1" Width="8" HorizontalAlignment="Stretch" Background="Transparent" />
+
+            <!-- what EAB has for the files highlighted, and their tags to change -->
+            <Border Grid.Column="2" Style="{StaticResource Card}" Padding="14,4,14,12">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel x:Name="Details">
+                        <TextBlock x:Name="DetailTitle" Margin="0,8,0,0" FontSize="16" FontWeight="SemiBold" TextWrapping="Wrap" />
+                        <TextBlock x:Name="ListedText" Margin="0,2,0,0" Opacity="0.7" TextWrapping="Wrap" />
+
+                        <TextBlock Style="{StaticResource FieldName}" Text="EAB path" />
+                        <DockPanel>
+                            <Button x:Name="CopyPathButton" DockPanel.Dock="Right" Padding="8,4" Margin="8,0,0,0" Click="CopyPath_Click" ToolTip="Copy the path as EasyAssetBrowser writes it">
+                                <TextBlock Style="{StaticResource IconText}" Text="&#xE8C8;" />
+                            </Button>
+                            <TextBox x:Name="PathText" IsReadOnly="True" TextWrapping="Wrap" FontFamily="Cascadia Mono, Consolas" FontSize="12" />
+                        </DockPanel>
+
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="12" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource FieldName}" Text="EAB category" />
+                                <ComboBox x:Name="CategoryBox" SelectionChanged="CategoryBox_SelectionChanged"
+                                          ToolTip="The category EasyAssetBrowser lists the file in. Change it, or pick one for a file it doesn't list yet, to suggest it." />
+                            </StackPanel>
+                            <StackPanel Grid.Column="2">
+                                <TextBlock Style="{StaticResource FieldName}" Text="EAB origin" />
+                                <TextBox x:Name="OriginText" IsReadOnly="True" ToolTip="Which part of the game EasyAssetBrowser says the file is from (BaseGame, HoS, BnW, dlc1…)" />
+                            </StackPanel>
+                        </Grid>
+
+                        <TextBlock Style="{StaticResource FieldName}" Text="EAB tags" />
+                        <TextBlock x:Name="TagsHint" Opacity="0.55" FontSize="12" TextWrapping="Wrap" Margin="0,0,0,4"
+                                   Text="Tick the tags the files should have. A filled box means some of the files highlighted have it." />
+                        <WrapPanel x:Name="TagPanel" />
+                        <DockPanel Margin="0,8,0,0">
+                            <Button DockPanel.Dock="Right" Margin="8,0,0,0" Padding="10,5" Click="AddTag_Click" Content="Add" />
+                            <Grid>
+                                <TextBox x:Name="NewTagBox" VerticalContentAlignment="Center" Padding="8,5" KeyDown="NewTagBox_KeyDown" TextChanged="NewTagBox_TextChanged" />
+                                <TextBlock x:Name="NewTagPlaceholder" Text="A new tag" Margin="10,0,0,0" VerticalAlignment="Center" Opacity="0.5" IsHitTestVisible="False" />
+                            </Grid>
+                        </DockPanel>
+
+                        <Button x:Name="OpenOnSiteButton" Margin="0,16,0,0" HorizontalAlignment="Left" Padding="10,6" Click="OpenOnSite_Click"
+                                ToolTip="Show the file on EasyAssetBrowser's site">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Style="{StaticResource IconText}" Text="&#xE8A7;" />
+                                <TextBlock Margin="8,0,0,0" Text="Open on EasyAssetBrowser" />
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
+        </Grid>
+
+        <!-- the changes, sent to EasyAssetBrowser as a suggestion -->
+        <DockPanel Grid.Row="2" Margin="0,12,0,0">
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                <Button x:Name="UndoButton" Padding="12,6" Click="Undo_Click" Content="Undo changes" ToolTip="Put the files highlighted back as EasyAssetBrowser has them" />
+                <Button x:Name="CopyButton" Margin="8,0,0,0" Padding="12,6" Click="Copy_Click" Content="Copy as JSON"
+                        ToolTip="Copy the files changed in EasyAssetBrowser's own JSON form" />
+                <Button x:Name="SuggestButton" Margin="8,0,0,0" Padding="12,6" Click="Suggest_Click" Style="{DynamicResource AccentButtonStyle}">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Style="{StaticResource IconText}" Text="&#xE8EC;" Foreground="{DynamicResource TextOnAccentFillColorPrimaryBrush}" />
+                        <TextBlock Margin="8,0,0,0" Text="Suggest on GitHub…" Foreground="{DynamicResource TextOnAccentFillColorPrimaryBrush}" />
+                    </StackPanel>
+                </Button>
+            </StackPanel>
+            <TextBlock x:Name="ChangesText" VerticalAlignment="Center" Opacity="0.7" TextWrapping="Wrap" Margin="0,0,12,0" />
+        </DockPanel>
+    </Grid>
+</Window>

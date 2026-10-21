@@ -138,6 +138,35 @@
             </Grid>
         </DockPanel>
         <DockPanel Margin="0,8,0,0" LastChildFill="False">
+            <!-- EasyAssetBrowser's categories and tags, named as its own -->
+            <StackPanel x:Name="EabPanel" DockPanel.Dock="Right" Orientation="Horizontal">
+                <TextBlock Text="EAB category" VerticalAlignment="Center" Margin="12,0,8,0" Opacity="0.7" />
+                <ComboBox x:Name="EabCategoryBox" Width="170" SelectionChanged="EabCategoryBox_SelectionChanged" IsEnabled="False"
+                          ToolTip="Show only files EasyAssetBrowser lists in one category (Meshes, Entities, Decals, Particles, Communities, SRT Trees)">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="{Binding Name}" />
+                                <TextBlock Text="{Binding CountText}" Opacity="0.5" Margin="8,0,0,0" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
+                <Button x:Name="EabTagsButton" Margin="8,0,0,0" Click="EabTags_Click" IsEnabled="False"
+                        ToolTip="Show only files with EasyAssetBrowser tags, or leave out files with them (Kaer Morhen, Ruin, Corpses…)">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Style="{StaticResource IconText}" Text="&#xE8EC;" Margin="0,1,0,0" />
+                        <TextBlock x:Name="EabTagsText" Margin="8,0,0,0" Text="EAB tags" />
+                        <TextBlock Style="{StaticResource IconText}" Text="&#xE70D;" FontSize="9" Margin="8,2,0,0" />
+                    </StackPanel>
+                </Button>
+                <Button x:Name="EabButton" Margin="4,0,0,0" Padding="8,6" Click="EabMenu_Click">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Style="{StaticResource IconText}" Text="&#xE946;" Margin="0,1,0,0" />
+                        <TextBlock Style="{StaticResource IconText}" Text="&#xE70D;" FontSize="9" Margin="6,2,0,0" />
+                    </StackPanel>
+                </Button>
+            </StackPanel>
             <Grid Width="360">
                 <TextBox x:Name="FolderBox" VerticalContentAlignment="Center" Padding="34,6,10,6" TextChanged="FolderBox_TextChanged" />
                 <TextBlock Style="{StaticResource IconText}" Text="&#xE8B7;" Margin="12,0,0,0" Opacity="0.6" IsHitTestVisible="False" HorizontalAlignment="Left" />
@@ -210,6 +239,8 @@
                             <DataGridTextColumn Header="Class" Binding="{Binding ResourceClass}" Width="150" ElementStyle="{StaticResource DimCellText}" />
                             <DataGridTextColumn Header="Size" Binding="{Binding SizeText}" SortMemberPath="Size" Width="90" ElementStyle="{StaticResource RightText}" />
                             <DataGridTextColumn Header="From" Binding="{Binding BundleName}" Width="210" ElementStyle="{StaticResource DimCellText}" />
+                            <DataGridTextColumn x:Name="EabCategoryColumn" Header="EAB category" Binding="{Binding EabCategory}" Width="100" ElementStyle="{StaticResource DimCellText}" Visibility="Collapsed" />
+                            <DataGridTextColumn x:Name="EabTagsColumn" Header="EAB tags" Binding="{Binding EabTags}" Width="160" ElementStyle="{StaticResource DimCellText}" Visibility="Collapsed" />
                         </DataGrid.Columns>
                         <DataGrid.ContextMenu>
                             <ContextMenu>
@@ -227,6 +258,10 @@
                                 </MenuItem>
                                 <MenuItem x:Name="BookmarkItem" Header="Bookmark" Click="BookmarkFiles_Click" />
                                 <MenuItem Header="Other copies of this file…" Click="Copies_Click" />
+                                <MenuItem x:Name="EabDetailsItem" Header="View EAB details…" Click="EabDetails_Click"
+                                          ToolTip="What EasyAssetBrowser has for the files: category, origin and tags, with tags to suggest">
+                                    <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE946;" /></MenuItem.Icon>
+                                </MenuItem>
                                 <Separator />
                                 <MenuItem Header="Copy">
                                     <MenuItem Header="Path" InputGestureText="Ctrl+C" Click="CopyPath_Click" />
