@@ -40,7 +40,7 @@ public sealed class AnimationPreview : Grid
     private Matrix4x4 _placing = Matrix4x4.Identity;
     private BoneTransform[] _pose = [];
     private float _time, _playedFrom, _speed = 1;
-    private bool _playing, _scrubbing;
+    private bool _playing, _scrubbing, _framed;
     private double _nextDraw;
     private CancellationTokenSource? _load;
     private int _animationVersion;
@@ -137,6 +137,7 @@ public sealed class AnimationPreview : Grid
             if (token.IsCancellationRequested) return;
             _view.ShowParts(parts, textures);
             _view.FitToView();
+            _framed = false;
             _posing = await Task.Run(() => FindRig(look, parts.Select(p => p.Mesh).ToList(), locator), token);
             Message = parts.Count == 0 ? "The entity has no meshes to show." : _posing is null ? "The entity has no skeleton to play animations on." : "";
         }
@@ -248,6 +249,12 @@ public sealed class AnimationPreview : Grid
         _scrub.Maximum = Math.Max(0.01, _clip.Duration);
         _scrub.IsEnabled = _play.IsEnabled = true;
         SetTime(0);
+        // the first animation frames the actor, once the view has its size
+        if (!_framed)
+        {
+            _framed = true;
+            _view.FitToView();
+        }
         if (play) Play();
         return true;
     }

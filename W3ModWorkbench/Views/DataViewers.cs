@@ -27,6 +27,7 @@ public static class DataViewers
         Tree("Job tree", JobTreeFile.IsJobTree, JobTreeFile.Read, w => new JobTreePreview(w.Locator)),
         new("Community", CommunityWindow.CanShow, CommunityWindow.Open, CommunityWindow.OpenFile),
         new("Journal", JournalWindow.CanShow, JournalWindow.Open, JournalWindow.OpenFile),
+        new("Animation events", AnimEventsWindow.CanShow, AnimEventsWindow.Open, AnimEventsWindow.OpenFile),
     ];
 
     /// <summary>Whether a file's name says a viewer here shows it.</summary>

@@ -453,6 +453,19 @@ Above the properties a character plays the action picked, in 3D, as REDkit's job
 Every one of REDkit's job trees reads (1,057).
 """),
 
+        new(Basics, "Animation events", "\uE8D6", """
+Double-click a `.w2animev`, or select it and press **Enter**, to open it in the animation events viewer. An animation events file keeps events timed to a set of animations (sounds, footsteps, effects, things scripts hear) apart from the animations, so they can be worked on alone. Each event names its animation and its track, and when it starts (and for how long, for those that last).
+
+The window is laid out as REDkit's animation events editor: the animation picked playing on a character in 3D at the top left, the file's animations at the top right, and the picked animation's events along a timeline underneath.
+
+- **The animation set** the events are for is found by the file's name (`man_axe_1handed_sounds.w2animev` is for `man_axe_1handed.w2anims`), or else by which set in folders like the file's has the most of its animations; or pick one in **Animation set**. The note over the list says how many of the file's animations are in it, and those that aren't are dimmed.
+- **The character** is Geralt, a man, a woman, a child or a dwarf, as the file's folder is for; pick another in **Preview on**. Play, pause, drag to any moment and change the speed under the view; **Space** plays and pauses.
+- **The animations** say how many events each has; narrow them by some letters (**Ctrl+F**). Click one to play it and see its events.
+- **The timeline** has a row for each track, each event marked where it starts (blue for a sound, brown for a footstep, orange for an effect, a bar for one that lasts) with the sound or effect it plays, a ruler of seconds, and a line that follows the animation. Click an event to go to it and see its properties under **Event**; click the ruler or a row to go to that moment; the wheel zooms the time.
+
+**File** has the file's own properties, from REDkit's copy when there is one. Every one of REDkit's animation events files reads (346).
+"""),
+
         new(Basics, "Communities", "\uE716", """
 Double-click a `.w2comm`, or select it and press **Enter**, to open it in the community viewer. One a property refers to opens from the other viewers too, and a file on disk opens from **Open files** or by dropping it on the window.
 
