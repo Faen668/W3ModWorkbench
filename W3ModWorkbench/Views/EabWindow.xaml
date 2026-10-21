@@ -138,8 +138,9 @@
                             </Grid.ColumnDefinitions>
                             <StackPanel>
                                 <TextBlock Style="{StaticResource FieldName}" Text="EAB category" />
-                                <ComboBox x:Name="CategoryBox" SelectionChanged="CategoryBox_SelectionChanged"
-                                          ToolTip="The category EasyAssetBrowser lists the file in. Change it, or pick one for a file it doesn't list yet, to suggest it." />
+                                <ComboBox x:Name="CategoryBox" IsEditable="True" IsTextSearchEnabled="True" SelectionChanged="CategoryBox_SelectionChanged"
+                                          KeyDown="CategoryBox_KeyDown" LostKeyboardFocus="CategoryBox_LostKeyboardFocus"
+                                          ToolTip="The category EasyAssetBrowser lists the file in. Pick another, or type a new one and press Enter, to suggest it." />
                             </StackPanel>
                             <StackPanel Grid.Column="2">
                                 <TextBlock Style="{StaticResource FieldName}" Text="EAB origin" />

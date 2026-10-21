@@ -49,7 +49,7 @@ public sealed class EabRow : INotifyPropertyChanged
     public bool Adding { get; private set; }
 
     /// <summary>Whether there's anything to suggest: tags added or taken off, a category changed, or a file EAB doesn't list to add.</summary>
-    public bool Changed => Category is not null && (Asset is null ? Adding : Added.Any() || Removed.Any() || CategoryChanged);
+    public bool Changed => Asset is null ? Adding : Added.Any() || Removed.Any() || CategoryChanged;
 
     /// <summary>What's changed, in a few words: "+Ruin −Cave", "Meshes → Entities", "new: +Ruin".</summary>
     public string ChangeText
@@ -58,7 +58,7 @@ public sealed class EabRow : INotifyPropertyChanged
         {
             if (!Changed) return "";
             var parts = new List<string>();
-            if (Asset is null) parts.Add(Tags.Count == 0 ? "new" : "new:");
+            if (Asset is null) parts.Add((Category is null ? "new, no category" : "new") + (Tags.Count == 0 ? "" : ":"));
             if (CategoryChanged) parts.Add($"{Asset!.Category} → {Category}");
             parts.AddRange(Added.Order(StringComparer.OrdinalIgnoreCase).Select(t => "+" + t));
             parts.AddRange(Removed.Order(StringComparer.OrdinalIgnoreCase).Select(t => "−" + t));
@@ -69,6 +69,8 @@ public sealed class EabRow : INotifyPropertyChanged
     public void SetCategory(string? category)
     {
         Category = category;
+        // giving a file EAB doesn't list a category suggests adding it
+        if (Asset is null && category is not null) Adding = true;
         Notify();
     }
 
@@ -84,7 +86,7 @@ public sealed class EabRow : INotifyPropertyChanged
     /// <summary>Suggests adding a file EAB doesn't list, or stops; nothing for one it lists already.</summary>
     public void SetAdding(bool on)
     {
-        if (Asset is not null || Category is null) return;
+        if (Asset is not null) return;
         Adding = on;
         Notify();
     }
@@ -174,8 +176,8 @@ public partial class EabWindow : Window
                 var row = picked[0];
                 DetailTitle.Text = row.Name;
                 ListedText.Text = row.Asset is not null ? $"Listed on EasyAssetBrowser · {row.Item.Path}"
-                    : row.Category is null ? $"EasyAssetBrowser lists meshes, entities, decals (.xbm), particles, communities and SpeedTree trees (.srt) for world building. "
-                        + $"It has no category for {System.IO.Path.GetExtension(row.Item.Name)} files, so this one can't be tagged."
+                    : row.Category is null ? $"Not listed on EasyAssetBrowser yet, and it has no category for {System.IO.Path.GetExtension(row.Item.Name)} files. "
+                        + "Pick one of its categories, or type a new one, or suggest it without and leave that to its author."
                     : "Not listed on EasyAssetBrowser yet.";
                 PathText.Text = row.EabPath;
                 OriginText.Text = row.Origin;
@@ -184,20 +186,31 @@ public partial class EabWindow : Window
             {
                 DetailTitle.Text = picked.Count == 0 ? "Highlight a file" : $"{picked.Count:N0} files";
                 int listed = picked.Count(r => r.Asset is not null);
-                int cannot = picked.Count(r => r.Category is null);
-                ListedText.Text = picked.Count == 0 ? "" : $"{listed:N0} listed on EasyAssetBrowser, {picked.Count - listed - cannot:N0} not yet"
-                    + (cannot > 0 ? $", and {cannot:N0} of kinds it doesn't list, which tags leave alone" : "");
+                ListedText.Text = picked.Count == 0 ? "" : $"{listed:N0} listed on EasyAssetBrowser, {picked.Count - listed:N0} not yet";
                 PathText.Text = string.Join(Environment.NewLine, picked.Take(20).Select(r => r.EabPath)) + (picked.Count > 20 ? $"{Environment.NewLine}… and {picked.Count - 20:N0} more" : "");
                 OriginText.Text = string.Join(", ", picked.Select(r => r.Origin).Distinct());
             }
             var categories = picked.Select(r => r.Category).Distinct().ToList();
-            CategoryBox.SelectedItem = categories.Count == 1 ? categories[0] : null;
-            // a file of a kind EAB doesn't list has no tags to give: the section goes rather than sitting there greyed out
-            bool canTag = picked.Any(r => r.Category is not null);
-            CategoryBox.IsEnabled = canTag;
-            TagSection.Visibility = canTag ? Visibility.Visible : Visibility.Collapsed;
+            CategoryBox.Text = categories.Count == 1 ? categories[0] ?? "" : "";
+            CategoryBox.IsEnabled = picked.Count > 0;
             OpenOnSiteButton.Visibility = picked is [{ Asset: not null }] ? Visibility.Visible : Visibility.Collapsed;
-            var unlisted = picked.Where(r => r.Asset is null && r.Category is not null).ToList();
+            ShowAdding(picked);
+            FillTags(picked);
+        }
+        finally
+        {
+            _filling = false;
+        }
+    }
+
+    /// <summary>The add box: shown for files EAB doesn't list, ticked when they're all suggested for adding, filled when some are.</summary>
+    private void ShowAdding(List<EabRow> picked)
+    {
+        bool filling = _filling;
+        _filling = true;
+        try
+        {
+            var unlisted = picked.Where(r => r.Asset is null).ToList();
             AddCheck.Visibility = unlisted.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
             AddCheck.Content = unlisted.Count switch
             {
@@ -207,11 +220,10 @@ public partial class EabWindow : Window
             };
             int adding = unlisted.Count(r => r.Adding);
             AddCheck.IsChecked = _addWas = adding == 0 ? false : adding == unlisted.Count ? true : null;
-            FillTags(picked);
         }
         finally
         {
-            _filling = false;
+            _filling = filling;
         }
     }
 
@@ -225,7 +237,6 @@ public partial class EabWindow : Window
         var categories = picked.Select(r => r.Category).OfType<string>().Distinct().ToList();
         IEnumerable<string> tags = categories.Count == 1 && _eab.Categories.FirstOrDefault(c => c.Name == categories[0]) is { } category ? category.Tags : _eab.Tags;
         tags = tags.Concat(picked.SelectMany(r => r.Tags)).Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase);
-        bool canTag = picked.Any(r => r.Category is not null);
         foreach (string tag in tags)
         {
             int with = picked.Count(r => r.Tags.Contains(tag));
@@ -234,7 +245,6 @@ public partial class EabWindow : Window
                 Content = tag,
                 Margin = new Thickness(0, 2, 14, 2),
                 MinWidth = 0,
-                IsEnabled = canTag,
                 IsThreeState = false,
                 IsChecked = with == 0 ? false : with == picked.Count ? true : null,
             };
@@ -250,7 +260,10 @@ public partial class EabWindow : Window
                     box.IsChecked = on;
                     return;
                 }
-                foreach (var row in Picked.Where(r => r.Category is not null)) row.SetTag(name, on);
+                var rows = Picked;
+                foreach (var row in rows) row.SetTag(name, on);
+                // a tag on a file EAB doesn't list suggests adding it, which the add box says
+                ShowAdding(rows);
             }
             box.Checked += (_, _) => Changed();
             box.Unchecked += (_, _) => Changed();
@@ -274,7 +287,31 @@ public partial class EabWindow : Window
     private void CategoryBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_filling || CategoryBox.SelectedItem is not string category) return;
-        foreach (var row in Picked.Where(r => r.Category is not null || r.Asset is null)) row.SetCategory(category);
+        SetCategory(category);
+    }
+
+    // a category typed in (one EAB doesn't have yet), taken when Enter's pressed or the box is left
+    private void CategoryBox_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter) return;
+        SetCategory(CategoryBox.Text);
+        e.Handled = true;
+    }
+
+    private void CategoryBox_LostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        if (!_filling && !CategoryBox.IsKeyboardFocusWithin) SetCategory(CategoryBox.Text);
+    }
+
+    /// <summary>Gives the files highlighted a category, spelled as EAB spells it when it has it; nothing for an empty one, or the one they have.</summary>
+    private void SetCategory(string typed)
+    {
+        typed = typed.Trim();
+        if (typed.Length == 0) return;
+        string category = _eab.Categories.FirstOrDefault(c => c.Name.Equals(typed, StringComparison.OrdinalIgnoreCase))?.Name ?? typed;
+        var rows = Picked.Where(r => r.Category != category).ToList();
+        if (rows.Count == 0) return;
+        foreach (var row in rows) row.SetCategory(category);
         ShowPicked();
     }
 
@@ -296,7 +333,7 @@ public partial class EabWindow : Window
         string typed = NewTagBox.Text.Trim();
         if (typed.Length == 0) return;
         string tag = _eab.Tags.FirstOrDefault(t => t.Equals(typed, StringComparison.OrdinalIgnoreCase)) ?? typed;
-        foreach (var row in Picked.Where(r => r.Category is not null)) row.SetTag(tag, true);
+        foreach (var row in Picked) row.SetTag(tag, true);
         NewTagBox.Clear();
         ShowPicked();
     }
