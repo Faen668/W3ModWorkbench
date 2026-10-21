@@ -12,7 +12,8 @@ namespace W3ModWorkbench;
 /// </summary>
 public static class ViewerLinks
 {
-    public static async Task OpenAsync(Window owner, MessageCard message, ResourceLocator locator, string path)
+    /// <param name="lookAs">For an entity opened from a scene or cutscene: the appearance that shows it in.</param>
+    public static async Task OpenAsync(Window owner, MessageCard message, ResourceLocator locator, string path, EntityWindow.LookAs? lookAs = null)
     {
         if (Path.GetExtension(path).ToLowerInvariant() is ".xbm" or ".w2cube" or ".texarray")
         {
@@ -47,7 +48,7 @@ public static class ViewerLinks
         if (MeshWindow.CanShow(path)) MeshWindow.Open(path, source, data, entry?.Archive, locator, owner);
         else if (CutsceneWindow.CanShow(path)) CutsceneWindow.Open(path, source, data, locator, owner, entry?.Archive);
         else if (SceneWindow.CanShow(path)) SceneWindow.Open(path, source, data, locator, owner, entry?.Archive);
-        else if (EntityWindow.CanShow(path)) EntityWindow.Open(path, source, data, locator, owner, entry?.Archive);
+        else if (EntityWindow.CanShow(path)) EntityWindow.Open(path, source, data, locator, owner, entry?.Archive, lookAs);
         else if (BehTreeWindow.CanShow(path)) BehTreeWindow.Open(path, source, data, locator, owner, entry?.Archive);
         else if (XmlWindow.CanOpen(path)) XmlWindow.OpenData(name, $"{source}  ·  {path}", data, owner, path);
         else if (PropertiesWindow.CanShow(path)) PropertiesWindow.Open(path, source, data, locator, owner, entry?.Archive);

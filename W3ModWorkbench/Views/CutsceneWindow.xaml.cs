@@ -830,7 +830,12 @@ public partial class CutsceneWindow : Window, IMessageHost
 
     private void ActorTemplate_Click(object sender, RoutedEventArgs e)
     {
-        if ((sender as FrameworkElement)?.Tag is string path) _ = ViewerLinks.OpenAsync(this, Message, _locator, path);
+        if ((sender as FrameworkElement)?.Tag is not string path) return;
+        // shown in the appearance the cutscene gives the actor, else its voice tag's, as the preview puts it together
+        var lookAs = (sender as FrameworkElement)?.DataContext is CutsceneActorItem { Actor: var actor }
+            ? new EntityWindow.LookAs(actor.Appearance is { } a ? [a] : [], actor.VoiceTag, $"the cutscene's {actor.Name}")
+            : null;
+        _ = ViewerLinks.OpenAsync(this, Message, _locator, path, lookAs);
     }
 
     private void Link_Click(object sender, RoutedEventArgs e)

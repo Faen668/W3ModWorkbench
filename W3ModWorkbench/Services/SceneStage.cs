@@ -358,7 +358,11 @@ public static class SceneStage
             token.ThrowIfCancellationRequested();
             var definition = scene.File.Object(export.Index);
             string name = definition["id"] as string ?? "";
-            if (!wanted.TryGetValue(name, out var names)) continue;
+            if (!wanted.TryGetValue(name, out var names))
+            {
+                notes.Add($"{name} isn't drawn: none of the dialog sets the sections play in has a place for them.");
+                continue;
+            }
             if ((definition["entityTemplate"] is RedHandle h ? scene.File.Import(h)?.Path : null) is not { } template || locator.ReadFile(template) is not { } data)
             {
                 notes.Add($"{name} isn't drawn: its entity template wasn't found.");

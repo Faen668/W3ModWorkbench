@@ -415,13 +415,17 @@ public partial class SceneWindow : Window, IMessageHost
         StageText.Text = "";
         var locator = _locator;
         var timelines = _timelines.ToList();
-        var sets = _dialogsets;
+        // a scene with no dialog sets is played where its actors stand in the world: here they stand together
+        bool standIn = _dialogsets.Count == 0;
+        var sets = standIn ? [SceneStaging.StandIn(s.File)] : _dialogsets;
         var cutscenes = s.Nodes.Where(n => n.Kind == SceneNodeKind.Cutscene && n.Cutscene is not null).Select(n => n.Cutscene!)
             .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         var loaded = await StageLoading.RunAsync($"Loading {Path.GetFileNameWithoutExtension(_path)}", async (report, token) =>
         {
             report.Step("Putting the actors together");
             var notes = new List<string>();
+            if (standIn)
+                notes.Add("The scene has no dialog sets: the game plays it where its actors already stand in the world, so here they stand in a ring facing each other.");
             var (cast, idles, bySection) = await Task.Run(() =>
             {
                 var idles = SceneStage.Idles(locator);
@@ -1338,7 +1342,13 @@ public partial class SceneWindow : Window, IMessageHost
 
     private void File_Click(object sender, RoutedEventArgs e)
     {
-        if ((sender as FrameworkElement)?.Tag is string path) _ = OpenLinkAsync(path);
+        if ((sender as FrameworkElement)?.Tag is not string path) return;
+        // an actor's template shows the appearance the scene puts it in: its appearance filter, else its voice tag's
+        var lookAs = (sender as FrameworkElement)?.DataContext is SceneActorRow { } actor
+            ? new EntityWindow.LookAs(actor.AppearanceFilter.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries), actor.Id,
+                $"the scene's {actor.Id}")
+            : null;
+        _ = OpenLinkAsync(path, lookAs);
     }
 
     private void CopyPath_Click(object sender, RoutedEventArgs e) => Copy((sender as FrameworkElement)?.Tag as string);
@@ -1347,7 +1357,7 @@ public partial class SceneWindow : Window, IMessageHost
     /// Opens a file the scene uses in its viewer, found the way the game would find it. A kind of file the tool can't
     /// show has its path copied instead.
     /// </summary>
-    private async Task OpenLinkAsync(string path)
+    private async Task OpenLinkAsync(string path, EntityWindow.LookAs? lookAs = null)
     {
         bool viewable = EntityWindow.CanShow(path) || BehTreeWindow.CanShow(path) || MeshWindow.CanShow(path) || CutsceneWindow.CanShow(path) || CanShow(path) || XmlWindow.CanOpen(path) || TextureWindow.CanShow(path) || DataViewers.CanShow(path);
         if (!viewable)
@@ -1375,7 +1385,7 @@ public partial class SceneWindow : Window, IMessageHost
         string source = entry is null ? "project" : entry.Archive.Name;
         string name = Path.GetFileName(path);
         if (DataViewers.CanShow(path)) DataViewers.Open(path, source, data, _locator, this, entry?.Archive);
-        else if (EntityWindow.CanShow(path)) EntityWindow.Open(path, source, data, _locator, this, entry?.Archive);
+        else if (EntityWindow.CanShow(path)) EntityWindow.Open(path, source, data, _locator, this, entry?.Archive, lookAs);
         else if (BehTreeWindow.CanShow(path)) BehTreeWindow.Open(path, source, data, _locator, this, entry?.Archive);
         else if (MeshWindow.CanShow(path)) MeshWindow.Open(path, source, data, entry?.Archive, _locator, this);
         else if (CutsceneWindow.CanShow(path)) CutsceneWindow.Open(path, source, data, _locator, this, entry?.Archive);

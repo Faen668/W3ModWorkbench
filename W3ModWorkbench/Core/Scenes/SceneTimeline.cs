@@ -152,6 +152,25 @@ public sealed record SceneCameraDefinition(string Name, Vector3 Position, Vector
 /// <summary>What a scene keeps besides its flow: its dialog sets and its cameras.</summary>
 public static class SceneStaging
 {
+    /// <summary>
+    /// Where to stand the actors of a scene with no dialog sets, for a preview: such a scene (a community chat, a
+    /// passing remark) is played where its actors already are in the world, so the file never says. They stand in a
+    /// ring facing its middle, as people talking do; a heading of a turns +Y towards -X, as the game's VecFromHeading.
+    /// </summary>
+    public static SceneDialogset StandIn(Cr2wFile file)
+    {
+        var actors = file.Exports.Where(x => x.ClassName == "CStorySceneActor").Select(x => file.Object(x.Index)["id"] as string)
+            .OfType<string>().Where(id => id.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        float radius = 0.7f + 0.2f * Math.Max(0, actors.Count - 2);
+        var slots = actors.Select((actor, i) =>
+        {
+            float heading = 2 * MathF.PI * i / actors.Count;
+            var position = new Vector3(radius * MathF.Sin(heading), -radius * MathF.Cos(heading), 0);
+            return new SceneDialogsetSlot(i + 1, actor, actor, position, new Vector3(0, 0, heading * 180 / MathF.PI), new RedObject("CStorySceneDialogsetSlot"));
+        }).ToList();
+        return new SceneDialogset("(standing where they are)", null, [], slots, new RedObject("CStorySceneDialogsetInstance"));
+    }
+
     public static List<SceneDialogset> Dialogsets(Cr2wFile file, RedObject scene)
     {
         var result = new List<SceneDialogset>();

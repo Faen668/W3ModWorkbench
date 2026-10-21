@@ -30,10 +30,20 @@ public partial class EntityWindow : Window, IMessageHost
     private readonly ResourceLocator _locator;
     private EntityFile? _entity;
     private EntityLook? _look;
+    private EntityAppearance? _lookWanted;
     private List<EntityComponent> _partComponents = [];
     private CancellationTokenSource? _meshLoad;
     private readonly Dictionary<string, Task<BitmapSource?>> _textures = new(StringComparer.OrdinalIgnoreCase);
     private bool _syncing;
+
+    /// <summary>The appearance a scene or cutscene shows the entity in, when it was opened from one.</summary>
+    private LookAs? _lookAs;
+
+    /// <summary>
+    /// How a scene or cutscene asks for the entity to look: the appearances it names, first that the entity has wins,
+    /// else the one the entity gives its voice tag, as the game picks it. <paramref name="From"/> says which, for the window.
+    /// </summary>
+    public sealed record LookAs(IReadOnlyList<string> Appearances, string? VoiceTag, string From);
 
     private EntityWindow(string path, string source, Func<byte[]> readData, ResourceLocator locator, string? origin)
     {
@@ -68,8 +78,8 @@ public partial class EntityWindow : Window, IMessageHost
     public static bool CanShow(string name) => EntityFile.IsEntity(name);
 
     /// <summary>Opens an entity in a window of its own. The files it uses are looked for with <paramref name="locator"/>.</summary>
-    public static void Open(string path, string source, byte[] data, ResourceLocator locator, Window owner, IArchive? archive = null) =>
-        new EntityWindow(path, source, () => data, locator, archive?.FilePath).Standalone(owner).Show();
+    public static void Open(string path, string source, byte[] data, ResourceLocator locator, Window owner, IArchive? archive = null, LookAs? lookAs = null) =>
+        new EntityWindow(path, source, () => data, locator, archive?.FilePath) { _lookAs = lookAs }.Standalone(owner).Show();
 
     /// <summary>Opens an entity file on disk: one in the project's game files, or one extracted from a bundle.</summary>
     public static void OpenFile(string file, ResourceLocator locator, Window owner) =>
@@ -81,11 +91,15 @@ public partial class EntityWindow : Window, IMessageHost
     {
         try
         {
-            _entity = await Task.Run(() =>
+            var lookAs = _lookAs;
+            (_entity, _lookWanted) = await Task.Run(() =>
             {
                 var entity = EntityFile.Read(_readData());
                 entity.FindOrigins(_locator.ReadFile);
-                return entity;
+                var wanted = lookAs is null ? null
+                    : lookAs.Appearances.Select(n => entity.Appearances.FirstOrDefault(a => a.Name.Equals(n, StringComparison.OrdinalIgnoreCase))).FirstOrDefault(a => a is not null)
+                      ?? SceneStage.Appearance(entity, lookAs.VoiceTag, _locator);
+                return (entity, wanted);
             });
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or NotSupportedException)
@@ -111,9 +125,10 @@ public partial class EntityWindow : Window, IMessageHost
         var looks = new List<object> { "The entity alone" };
         looks.AddRange(e.Appearances.Select(a => a.Name));
         AppearanceBox.ItemsSource = looks;
-        AppearanceBox.SelectedIndex = e.DefaultAppearance is { } shown ? e.Appearances.IndexOf(shown) + 1 : 0;
+        AppearanceBox.SelectedIndex = (_lookWanted ?? e.DefaultAppearance) is { } shown ? e.Appearances.IndexOf(shown) + 1 : 0;
         InfoText.Text = $"{_path}   ·   {_source}   ·   CR2W {e.File.Version}, {Format.Count(e.Components.Count, "component")}, "
-                      + $"{Format.Count(e.Appearances.Count, "appearance")}, {Format.Count(e.Includes.Count, "include")}";
+                      + $"{Format.Count(e.Appearances.Count, "appearance")}, {Format.Count(e.Includes.Count, "include")}"
+                      + (_lookWanted is { } asked && _lookAs is { } from ? $"   ·   shown as {from.From} shows it: {asked.Name}" : "");
     }
 
     /// <summary>Every file the entity refers to: its includes, the templates of its appearances, and its components' resources.</summary>
