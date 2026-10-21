@@ -22,7 +22,8 @@ namespace W3ModWorkbench;
 /// </summary>
 public partial class EntityWindow : Window, IMessageHost
 {
-    private const int TextureSize = 1024;
+    /// <summary>The largest a texture is read, from Settings.</summary>
+    private static int TextureSize => App.TextureDetail;
 
     private readonly string _path;
     private readonly string _source;

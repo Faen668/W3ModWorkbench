@@ -213,6 +213,26 @@ public partial class AssetBrowserWindow
         _ = LoadEabAsync(false);
     }
 
+    /// <summary>Settings changed what the asset browser asks and whether EasyAssetBrowser's tags are on: the open one follows.</summary>
+    public static void SettingsChanged()
+    {
+        if (_instance is not { } browser) return;
+        browser.AskToggle.IsChecked = browser._settings.AskWhichCopy;
+        if (!browser._settings.EasyAssetBrowserOn)
+        {
+            browser._eabCategory = null;
+            browser._eabInclude.Clear();
+            browser._eabExclude.Clear();
+            browser.ApplyEab();
+            browser.RefreshView();
+        }
+        else
+        {
+            browser.ApplyEab();
+            _ = browser.LoadEabAsync(false);
+        }
+    }
+
     /// <summary>Turns EasyAssetBrowser's tags off, so the tool doesn't go online, and when asked deletes the lists it downloaded.</summary>
     private void TurnEabOff(bool deleteLists)
     {

@@ -6,6 +6,13 @@ public partial class App : Application
 {
     public static Settings Settings { get; } = Settings.Load();
 
+    /// <summary>The language of the game's text and voices the viewers start in, from Settings (English when it names none the game has).</summary>
+    public static Core.Strings.W3Language GameLanguage =>
+        Core.Strings.W3Strings.Language(Settings.GameLanguage) ?? Core.Strings.W3Strings.Languages[0];
+
+    /// <summary>The largest a texture is read for the 3D views, from Settings: 0 there means as big as the game's.</summary>
+    public static int TextureDetail => Settings.TextureDetail switch { 512 or 1024 or 2048 => Settings.TextureDetail, 0 => 16384, _ => 1024 };
+
     /// <param name="theme">System, Light or Dark.</param>
     /// <param name="preset">The name of a <see cref="ThemePreset"/>.</param>
     public static void ApplyTheme(string theme, string preset) => Themes.Apply(theme, preset);
@@ -17,6 +24,7 @@ public partial class App : Application
         if (CommandLine.Handles(e.Args))
         {
             Core.Scripts.GameScripts.GameFolder = Settings.GameFolder;
+            Core.GameDocuments.Override = Settings.GameDocumentsFolder;
             Shutdown(CommandLine.Run(e.Args));
             return;
         }
@@ -48,6 +56,7 @@ public partial class App : Application
                 args.Handled = true;
             }));
         Core.Scripts.GameScripts.GameFolder = Settings.GameFolder;
+        Core.GameDocuments.Override = Settings.GameDocumentsFolder;
         bool reporting = false;
         DispatcherUnhandledException += async (_, args) =>
         {

@@ -21,7 +21,8 @@ namespace W3ModWorkbench;
 /// </summary>
 public sealed class AnimationPreview : Grid
 {
-    private const int TextureSize = 1024;
+    /// <summary>The largest a texture is read, from Settings.</summary>
+    private static int TextureSize => App.TextureDetail;
     private readonly MeshView _view = new();
     private readonly TextBlock _message = new() { HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, TextWrapping = TextWrapping.Wrap, TextAlignment = TextAlignment.Center, Margin = new Thickness(20), Opacity = 0.8 };
     private readonly Button _play = new() { Padding = new Thickness(10, 4, 10, 4), IsEnabled = false, ToolTip = "Play or pause" };

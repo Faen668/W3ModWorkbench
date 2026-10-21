@@ -30,6 +30,7 @@ public partial class StubWindow : Window, IMessageHost
     private StubWindow(string scriptsFolder)
     {
         InitializeComponent();
+        EditorLook.Apply(Output);
         _scriptsFolder = scriptsFolder;
         _searchTimer.Tick += (_, _) =>
         {

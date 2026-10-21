@@ -152,6 +152,30 @@ public sealed class Settings
     /// <summary>How many times a second the entity viewer poses an animation as it plays; 0 for as often as the screen draws.</summary>
     public int AnimationFps { get; set; } = 30;
 
+    /// <summary>The language of the game's text and voices the viewers start in: subtitles, lines, strings. A handle such as "en" or "de".</summary>
+    public string GameLanguage { get; set; } = "en";
+
+    /// <summary>The folder the game keeps input.settings, mods.settings and scriptslog.txt in. Empty for Documents\The Witcher 3.</summary>
+    public string GameDocumentsFolder { get; set; } = "";
+
+    /// <summary>Where new projects go unless one is put somewhere else. Empty for Documents\W3 Mod Workbench.</summary>
+    public string ProjectsFolder { get; set; } = "";
+
+    /// <summary>The code and text editors' font size, in points.</summary>
+    public double EditorFontSize { get; set; } = 13;
+
+    /// <summary>How many spaces wide a tab is drawn in the code and text editors. The game's own scripts are indented with tabs.</summary>
+    public int EditorTabWidth { get; set; } = 4;
+
+    /// <summary>
+    /// The largest a texture is read for the 3D views (entities, scenes, cutscenes, rigs, animations): 512, 1024, 2048, or
+    /// 0 for as big as the game's. Bigger is sharper, and slower to load with more memory used.
+    /// </summary>
+    public int TextureDetail { get; set; } = 1024;
+
+    /// <summary>Show a game file's properties from REDkit's source copy when there is one, as it keeps what cooking leaves out.</summary>
+    public bool PreferRedkitProperties { get; set; } = true;
+
     /// <summary>The project files opened most recently, newest first.</summary>
     public List<string> RecentProjects { get; set; } = [];
 

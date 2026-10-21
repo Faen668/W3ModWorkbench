@@ -167,7 +167,8 @@ public partial class CutsceneWindow : Window, IMessageHost
         List<uint?> ids = [];
         try
         {
-            var strings = await GameStringIndex.GetAsync(game, W3Strings.Language("en")!);
+            // the lines in the language Settings names; their voices stay English, which the cutscene is timed to
+            var strings = await GameStringIndex.GetAsync(game, App.GameLanguage);
             lines = await Task.Run(() =>
             {
                 foreach (string scenePath in c.UsedIn)

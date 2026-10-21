@@ -39,6 +39,8 @@ public static class RedkitSource
     {
         if (origin is not null && FileSafety.IsRedkitFile(origin)) return new(null, PropertySource.Redkit, origin);
         if (origin is null || !FileSafety.IsGameContent(origin)) return new(null, PropertySource.Own, null);
+        // Settings can ask for the game's own file, as cooked, instead
+        if (!App.Settings.PreferRedkitProperties) return new(null, PropertySource.Cooked, null);
         if (Path.IsPathRooted(gamePath) || FileSafety.RedkitFile(gamePath) is not { } source) return new(null, PropertySource.Cooked, null);
         return Parse(() => File.ReadAllBytes(source)) is { } read
             ? new(read, PropertySource.Redkit, source)
@@ -128,6 +130,8 @@ public static class RedkitSource
         PropertySource.RedkitUnreadable => $"REDkit has a source file for this {what}, but it's in an older format this tool can't read yet{Version(redkitPath)}, "
             + $"so only what the game's cooked file keeps is shown: {redkitPath}",
         PropertySource.Own => $"Properties from this {what} itself, as it's from a mod, a project or a file on disk: REDkit's copy would show the game's version instead.",
+        PropertySource.Cooked when !App.Settings.PreferRedkitProperties =>
+            $"Properties from the game's cooked file, as Settings asks: what cooking leaves out isn't shown. Turn on REDkit's source files in Settings, under Viewers, to see it.",
         PropertySource.Cooked => $"REDkit has no source file for this {what}, so only what the game's cooked file keeps is shown.",
         _ => $"Neither REDkit nor the game has this {what}'s resource file, so only what's known without it is shown.",
     };

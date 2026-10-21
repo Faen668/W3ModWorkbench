@@ -17,7 +17,8 @@ namespace W3ModWorkbench;
 /// </summary>
 public sealed class CutsceneStage : Grid
 {
-    private const int TextureSize = 1024;
+    /// <summary>The largest a texture is read, from Settings.</summary>
+    private static int TextureSize => App.TextureDetail;
 
     private readonly System.Windows.Controls.Border _bars = new() { Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0xE0, 0, 0, 0)), Visibility = Visibility.Collapsed };
     private readonly TextBlock _text = new()

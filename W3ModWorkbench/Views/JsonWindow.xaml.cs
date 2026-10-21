@@ -67,6 +67,7 @@ public partial class JsonWindow : Window, IMessageHost
     private JsonWindow(string name, string source)
     {
         InitializeComponent();
+        EditorLook.Apply(Editor, tabWidth: false);
         _source = source;
         Editor.Options.IndentationSize = 2;
         Editor.Options.ConvertTabsToSpaces = true;

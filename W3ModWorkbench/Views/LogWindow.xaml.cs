@@ -33,7 +33,7 @@ public partial class LogWindow : Window, IMessageHost
     private CancellationTokenSource? _findCts;
 
     /// <summary>Documents\The Witcher 3\scriptslog.txt, where the game writes the log.</summary>
-    public static string DefaultPath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "The Witcher 3", "scriptslog.txt");
+    public static string DefaultPath => GameDocuments.FileIn("scriptslog.txt");
 
     private LogWindow(string path)
     {

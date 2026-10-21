@@ -37,8 +37,7 @@ public sealed partial class InputSettings
     public static readonly string[] CommonContexts = ["Exploration", "Combat", "Horse", "Swimming", "Boat", "Diving"];
 
     /// <summary>Documents\The Witcher 3\input.settings, the file the game reads.</summary>
-    public static string DefaultPath => System.IO.Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "The Witcher 3", "input.settings");
+    public static string DefaultPath => GameDocuments.FileIn("input.settings");
 
     /// <summary>bin\config\r4game\user_config_matrix\pc\input.xml in the game's folder, which lists the actions the key bindings menu offers.</summary>
     public static string? MenuPath(string? gameFolder) =>

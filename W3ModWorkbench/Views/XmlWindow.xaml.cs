@@ -51,8 +51,8 @@ public partial class XmlWindow : Window, IMessageHost
     private XmlWindow(string name, string source)
     {
         InitializeComponent();
+        EditorLook.Apply(Editor);
         _source = source;
-        Editor.Options.IndentationSize = 4;
         Editor.Options.EnableHyperlinks = false;
         Editor.Options.EnableEmailHyperlinks = false;
         Editor.Options.ConvertTabsToSpaces = false;

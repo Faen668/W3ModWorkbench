@@ -247,7 +247,7 @@ public partial class StringsWindow : Window, IMessageHost
 
         foreach (var s in strings) Add(StringRow.From(s));
         _view.Refresh();
-        LanguageBox.SelectedItem = language ?? W3Strings.Language("en");
+        LanguageBox.SelectedItem = language ?? App.GameLanguage;
         Validate();
         _edited = false;
         UpdateHeader();

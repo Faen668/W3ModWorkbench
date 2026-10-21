@@ -21,8 +21,8 @@ namespace W3ModWorkbench;
 /// </summary>
 public partial class SceneWindow : Window, IMessageHost
 {
-    // the language the lines were last shown in, kept for the next scene opened
-    private static string _language = "en";
+    // the language the lines were last shown in, kept for the next scene opened: the one Settings names at first
+    private static string _language = App.Settings.GameLanguage;
 
     private readonly string _path;
     private readonly string _source;
@@ -385,7 +385,7 @@ public partial class SceneWindow : Window, IMessageHost
     private Dictionary<SceneNode, SceneDialogset?> _dialogsetOf = [];
     private readonly Dictionary<SceneNode, List<ActorTrack>> _tracks = [];
     private readonly Dictionary<string, Task<System.Windows.Media.Imaging.BitmapSource?>> _stageTextures = new(StringComparer.OrdinalIgnoreCase);
-    private const int StageTextureSize = 1024;
+    private static int StageTextureSize => App.TextureDetail;
     private readonly CancellationTokenSource _closing = new();
 
     private void MainTabs_SelectionChanged(object sender, SelectionChangedEventArgs e)

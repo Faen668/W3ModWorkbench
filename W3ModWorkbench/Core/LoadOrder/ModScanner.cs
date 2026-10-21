@@ -419,8 +419,7 @@ public static partial class ModScanner
     /// <summary>Documents\The Witcher 3\mods.settings, where the game keeps each mod's priority.</summary>
     public static string? FindSettingsFile()
     {
-        string documents = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-        string path = Path.Combine(documents, "The Witcher 3", "mods.settings");
+        string path = GameDocuments.FileIn("mods.settings");
         return File.Exists(path) ? path : null;
     }
 }

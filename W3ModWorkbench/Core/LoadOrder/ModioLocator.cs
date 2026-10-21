@@ -69,7 +69,7 @@ public static class ModioLocator
     private static Dictionary<long, (bool? Enabled, int? Priority)> ReadConfig()
     {
         var result = new Dictionary<long, (bool?, int?)>();
-        string path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "The Witcher 3", "modioModsConfig.json");
+        string path = GameDocuments.FileIn("modioModsConfig.json");
         try
         {
             if (!File.Exists(path)) return result;

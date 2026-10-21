@@ -269,7 +269,7 @@ public partial class RigWindow : Window, IMessageHost
     {
         lock (_textures)
         {
-            if (!_textures.TryGetValue(path, out var task)) _textures[path] = task = Task.Run(() => MeshTextures.Load(_locator, path, 1024));
+            if (!_textures.TryGetValue(path, out var task)) _textures[path] = task = Task.Run(() => MeshTextures.Load(_locator, path, App.TextureDetail));
             return task;
         }
     }

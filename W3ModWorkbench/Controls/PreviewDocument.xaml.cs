@@ -114,7 +114,7 @@ public partial class PreviewDocument : UserControl
         InitializeComponent();
         Item = item;
 
-        Editor.Options.IndentationSize = 4; // tab width
+        EditorLook.Apply(Editor);
         Editor.Options.EnableHyperlinks = false;
         Editor.Options.EnableEmailHyperlinks = false;
         Editor.TextArea.TextView.Margin = new Thickness(10, 0, 0, 0);

@@ -113,9 +113,13 @@ public partial class ProjectWindow : Window
         Validate();
     }
 
-    /// <summary>Where new projects go unless you choose: Documents, in W3 Mod Workbench, beside your other work and outside the game.</summary>
-    private static string DefaultProjectsFolder =>
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "W3 Mod Workbench");
+    /// <summary>
+    /// Where new projects go unless you choose: the folder Settings names, else Documents, in W3 Mod Workbench, beside your
+    /// other work and outside the game.
+    /// </summary>
+    private static string DefaultProjectsFolder => string.IsNullOrWhiteSpace(App.Settings.ProjectsFolder)
+        ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "W3 Mod Workbench")
+        : App.Settings.ProjectsFolder.Trim();
 
     private static string SafeFolderName(string name) =>
         string.Concat(name.Trim().Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '_' : c));

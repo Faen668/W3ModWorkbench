@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **Settings, redone in sections**: General, Appearance, Game and tools, Language, Scripts and editors, Viewers, and Privacy and online, each with what it changes said beside it. New settings, each for something the app used to decide for you:
+  - **Where new projects go** (was always Documents\W3 Mod Workbench), and **Clear the recent lists**.
+  - **The game's own settings folder**, where input.settings, mods.settings and scriptslog.txt are: Documents\The Witcher 3 unless the game writes elsewhere, such as under Proton or Wine. The key binding helper, load order analyser and scripts log read from it.
+  - **The game's language**: scenes' lines and voices, cutscenes' lines, the game strings search and the strings editor start in it instead of English, and it says whether your game has that language's text and voices.
+  - **Code editor font size and tab width**, for scripts, XML and stubs, with a sample.
+  - **Texture detail in the 3D views** (512, 1024, 2048 or full), which was fixed at 1024.
+  - **Read properties from REDkit's source files**, which can be turned off to see exactly what the game's cooked file holds.
+  - **Ask which copy to open** and **EasyAssetBrowser tags** (turn off, or off and delete what was downloaded) are in Settings too, not only in the Asset Browser.
 - **Scene actors without the idle or the entity a scene expects**: an actor whose animation sets haven't the idle the scene stands it in (an adult's idle on a child's or a woman's skeleton) stands in a standing idle of its own instead of T-posing. An actor the scene gives only a voice tag (chats that play on whoever is nearby) is drawn as the community entity that has that voice tag, the one named after it first. Notes say which stood in.
 - **The player's entity shows Geralt**: `player.w2ent` and `geralt_player.w2ent` are only a neck seam, as the game dresses him in what's equipped. The entity window now offers **Geralt, dressed (Workbench)** and starts on it: his head, starting armour and both swords, as the scene and cutscene previews dress him. A note on the view says it's put together by the app, not an appearance in the game's files.
 - **Scenes without dialog sets play in the preview**: community chats and other scenes the game plays wherever their actors already stand (which REDkit shows empty) now stand their actors in a ring facing each other, with a note saying so, instead of "None of the scene's actors could be put together". An actor left out now always says why.

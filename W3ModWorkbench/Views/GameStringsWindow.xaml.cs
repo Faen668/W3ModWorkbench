@@ -44,7 +44,7 @@ public partial class GameStringsWindow : Window, IMessageHost
         InitializeComponent();
         _gameFolder = gameFolder;
         LanguageBox.ItemsSource = W3Strings.Languages;
-        LanguageBox.SelectedItem = W3Strings.Language(handle) ?? W3Strings.Language("en");
+        LanguageBox.SelectedItem = W3Strings.Language(handle) ?? App.GameLanguage;
         GameItem.IsEnabled = gameFolder is not null;
         RedkitItem.IsEnabled = _redkitDatabase is not null;
         RedkitItem.Content = _redkitDatabase is null ? "REDkit database (not found)" : "REDkit database";
@@ -76,8 +76,10 @@ public partial class GameStringsWindow : Window, IMessageHost
     /// Opens the window for the game folder, or says what's missing when there's neither it nor a REDkit strings
     /// database to read.
     /// </summary>
-    public static void Open(Window owner, string? gameFolder, string handle = "en", string? query = null)
+    /// <param name="handle">The language to start in; the one Settings names when not given.</param>
+    public static void Open(Window owner, string? gameFolder, string? handle = null, string? query = null)
     {
+        handle ??= App.Settings.GameLanguage;
         if (gameFolder is not null && !GameLocator.IsGameFolder(gameFolder)) gameFolder = null;
         if (gameFolder is null && RedkitStrings.Find(App.Settings.WccLitePath) is null && !File.Exists(App.Settings.StringsDatabasePath))
         {
