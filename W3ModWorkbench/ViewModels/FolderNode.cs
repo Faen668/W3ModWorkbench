@@ -3,6 +3,7 @@ using W3ModWorkbench.Core;
 using W3ModWorkbench.Core.Scripts;
 using W3ModWorkbench.Core.Strings;
 using W3ModWorkbench.Core.Textures;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.ViewModels;
 
@@ -77,11 +78,11 @@ public sealed class FolderNode : INotifyPropertyChanged
     public bool IsLooseScripts => IsBundle && Archive is ScriptFolder { Project: null } folder && !ScriptFolder.IsGameScripts(folder.FilePath);
     public string Detail => IsBundle && !InGroup && !IsGroup ? Archive.Name : "";
     public string Glyph => !IsBundle ? "\uE8B7" : IsGroup ? "\uE838" : IsProject ? "\uE821" : IsLooseScripts ? "\uE8A5" : Archive is RedkitDepot ? "\uEC7A" : Archive is GameFilesArchive ? "\uE8F1" : Archive is ScriptArchive ? "\uE943" : Archive is TextureCacheArchive ? "\uEB9F" : Archive is StringsFolder ? "\uE8D2" : "\uE7B8";
-    public string ToolTip => Unavailable ?? (IsBundle && Archive is RedkitDepot ? $"REDkit's own files, from before they're cooked, as REDkit places them; read-only\n{Archive.FilePath}"
-        : IsGroup ? $"{Name}: {Children.Count} archives"
-        : IsBundle && Archive is GameFilesArchive ? $"Every file the game has, from {Archive.Name}, each from where the game loads it (mods first, then DLC, then content0)\n{Archive.FilePath}"
-        : IsBundle && Archive is ScriptFolder { Project: { } project } ? $"Project {project.Name}: its files can be edited, saved and compiled\n{project.FilePath}"
-        : IsLooseScripts ? $"Loose scripts, not in a project: editing them offers to add them to one\n{Archive.FilePath}"
+    public string ToolTip => Unavailable ?? (IsBundle && Archive is RedkitDepot ? L.T("FolderNode.REDkitsOwnFilesBefore", Archive.FilePath)
+        : IsGroup ? L.T("FolderNode.Archives", Name, Children.Count)
+        : IsBundle && Archive is GameFilesArchive ? L.T("FolderNode.EveryFileGameHas", Archive.Name, Archive.FilePath)
+        : IsBundle && Archive is ScriptFolder { Project: { } project } ? L.T("FolderNode.ProjectFilesCanEdited", project.Name, project.FilePath)
+        : IsLooseScripts ? L.T("FolderNode.LooseScriptsNotProject", Archive.FilePath)
         : IsBundle ? Archive.FilePath : FullPath);
 
     public string FullPath => Parent is null || Parent.IsBundle ? Name : Parent.FullPath + "\\" + Name;

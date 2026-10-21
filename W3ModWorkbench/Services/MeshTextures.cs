@@ -4,6 +4,7 @@ using System.Windows.Media.Imaging;
 using W3ModWorkbench.Core.Cr2w;
 using W3ModWorkbench.Core.Meshes;
 using W3ModWorkbench.Core.Textures;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -74,5 +75,5 @@ public static class MeshTextures
 
     /// <summary>Where a texture's pixels were found, or that they weren't, for a material's status line.</summary>
     public static string Describe(ResourceLocator locator, string xbmPath) =>
-        locator.FindTexture(xbmPath) is { } texture ? $"{texture.FormatText}, from {texture.Archive.Owner}\\{texture.Archive.Name}" : "Not found in any texture cache.";
+        locator.FindTexture(xbmPath) is { } texture ? L.T("MeshTextures.From", texture.FormatText, texture.Archive.Owner, texture.Archive.Name) : L.T("MeshTextures.NotFoundAnyTexture");
 }

@@ -4,6 +4,7 @@ using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 using W3ModWorkbench.Core.Animation;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -171,7 +172,7 @@ public sealed class EventTimeline : FrameworkElement
         }
         if (_tracks.Count == 0)
         {
-            var none = new FormattedText("This animation has no events.", CultureInfo.CurrentCulture, FlowDirection.LeftToRight, plain, 12, LineBrush, dip);
+            var none = new FormattedText(L.T("EventTimeline.AnimationHasNoEvents"), CultureInfo.CurrentCulture, FlowDirection.LeftToRight, plain, 12, LineBrush, dip);
             dc.DrawText(none, new Point(HeaderWidth + 12, RulerHeight + 8));
         }
     }
@@ -231,7 +232,7 @@ public sealed class EventTimeline : FrameworkElement
         if (ReferenceEquals(at, _hover)) return;
         _hover = at;
         Cursor = at is null ? null : Cursors.Hand;
-        ToolTip = at is null ? null : $"{at.Label}\n{at.Object.ClassName}  ·  {at.Track}\nat {at.Start:0.000} s" + (at.Duration > 0 ? $" for {at.Duration:0.000} s" : "");
+        ToolTip = at is null ? null : L.T("EventTimeline.EventTip", at.Label, at.Object.ClassName, at.Track, at.Start) + (at.Duration > 0 ? L.T("EventTimeline.EventFor", at.Duration) : "");
         InvalidateVisual();
     }
 

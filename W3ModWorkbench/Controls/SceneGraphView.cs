@@ -5,6 +5,7 @@ using System.Windows.Media;
 using System.Windows.Shapes;
 using W3ModWorkbench.Core.Scenes;
 using W3ModWorkbench.ViewModels;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -162,7 +163,7 @@ public sealed class SceneGraphView : Border
         foreach (var element in node.Elements)
         {
             if (element.Kind == SceneElementKind.Line && element.StringId is { } id)
-                yield return $"{element.Speaker}: {text(id) ?? $"(string {id})"}";
+                yield return $"{element.Speaker}: {text(id) ?? L.T("SceneGraphView.String", id)}";
             else if (element.Kind == SceneElementKind.Choice)
                 foreach (var option in element.Options)
                     yield return "▸ " + (option.StringId is { } o && text(o) is { } words ? words : option.Label);

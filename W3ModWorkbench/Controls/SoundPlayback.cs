@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
 using NAudio.Wave;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -266,7 +267,7 @@ public sealed class Waveform : FrameworkElement
         // the ruler: a tick a sensible number of seconds apart
         double[] steps = [0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300];
         double step = steps.FirstOrDefault(s => s / duration * width >= 70, 600);
-        var typeface = new Typeface("Segoe UI");
+        var typeface = new Typeface(L.T("SoundPlayback.SegoeUI"));
         double dpi = VisualTreeHelper.GetDpi(this).PixelsPerDip;
         for (double t = 0; t <= duration + 1e-6; t += step)
         {

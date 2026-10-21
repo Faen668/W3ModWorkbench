@@ -6,6 +6,7 @@ using System.Windows.Media.Imaging;
 using HelixToolkit.SharpDX;
 using W3ModWorkbench.Core.Cr2w;
 using W3ModWorkbench.Core.Textures;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -99,7 +100,7 @@ public static class GpuTextures
             (level, width, height) = Half(level, width, height);
             levels.Add((level, width, height));
         }
-        return TextureModel.Create(new MemoryStream(Dds(levels))) ?? throw new InvalidOperationException("The texture couldn't be made.");
+        return TextureModel.Create(new MemoryStream(Dds(levels))) ?? throw new InvalidOperationException(L.T("GpuTextures.TextureCouldntMade"));
     }
 
     /// <summary>

@@ -3,6 +3,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using W3ModWorkbench.Core;
 using W3ModWorkbench.Core.Textures;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -82,7 +83,7 @@ public static class EntryImages
         if (TextureDecoder.Decode(info, pixels, level) is not { } image) return null;
         var bitmap = BitmapSource.Create(image.Width, image.Height, 96, 96, PixelFormats.Bgra32, null, image.Bgra, image.Width * 4);
         bitmap.Freeze();
-        return new EntryPicture(bitmap, description + (level > 0 ? $"  ·  showing {image.Width}x{image.Height}" : ""));
+        return new EntryPicture(bitmap, description + (level > 0 ? L.T("EntryImages.ShowingX", image.Width, image.Height) : ""));
     }
 
     /// <summary>
@@ -122,7 +123,7 @@ public static class EntryImages
             if (w >= h) small.DecodePixelWidth = max; else small.DecodePixelHeight = max;
             small.EndInit();
             small.Freeze();
-            return new EntryPicture(small, $"{w}x{h}  ·  showing {small.PixelWidth}x{small.PixelHeight}");
+            return new EntryPicture(small, L.T("EntryImages.XShowingX", w, h, small.PixelWidth, small.PixelHeight));
         }
         image.Freeze();
         return new EntryPicture(image, $"{w}x{h}");

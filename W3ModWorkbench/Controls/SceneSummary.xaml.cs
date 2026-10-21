@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using W3ModWorkbench.Core.Scenes;
 using W3ModWorkbench.ViewModels;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -52,9 +53,9 @@ public partial class SceneSummary : UserControl
         }
         Script.ItemsSource = shown;
         int left = nodes.Count(n => n.Kind != SceneNodeKind.Hub) - shown.Count;
-        MoreText.Text = left > 0 ? $"and {left:N0} more part{(left == 1 ? "" : "s")}, double-click to see them all" : "";
+        MoreText.Text = left > 0 ? L.T("SceneSummary.MoreParts", left) : "";
         MoreText.Visibility = left > 0 ? Visibility.Visible : Visibility.Collapsed;
-        StringsText.Text = note ?? (text is null ? "Reading the game's strings…" : "");
+        StringsText.Text = note ?? (text is null ? L.T("SceneSummary.ReadingGamesStrings") : "");
         StringsText.Visibility = StringsText.Text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
 
         var spokenBy = lines.GroupBy(l => l.Speaker ?? "").ToDictionary(g => g.Key, g => g.Count());

@@ -1,6 +1,7 @@
 using System.IO;
 using System.Windows;
 using W3ModWorkbench.Core.Projects;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -21,9 +22,9 @@ public static class ProjectPrompts
     {
         if (!ShouldOffer(path) || ProjectWorkspace.Current is not { } project) return;
         Asked.Add(Path.GetFullPath(path));
-        var choice = await card.Ask($"Add {Path.GetFileName(path)} to {project.Name}?",
-            $"{saved} It isn't part of the open project yet. Add it so it's listed with the project's other files.",
-            MessageKind.Question, "Add to project", "Not now");
+        var choice = await card.Ask(L.T("ProjectPrompts.Add", Path.GetFileName(path), project.Name),
+            L.T("ProjectPrompts.IsntPartOpenProject", saved),
+            MessageKind.Question, L.T("Common.AddProject"), L.T("ProjectPrompts.NotNow"));
         if (choice == MessageChoice.Primary && Application.Current.MainWindow is MainWindow main)
             await main.AddToProjectAsync([path]);
     }

@@ -4,6 +4,7 @@ using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 using W3ModWorkbench.Core.Entities;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -135,7 +136,7 @@ public sealed class EntityGraph : FrameworkElement
 
     /// <summary>A component's second line: its class, and the template it comes from without the extension.</summary>
     private static string Subtitle(EntityComponent c) =>
-        Short(c.ClassName) + (c.Origin is { } origin ? "  ·  " + origin.Replace(".w2ent", "") : "") + (c.Streamed ? "  ·  streamed" : "");
+        Short(c.ClassName) + (c.Origin is { } origin ? "  ·  " + origin.Replace(".w2ent", "") : "") + (c.Streamed ? L.T("EntityGraph.Streamed") : "");
 
     /// <summary>The editor's marks: I included, A from the appearance, O overridden.</summary>
     private static string Badges(EntityComponent c) => (c.Overridden ? "O" : "") + (c.FromAppearance ? "A" : "") + (c.Included ? "I" : "");
@@ -236,7 +237,7 @@ public sealed class EntityGraph : FrameworkElement
         if (ReferenceEquals(at, _hover)) return;
         _hover = at;
         Cursor = at is null ? null : Cursors.Hand;
-        ToolTip = at is null ? null : $"{at.Name}\n{at.ClassName}" + (at.Origin is { } origin ? $"\nfrom {origin}" : "") + (at.Mesh is { } mesh ? $"\n{mesh}" : "");
+        ToolTip = at is null ? null : $"{at.Name}\n{at.ClassName}" + (at.Origin is { } origin ? L.T("EntityGraph.From", origin) : "") + (at.Mesh is { } mesh ? $"\n{mesh}" : "");
         InvalidateVisual();
     }
 

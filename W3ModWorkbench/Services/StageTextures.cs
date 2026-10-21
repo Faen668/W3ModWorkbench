@@ -2,6 +2,7 @@ using System.Windows.Media.Imaging;
 using W3ModWorkbench.Core.Cr2w;
 using W3ModWorkbench.Core.Entities;
 using W3ModWorkbench.Core.Meshes;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -62,5 +63,5 @@ public static class StageTextures
 
     /// <summary>"Loading textures, 12 of 80…" for a stage's message.</summary>
     public static string Describe((int Done, int Total) progress) =>
-        progress.Total == 0 ? "Putting the actors together…" : $"Loading textures, {progress.Done} of {progress.Total}…";
+        progress.Total == 0 ? L.T("StageTextures.PuttingActorsTogether") : L.T("StageTextures.LoadingTextures", progress.Done, progress.Total);
 }

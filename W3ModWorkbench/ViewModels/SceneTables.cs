@@ -1,5 +1,6 @@
 using W3ModWorkbench.Core.Cr2w;
 using W3ModWorkbench.Core.Scenes;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.ViewModels;
 
@@ -12,7 +13,7 @@ public sealed record SceneVoicetagRow(string Input, string Voicetag, string Cont
         foreach (var export in scene.File.Exports.Where(x => x.ClassName == "CStorySceneInput"))
         {
             var input = scene.File.Object(export.Index);
-            string name = input["inputName"] as string is { Length: > 0 } n ? n : "Input";
+            string name = input["inputName"] as string is { Length: > 0 } n ? n : L.T("SceneTables.Input");
             foreach (var mapping in input.Array("voicetagMappings").OfType<RedObject>())
             {
                 if (mapping["voicetag"] is not string tag || tag.Length == 0 || tag == "None") continue;
@@ -41,10 +42,10 @@ public sealed record SceneActorRow(string Id, string Tags, string? Template, str
             string? template = actor["entityTemplate"] is RedHandle h ? scene.File.Import(h)?.Path : null;
             var flags = new List<string>();
             if (export.ClassName == "CStorySceneProp") flags.Add("prop");
-            if (actor["dontSearchByVoicetag"] is true) flags.Add("not found by voice tag");
-            if (actor["useHiresShadows"] is true) flags.Add("hi-res shadows");
-            if (actor["forceSpawn"] is true) flags.Add("always spawned");
-            if (actor["useMimic"] is true) flags.Add("face animated");
+            if (actor["dontSearchByVoicetag"] is true) flags.Add(L.T("SceneTables.NotFoundVoiceTag"));
+            if (actor["useHiresShadows"] is true) flags.Add(L.T("SceneTables.HiResShadows"));
+            if (actor["forceSpawn"] is true) flags.Add(L.T("SceneTables.AlwaysSpawned"));
+            if (actor["useMimic"] is true) flags.Add(L.T("SceneTables.FaceAnimated"));
             rows.Add(new(id, string.Join(", ", actor.Array("actorTags").OfType<string>()), template,
                 string.Join(", ", actor.Array("appearanceFilter").OfType<string>()), string.Join(", ", flags), spoken.GetValueOrDefault(id)));
         }
@@ -64,11 +65,11 @@ public sealed record SceneAnimationRow(string Actor, string Kind, string Animati
                 if (e.Source["animationName"] is not string name || name.Length == 0 || name == "None") continue;
                 string kind = e.ClassName switch
                 {
-                    "CStorySceneEventMimicsAnim" => "Face",
-                    "CStorySceneEventAdditiveAnimation" => "Additive",
-                    "CStorySceneEventCameraAnim" => "Camera",
-                    _ when e.Kind == SceneEventKind.Mimics => "Face",
-                    _ => "Body",
+                    "CStorySceneEventMimicsAnim" => L.T("SceneTables.Face"),
+                    "CStorySceneEventAdditiveAnimation" => L.T("SceneTables.Additive"),
+                    "CStorySceneEventCameraAnim" => L.T("SceneTables.Camera"),
+                    _ when e.Kind == SceneEventKind.Mimics => L.T("SceneTables.Face"),
+                    _ => L.T("SceneTables.Body"),
                 };
                 var key = (e.Actor ?? "", kind, name);
                 if (!uses.TryGetValue(key, out var seen)) seen = (0, []);
@@ -117,9 +118,9 @@ public sealed record SceneVariantRow(string Variant, string Language, string Eve
             int id = v["id"] is { } i ? Convert.ToInt32(i) : 0;
             int locale = v["localeId"] is { } l ? Convert.ToInt32(l) : -1;
             float length = v.Array("elementInfo").OfType<RedObject>().Sum(e => e.Float("approvedDuration"));
-            rows.Add(new($"Variant {id}{(id == defaultId ? " (default)" : "")}", // locale 2 is English (REDkit calls the Baron scene's variant 2 "base EN"); the rest aren't known by name
-                locale == 2 ? "EN" : $"locale {locale}",
-                $"{v.Array("events").Count}", length > 0 ? $"{length:0.0} s of lines" : ""));
+            rows.Add(new(L.T("SceneTables.Variant", id) + (id == defaultId ? L.T("SceneTables.Default") : ""), // locale 2 is English (REDkit calls the Baron scene's variant 2 "base EN"); the rest aren't known by name
+                locale == 2 ? "EN" : L.T("SceneTables.Locale", locale),
+                $"{v.Array("events").Count}", length > 0 ? L.T("SceneTables.Lines", length) : ""));
         }
         return rows;
     }

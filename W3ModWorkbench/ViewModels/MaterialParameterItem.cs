@@ -4,6 +4,7 @@ using System.Numerics;
 using System.Windows;
 using System.Windows.Media;
 using W3ModWorkbench.Core.Meshes;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.ViewModels;
 
@@ -46,8 +47,8 @@ public sealed class MaterialParameterItem : INotifyPropertyChanged
     public Visibility ResetVisibility => IsOwn && OverridesBase ? Visibility.Visible : Visibility.Collapsed;
     public Visibility SwatchVisibility => Parameter.Kind == ParameterKind.Color ? Visibility.Visible : Visibility.Collapsed;
 
-    public string Detail => (IsOwn ? "its own" : "from " + Parameter.From) + "  ·  " + Parameter.Type
-        + (Parameter.Kind == ParameterKind.Other ? "  ·  not changed here" : "");
+    public string Detail => (IsOwn ? L.T("MaterialParameterItem.Own") : "from " + Parameter.From) + "  ·  " + Parameter.Type
+        + (Parameter.Kind == ParameterKind.Other ? L.T("MaterialParameterItem.NotChangedHere") : "");
 
     public Brush? Swatch => Parameter.Value is ColorValue c ? Frozen(new SolidColorBrush(Color.FromArgb(255, c.R, c.G, c.B))) : null;
 
@@ -93,7 +94,7 @@ public sealed class MaterialParameterItem : INotifyPropertyChanged
         float f => f.ToString("0.#####", CultureInfo.InvariantCulture),
         ColorValue c => c.ToString(),
         Vector4 v => string.Join(", ", new[] { v.X, v.Y, v.Z, v.W }.Select(x => x.ToString("0.#####", CultureInfo.InvariantCulture))),
-        RawValue r => $"({r.Bytes.Length} bytes)",
+        RawValue r => L.T("MaterialParameterItem.Bytes", r.Bytes.Length),
         _ => "",
     };
 
@@ -109,11 +110,11 @@ public sealed class MaterialParameterItem : INotifyPropertyChanged
                 return true;
             case ParameterKind.Scalar:
                 if (float.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out float f)) { value = f; return true; }
-                error = "A number, such as 0.5.";
+                error = L.T("MaterialParameterItem.NumberSuch");
                 return false;
             case ParameterKind.Color:
                 if (ParseColor(text) is { } c) { value = c; return true; }
-                error = "A colour: #RRGGBB, #RRGGBBAA, or four numbers from 0 to 255.";
+                error = L.T("MaterialParameterItem.ColourRrggbbRrggbbaaFour");
                 return false;
             case ParameterKind.Vector:
                 var parts = text.Split([',', ' ', ';'], StringSplitOptions.RemoveEmptyEntries);
@@ -123,10 +124,10 @@ public sealed class MaterialParameterItem : INotifyPropertyChanged
                     value = new Vector4(numbers[0], numbers[1], numbers[2], numbers[3]);
                     return true;
                 }
-                error = "Up to four numbers: x, y, z, w.";
+                error = L.T("MaterialParameterItem.UpFourNumbersX");
                 return false;
             default:
-                error = "This kind of parameter isn't changed here.";
+                error = L.T("MaterialParameterItem.KindParameterIsntChanged");
                 return false;
         }
     }

@@ -8,6 +8,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Help;
 
@@ -17,7 +18,7 @@ namespace W3ModWorkbench.Help;
 /// </summary>
 public sealed partial class HelpRenderer(FrameworkElement owner, Action<string> openPage, Action<BitmapSource, string> openImage)
 {
-    private static readonly FontFamily Mono = new("Cascadia Mono, Consolas, Courier New");
+    private static readonly FontFamily Mono = new(L.T("HelpRenderer.CascadiaMonoConsolasCourier"));
 
     /// <summary>The words a search looked for, picked out wherever they're in the text.</summary>
     public IReadOnlyList<string> Highlight { get; set; } = [];
@@ -176,9 +177,9 @@ public sealed partial class HelpRenderer(FrameworkElement owner, Action<string> 
         }
         var (glyph, title, brush) = kind switch
         {
-            "tip" => ("\uE82F", "Tip", "SystemFillColorSuccessBrush"),
-            "warning" or "important" => ("\uE7BA", "Watch out", "SystemFillColorCautionBrush"),
-            _ => ("\uE946", "Note", "AccentTextFillColorPrimaryBrush"),
+            "tip" => ("\uE82F", L.T("HelpRenderer.Tip"), "SystemFillColorSuccessBrush"),
+            "warning" or "important" => ("\uE7BA", L.T("HelpRenderer.WatchOut"), "SystemFillColorCautionBrush"),
+            _ => ("\uE946", L.T("HelpRenderer.Note"), "AccentTextFillColorPrimaryBrush"),
         };
         var row = new Grid();
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -214,16 +215,16 @@ public sealed partial class HelpRenderer(FrameworkElement owner, Action<string> 
             "ws" or "witcherscript" => "WitcherScript",
             "xml" => "XML",
             "json" => "JSON",
-            "cmd" or "bat" => "Command line",
+            "cmd" or "bat" => L.T("HelpRenderer.CommandLine"),
             "ps" or "powershell" => "PowerShell",
             "py" or "python" => "Python",
-            "ini" => "Settings file",
+            "ini" => L.T("HelpRenderer.SettingsFile"),
             "csv" => "CSV",
             _ => "",
         };
         var header = new DockPanel { Margin = new Thickness(14, 6, 6, 0) };
-        var copy = new Button { Padding = new Thickness(8, 3, 8, 3), MinWidth = 0, MinHeight = 0, FontSize = 12, ToolTip = "Copy this to the clipboard" };
-        var copyText = new TextBlock { Text = "Copy" };
+        var copy = new Button { Padding = new Thickness(8, 3, 8, 3), MinWidth = 0, MinHeight = 0, FontSize = 12, ToolTip = L.T("HelpRenderer.CopyClipboard") };
+        var copyText = new TextBlock { Text = L.T("Common.Copy") };
         var copyRow = new StackPanel { Orientation = Orientation.Horizontal };
         copyRow.Children.Add(new TextBlock { Text = "\uE8C8", FontFamily = (FontFamily)owner.FindResource("IconFont"), Margin = new Thickness(0, 1, 6, 0), FontSize = 12 });
         copyRow.Children.Add(copyText);
@@ -231,9 +232,9 @@ public sealed partial class HelpRenderer(FrameworkElement owner, Action<string> 
         copy.Click += (_, _) =>
         {
             try { Clipboard.SetText(code); } catch (System.Runtime.InteropServices.ExternalException) { return; }
-            copyText.Text = "Copied";
+            copyText.Text = L.T("HelpRenderer.Copied");
             var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1.6) };
-            timer.Tick += (_, _) => { copyText.Text = "Copy"; timer.Stop(); };
+            timer.Tick += (_, _) => { copyText.Text = L.T("Common.Copy"); timer.Stop(); };
             timer.Start();
         };
         DockPanel.SetDock(copy, Dock.Right);
@@ -264,7 +265,7 @@ public sealed partial class HelpRenderer(FrameworkElement owner, Action<string> 
         var stack = new StackPanel { Margin = new Thickness(0, 4, 0, 18) };
         if (HelpLibrary.Image(file) is not { } source)
         {
-            stack.Children.Add(Callout($"warning: The picture {file} is missing."));
+            stack.Children.Add(Callout(L.T("HelpRenderer.WarningPictureMissing", file)));
             return stack;
         }
         var image = new Image { Source = source, Stretch = Stretch.Uniform, MaxHeight = 560, HorizontalAlignment = HorizontalAlignment.Left };
@@ -272,7 +273,7 @@ public sealed partial class HelpRenderer(FrameworkElement owner, Action<string> 
         var frame = new Border
         {
             CornerRadius = new CornerRadius(8), BorderThickness = new Thickness(1), Child = image, Cursor = Cursors.Hand,
-            HorizontalAlignment = HorizontalAlignment.Left, ClipToBounds = true, ToolTip = "Click to see it full size",
+            HorizontalAlignment = HorizontalAlignment.Left, ClipToBounds = true, ToolTip = L.T("HelpRenderer.ClickSeeFullSize"),
         };
         frame.SetResourceReference(Border.BorderBrushProperty, "CardStrokeColorDefaultBrush");
         frame.MouseLeftButtonUp += (_, _) => openImage(source, caption);
@@ -385,7 +386,7 @@ public sealed partial class HelpRenderer(FrameworkElement owner, Action<string> 
             else if (m.Groups[3].Success)
             {
                 string page = m.Groups[3].Value.Trim();
-                var link = new Hyperlink(new Run(m.Groups[4].Success ? m.Groups[4].Value : page)) { ToolTip = $"Go to {page}" };
+                var link = new Hyperlink(new Run(m.Groups[4].Success ? m.Groups[4].Value : page)) { ToolTip = L.T("HelpRenderer.Go", page) };
                 link.SetResourceReference(TextElement.ForegroundProperty, "AccentTextFillColorPrimaryBrush");
                 link.Click += (_, _) => openPage(page);
                 inlines.Add(link);

@@ -3,6 +3,7 @@ using System.IO;
 using System.Windows;
 using W3ModWorkbench.Core.Cr2w;
 using W3ModWorkbench.Core.Entities;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.ViewModels;
 
@@ -145,7 +146,7 @@ public sealed class PropertyRow(string name, string type, string value, int dept
         var other = stored.Values.Where(p => !shown.Contains(p.Name)).ToList();
         if (other.Count > 0)
         {
-            var heading = Child(rows, new PropertyRow("Other", "", "", depth, null, heading: true), parent);
+            var heading = Child(rows, new PropertyRow(L.T("EntityItems.Other"), "", "", depth, null, heading: true), parent);
             foreach (var (name, type, value) in other) Add(rows, name, type, value, depth + 1, file, heading, path);
         }
     }
@@ -199,10 +200,10 @@ public sealed class PropertyRow(string name, string type, string value, int dept
                 foreach (var (field, t, v) in s.Properties) Add(rows, field, t, v, depth + 1, file, row, path);
                 break;
             case List<object?> list:
-                var array = Child(rows, new PropertyRow(name, type, list.Count == 0 ? "empty" : list.Count == 1 ? "1 item" : $"{list.Count:N0} items", depth, null), parent);
+                var array = Child(rows, new PropertyRow(name, type, list.Count == 0 ? L.T("EntityItems.Empty") : list.Count == 1 ? L.T("EntityItems.Item") : L.T("EntityItems.Items", list.Count), depth, null), parent);
                 string element = type.Contains(',') ? type[(type.LastIndexOf(',') + 1)..] : "";
                 for (int i = 0; i < list.Count && i < MostItems; i++) Add(rows, $"[{i}]", element, list[i], depth + 1, file, array, path, name);
-                if (list.Count > MostItems) Child(rows, new PropertyRow("…", "", $"and {list.Count - MostItems:N0} more", depth + 1, null), array);
+                if (list.Count > MostItems) Child(rows, new PropertyRow("…", "", L.T("EntityItems.More", list.Count - MostItems), depth + 1, null), array);
                 break;
             case RedHandle h when file.Import(h) is { } import:
                 Child(rows, new PropertyRow(name, type, import.Path, depth, import.Path), parent);
@@ -242,7 +243,7 @@ public sealed class PropertyRow(string name, string type, string value, int dept
                 return Transform(raw);
             case "TagList":
                 var tags = file.Tags(raw);
-                return tags.Count == 0 ? "no tags" : string.Join(", ", tags);
+                return tags.Count == 0 ? L.T("EntityItems.NoTags") : string.Join(", ", tags);
             case "StringAnsi":
                 // an 8-bit string, kept as its bytes by the reader
                 return Core.Animation.AnimEvent.Text(raw) ?? Text(raw);
@@ -265,9 +266,9 @@ public sealed class PropertyRow(string name, string type, string value, int dept
             return string.Join(", ", v);
         }
         var parts = new List<string>();
-        if ((flags & 1) != 0) parts.Add($"position {Three()}");
-        if ((flags & 2) != 0) parts.Add($"rotation {Three()}");
-        if ((flags & 4) != 0) parts.Add($"scale {Three()}");
+        if ((flags & 1) != 0) parts.Add(L.T("EntityItems.Position", Three()));
+        if ((flags & 2) != 0) parts.Add(L.T("EntityItems.Rotation", Three()));
+        if ((flags & 4) != 0) parts.Add(L.T("EntityItems.Scale", Three()));
         return string.Join("  ·  ", parts);
     }
 
@@ -275,10 +276,10 @@ public sealed class PropertyRow(string name, string type, string value, int dept
     private static string Summary(RedObject s) => s.ClassName switch
     {
         "Vector" or "Vector2" or "Vector3" or "EulerAngles" or "Color" => string.Join(", ", s.Properties.Select(p => $"{p.Name} {Text(p.Value)}")),
-        "Box" => $"min {Summary(s.Struct("Min") ?? new RedObject("Vector"))}  ·  max {Summary(s.Struct("Max") ?? new RedObject("Vector"))}",
+        "Box" => L.T("EntityItems.Box", Summary(s.Struct("Min") ?? new RedObject("Vector")), Summary(s.Struct("Max") ?? new RedObject("Vector"))),
         // a behaviour tree's value: what it is, and the behaviour variable it can be set from
         _ when s.ClassName.StartsWith("CBehTreeVal", StringComparison.Ordinal) && s.Properties.Count > 0 =>
-            Text(s["value"]) + (s["varName"] is string v && v.Length > 0 && v != "None" ? $"  (from {v})" : ""),
+            Text(s["value"]) + (s["varName"] is string v && v.Length > 0 && v != "None" ? L.T("EntityItems.From", v) : ""),
         _ => "",
     };
 
@@ -288,9 +289,9 @@ public sealed class PropertyRow(string name, string type, string value, int dept
         bool b => b ? "true" : "false",
         float f => f.ToString("0.####", CultureInfo.InvariantCulture),
         double d => d.ToString("0.####", CultureInfo.InvariantCulture),
-        byte[] bytes => bytes.Length <= 32 ? Convert.ToHexString(bytes) : $"{bytes.Length:N0} bytes",
+        byte[] bytes => bytes.Length <= 32 ? Convert.ToHexString(bytes) : L.T("EntityItems.Bytes", bytes.Length),
         RedHandle { Raw: 0 } => "none",
-        RedBufferRef r => $"buffer {r.Index}",
+        RedBufferRef r => L.T("EntityItems.Buffer", r.Index),
         _ => value.ToString() ?? "",
     };
 }

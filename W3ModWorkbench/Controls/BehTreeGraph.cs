@@ -4,6 +4,7 @@ using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 using W3ModWorkbench.Core.BehTrees;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -269,13 +270,13 @@ public sealed class BehTreeGraph : FrameworkElement
     /// <summary>A kind of node in words, for a node with nothing more to say on its second line.</summary>
     public static string Kind(BehTreeNodeKind kind) => kind switch
     {
-        BehTreeNodeKind.Composite => "Composite",
-        BehTreeNodeKind.Decorator => "Decorator",
-        BehTreeNodeKind.Condition => "Condition",
-        BehTreeNodeKind.Script => "Script task",
-        BehTreeNodeKind.Action => "Action",
-        BehTreeNodeKind.Subtree => "Subtree",
-        _ => "A note in the tree",
+        BehTreeNodeKind.Composite => L.T("BehTreeGraph.Composite"),
+        BehTreeNodeKind.Decorator => L.T("BehTreeGraph.Decorator"),
+        BehTreeNodeKind.Condition => L.T("BehTreeGraph.Condition"),
+        BehTreeNodeKind.Script => L.T("BehTreeGraph.ScriptTask"),
+        BehTreeNodeKind.Action => L.T("BehTreeGraph.Action"),
+        BehTreeNodeKind.Subtree => L.T("BehTreeGraph.Subtree"),
+        _ => L.T("BehTreeGraph.NoteTree"),
     };
 
     private BehTreeNode? NodeAt(Point p)
@@ -333,9 +334,9 @@ public sealed class BehTreeGraph : FrameworkElement
         if (ReferenceEquals(at, _hover)) return;
         _hover = at;
         Cursor = at is null ? null : Cursors.Hand;
-        ToolTip = at is null ? null : $"{at.Title}\n{KindOf(at)} · {at.Object.ClassName}" + (at.Task is { } task ? $"\ntask {task.ClassName}" : "")
-            + (at.Priority is { } p ? $"\npriority {p}" : "") + (at.Comment is { } c ? $"\n{c}" : "")
-            + (at.Children.Count > 0 ? $"\n{at.Children.Count} under it; double-click to fold or open" : "");
+        ToolTip = at is null ? null : $"{at.Title}\n{KindOf(at)} · {at.Object.ClassName}" + (at.Task is { } task ? L.T("BehTreeGraph.Task", task.ClassName) : "")
+            + (at.Priority is { } p ? L.T("BehTreeGraph.Priority", p) : "") + (at.Comment is { } c ? $"\n{c}" : "")
+            + (at.Children.Count > 0 ? L.T("BehTreeGraph.UnderDoubleClickFold", at.Children.Count) : "");
         InvalidateVisual();
     }
 

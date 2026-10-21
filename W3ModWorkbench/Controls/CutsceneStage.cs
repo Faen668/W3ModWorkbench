@@ -6,6 +6,7 @@ using System.Windows.Media.Imaging;
 using W3ModWorkbench.Core.Cr2w;
 using W3ModWorkbench.Core.Cutscenes;
 using W3ModWorkbench.Core.Meshes;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -23,7 +24,7 @@ public sealed class CutsceneStage : Grid
     private readonly System.Windows.Controls.Border _bars = new() { Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0xE0, 0, 0, 0)), Visibility = Visibility.Collapsed };
     private readonly TextBlock _text = new()
     {
-        Text = "Reading the actors…", HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
+        Text = L.T("CutsceneStage.ReadingActors"), HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
         TextWrapping = TextWrapping.Wrap, TextAlignment = TextAlignment.Center, MaxWidth = 560, Margin = new Thickness(16), Opacity = 0.8, IsHitTestVisible = false,
     };
     private readonly TextBlock _notes = new()
@@ -46,7 +47,7 @@ public sealed class CutsceneStage : Grid
     {
         Background = System.Windows.Media.Brushes.Transparent;
         ClipToBounds = true;
-        View = new MeshView { ShowFloor = true, AutoLod = true, ToolTip = "Drag to turn around, right-drag to move, wheel to come closer, double-click to see everyone" };
+        View = new MeshView { ShowFloor = true, AutoLod = true, ToolTip = L.T("CutsceneStage.DragTurnAroundRight") };
         Children.Add(_bars);
         Children.Add(View);
         Children.Add(_text);
@@ -118,11 +119,11 @@ public sealed class CutsceneStage : Grid
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or NotSupportedException)
         {
-            Message = "The animations could not be read.\n\n" + ex.Message;
+            Message = L.T("CutsceneStage.AnimationsCouldNotRead", ex.Message);
             _ready.TrySetResult();
             return null;
         }
-        Message = Playback.Actors.Count == 0 ? "There are no body animations to play." : "Putting the actors together…";
+        Message = Playback.Actors.Count == 0 ? L.T("CutsceneStage.ThereNoBodyAnimations") : L.T("CutsceneStage.PuttingActorsTogether");
         return Playback;
     }
 
@@ -140,12 +141,12 @@ public sealed class CutsceneStage : Grid
     public static async Task<PreparedCast> PrepareAsync(CutsceneFile cutscene, CutscenePlayback playback, ResourceLocator locator,
         Func<string, Task<BitmapSource?>> texture, LoadingReporter? report, CancellationToken token, string label = "")
     {
-        report?.Step($"{label}Putting the actors together", $"{playback.Actors.Count} animated");
+        report?.Step(L.T("CutsceneStage.PuttingActorsTogether2", label), L.T("CutsceneStage.Animated", playback.Actors.Count));
         var notes = new List<string>(playback.Problems);
         var cast = await Task.Run(() => CutsceneCast.Load(cutscene, playback, locator, notes, token), token);
         var parts = cast.SelectMany(m => m.Parts.Select((part, i) =>
             (part.Mesh, StageTextures.Coloring(m.Entity, m.ColoredBy[i].Entity, m.ColoredBy[i].Appearance, m.DrawnBy[i].Name)))).ToList();
-        report?.Step($"{label}Loading textures", string.Join(", ", cast.Select(m => m.Name)));
+        report?.Step(L.T("CutsceneStage.LoadingTextures", label), string.Join(", ", cast.Select(m => m.Name)));
         var textures = await StageTextures.LoadAsync(parts, locator, texture, report?.Counter, token);
         return new PreparedCast(cutscene, playback, cast, textures, notes);
     }
@@ -180,9 +181,9 @@ public sealed class CutsceneStage : Grid
         // again once the view has its size, as the first fit can come before it's laid out
         _ = Dispatcher.InvokeAsync(() => { if (!View.IsLookingThrough) FitActors(); }, System.Windows.Threading.DispatcherPriority.Loaded);
         var p = prepared.Playback;
-        Message = _cast.Count > 0 ? "" : p.Actors.Count == 0 ? "There are no body animations to play." : "None of the actors could be put together.";
+        Message = _cast.Count > 0 ? "" : p.Actors.Count == 0 ? L.T("CutsceneStage.ThereNoBodyAnimations") : L.T("CutsceneStage.NoneActorsCouldPut");
         var notes = prepared.Notes;
-        _notes.Text = string.Join("\n", notes.Take(6)) + (notes.Count > 6 ? $"\n… and {notes.Count - 6} more" : "");
+        _notes.Text = string.Join("\n", notes.Take(6)) + (notes.Count > 6 ? L.T("CutsceneStage.More", notes.Count - 6) : "");
         if (ThroughCamera) ThroughCamera = true; // the bars, now there's a camera to look through
         SetTime(_time);
         _ready.TrySetResult();

@@ -2,6 +2,7 @@ using System.IO;
 using System.Windows;
 using W3ModWorkbench.Core;
 using W3ModWorkbench.Core.Cr2w;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -35,12 +36,12 @@ public static class ViewerLinks
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or NotSupportedException)
         {
-            await message.Show("It could not be read", $"{path}\n\n{ex.Message}", MessageKind.Error, primary: "OK");
+            await message.Show(L.T("Common.CouldNotRead"), $"{path}\n\n{ex.Message}", MessageKind.Error, primary: L.T("Common.OK"));
             return;
         }
         if (data is null)
         {
-            await message.Show("Not found", $"{path}\n\nIt isn't in the open project, the archives open in the tool, or the game's bundles.", MessageKind.Warning, primary: "OK");
+            await message.Show(L.T("Common.NotFound"), L.T("ViewerLinks.IsntOpenProjectArchives", path), MessageKind.Warning, primary: L.T("Common.OK"));
             return;
         }
         string source = entry is null ? "project" : entry.Archive.Name;
@@ -53,7 +54,7 @@ public static class ViewerLinks
         else if (XmlWindow.CanOpen(path)) XmlWindow.OpenData(name, $"{source}  ·  {path}", data, owner, path);
         else if (PropertiesWindow.CanShow(path)) PropertiesWindow.Open(path, source, data, locator, owner, entry?.Archive);
         else if (!TextureWindow.Open(name, $"{source}  ·  {path}", data, owner))
-            await message.Show("It can't be shown", $"{path}\n\nIt isn't a picture the texture viewer understands.", MessageKind.Warning, primary: "OK");
+            await message.Show(L.T("Common.CantShown"), L.T("ViewerLinks.IsntPictureTextureViewer", path), MessageKind.Warning, primary: L.T("Common.OK"));
     }
 
     private static void Copy(MessageCard message, string text, string note)
@@ -61,7 +62,7 @@ public static class ViewerLinks
         try
         {
             Clipboard.SetText(text);
-            _ = message.Show(null, note, MessageKind.Info, primary: "OK");
+            _ = message.Show(null, note, MessageKind.Info, primary: L.T("Common.OK"));
         }
         catch (System.Runtime.InteropServices.COMException)
         {

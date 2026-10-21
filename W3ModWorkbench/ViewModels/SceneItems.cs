@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Media;
 using W3ModWorkbench.Core.Scenes;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.ViewModels;
 
@@ -22,8 +23,8 @@ public sealed class SceneNodeItem
             switch (e.Kind)
             {
                 case SceneElementKind.Line:
-                    Rows.Add(new SceneLineRow(e.Speaker ?? "(no one)", speakers.GetValueOrDefault(e.Speaker ?? "", Brushes.Gray), e.SpeakingTo is { } to && to != e.Speaker ? "to " + to : "",
-                        Words(e.StringId, text), Join(e.Duration > 0 ? $"{e.Duration:0.#} s" : null, e.Background ? "in passing" : null, e.Detail), e.StringId));
+                    Rows.Add(new SceneLineRow(e.Speaker ?? L.T("SceneItems.NoOne"), speakers.GetValueOrDefault(e.Speaker ?? "", Brushes.Gray), e.SpeakingTo is { } to && to != e.Speaker ? "to " + to : "",
+                        Words(e.StringId, text), Join(e.Duration > 0 ? $"{e.Duration:0.#} s" : null, e.Background ? L.T("SceneItems.Passing") : null, e.Detail), e.StringId));
                     break;
                 case SceneElementKind.Comment:
                     // the writers' comments are mostly left out of the game's strings, so one with no words isn't shown
@@ -31,16 +32,16 @@ public sealed class SceneNodeItem
                     else if (e.Detail is not null) Rows.Add(new SceneNoteRow(e.Detail, true));
                     break;
                 case SceneElementKind.Pause:
-                    if (pauses) Rows.Add(new SceneNoteRow($"pause, {e.Duration:0.#} s", false));
+                    if (pauses) Rows.Add(new SceneNoteRow(L.T("SceneItems.Pause", e.Duration), false));
                     break;
                 case SceneElementKind.Cutscene:
-                    Rows.Add(new SceneNoteRow($"plays the cutscene, {e.Duration:0.#} s", false));
+                    Rows.Add(new SceneNoteRow(L.T("SceneItems.PlaysCutscene", e.Duration), false));
                     break;
                 case SceneElementKind.Video:
-                    Rows.Add(new SceneNoteRow(Join("plays a video", e.Detail, e.Duration > 0 ? $"{e.Duration:0.#} s" : null), false));
+                    Rows.Add(new SceneNoteRow(Join(L.T("SceneItems.PlaysVideo"), e.Detail, e.Duration > 0 ? $"{e.Duration:0.#} s" : null), false));
                     break;
                 case SceneElementKind.Choice:
-                    Rows.Add(new SceneNoteRow(Join("Choice", e.Detail), false, true));
+                    Rows.Add(new SceneNoteRow(Join(L.T("SceneItems.Choice"), e.Detail), false, true));
                     for (int o = 0; o < e.Options.Count; o++)
                         Rows.Add(new SceneOptionRow(o + 1, Words(e.Options[o].StringId, text), e.Options[o].Detail ?? "", e.Options[o].Emphasis, new SceneLinkItem(e.Options[o])));
                     break;
@@ -58,7 +59,7 @@ public sealed class SceneNodeItem
     public string Detail => Node.Detail ?? "";
     public Visibility DetailVisibility => Node.Detail is null ? Visibility.Collapsed : Visibility.Visible;
     public Brush Swatch => BrushOf(Node.Kind);
-    public string From => Node.From.Count == 0 ? (Node.Kind == SceneNodeKind.Input ? "" : "nothing leads here")
+    public string From => Node.From.Count == 0 ? (Node.Kind == SceneNodeKind.Input ? "" : L.T("SceneItems.NothingLeadsHere"))
         : "from " + string.Join(", ", Node.From.Select(f => f.Number).Order());
     public Visibility RowsVisibility => Rows.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
     public Visibility NextVisibility => Next.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
@@ -73,7 +74,7 @@ public sealed class SceneNodeItem
         {
             int lines = Node.Elements.Count(e => e.Kind == SceneElementKind.Line);
             int options = Node.Elements.Sum(e => e.Options.Count);
-            return Join(lines > 0 ? (lines == 1 ? "1 line" : $"{lines} lines") : null, options > 0 ? $"{options} options" : null);
+            return Join(lines > 0 ? (lines == 1 ? L.T("SceneItems.Line") : L.T("SceneItems.Lines", lines)) : null, options > 0 ? L.T("SceneItems.Options", options) : null);
         }
     }
 
@@ -90,10 +91,10 @@ public sealed class SceneNodeItem
 
     public static string KindName(SceneNodeKind kind) => kind switch
     {
-        SceneNodeKind.Input => "Start",
+        SceneNodeKind.Input => L.T("SceneItems.Start"),
         SceneNodeKind.Output => "End",
-        SceneNodeKind.Random => "Random",
-        SceneNodeKind.Hub => "Link",
+        SceneNodeKind.Random => L.T("SceneItems.Random"),
+        SceneNodeKind.Hub => L.T("SceneItems.Link"),
         _ => kind.ToString(),
     };
 
@@ -142,7 +143,7 @@ public sealed class SceneNodeItem
     }).ToArray();
 
     private static string Words(uint? id, Func<uint, string?> text) =>
-        id is not { } i ? "" : i == 0 ? "(no text)" : text(i) ?? $"(string {i})";
+        id is not { } i ? "" : i == 0 ? L.T("SceneItems.NoText") : text(i) ?? L.T("SceneItems.String", i);
 
     private static string Join(params string?[] parts) => string.Join(", ", parts.Where(p => !string.IsNullOrEmpty(p)));
 }
@@ -156,7 +157,7 @@ public sealed class SceneLineRow(string speaker, Brush speakerBrush, string to, 
     public string Text { get; } = text;
     public string Detail { get; } = detail;
     public uint? StringId { get; } = stringId;
-    public string Tip => StringId is { } id ? $"String {id}" + (Detail.Length > 0 ? $"  ·  {Detail}" : "") : Detail;
+    public string Tip => StringId is { } id ? L.T("SceneItems.StringId", id) + (Detail.Length > 0 ? $"  ·  {Detail}" : "") : Detail;
 
     /// <summary>Whether its voice is playing, to mark it in the list.</summary>
     public bool IsPlaying
@@ -187,7 +188,7 @@ public sealed record SceneOptionRow(int Number, string Text, string Detail, bool
 {
     public Visibility DetailVisibility => Detail.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
     public FontWeight Weight => Emphasis ? FontWeights.SemiBold : FontWeights.Normal;
-    public string Tip => Emphasis ? "Picked out in the game: the story's way on" : "";
+    public string Tip => Emphasis ? L.T("SceneItems.PickedOutGameStorys") : "";
 }
 
 /// <summary>A way out of a part, as a button that goes to the part it reaches.</summary>
@@ -206,7 +207,7 @@ public sealed class SceneActorItem(SceneActor actor, int lines)
 {
     public SceneActor Actor { get; } = actor;
     public string Name => Actor.Name;
-    public string Detail => (Actor.Prop ? "prop" : lines == 1 ? "1 line" : $"{lines} lines");
+    public string Detail => (Actor.Prop ? L.T("SceneItems.Prop") : lines == 1 ? L.T("SceneItems.Line") : L.T("SceneItems.Lines", lines));
     public string? Template => Actor.Template;
-    public string TemplateName => Actor.Template is { } t ? System.IO.Path.GetFileName(t) : "no entity";
+    public string TemplateName => Actor.Template is { } t ? System.IO.Path.GetFileName(t) : L.T("SceneItems.NoEntity");
 }

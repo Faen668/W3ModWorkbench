@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -357,7 +358,7 @@ public sealed class PreviewTab : Border
             Background = Brushes.Transparent,
             BorderThickness = new Thickness(0),
             Focusable = false,
-            ToolTip = "Close (Ctrl+W)",
+            ToolTip = L.T("PreviewPane.CloseCtrlW"),
             Visibility = Visibility.Hidden,
         };
         _close.Click += (_, _) => Pane.Host.CloseDocument(Document);
@@ -377,7 +378,7 @@ public sealed class PreviewTab : Border
             Margin = new Thickness(0, 0, 6, 0),
             VerticalAlignment = VerticalAlignment.Center,
             Opacity = 0.75,
-            ToolTip = "Pinned: stays open when others are closed. Right-click to unpin",
+            ToolTip = L.T("PreviewPane.PinnedStaysOpenWhen"),
         };
         _pin.SetResourceReference(TextBlock.FontFamilyProperty, "IconFont");
 
@@ -423,7 +424,7 @@ public sealed class PreviewTab : Border
         _close.Visibility = selected || _hover || dirty ? Visibility.Visible : Visibility.Hidden;
         _dot.Visibility = dirty && !_close.IsMouseOver ? Visibility.Visible : Visibility.Collapsed;
         _cross.Visibility = _dot.Visibility == Visibility.Visible ? Visibility.Hidden : Visibility.Visible;
-        _close.ToolTip = dirty ? "Close (Ctrl+W). It has changes that aren't saved" : "Close (Ctrl+W)";
+        _close.ToolTip = dirty ? L.T("PreviewPane.CloseCtrlWHas") : L.T("PreviewPane.CloseCtrlW");
         _mark.Visibility = selected ? Visibility.Visible : Visibility.Hidden;
         // the open project's own files carry a star in the accent colour, so they stand apart from everything read-only
         bool mine = Document.InProject;
@@ -432,7 +433,7 @@ public sealed class PreviewTab : Border
         if (mine) _icon.SetResourceReference(TextBlock.ForegroundProperty, "AccentTextFillColorPrimaryBrush");
         else _icon.ClearValue(TextBlock.ForegroundProperty);
         ToolTip = $"{Document.Item.Path}\n{Document.Item.Source}\n"
-            + (mine ? "In the project: yours to change" : Document.IsEditable ? "Not in the project" : "Read-only");
+            + (mine ? L.T("PreviewPane.ProjectYoursChange") : Document.IsEditable ? L.T("PreviewPane.NotProject") : "Read-only");
         _mark.SetResourceReference(BackgroundProperty, Pane.IsActive ? "AccentFillColorDefaultBrush" : "TextFillColorDisabledBrush");
     }
 

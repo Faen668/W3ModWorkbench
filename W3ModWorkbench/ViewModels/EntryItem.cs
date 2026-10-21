@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using W3ModWorkbench.Core;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.ViewModels;
 
@@ -53,7 +54,7 @@ public sealed class EntryItem : INotifyPropertyChanged
 
     /// <summary>The file's path, what kind of file it is, and EasyAssetBrowser's category and tags for it.</summary>
     public string ToolTip => (Kind is { } kind ? $"{Path}\n{kind.Name}: {kind.Description}" : Path)
-        + (Eab is { } eab ? $"\nEAB category: {eab.Category}" + (eab.Tags.Count > 0 ? $"\nEAB tags: {EabTags}" : "") : "");
+        + (Eab is { } eab ? L.T("EntryItem.EabCategory", eab.Category) + (eab.Tags.Count > 0 ? L.T("EntryItem.EabTags", EabTags) : "") : "");
 
     /// <summary>What EasyAssetBrowser lists for the file, when it lists it and its lists have been read.</summary>
     public EabAsset? Eab => EasyAssetBrowser.Current?.Find(Path);

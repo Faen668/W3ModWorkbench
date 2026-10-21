@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using W3ModWorkbench.Core.Meshes;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.ViewModels;
 
@@ -18,8 +19,8 @@ public sealed class MeshChunkItem : INotifyPropertyChanged
     public event PropertyChangedEventHandler? PropertyChanged;
 
     public MeshChunk Chunk { get; }
-    public string Title => $"Chunk {Chunk.Index}";
-    public string Detail => $"  material {Chunk.Material}  ·  {Chunk.Positions.Length:N0} vertices, {Chunk.Triangles:N0} triangles" + (Chunk.Skinned ? "  ·  skinned" : "");
+    public string Title => L.T("MeshChunkItem.Chunk", Chunk.Index);
+    public string Detail => L.T("MeshChunkItem.Detail", Chunk.Material, Chunk.Positions.Length, Chunk.Triangles) + (Chunk.Skinned ? L.T("MeshChunkItem.Skinned") : "");
 
     public bool IsVisible
     {

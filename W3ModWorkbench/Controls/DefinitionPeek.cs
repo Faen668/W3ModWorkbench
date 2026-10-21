@@ -8,6 +8,7 @@ using System.Windows.Media;
 using W3ModWorkbench.Core;
 using W3ModWorkbench.Core.Scripts.Navigation;
 using W3ModWorkbench.Highlighting;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -119,12 +120,12 @@ internal static class DefinitionPeek
     private static string? Note(string[] lines, ScriptSymbol symbol) => symbol.Kind switch
     {
         SymbolKind.EnumMember when EnumValue(lines, symbol) is { } value => $"{symbol.Owner}.{symbol.Name} = {value}",
-        SymbolKind.EnumMember => $"in {symbol.Owner}",
-        SymbolKind.State => $"state of {symbol.Owner}",
+        SymbolKind.EnumMember => L.T("DefinitionPeek.In", symbol.Owner),
+        SymbolKind.State => L.T("DefinitionPeek.State", symbol.Owner),
         SymbolKind.Function or SymbolKind.Event or SymbolKind.Field when symbol.Annotation is { } a && symbol.Owner is not null =>
-            $"@{a} on {symbol.Owner}",
-        SymbolKind.Function or SymbolKind.Event or SymbolKind.Field when symbol.Owner is not null => $"in {symbol.OwnerTitle ?? symbol.Owner}",
-        SymbolKind.Function or SymbolKind.Event => "global function",
+            L.T("DefinitionPeek.On", a, symbol.Owner),
+        SymbolKind.Function or SymbolKind.Event or SymbolKind.Field when symbol.Owner is not null => L.T("DefinitionPeek.In2", symbol.OwnerTitle ?? symbol.Owner),
+        SymbolKind.Function or SymbolKind.Event => L.T("DefinitionPeek.GlobalFunction"),
         _ => null,
     };
 
@@ -202,8 +203,8 @@ internal static class DefinitionPeek
             var more = new TextBlock { FontSize = 11.5, Margin = new Thickness(0, 10, 0, 0), Opacity = 0.75 };
             more.SetResourceReference(TextBlock.ForegroundProperty, "TextFillColorSecondaryBrush");
             more.Text = total > snippets.Count
-                ? $"…and {total - snippets.Count} more. Ctrl+click to choose."
-                : $"{total} declarations fit. Ctrl+click to choose.";
+                ? L.T("DefinitionPeek.MoreCtrlClickChoose", total - snippets.Count)
+                : L.T("DefinitionPeek.DeclarationsFitCtrlClick", total);
             panel.Children.Add(more);
         }
         return panel;

@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Threading;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -51,8 +52,9 @@ public partial class MessageCard : UserControl
     /// A question with three answers, such as Save, Don't Save and Cancel. Anything but the first two buttons,
     /// Esc included, counts as Cancel.
     /// </summary>
-    public async Task<MessageChoice> Ask(string? title, string message, MessageKind kind, string primary, string secondary, string cancel = "Cancel")
+    public async Task<MessageChoice> Ask(string? title, string message, MessageKind kind, string primary, string secondary, string? cancel = null)
     {
+        cancel ??= L.T("Common.Cancel");
         var shown = Show(title, message, kind, primary, secondary);
         CardCancel.Content = cancel;
         CardCancel.Visibility = Visibility.Visible;

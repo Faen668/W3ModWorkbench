@@ -2,6 +2,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Media;
 using W3ModWorkbench.Core.Cutscenes;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.ViewModels;
 
@@ -11,7 +12,7 @@ public sealed class CutsceneActorItem(CutsceneActor actor)
     public CutsceneActor Actor { get; } = actor;
     public string Name => Actor.Name;
     public string Type => Actor.Type;
-    public string TemplateName => Actor.Template is { } t ? Path.GetFileName(t) : "no entity";
+    public string TemplateName => Actor.Template is { } t ? Path.GetFileName(t) : L.T("CutsceneItems.NoEntity");
     public string? Template => Actor.Template;
 
     public string Detail
@@ -19,19 +20,21 @@ public sealed class CutsceneActorItem(CutsceneActor actor)
         get
         {
             var parts = new List<string>();
-            if (Actor.Appearance is { } appearance) parts.Add($"appearance {appearance}");
-            if (Actor.VoiceTag is { } voice) parts.Add($"voice {voice}");
-            if (Actor.Tags.Count > 0) parts.Add($"tag {string.Join(", ", Actor.Tags)}");
-            if (Actor.KillMe) parts.Add("despawned after");
+            if (Actor.Appearance is { } appearance) parts.Add(L.T("CutsceneItems.Appearance", appearance));
+            if (Actor.VoiceTag is { } voice) parts.Add(L.T("CutsceneItems.Voice", voice));
+            if (Actor.Tags.Count > 0) parts.Add(L.T("CutsceneItems.Tag", string.Join(", ", Actor.Tags)));
+            if (Actor.KillMe) parts.Add(L.T("CutsceneItems.DespawnedAfter"));
             int events = Actor.Events.Count(e => e.Kind != CutsceneEventKind.Cloth);
-            if (events > 0) parts.Add(events == 1 ? "1 event" : $"{events:N0} events");
+            if (events > 0) parts.Add(events == 1 ? L.T("CutsceneItems.Event") : L.T("CutsceneItems.Events", events));
             return string.Join("  ·  ", parts);
         }
     }
 
     public Visibility DetailVisibility => Detail.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
 
-    public string Animations => string.Join("\n", Actor.Animations.Select(a => $"{(a.Part == "Root" ? "Body" : a.Part.Length > 0 ? char.ToUpperInvariant(a.Part[0]) + a.Part[1..] : "Animation")}: {a.Name}  ({CutsceneTimeline.FormatTime(a.Duration)}, {a.FramesPerSecond:0.#} fps)"));
+    public string Animations => string.Join("\n", Actor.Animations.Select(a => L.T("CutsceneItems.AnimationLine",
+        a.Part == "Root" ? L.T("CutsceneItems.Body") : a.Part.Length > 0 ? char.ToUpperInvariant(a.Part[0]) + a.Part[1..] : L.T("Common.Animation"),
+        a.Name, CutsceneTimeline.FormatTime(a.Duration), a.FramesPerSecond)));
 }
 
 /// <summary>An event in the cutscene viewer's list.</summary>
@@ -41,7 +44,7 @@ public sealed class CutsceneEventItem(CutsceneEvent e)
     public string Time => CutsceneTimeline.FormatTime(Event.Start);
     public string Length => Event.Duration > 0 ? CutsceneTimeline.FormatTime(Event.Duration) : "";
     public double Start => Event.Start;
-    public string Actor => Event.Actor ?? "Scene";
+    public string Actor => Event.Actor ?? L.T("CutsceneItems.Scene");
     public string Kind => Event.Kind.ToString();
     public Brush Swatch => CutsceneTimeline.BrushOf(Event.Kind);
     public string Title => Event.Title;
@@ -63,7 +66,7 @@ public sealed class CutsceneEffectItem(CutsceneEffect effect)
 {
     public CutsceneEffect Effect { get; } = effect;
     public string Name => Effect.Name;
-    public string Detail => (Effect.Length > 0 ? CutsceneTimeline.FormatTime(Effect.Length) : "no length") + (Effect.Looped ? ", looped" : "");
+    public string Detail => (Effect.Length > 0 ? CutsceneTimeline.FormatTime(Effect.Length) : L.T("CutsceneItems.NoLength")) + (Effect.Looped ? L.T("CutsceneItems.Looped") : "");
     public string Parts => string.Join("\n", Effect.Parts);
 }
 

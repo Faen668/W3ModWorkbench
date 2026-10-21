@@ -5,6 +5,7 @@ using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 using W3ModWorkbench.Core.Scenes;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -95,18 +96,18 @@ public sealed class SceneTimelineView : FrameworkElement
     {
         _tracks.Clear();
         if (_timeline is not { } t) return;
-        Add("Lines", null, t.Elements.Where(e => e.Duration > 0).Select(e => ((object)e, (double)e.Start, (double)e.Duration)));
-        Add("Camera", null, t.Events.Where(e => e.Kind == SceneEventKind.Camera).Select(Item));
-        Add("Lights and fades", null, t.Events.Where(e => e.Kind is SceneEventKind.Light or SceneEventKind.Fade).Select(Item));
+        Add(L.T("SceneTimelineView.Lines"), null, t.Elements.Where(e => e.Duration > 0).Select(e => ((object)e, (double)e.Start, (double)e.Duration)));
+        Add(L.T("SceneTimelineView.Camera"), null, t.Events.Where(e => e.Kind == SceneEventKind.Camera).Select(Item));
+        Add(L.T("SceneTimelineView.LightsFades"), null, t.Events.Where(e => e.Kind is SceneEventKind.Light or SceneEventKind.Fade).Select(Item));
         foreach (string actor in t.Actors)
         {
             var theirs = t.Events.Where(e => e.Actor == actor).ToList();
-            Add("Body", actor, theirs.Where(e => e.Kind == SceneEventKind.Animation).Select(Item));
-            Add("Face", actor, theirs.Where(e => e.Kind == SceneEventKind.Mimics).Select(Item));
-            Add("Looks", actor, theirs.Where(e => e.Kind == SceneEventKind.LookAt).Select(Item));
-            Add("Other", actor, theirs.Where(e => e.Kind is not (SceneEventKind.Animation or SceneEventKind.Mimics or SceneEventKind.LookAt or SceneEventKind.Camera or SceneEventKind.Light or SceneEventKind.Fade)).Select(Item));
+            Add(L.T("SceneTimelineView.Body"), actor, theirs.Where(e => e.Kind == SceneEventKind.Animation).Select(Item));
+            Add(L.T("SceneTimelineView.Face"), actor, theirs.Where(e => e.Kind == SceneEventKind.Mimics).Select(Item));
+            Add(L.T("SceneTimelineView.Looks"), actor, theirs.Where(e => e.Kind == SceneEventKind.LookAt).Select(Item));
+            Add(L.T("SceneTimelineView.Other"), actor, theirs.Where(e => e.Kind is not (SceneEventKind.Animation or SceneEventKind.Mimics or SceneEventKind.LookAt or SceneEventKind.Camera or SceneEventKind.Light or SceneEventKind.Fade)).Select(Item));
         }
-        Add("Other", null, t.Events.Where(e => e.Actor is null or "" && e.Kind is not (SceneEventKind.Camera or SceneEventKind.Light or SceneEventKind.Fade)).Select(Item));
+        Add(L.T("SceneTimelineView.Other"), null, t.Events.Where(e => e.Actor is null or "" && e.Kind is not (SceneEventKind.Camera or SceneEventKind.Light or SceneEventKind.Fade)).Select(Item));
     }
 
     private static (object, double, double) Item(SceneTimelineEvent e) => (e, e.Start, e.Duration);
@@ -266,10 +267,10 @@ public sealed class SceneTimelineView : FrameworkElement
     private (Brush Fill, string Label) Look(object item) => item switch
     {
         SceneTimelineElement { Kind: SceneElementKind.Line } l => (l.Speaker is { } s && _speakers.TryGetValue(s, out var b) ? b : Brushes.SteelBlue,
-            $"{l.Speaker}: {(l.StringId is { } id ? _text(id) ?? $"(string {id})" : "")}"),
-        SceneTimelineElement { Kind: SceneElementKind.Pause } p => (Brushes.Gray, $"Pause {p.Duration:0.##} s"),
-        SceneTimelineElement { Kind: SceneElementKind.Choice } => (Brushes.Goldenrod, "Choice"),
-        SceneTimelineElement { Kind: SceneElementKind.Cutscene } c => (Brushes.MediumTurquoise, $"Cutscene, {c.Duration:0.#} s (its own events are in the cutscene viewer)"),
+            $"{l.Speaker}: {(l.StringId is { } id ? _text(id) ?? L.T("SceneTimelineView.String", id) : "")}"),
+        SceneTimelineElement { Kind: SceneElementKind.Pause } p => (Brushes.Gray, L.T("SceneTimelineView.Pause", p.Duration)),
+        SceneTimelineElement { Kind: SceneElementKind.Choice } => (Brushes.Goldenrod, L.T("SceneTimelineView.Choice")),
+        SceneTimelineElement { Kind: SceneElementKind.Cutscene } c => (Brushes.MediumTurquoise, L.T("SceneTimelineView.CutsceneOwnEventsCutscene", c.Duration)),
         SceneTimelineElement e => (Brushes.Gray, e.Kind.ToString()),
         SceneTimelineEvent e => (KindBrush(e.Kind), Label(e)),
         _ => (Brushes.Gray, ""),
@@ -313,7 +314,7 @@ public sealed class SceneTimelineView : FrameworkElement
     {
         SceneTimelineElement e => $"{Look(e).Label}\n{e.Start:0.00} s to {e.Start + e.Duration:0.00} s",
         SceneTimelineEvent e => $"{Label(e)}{(e.Actor is { Length: > 0 } a ? $" ({a})" : "")}\n{CutsceneTimeline_Humanize(e.ClassName)} at {e.Start:0.00} s"
-            + (e.Duration > 0 ? $" for {e.Duration:0.00} s" : ""),
+            + (e.Duration > 0 ? L.T("SceneTimelineView.ForS", e.Duration) : ""),
         _ => "",
     };
 

@@ -14,6 +14,7 @@ using W3ModWorkbench.Core.Menu;
 using W3ModWorkbench.Core.Strings;
 using W3ModWorkbench.Highlighting;
 using W3ModWorkbench.Core.Projects;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -56,11 +57,11 @@ public partial class MenuBuilderPanel : UserControl
 
     private static readonly KindChoice[] Kinds =
     [
-        new(MenuVarKind.Toggle, "Toggle (on / off)"),
-        new(MenuVarKind.Slider, "Slider"),
-        new(MenuVarKind.Options, "Options (a list of choices)"),
-        new(MenuVarKind.Separator, "Separator"),
-        new(MenuVarKind.Other, "Other (kept as written)"),
+        new(MenuVarKind.Toggle, L.T("MenuBuilderPanel.ToggleOff")),
+        new(MenuVarKind.Slider, L.T("MenuBuilderPanel.Slider")),
+        new(MenuVarKind.Options, L.T("MenuBuilderPanel.OptionsListChoices")),
+        new(MenuVarKind.Separator, L.T("MenuBuilderPanel.Separator")),
+        new(MenuVarKind.Other, L.T("MenuBuilderPanel.OtherKeptWritten")),
     ];
 
     private readonly DispatcherTimer _refreshTimer = new() { Interval = TimeSpan.FromMilliseconds(250) };
@@ -150,7 +151,7 @@ public partial class MenuBuilderPanel : UserControl
         _group = GroupList.SelectedItem as MenuGroup;
         VarList.ItemsSource = _group?.Vars;
         PresetGrid.ItemsSource = _group?.Presets;
-        PresetsTitle.Text = _group is null ? "Presets of the page" : $"Presets of {_group.Summary}";
+        PresetsTitle.Text = _group is null ? L.T("MenuBuilderPanel.PresetsPage") : L.T("MenuBuilderPanel.Presets2", _group.Summary);
         VarList.SelectedIndex = -1;
         PresetGrid.SelectedIndex = _group?.Presets.Count > 0 ? 0 : -1;
         ShowDetails();
@@ -310,9 +311,9 @@ public partial class MenuBuilderPanel : UserControl
             OptionGrid.ItemsSource = _var.Options;
             DefaultHint.Text = _var.Kind switch
             {
-                MenuVarKind.Toggle => "true or false.",
-                MenuVarKind.Slider => "A number between the minimum and maximum.",
-                MenuVarKind.Options => "The value of the option that is picked at first.",
+                MenuVarKind.Toggle => L.T("MenuBuilderPanel.TrueFalse"),
+                MenuVarKind.Slider => L.T("MenuBuilderPanel.NumberBetweenMinimumMaximum"),
+                MenuVarKind.Options => L.T("MenuBuilderPanel.ValueOptionPickedFirst"),
                 _ => "",
             };
         }
@@ -377,7 +378,7 @@ public partial class MenuBuilderPanel : UserControl
     private void PresetGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         EntryGrid.ItemsSource = SelectedPreset?.Entries;
-        EntriesTitle.Text = SelectedPreset is null ? "Values" : $"Values of preset {SelectedPreset.Id}";
+        EntriesTitle.Text = SelectedPreset is null ? L.T("MenuBuilderPanel.Values") : L.T("MenuBuilderPanel.ValuesPreset", SelectedPreset.Id);
     }
 
     private void AddPreset_Click(object sender, RoutedEventArgs e)
@@ -452,8 +453,8 @@ public partial class MenuBuilderPanel : UserControl
         if (_model is null) return;
         var problems = _model.Check();
         ProblemList.ItemsSource = problems;
-        ProblemsTitle.Text = problems.Count == 0 ? "No problems found" : $"{Format.Count(problems.Count, "problem")}  (double-click one to go to it)";
-        ((TabItem)Tabs.Items[4]).Header = problems.Count == 0 ? "Problems" : $"Problems ({problems.Count})";
+        ProblemsTitle.Text = problems.Count == 0 ? L.T("MenuBuilderPanel.NoProblemsFound") : L.T("MenuBuilderPanel.DoubleClickOneGo", L.T("Count.Problem", problems.Count));
+        ((TabItem)Tabs.Items[4]).Header = problems.Count == 0 ? L.T("Common.Problems") : L.T("MenuBuilderPanel.Problems", problems.Count);
     }
 
     private void ProblemList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
@@ -494,7 +495,7 @@ public partial class MenuBuilderPanel : UserControl
             _model.Texts[key] = row.Text;
         }
         KeyGrid.Items.Refresh();
-        CsvText.Text = _csvPath is null ? "No strings CSV yet: Add to CSV… starts one." : $"CSV: {_csvPath}  ·  {Format.Count(_keys.Count(k => k.ExistingId is null), "key")} not in it yet";
+        CsvText.Text = _csvPath is null ? L.T("MenuBuilderPanel.NoStringsCSVYet") : L.T("MenuBuilderPanel.CSVNotYet", _csvPath, L.T("Count.Key", _keys.Count(k => k.ExistingId is null)));
         if (FirstIdBox.Text.Length == 0) SuggestFirstId();
     }
 
@@ -532,7 +533,7 @@ public partial class MenuBuilderPanel : UserControl
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            Tell("The CSV could not be read", ex.Message, MessageKind.Error);
+            Tell(L.T("MenuBuilderPanel.CSVCouldNotRead"), ex.Message, MessageKind.Error);
         }
     }
 
@@ -554,7 +555,7 @@ public partial class MenuBuilderPanel : UserControl
         string? folder = _gameFolder ?? GameLocator.Resolve(_xmlPath);
         if (folder is null)
         {
-            if (!quiet) Tell("The game folder isn't set", "Finding unused IDs needs The Witcher 3's folder. Set it in Settings.");
+            if (!quiet) Tell(L.T("Common.GameFolderIsntSet"), L.T("MenuBuilderPanel.FindingUnusedIDsNeeds"));
             return;
         }
         try
@@ -562,11 +563,11 @@ public partial class MenuBuilderPanel : UserControl
             var index = await GameStringIndex.GetAsync(folder, W3Strings.Language("en")!);
             uint block = index.FreeBlock();
             FirstIdBox.Text = block.ToString(CultureInfo.InvariantCulture);
-            if (!quiet) Tell("A free block", $"{block} to {block + 999} isn't used by the game, its DLC or your installed mods.");
+            if (!quiet) Tell(L.T("MenuBuilderPanel.FreeBlock"), L.T("MenuBuilderPanel.IsntUsedGameDLC", block, block + 999));
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
         {
-            if (!quiet) Tell("The game's strings could not be read", ex.Message, MessageKind.Error);
+            if (!quiet) Tell(L.T("MenuBuilderPanel.GamesStringsCouldNot"), ex.Message, MessageKind.Error);
         }
     }
 
@@ -574,8 +575,8 @@ public partial class MenuBuilderPanel : UserControl
     {
         var dialog = new OpenFileDialog
         {
-            Title = "Load texts from a strings CSV",
-            Filter = "Strings CSV (*.csv)|*.csv",
+            Title = L.T("MenuBuilderPanel.LoadTextsStringsCSV"),
+            Filter = L.T("MenuBuilderPanel.StringsCSVCsvCsv"),
             InitialDirectory = Path.GetDirectoryName(_csvPath ?? _xmlPath) ?? "",
         };
         if (dialog.ShowDialog() != true) return;
@@ -597,7 +598,7 @@ public partial class MenuBuilderPanel : UserControl
     private bool TryFirstId(out uint first)
     {
         if (uint.TryParse(FirstIdBox.Text.Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out first)) return true;
-        Tell("The first ID isn't a number", "Type the ID to give the first new string, or use Find a free block.", MessageKind.Warning);
+        Tell(L.T("MenuBuilderPanel.FirstIDIsntNumber"), L.T("MenuBuilderPanel.TypeIDGiveFirst"), MessageKind.Warning);
         return false;
     }
 
@@ -607,13 +608,13 @@ public partial class MenuBuilderPanel : UserControl
         var missing = _keys.Where(k => k.ExistingId is null).ToList();
         if (missing.Count == 0)
         {
-            Tell("Nothing to copy", "The CSV already has every key.");
+            Tell(L.T("MenuBuilderPanel.NothingCopy"), L.T("MenuBuilderPanel.CSVAlreadyHasEvery"));
             return;
         }
         try
         {
             Clipboard.SetText(CsvLines(missing, first));
-            Tell("Copied", $"{Format.Count(missing.Count, "line")} copied, from ID {first}.");
+            Tell(L.T("MenuBuilderPanel.Copied"), L.T("MenuBuilderPanel.CopiedID", L.T("Count.Line", missing.Count), first));
         }
         catch (System.Runtime.InteropServices.COMException)
         {
@@ -626,8 +627,8 @@ public partial class MenuBuilderPanel : UserControl
         if (_model is null || !TryFirstId(out uint first)) return;
         var dialog = new SaveFileDialog
         {
-            Title = "Add the menu's strings to a CSV",
-            Filter = "Strings CSV (*.csv)|*.csv",
+            Title = L.T("MenuBuilderPanel.AddMenusStringsCSV"),
+            Filter = L.T("MenuBuilderPanel.StringsCSVCsvCsv"),
             FileName = Path.GetFileName(_csvPath ?? "en.csv"),
             InitialDirectory = Path.GetDirectoryName(_csvPath ?? _xmlPath) ?? "",
             OverwritePrompt = false,
@@ -646,7 +647,7 @@ public partial class MenuBuilderPanel : UserControl
             var rows = _keys.Where(k => !haveKeys.Contains(k.Key) && !haveHashes.Contains(W3Strings.HashKey(k.Key))).ToList();
             if (rows.Count == 0)
             {
-                Tell("Nothing to add", $"{Path.GetFileName(path)} already has every key of the menu.");
+                Tell(L.T("MenuBuilderPanel.NothingAdd"), L.T("MenuBuilderPanel.AlreadyHasEveryKey", Path.GetFileName(path)));
                 ReadCsv(path);
                 RefreshKeys();
                 return;
@@ -658,7 +659,7 @@ public partial class MenuBuilderPanel : UserControl
                 sb.Append(";meta[language=en]").Append(eol).Append("; id      |key(hex)|key(str)| text").Append(eol);
             else if (!existing.EndsWith('\n'))
                 sb.Append(eol);
-            sb.Append("; ---------------------------------------- Mod menu").Append(eol);
+            sb.Append(L.T("MenuBuilderPanel.ModMenu")).Append(eol);
             uint id = first;
             int clashes = 0;
             foreach (var row in rows)
@@ -673,14 +674,14 @@ public partial class MenuBuilderPanel : UserControl
             ReadCsv(path);
             _keys.Clear();
             RefreshKeys();
-            Tell("Added to the CSV", $"{Format.Count(rows.Count, "string")} added to {Path.GetFileName(path)}"
-                + (clashes > 0 ? $", skipping {Format.Count(clashes, "ID")} the file already used" : "")
-                + ". Open it in the strings editor to save the .w3strings files.");
+            Tell(L.T("MenuBuilderPanel.AddedCSV"), L.T("MenuBuilderPanel.AddedTo", L.T("Count.String", rows.Count), Path.GetFileName(path))
+                + (clashes > 0 ? L.T("MenuBuilderPanel.SkippingIds", L.T("Count.ID", clashes)) : "")
+                + L.T("MenuBuilderPanel.OpenInStringsEditor"));
             if (Window.GetWindow(this) is { } owner && StringsWindow.CanOpen(path)) StringsWindow.Open(path, owner);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            Tell("The CSV could not be saved", ex.Message, MessageKind.Error);
+            Tell(L.T("MenuBuilderPanel.CSVCouldNotSaved"), ex.Message, MessageKind.Error);
         }
     }
 

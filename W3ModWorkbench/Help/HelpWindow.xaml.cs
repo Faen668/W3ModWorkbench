@@ -4,6 +4,7 @@ using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Help;
 
@@ -58,9 +59,9 @@ public partial class HelpWindow : Window
     private void BuildContents()
     {
         NavPanel.Children.Clear();
-        NavHeading.Text = "CONTENTS";
+        NavHeading.Text = L.T("HelpWindow.Contents");
         ExpandAllButton.Visibility = Visibility.Visible;
-        ExpandAllText.Text = HelpLibrary.Categories.All(c => Expanded.Contains(c.Title)) ? "Collapse all" : "Expand all";
+        ExpandAllText.Text = HelpLibrary.Categories.All(c => Expanded.Contains(c.Title)) ? L.T("HelpWindow.CollapseAll") : L.T("HelpWindow.ExpandAll");
         foreach (var category in HelpLibrary.Categories)
         {
             bool open = Expanded.Contains(category.Title);
@@ -156,12 +157,12 @@ public partial class HelpWindow : Window
         var words = HelpLibrary.Words(query);
         NavPanel.Children.Clear();
         ExpandAllButton.Visibility = Visibility.Collapsed;
-        NavHeading.Text = _hits.Count == 0 ? "NO PAGES MATCH" : _hits.Count == 1 ? "1 PAGE MATCHES" : $"{_hits.Count} PAGES MATCH";
+        NavHeading.Text = _hits.Count == 0 ? L.T("HelpWindow.NOPagesMatch") : _hits.Count == 1 ? L.T("HelpWindow.PageMatches") : L.T("HelpWindow.PagesMatch", _hits.Count);
         if (_hits.Count == 0)
         {
             NavPanel.Children.Add(new TextBlock
             {
-                Text = "Try fewer words, or another word for the same thing: the guide calls a .w2mesh a mesh, a .ws file a script.",
+                Text = L.T("HelpWindow.TryFewerWordsAnother"),
                 TextWrapping = TextWrapping.Wrap, Opacity = 0.7, Margin = new Thickness(4, 6, 4, 0),
             });
             return;
@@ -174,7 +175,7 @@ public partial class HelpWindow : Window
             stack.Children.Add(title);
             stack.Children.Add(new TextBlock
             {
-                Text = $"{hit.Page.Category.Title}" + (hit.Count > 0 ? $"  ·  {hit.Count} {(hit.Count == 1 ? "match" : "matches")}" : ""),
+                Text = $"{hit.Page.Category.Title}" + (hit.Count > 0 ? $"  ·  {hit.Count} {(hit.Count == 1 ? L.T("HelpWindow.Match") : L.T("HelpWindow.Matches"))}" : ""),
                 FontSize = 11.5, Opacity = 0.6, Margin = new Thickness(0, 1, 0, 3),
             });
             var snippet = new TextBlock { FontSize = 12.5, Opacity = 0.85, TextWrapping = TextWrapping.Wrap, LineHeight = 18 };
@@ -224,7 +225,7 @@ public partial class HelpWindow : Window
     public void Open(string title)
     {
         if (HelpLibrary.Find(title) is { } page) Open(page);
-        else MessageBox.Show(this, $"There's no page called \"{title}\" yet.", "Help", MessageBoxButton.OK, MessageBoxImage.Information);
+        else MessageBox.Show(this, L.T("HelpWindow.TheresNoPageCalled", title), L.T("Common.Help"), MessageBoxButton.OK, MessageBoxImage.Information);
     }
 
     private void Open(HelpPage page, List<string>? highlight = null)
@@ -247,7 +248,9 @@ public partial class HelpWindow : Window
         TitleText.Text = page.Title;
         SummaryText.Text = page.Summary;
         SummaryText.Visibility = page.Summary.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
-        Title = $"{page.Title} - W3 Mod Workbench Help";
+        EnglishNote.Visibility = page.Language != Localisation.Loc.Instance.Language && Localisation.Loc.Instance.Language != Localisation.Loc.Pseudo
+            ? Visibility.Visible : Visibility.Collapsed;
+        Title = L.T("HelpWindow.W3ModWorkbenchHelp2", page.Title);
 
         _renderer.Highlight = _highlight;
         _renderer.Render(page.Body, PageBody);

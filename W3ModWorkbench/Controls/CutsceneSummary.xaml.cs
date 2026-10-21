@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using W3ModWorkbench.Core.Cutscenes;
 using W3ModWorkbench.ViewModels;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -35,8 +36,8 @@ public partial class CutsceneSummary : UserControl
 
         var played = new List<string>();
         played.AddRange(cutscene.UsedIn.Select(Path.GetFileName).OfType<string>());
-        if (cutscene.AudioTrack is { } audio) played.Add($"sound: {audio}");
-        if (cutscene.Level is { } level) played.Add($"made in {Path.GetFileNameWithoutExtension(level)}");
+        if (cutscene.AudioTrack is { } audio) played.Add(L.T("CutsceneSummary.Sound", audio));
+        if (cutscene.Level is { } level) played.Add(L.T("CutsceneSummary.Made", Path.GetFileNameWithoutExtension(level)));
         PlayedText.Text = string.Join("\n", played);
         PlayedPanel.Visibility = played.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
     }

@@ -11,6 +11,7 @@ using W3ModWorkbench.Core.Strings;
 using W3ModWorkbench.Core.Textures;
 using W3ModWorkbench.Highlighting;
 using W3ModWorkbench.ViewModels;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -98,7 +99,7 @@ public partial class FilePreview : UserControl
         var first = parts[0].Mesh;
         var progress = new Progress<(int Done, int Total)>(n =>
         {
-            if (!token.IsCancellationRequested && n.Total > 0 && n.Done < n.Total) PreviewDetail.Text = $"{detail}  ·  textures {n.Done} of {n.Total}…";
+            if (!token.IsCancellationRequested && n.Total > 0 && n.Done < n.Total) PreviewDetail.Text = L.T("FilePreview.Textures", detail, n.Done, n.Total);
         });
         List<(int Part, int Material, System.Windows.Media.Imaging.BitmapSource? Picture, MaterialLook? Look, bool LeaveOut)> textures;
         try
@@ -134,9 +135,9 @@ public partial class FilePreview : UserControl
         Stop();
         if (items.Count != 1)
         {
-            PreviewName.Text = items.Count > 1 ? $"{items.Count:N0} files selected" : "";
-            PreviewDetail.Text = items.Count > 1 ? Format.Bytes(items.Sum(i => (long)i.Size)) + " in all" : "";
-            ShowPreview("\uE8A5", items.Count == 0 ? "Highlight a file to see it here." : "Highlight a single file to see it here.");
+            PreviewName.Text = items.Count > 1 ? L.T("FilePreview.FilesSelected", items.Count) : "";
+            PreviewDetail.Text = items.Count > 1 ? L.T("FilePreview.All", Format.Bytes(items.Sum(i => (long)i.Size))) : "";
+            ShowPreview("\uE8A5", items.Count == 0 ? L.T("FilePreview.HighlightFileSeeHere") : L.T("FilePreview.HighlightSingleFileSee"));
             return;
         }
         var item = items[0];
@@ -151,7 +152,7 @@ public partial class FilePreview : UserControl
             {
                 var picture = await EntryImages.LoadAsync(item.Entry, 1024, token);
                 if (token.IsCancellationRequested) return;
-                if (picture is null) ShowPreview(item.Glyph, "This picture can't be shown yet.");
+                if (picture is null) ShowPreview(item.Glyph, L.T("FilePreview.PictureCantShownYet"));
                 else
                 {
                     ShowPreview(item.Glyph, null, picture);
@@ -160,12 +161,12 @@ public partial class FilePreview : UserControl
             }
             else if (item.IsTextureHeader)
             {
-                ShowPreview(item.Glyph, "Looking for the texture's pixels…");
+                ShowPreview(item.Glyph, L.T("FilePreview.LookingTexturesPixels"));
                 var texture = await FindTextureForHeaderAsync(item);
                 if (token.IsCancellationRequested) return;
                 var picture = texture is null ? null : await Task.Run(() => EntryImages.FromTexture(texture, 1024));
                 if (token.IsCancellationRequested) return;
-                if (picture is null) ShowPreview(item.Glyph, "Its pixels are in a texture.cache under the same path. Open the mod's texture.cache, or the game's, and they show here.");
+                if (picture is null) ShowPreview(item.Glyph, L.T("FilePreview.PixelsTextureCacheUnder"));
                 else
                 {
                     ShowPreview(item.Glyph, null, picture);
@@ -174,7 +175,7 @@ public partial class FilePreview : UserControl
             }
             else if (MeshWindow.CanShow(item.Name))
             {
-                ShowPreview(item.Glyph, "Reading the mesh…");
+                ShowPreview(item.Glyph, L.T("FilePreview.ReadingMesh"));
                 var entry = item.Entry;
                 var locator = Locator(entry);
                 var mesh = await Task.Run(() =>
@@ -191,13 +192,13 @@ public partial class FilePreview : UserControl
                 if (token.IsCancellationRequested) return;
                 ShowPreview(item.Glyph, null, mesh: mesh);
                 int triangles = MeshView.Drawn(mesh, 0).Sum(c => c.Triangles);
-                PreviewDetail.Text = detail + $"  ·  {triangles:N0} triangles, {mesh.LodCount} LOD{(mesh.LodCount == 1 ? "" : "s")}  ·  double-click to open";
+                PreviewDetail.Text = detail + L.T("FilePreview.MeshDetail", triangles, L.T("Count.Lod", mesh.LodCount));
                 // the colour textures, smaller than the viewer's, all read at once, as the viewers read them, then put on together
                 await ShowTexturesAsync([(mesh, System.Numerics.Matrix4x4.Identity)], [null], locator, detail, token);
             }
             else if (CutsceneWindow.CanShow(item.Name))
             {
-                ShowPreview(item.Glyph, "Reading the cutscene…");
+                ShowPreview(item.Glyph, L.T("FilePreview.ReadingCutscene"));
                 var entry = item.Entry;
                 CutsceneFile cutscene;
                 try
@@ -207,17 +208,17 @@ public partial class FilePreview : UserControl
                 }
                 catch (InvalidDataException ex)
                 {
-                    if (!token.IsCancellationRequested) ShowPreview(item.Glyph, $"This cutscene could not be read.\n\n{ex.Message}\n\nIt can still be checked and extracted.");
+                    if (!token.IsCancellationRequested) ShowPreview(item.Glyph, L.T("FilePreview.CutsceneCouldNotRead", ex.Message));
                     return;
                 }
                 if (token.IsCancellationRequested) return;
                 ShowPreview(item.Glyph, null, cutscene: cutscene);
-                PreviewDetail.Text = detail + "  ·  double-click to open";
+                PreviewDetail.Text = L.T("FilePreview.DoubleClickOpen", detail);
             }
             else if (EntityWindow.CanShow(item.Name))
             {
                 // its meshes put together, in its first appearance
-                ShowPreview(item.Glyph, "Reading the entity…");
+                ShowPreview(item.Glyph, L.T("FilePreview.ReadingEntity"));
                 var locator = Locator(item.Entry);
                 Core.Entities.EntityFile entity;
                 List<(MeshFile Mesh, System.Numerics.Matrix4x4 Place)> parts;
@@ -237,26 +238,26 @@ public partial class FilePreview : UserControl
                 }
                 catch (InvalidDataException ex)
                 {
-                    if (!token.IsCancellationRequested) ShowPreview(item.Glyph, $"This entity could not be read.\n\n{ex.Message}\n\nIt can still be checked and extracted.");
+                    if (!token.IsCancellationRequested) ShowPreview(item.Glyph, L.T("FilePreview.EntityCouldNotRead", ex.Message));
                     return;
                 }
                 if (token.IsCancellationRequested) return;
-                string what = $"{entity.EntityClass ?? "Entity"}  ·  {Format.Count(entity.Components.Count, "component")}"
-                            + (entity.Appearances.Count > 0 ? $", {Format.Count(entity.Appearances.Count, "appearance")}" : "");
+                string what = $"{entity.EntityClass ?? L.T("FilePreview.Entity")}  ·  {L.T("Count.Component", entity.Components.Count)}"
+                            + (entity.Appearances.Count > 0 ? $", {L.T("Count.Appearance", entity.Appearances.Count)}" : "");
                 if (parts.Count == 0)
                 {
-                    ShowPreview(item.Glyph, $"{what}\n\nIt has no meshes to show. Double-click to see its components.");
+                    ShowPreview(item.Glyph, L.T("FilePreview.HasNoMeshesShow", what));
                     return;
                 }
                 ShowPreview(item.Glyph, null, mesh: parts[0].Mesh);
                 PreviewMesh.ShowParts(parts);
-                PreviewDetail.Text = detail + $"  ·  {what}, {Format.Count(parts.Count, "mesh", "meshes")}  ·  double-click to open";
+                PreviewDetail.Text = L.T("FilePreview.DoubleClickOpen2", detail, what, L.T("Count.Mesh", parts.Count));
                 var colorings = drawnBy.Select(c => LookTextures.Coloring(entity, entity.DefaultAppearance?.Name, c.Name)).ToList();
                 await ShowTexturesAsync(parts, colorings, locator, PreviewDetail.Text, token);
             }
             else if (SceneWindow.CanShow(item.Name))
             {
-                ShowPreview(item.Glyph, "Reading the scene…");
+                ShowPreview(item.Glyph, L.T("FilePreview.ReadingScene"));
                 Core.Scenes.SceneFile scene;
                 try
                 {
@@ -265,23 +266,23 @@ public partial class FilePreview : UserControl
                 }
                 catch (InvalidDataException ex)
                 {
-                    if (!token.IsCancellationRequested) ShowPreview(item.Glyph, $"This scene could not be read.\n\n{ex.Message}\n\nIt can still be checked and extracted.");
+                    if (!token.IsCancellationRequested) ShowPreview(item.Glyph, L.T("FilePreview.SceneCouldNotRead", ex.Message));
                     return;
                 }
                 if (token.IsCancellationRequested) return;
                 // shown at once, then again with its lines in words once the game's strings are read
                 ShowPreview(item.Glyph, null, scene: scene);
-                PreviewDetail.Text = detail + "  ·  double-click to open";
+                PreviewDetail.Text = L.T("FilePreview.DoubleClickOpen", detail);
                 var (text, note) = await SceneWindow.LinesAsync();
                 if (!token.IsCancellationRequested && ReferenceEquals(PreviewScene.Scene, scene)) PreviewScene.Show(scene, text ?? (_ => null), note);
             }
             else if (item.Entry is StringsEntry)
-                ShowPreview(item.Glyph, "Double-click to open it in the strings editor.");
+                ShowPreview(item.Glyph, L.T("FilePreview.DoubleClickOpenStrings"));
             else if (item.IsPreviewable)
             {
                 if (item.Size > 4_000_000)
                 {
-                    ShowPreview(item.Glyph, "Too large to read here. Double-click to open it.");
+                    ShowPreview(item.Glyph, L.T("FilePreview.TooLargeReadHere"));
                     return;
                 }
                 var entry = item.Entry;
@@ -301,16 +302,16 @@ public partial class FilePreview : UserControl
                 ShowPreview(item.Glyph, null, text: text, name: item.Name);
             }
             else if (item.Kind is { } kind)
-                ShowPreview(item.Glyph, $"{kind.Name}\n\n{kind.Description}\n\nThere's no preview for this kind of file; check it and extract it.");
+                ShowPreview(item.Glyph, L.T("FilePreview.TheresNoPreviewKind", kind.Name, kind.Description));
             else
-                ShowPreview(item.Glyph, "No preview for this kind of file. Check it and extract it, or double-click for what the tool can do with it.");
+                ShowPreview(item.Glyph, L.T("FilePreview.NoPreviewKindFile"));
         }
         catch (OperationCanceledException)
         {
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or NotSupportedException)
         {
-            if (!token.IsCancellationRequested) ShowPreview(item.Glyph, "It could not be read: " + ex.Message);
+            if (!token.IsCancellationRequested) ShowPreview(item.Glyph, L.T("FilePreview.CouldNotRead", ex.Message));
         }
     }
 }

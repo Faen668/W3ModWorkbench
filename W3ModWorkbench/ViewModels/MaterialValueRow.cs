@@ -5,6 +5,7 @@ using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using W3ModWorkbench.Core.Meshes;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.ViewModels;
 
@@ -45,14 +46,17 @@ public sealed class MaterialValueRow : INotifyPropertyChanged
     /// <summary>The group it's listed under.</summary>
     public string Group => Kind switch
     {
-        ParameterKind.Texture => "Textures",
-        ParameterKind.Color => "Colours",
-        ParameterKind.Scalar => "Numbers",
-        ParameterKind.Vector => "Vectors",
-        _ => "Other",
+        ParameterKind.Texture => L.T("Common.Textures"),
+        ParameterKind.Color => L.T("MaterialValueRow.Colours"),
+        ParameterKind.Scalar => L.T("MaterialValueRow.Numbers"),
+        ParameterKind.Vector => L.T("MaterialValueRow.Vectors"),
+        _ => L.T("MaterialValueRow.Other"),
     };
 
-    public string Where => IsOwn ? (InBase ? "its own, over its base's" : "its own") : $"from {Parameter.From}";
+    /// <summary>Where its group comes in the list: textures, colours, numbers, vectors, then the rest.</summary>
+    public int GroupOrder => Kind switch { ParameterKind.Texture => 0, ParameterKind.Color => 1, ParameterKind.Scalar => 2, ParameterKind.Vector => 3, _ => 4 };
+
+    public string Where => IsOwn ? (InBase ? L.T("MaterialValueRow.OwnOverBases") : L.T("MaterialValueRow.Own")) : L.T("MaterialValueRow.From", Parameter.From);
     public double WhereOpacity => IsOwn ? 1 : 0.6;
     public FontWeight Weight => IsOwn ? FontWeights.SemiBold : FontWeights.Normal;
     public string Tip => $"{Name}  ·  {Parameter.Type}  ·  {Where}";
@@ -92,10 +96,10 @@ public sealed class MaterialValueRow : INotifyPropertyChanged
             }
             else Error = Kind switch
             {
-                ParameterKind.Scalar => "A number, such as 0.5.",
-                ParameterKind.Color => "A colour: #RRGGBB, #RRGGBBAA, or three or four numbers from 0 to 255.",
-                ParameterKind.Vector => "Up to four numbers: x, y, z, w.",
-                _ => "This kind of parameter isn't changed here.",
+                ParameterKind.Scalar => L.T("MaterialValueRow.NumberSuch"),
+                ParameterKind.Color => L.T("MaterialValueRow.ColourRrggbbRrggbbaaThree"),
+                ParameterKind.Vector => L.T("MaterialValueRow.UpFourNumbersX"),
+                _ => L.T("MaterialValueRow.KindParameterIsntChanged"),
             };
         }
     }

@@ -7,6 +7,7 @@ using W3ModWorkbench.Core.Cr2w;
 using W3ModWorkbench.Core.Entities;
 using W3ModWorkbench.Core.Meshes;
 using W3ModWorkbench.Core.Scenes;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -360,7 +361,7 @@ public static class SceneStage
             string name = definition["id"] as string ?? "";
             if (!wanted.TryGetValue(name, out var names))
             {
-                notes.Add($"{name} isn't drawn: none of the dialog sets the sections play in has a place for them.");
+                notes.Add(L.T("SceneStage.IsntDrawnNoneDialog", name));
                 continue;
             }
             string? template = definition["entityTemplate"] is RedHandle h ? scene.File.Import(h)?.Path : null;
@@ -368,13 +369,13 @@ public static class SceneStage
             {
                 // a chat names only its speakers' voice tags: the game finds whoever has them nearby
                 template = found;
-                notes.Add($"{name} has no entity in the scene, as the game finds whoever has its voice tag nearby: shown as {Path.GetFileName(found)}, which has it.");
+                notes.Add(L.T("SceneStage.HasNoEntityScene", name, Path.GetFileName(found)));
             }
             if (template is null || locator.ReadFile(template) is not { } data)
             {
                 notes.Add(template is null
-                    ? $"{name} isn't drawn: the scene gives it no entity, and no community entity has its voice tag."
-                    : $"{name} isn't drawn: its entity template wasn't found.");
+                    ? L.T("SceneStage.IsntDrawnSceneGives", name)
+                    : L.T("SceneStage.IsntDrawnEntityTemplate", name));
                 continue;
             }
             EntityFile entity;
@@ -386,7 +387,7 @@ public static class SceneStage
             }
             catch (InvalidDataException ex)
             {
-                notes.Add($"{name} isn't drawn: its entity could not be read ({ex.Message}).");
+                notes.Add(L.T("SceneStage.IsntDrawnEntityCould", name, ex.Message));
                 continue;
             }
             // the appearance the scene asks for, else the entity's default one
@@ -396,7 +397,7 @@ public static class SceneStage
             var (parts, drawnBy, _, missing) = EntityWindow.ReadMeshes(look, locator, token);
             if (BodyRig(look, parts, locator) is not { } body)
             {
-                notes.Add($"{name} isn't drawn: its body's rig wasn't found.");
+                notes.Add(L.T("SceneStage.IsntDrawnBodysRig", name));
                 continue;
             }
             // its face's bones go on the body's rig, for the head to be skinned to them
@@ -407,10 +408,10 @@ public static class SceneStage
             var coloredBy = parts.Select(_ => (entity, appearance?.Name)).ToList();
             var attachedTo = CutsceneCast.AttachToRig(look, parts, drawnBy, rig);
             if (CutsceneCast.IsPlayer(template) && CutsceneCast.Dress(entity, look, rig, locator, parts, drawnBy, coloredBy, attachedTo, token))
-                notes.Add($"{name} is the player, whom the game dresses in what's equipped: shown in Geralt's default gear.");
+                notes.Add(L.T("SceneStage.PlayerWhomGameDresses", name));
             if (parts.Count == 0)
             {
-                notes.Add($"{name} isn't drawn: " + (missing > 0 ? "its meshes could not be read." : "its entity has no meshes."));
+                notes.Add(L.T("SceneStage.IsntDrawn", name, (missing > 0 ? L.T("SceneStage.MeshesCouldNotRead") : L.T("SceneStage.EntityHasNoMeshes"))));
                 continue;
             }
             var rest = new Matrix4x4[rig.Count];
@@ -431,9 +432,9 @@ public static class SceneStage
                 var stood = notFound.Where(n => n.Contains("idle", StringComparison.OrdinalIgnoreCase)).ToList();
                 foreach (string idle in stood) clips[idle] = ownClip;
                 notFound = [.. notFound.Except(stood)];
-                notes.Add($"{name} stands in {own} from its own animation sets, as they haven't {string.Join(", ", stood)}.");
+                notes.Add(L.T("SceneStage.StandsOwnAnimationSets", name, own, string.Join(", ", stood)));
             }
-            if (notFound.Count > 0) notes.Add($"{name}: {Format.Count(notFound.Count, "animation")} not found in its animation sets ({string.Join(", ", notFound.Take(3))}{(notFound.Count > 3 ? "…" : "")}).");
+            if (notFound.Count > 0) notes.Add(L.T("SceneStage.NotFoundAnimationSets", name, L.T("Count.Animation", notFound.Count), string.Join(", ", notFound.Take(3)), (notFound.Count > 3 ? "…" : "")));
             cast.Add(new StageActor
             {
                 Name = name,
@@ -666,7 +667,7 @@ public static class SceneStage
             {
                 if (template is null || locator.ReadFile(template) is not { } data)
                 {
-                    notes.Add($"The prop {id} isn't drawn: its entity wasn't found.");
+                    notes.Add(L.T("SceneStage.PropIsntDrawnEntity", id));
                     continue;
                 }
                 var entity = EntityFile.Read(data);
@@ -674,12 +675,12 @@ public static class SceneStage
                 var appearance = entity.DefaultAppearance;
                 var look = entity.Look(appearance, locator.ReadFile);
                 var (parts, drawnBy, _, _) = EntityWindow.ReadMeshes(look, locator, token);
-                if (parts.Count == 0) notes.Add($"The prop {id} isn't drawn: its entity has no meshes (an effect, a light).");
+                if (parts.Count == 0) notes.Add(L.T("SceneStage.PropIsntDrawnEntity2", id));
                 else props.Add(new StageProp { Id = id, Entity = entity, Appearance = appearance?.Name, Parts = parts, DrawnBy = drawnBy });
             }
             catch (InvalidDataException ex)
             {
-                notes.Add($"The prop {id} isn't drawn: {ex.Message}");
+                notes.Add(L.T("SceneStage.PropIsntDrawn", id, ex.Message));
             }
         }
         return props;
@@ -1380,7 +1381,7 @@ public static class SceneStage
                 // the angles go the shortest way round (across 174 blends that's what keeps the actors in the picture)
                 float pitch = a.Pitch + MathF.IEEERemainder(b.Pitch - a.Pitch, 360), yaw = a.Yaw + MathF.IEEERemainder(b.Yaw - a.Yaw, 360);
                 var position = new Vector3(Value(0, a.Position.X, b.Position.X), Value(1, a.Position.Y, b.Position.Y), Value(2, a.Position.Z, b.Position.Z));
-                return Camera($"{a.Name} to {b.Name}", position, Value(3, a.Pitch, pitch), Value(5, a.Yaw, yaw), Value(6, a.FieldOfView, b.FieldOfView));
+                return Camera(L.T("SceneStage.To", a.Name, b.Name), position, Value(3, a.Pitch, pitch), Value(5, a.Yaw, yaw), Value(6, a.FieldOfView, b.FieldOfView));
             }
         }
         foreach (var e in timeline.Events.Where(e => e.Start <= time + 1e-3f && e.Source["isMuted"] is not true).OrderByDescending(e => e.Start))

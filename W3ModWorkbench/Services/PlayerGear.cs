@@ -2,6 +2,7 @@ using System.IO;
 using System.Text;
 using System.Text.RegularExpressions;
 using W3ModWorkbench.Core.Cr2w;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -63,7 +64,7 @@ public static class PlayerGear
 
     private static List<GearPiece> Read(ResourceLocator locator)
     {
-        var gear = new List<GearPiece> { new("Geralt's head", Head, null) };
+        var gear = new List<GearPiece> { new(L.T("PlayerGear.GeraltsHead"), Head, null) };
         var items = InventoryItems(locator);
         if (items.Count == 0) return gear;
         var definitions = Definitions(locator);

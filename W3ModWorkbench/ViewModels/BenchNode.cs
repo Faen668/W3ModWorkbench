@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using W3ModWorkbench.Core;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.ViewModels;
 
@@ -93,7 +94,7 @@ public sealed class BenchNode : INotifyPropertyChanged
     public void LoadLater(Func<Task<List<BenchNode>>> load)
     {
         _load = load;
-        Add(Note(Group, "Reading…"));
+        Add(Note(Group, L.T("BenchNode.Reading")));
     }
 
     private async Task LoadAsync()
@@ -107,7 +108,7 @@ public sealed class BenchNode : INotifyPropertyChanged
         }
         catch (Exception ex)
         {
-            children = [Note(Group, "Couldn't be read: " + ex.Message)];
+            children = [Note(Group, L.T("BenchNode.CouldntRead", ex.Message))];
         }
         Children.Clear();
         foreach (var child in children) Add(child);

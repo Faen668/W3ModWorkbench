@@ -6,6 +6,7 @@ using System.Windows.Media;
 using System.Xml;
 using System.IO;
 using W3ModWorkbench.Core.Scripts.Navigation;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -55,7 +56,7 @@ public sealed class OutlineNode(ScriptSymbol symbol, int end) : INotifyPropertyC
         : Symbol.Base is { } b ? "extends " + b
         : "";
 
-    public string ToolTip => $"{Symbol.Title}  ·  line {Symbol.Line}";
+    public string ToolTip => L.T("OutlinePanel.Line", Symbol.Title, Symbol.Line);
 
     /// <summary>Tells the same declaration apart across edits.</summary>
     public string Identity => CustomLabel is not null ? $"xml|{Parent?.Identity}|{CustomLabel}|{CustomDetail}" : $"{Symbol.Kind}|{Symbol.Annotation}|{Symbol.Owner}|{Symbol.Name}";
@@ -224,7 +225,7 @@ public partial class OutlinePanel : UserControl
             var node = new OutlineNode(symbol, block.End)
             {
                 CustomLabel = block.Name,
-                CustomDetail = block.Label ?? (block.IsList ? $"{block.Count} item{(block.Count == 1 ? "" : "s")}" : $"{block.Count} propert{(block.Count == 1 ? "y" : "ies")}"),
+                CustomDetail = block.Label ?? (block.IsList ? L.T("OutlinePanel.Items", block.Count) : L.T("OutlinePanel.Properties", block.Count)),
                 Parent = parent,
                 IsExpanded = depth < 3,
             };
@@ -310,7 +311,7 @@ public partial class OutlinePanel : UserControl
         string query = FilterBox.Text.Trim();
         var shown = _roots.Where(r => Filter(r, query, query.Length == 0)).ToList();
         Tree.ItemsSource = shown;
-        EmptyText.Text = _all.Count == 0 ? "Nothing declared in this file." : "Nothing matches the filter.";
+        EmptyText.Text = _all.Count == 0 ? L.T("OutlinePanel.NothingDeclaredFile") : L.T("OutlinePanel.NothingMatchesFilter");
         EmptyText.Visibility = shown.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 

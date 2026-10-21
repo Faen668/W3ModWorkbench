@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -29,11 +30,11 @@ public partial class LoadingPanel : UserControl
     public bool IsLoading => _cancel is not null;
 
     /// <summary>Shows the button that loads it, with what loading does.</summary>
-    public void Prompt(string title, string text, string button = "Load preview")
+    public void Prompt(string title, string text, string? button = null)
     {
         TitleText.Text = title;
         PromptText.Text = text;
-        LoadButtonText.Text = button;
+        LoadButtonText.Text = button ?? L.T("LoadingPanel.LoadPreview");
         PromptText.Visibility = LoadButton.Visibility = Visibility.Visible;
         ProgressPart.Visibility = Visibility.Collapsed;
         Visibility = Visibility.Visible;
@@ -80,7 +81,7 @@ public partial class LoadingPanel : UserControl
         DetailText.Text = detail ?? "";
         Bar.IsIndeterminate = total <= 0;
         if (total > 0) Bar.Value = Math.Clamp(done / (double)total, 0, 1);
-        CountText.Text = total > 0 ? $"{done} of {total}" : "";
+        CountText.Text = total > 0 ? L.T("LoadingPanel.Of", done, total) : "";
     }
 
     private void Load_Click(object sender, RoutedEventArgs e) => LoadRequested?.Invoke(this, EventArgs.Empty);
@@ -88,7 +89,7 @@ public partial class LoadingPanel : UserControl
     private void Cancel_Click(object sender, RoutedEventArgs e)
     {
         CancelButton.IsEnabled = false;
-        StepText.Text = "Stopping…";
+        StepText.Text = L.T("LoadingPanel.Stopping");
         _cancel?.Cancel();
     }
 }

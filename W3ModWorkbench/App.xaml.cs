@@ -1,4 +1,5 @@
 using System.Windows;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -70,7 +71,7 @@ public partial class App : Application
                 // in the window in use; a native box only when there's none to show it in
                 var window = Windows.OfType<Window>().FirstOrDefault(w => w.IsActive) ?? MainWindow;
                 if (window is IMessageHost host && window.IsLoaded && window.IsVisible)
-                    await host.ShowMessage("Something went wrong", args.Exception.Message, MessageKind.Error);
+                    await host.ShowMessage(L.T("App.SomethingWentWrong"), args.Exception.Message, MessageKind.Error);
                 else
                     MessageBox.Show(args.Exception.Message, "W3 Mod Workbench", MessageBoxButton.OK, MessageBoxImage.Error);
             }

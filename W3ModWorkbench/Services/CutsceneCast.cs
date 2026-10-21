@@ -5,6 +5,7 @@ using W3ModWorkbench.Core.Cr2w;
 using W3ModWorkbench.Core.Cutscenes;
 using W3ModWorkbench.Core.Entities;
 using W3ModWorkbench.Core.Meshes;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -78,12 +79,12 @@ public static class CutsceneCast
             var actor = cutscene.Actors.FirstOrDefault(a => a.Name == played.Name);
             if (played.Rig is not { } rig)
             {
-                notes.Add($"{played.Name} isn't drawn: {played.RigNote}");
+                notes.Add(L.T("CutsceneCast.IsntDrawn", played.Name, played.RigNote));
                 continue;
             }
             if (actor?.Template is not { } template || locator.ReadFile(template) is not { } data)
             {
-                notes.Add($"{played.Name} isn't drawn: its entity template wasn't found.");
+                notes.Add(L.T("CutsceneCast.IsntDrawnEntityTemplate", played.Name));
                 continue;
             }
             EntityFile entity;
@@ -95,7 +96,7 @@ public static class CutsceneCast
             }
             catch (InvalidDataException ex)
             {
-                notes.Add($"{played.Name} isn't drawn: its entity could not be read ({ex.Message}).");
+                notes.Add(L.T("CutsceneCast.IsntDrawnEntityCould", played.Name, ex.Message));
                 continue;
             }
             // the appearance the cutscene names, else the one the entity gives its voice tag, else its default one
@@ -112,13 +113,13 @@ public static class CutsceneCast
             skinned = SceneStage.WithCarriedRigs(skinned, look, locator);
             var attachedTo = AttachToRig(look, parts, drawnBy, rig);
             if (IsPlayer(template) && Dress(entity, look, rig, locator, parts, drawnBy, coloredBy, attachedTo, token))
-                notes.Add($"{played.Name} is the player, whom the game dresses in what's equipped: shown here with Geralt's default gear (his starting armour, swords and hairstyle).");
+                notes.Add(L.T("CutsceneCast.PlayerWhomGameDresses", played.Name));
             if (parts.Count == 0)
             {
-                notes.Add($"{played.Name} isn't drawn: " + (missing > 0 ? "its meshes could not be read." : "its entity has no meshes."));
+                notes.Add(L.T("CutsceneCast.IsntDrawn2", played.Name, (missing > 0 ? L.T("CutsceneCast.MeshesCouldNotRead") : L.T("CutsceneCast.EntityHasNoMeshes"))));
                 continue;
             }
-            if (missing > 0) notes.Add($"{played.Name}: {Format.Count(missing, "mesh", "meshes")} not found or not read.");
+            if (missing > 0) notes.Add(L.T("CutsceneCast.NotFoundNotRead", played.Name, L.T("Count.Mesh", missing)));
             var rest = new Matrix4x4[skinned.Count];
             skinned.ToModel(skinned.Pose, rest);
             cast.Add(new CastMember

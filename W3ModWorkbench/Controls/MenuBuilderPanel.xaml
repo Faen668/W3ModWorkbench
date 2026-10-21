@@ -1,6 +1,7 @@
 <UserControl x:Class="W3ModWorkbench.MenuBuilderPanel"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:l="clr-namespace:W3ModWorkbench.Localisation"
              xmlns:local="clr-namespace:W3ModWorkbench"
              xmlns:avalonEdit="http://icsharpcode.net/sharpdevelop/avalonedit">
     <UserControl.Resources>
@@ -84,20 +85,20 @@
 
             <DockPanel Margin="2,0,0,6">
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-                    <Button Style="{StaticResource MiniButton}" Click="AddGroup_Click" ToolTip="Add a page">
+                    <Button Style="{StaticResource MiniButton}" Click="AddGroup_Click" ToolTip="{l:T MenuBuilderPanel.AddPage}">
                         <TextBlock Style="{StaticResource IconText}" Text="&#xE710;" />
                     </Button>
-                    <Button Style="{StaticResource MiniButton}" Click="RemoveGroup_Click" ToolTip="Remove the page">
+                    <Button Style="{StaticResource MiniButton}" Click="RemoveGroup_Click" ToolTip="{l:T MenuBuilderPanel.RemovePage}">
                         <TextBlock Style="{StaticResource IconText}" Text="&#xE74D;" />
                     </Button>
-                    <Button Style="{StaticResource MiniButton}" Click="GroupUp_Click" ToolTip="Move up">
+                    <Button Style="{StaticResource MiniButton}" Click="GroupUp_Click" ToolTip="{l:T MenuBuilderPanel.MoveUp}">
                         <TextBlock Style="{StaticResource IconText}" Text="&#xE74A;" />
                     </Button>
-                    <Button Style="{StaticResource MiniButton}" Click="GroupDown_Click" ToolTip="Move down">
+                    <Button Style="{StaticResource MiniButton}" Click="GroupDown_Click" ToolTip="{l:T MenuBuilderPanel.MoveDown}">
                         <TextBlock Style="{StaticResource IconText}" Text="&#xE74B;" />
                     </Button>
                 </StackPanel>
-                <TextBlock Text="Pages" FontWeight="SemiBold" VerticalAlignment="Center" />
+                <TextBlock Text="{l:T MenuBuilderPanel.Pages}" FontWeight="SemiBold" VerticalAlignment="Center" />
             </DockPanel>
             <Border Grid.Row="1" Style="{StaticResource Card}" ClipToBounds="True">
                 <ListBox x:Name="GroupList" BorderThickness="0" Background="Transparent" Padding="0,0,14,0" SelectionChanged="GroupList_SelectionChanged">
@@ -111,20 +112,20 @@
 
             <DockPanel Grid.Row="2" Margin="2,12,0,6">
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-                    <Button x:Name="AddVarButton" Style="{StaticResource MiniButton}" Click="AddVar_Click" ToolTip="Add a setting to the page">
+                    <Button x:Name="AddVarButton" Style="{StaticResource MiniButton}" Click="AddVar_Click" ToolTip="{l:T MenuBuilderPanel.AddSettingPage}">
                         <TextBlock Style="{StaticResource IconText}" Text="&#xE710;" />
                     </Button>
-                    <Button Style="{StaticResource MiniButton}" Click="RemoveVar_Click" ToolTip="Remove the setting">
+                    <Button Style="{StaticResource MiniButton}" Click="RemoveVar_Click" ToolTip="{l:T MenuBuilderPanel.RemoveSetting}">
                         <TextBlock Style="{StaticResource IconText}" Text="&#xE74D;" />
                     </Button>
-                    <Button Style="{StaticResource MiniButton}" Click="VarUp_Click" ToolTip="Move up">
+                    <Button Style="{StaticResource MiniButton}" Click="VarUp_Click" ToolTip="{l:T MenuBuilderPanel.MoveUp}">
                         <TextBlock Style="{StaticResource IconText}" Text="&#xE74A;" />
                     </Button>
-                    <Button Style="{StaticResource MiniButton}" Click="VarDown_Click" ToolTip="Move down">
+                    <Button Style="{StaticResource MiniButton}" Click="VarDown_Click" ToolTip="{l:T MenuBuilderPanel.MoveDown}">
                         <TextBlock Style="{StaticResource IconText}" Text="&#xE74B;" />
                     </Button>
                 </StackPanel>
-                <TextBlock Text="Settings" FontWeight="SemiBold" VerticalAlignment="Center" />
+                <TextBlock Text="{l:T Common.Settings}" FontWeight="SemiBold" VerticalAlignment="Center" />
             </DockPanel>
             <Border Grid.Row="3" Style="{StaticResource Card}" ClipToBounds="True">
                 <ListBox x:Name="VarList" BorderThickness="0" Background="Transparent" Padding="0,0,14,0" SelectionChanged="VarList_SelectionChanged">
@@ -178,39 +179,39 @@
                 </Style>
             </TabControl.Resources>
             <!-- the page or setting picked -->
-            <TabItem Foreground="{DynamicResource TextFillColorPrimaryBrush}" Header="Details">
+            <TabItem Foreground="{DynamicResource TextFillColorPrimaryBrush}" Header="{l:T MenuBuilderPanel.Details}">
                 <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="4,0,10,10" Foreground="{DynamicResource TextFillColorPrimaryBrush}">
                     <StackPanel>
                         <TextBlock x:Name="NothingText" Style="{StaticResource Hint}" Margin="0,14,0,0"
-                                   Text="Pick a page or a setting on the left to edit it, or add one with the + buttons." />
+                                   Text="{l:T MenuBuilderPanel.PickPageSettingLeft}" />
 
                         <!-- a page -->
                         <StackPanel x:Name="GroupForm" Visibility="Collapsed">
-                            <TextBlock Text="Page id" Style="{StaticResource FieldLabel}" />
+                            <TextBlock Text="{l:T MenuBuilderPanel.PageId}" Style="{StaticResource FieldLabel}" />
                             <TextBox x:Name="GroupIdBox" Style="{StaticResource CodeBox}" Text="{Binding Id, UpdateSourceTrigger=PropertyChanged}" />
                             <TextBlock Style="{StaticResource Hint}"
-                                       Text="What scripts call the page: GetVarValue('page id', 'setting id'). Keep it unique, and the same in every update." />
-                            <TextBlock Text="Display name  (where the page sits in the menu)" Style="{StaticResource FieldLabel}" />
+                                       Text="{l:T MenuBuilderPanel.WhatScriptsCallPage}" />
+                            <TextBlock Text="{l:T MenuBuilderPanel.DisplayNameWherePage}" Style="{StaticResource FieldLabel}" />
                             <TextBox x:Name="GroupNameBox" Style="{StaticResource CodeBox}" Text="{Binding DisplayName, UpdateSourceTrigger=PropertyChanged}" />
                             <TextBlock Style="{StaticResource Hint}"
-                                       Text="Dots make levels: Mods.Author.ModName.Page puts Page under ModName, under Author, under Mods. Each level's text is a key, filled in on the Strings tab." />
+                                       Text="{l:T MenuBuilderPanel.DotsMakeLevelsMods}" />
                         </StackPanel>
 
                         <!-- a setting -->
                         <StackPanel x:Name="VarForm" Visibility="Collapsed">
-                            <TextBlock Text="Type" Style="{StaticResource FieldLabel}" />
+                            <TextBlock Text="{l:T Common.Type}" Style="{StaticResource FieldLabel}" />
                             <ComboBox x:Name="KindBox" Width="220" HorizontalAlignment="Left" SelectionChanged="KindBox_SelectionChanged" />
                             <StackPanel x:Name="IdFields">
-                                <TextBlock Text="Setting id" Style="{StaticResource FieldLabel}" />
+                                <TextBlock Text="{l:T MenuBuilderPanel.SettingId}" Style="{StaticResource FieldLabel}" />
                                 <TextBox Style="{StaticResource CodeBox}" Text="{Binding Id, UpdateSourceTrigger=PropertyChanged}" />
-                                <TextBlock Style="{StaticResource Hint}" Text="What scripts call the setting. Unique on its page; letters, digits and _." />
-                                <TextBlock Text="Display name key" Style="{StaticResource FieldLabel}" />
+                                <TextBlock Style="{StaticResource Hint}" Text="{l:T MenuBuilderPanel.WhatScriptsCallSetting}" />
+                                <TextBlock Text="{l:T MenuBuilderPanel.DisplayNameKey}" Style="{StaticResource FieldLabel}" />
                                 <TextBox Style="{StaticResource CodeBox}" Text="{Binding DisplayName, UpdateSourceTrigger=PropertyChanged}" />
-                                <TextBlock Style="{StaticResource Hint}" Text="The key of the text shown beside the setting. The game looks it up as option_ plus this." />
+                                <TextBlock Style="{StaticResource Hint}" Text="{l:T MenuBuilderPanel.KeyTextShownBeside}" />
                             </StackPanel>
 
                             <StackPanel x:Name="DefaultFields">
-                                <TextBlock Text="Default value" Style="{StaticResource FieldLabel}" />
+                                <TextBlock Text="{l:T MenuBuilderPanel.DefaultValue}" Style="{StaticResource FieldLabel}" />
                                 <TextBox x:Name="DefaultBox" Width="220" HorizontalAlignment="Left" Style="{StaticResource CodeBox}"
                                          Text="{Binding Default, UpdateSourceTrigger=PropertyChanged}" />
                                 <TextBlock x:Name="DefaultHint" Style="{StaticResource Hint}" />
@@ -224,61 +225,61 @@
                                         <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
                                     <StackPanel Margin="0,0,6,0">
-                                        <TextBlock Text="Minimum" Opacity="0.7" Margin="0,0,0,4" />
+                                        <TextBlock Text="{l:T MenuBuilderPanel.Minimum}" Opacity="0.7" Margin="0,0,0,4" />
                                         <TextBox Style="{StaticResource CodeBox}" Text="{Binding Min, UpdateSourceTrigger=PropertyChanged}" />
                                     </StackPanel>
                                     <StackPanel Grid.Column="1" Margin="0,0,6,0">
-                                        <TextBlock Text="Maximum" Opacity="0.7" Margin="0,0,0,4" />
+                                        <TextBlock Text="{l:T MenuBuilderPanel.Maximum}" Opacity="0.7" Margin="0,0,0,4" />
                                         <TextBox Style="{StaticResource CodeBox}" Text="{Binding Max, UpdateSourceTrigger=PropertyChanged}" />
                                     </StackPanel>
                                     <StackPanel Grid.Column="2">
-                                        <TextBlock Text="Steps" Opacity="0.7" Margin="0,0,0,4" />
+                                        <TextBlock Text="{l:T MenuBuilderPanel.Steps}" Opacity="0.7" Margin="0,0,0,4" />
                                         <TextBox Style="{StaticResource CodeBox}" Text="{Binding Steps, UpdateSourceTrigger=PropertyChanged}" />
                                     </StackPanel>
                                 </Grid>
                                 <Button Margin="0,8,0,0" Padding="10,4" HorizontalAlignment="Left" Click="WholeNumbers_Click"
-                                        Content="Whole numbers (steps = maximum − minimum)" />
+                                        Content="{l:T MenuBuilderPanel.WholeNumbersStepsMaximum}" />
                                 <TextBlock Style="{StaticResource Hint}"
-                                           Text="Written as SLIDER;min;max;steps. For whole numbers the steps are the maximum minus the minimum; anything smaller gives fractions." />
+                                           Text="{l:T MenuBuilderPanel.WrittenSliderMinMax}" />
                             </StackPanel>
 
                             <StackPanel x:Name="OptionFields" Visibility="Collapsed">
                                 <DockPanel Margin="0,12,0,6">
                                     <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-                                        <Button Style="{StaticResource MiniButton}" Click="AddOption_Click" ToolTip="Add an option">
+                                        <Button Style="{StaticResource MiniButton}" Click="AddOption_Click" ToolTip="{l:T MenuBuilderPanel.AddOption}">
                                             <TextBlock Style="{StaticResource IconText}" Text="&#xE710;" />
                                         </Button>
-                                        <Button Style="{StaticResource MiniButton}" Click="RemoveOption_Click" ToolTip="Remove the selected options">
+                                        <Button Style="{StaticResource MiniButton}" Click="RemoveOption_Click" ToolTip="{l:T MenuBuilderPanel.RemoveSelectedOptions}">
                                             <TextBlock Style="{StaticResource IconText}" Text="&#xE74D;" />
                                         </Button>
                                     </StackPanel>
-                                    <TextBlock Text="Options" Opacity="0.7" VerticalAlignment="Center" />
+                                    <TextBlock Text="{l:T MenuBuilderPanel.Options}" Opacity="0.7" VerticalAlignment="Center" />
                                 </DockPanel>
                                 <Border Style="{StaticResource Card}" ClipToBounds="True" Height="230">
                                     <DataGrid x:Name="OptionGrid" AutoGenerateColumns="False" CanUserAddRows="False" HeadersVisibility="Column"
                                               GridLinesVisibility="None" BorderThickness="0" Background="Transparent" SelectionMode="Extended" SelectionUnit="FullRow"
                                               CellStyle="{StaticResource GridCell}">
                                         <DataGrid.Columns>
-                                            <DataGridTextColumn Header="Value" Width="90" Binding="{Binding Id, UpdateSourceTrigger=LostFocus}"
+                                            <DataGridTextColumn Header="{l:T MenuBuilderPanel.Value}" Width="90" Binding="{Binding Id, UpdateSourceTrigger=LostFocus}"
                                                                 ElementStyle="{StaticResource CellText}" EditingElementStyle="{StaticResource CellEdit}" />
-                                            <DataGridTextColumn Header="Display name key" Width="*" Binding="{Binding DisplayName, UpdateSourceTrigger=LostFocus}"
+                                            <DataGridTextColumn Header="{l:T MenuBuilderPanel.DisplayNameKey}" Width="*" Binding="{Binding DisplayName, UpdateSourceTrigger=LostFocus}"
                                                                 ElementStyle="{StaticResource CellText}" EditingElementStyle="{StaticResource CellEdit}" />
                                         </DataGrid.Columns>
                                     </DataGrid>
                                 </Border>
                                 <TextBlock Style="{StaticResource Hint}"
-                                           Text="Picking an option sets the setting to its value. Each option's text is the key preset_value_ plus its display name." />
+                                           Text="{l:T MenuBuilderPanel.PickingOptionSetsSetting}" />
                             </StackPanel>
 
                             <TextBlock x:Name="SeparatorHint" Style="{StaticResource Hint}" Visibility="Collapsed"
-                                       Text="A thin line between settings. Its id and display name stay as they are." />
+                                       Text="{l:T MenuBuilderPanel.ThinLineBetweenSettings}" />
                         </StackPanel>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
 
             <!-- named sets of values -->
-            <TabItem Foreground="{DynamicResource TextFillColorPrimaryBrush}" Header="Presets">
+            <TabItem Foreground="{DynamicResource TextFillColorPrimaryBrush}" Header="{l:T MenuBuilderPanel.Presets}">
                 <Grid Margin="4,10,10,10" TextElement.Foreground="{DynamicResource TextFillColorPrimaryBrush}">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
@@ -288,23 +289,23 @@
                     </Grid.RowDefinitions>
                     <DockPanel Margin="0,0,0,6">
                         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-                            <Button Style="{StaticResource MiniButton}" Click="AddPreset_Click" ToolTip="Add a preset to the page">
+                            <Button Style="{StaticResource MiniButton}" Click="AddPreset_Click" ToolTip="{l:T MenuBuilderPanel.AddPresetPage}">
                                 <TextBlock Style="{StaticResource IconText}" Text="&#xE710;" />
                             </Button>
-                            <Button Style="{StaticResource MiniButton}" Click="RemovePreset_Click" ToolTip="Remove the preset">
+                            <Button Style="{StaticResource MiniButton}" Click="RemovePreset_Click" ToolTip="{l:T MenuBuilderPanel.RemovePreset}">
                                 <TextBlock Style="{StaticResource IconText}" Text="&#xE74D;" />
                             </Button>
                         </StackPanel>
-                        <TextBlock x:Name="PresetsTitle" Text="Presets of the page" FontWeight="SemiBold" VerticalAlignment="Center" />
+                        <TextBlock x:Name="PresetsTitle" Text="{l:T MenuBuilderPanel.PresetsPage}" FontWeight="SemiBold" VerticalAlignment="Center" />
                     </DockPanel>
                     <Border Grid.Row="1" Style="{StaticResource Card}" ClipToBounds="True">
                         <DataGrid x:Name="PresetGrid" AutoGenerateColumns="False" CanUserAddRows="False" HeadersVisibility="Column" GridLinesVisibility="None"
                                   BorderThickness="0" Background="Transparent" SelectionMode="Single" SelectionUnit="FullRow" CellStyle="{StaticResource GridCell}"
                                   SelectionChanged="PresetGrid_SelectionChanged">
                             <DataGrid.Columns>
-                                <DataGridTextColumn Header="Id" Width="70" Binding="{Binding Id, UpdateSourceTrigger=LostFocus}"
+                                <DataGridTextColumn Header="{l:T MenuBuilderPanel.Id}" Width="70" Binding="{Binding Id, UpdateSourceTrigger=LostFocus}"
                                                     ElementStyle="{StaticResource CellText}" EditingElementStyle="{StaticResource CellEdit}" />
-                                <DataGridTextColumn Header="Display name key" Width="*" Binding="{Binding DisplayName, UpdateSourceTrigger=LostFocus}"
+                                <DataGridTextColumn Header="{l:T MenuBuilderPanel.DisplayNameKey}" Width="*" Binding="{Binding DisplayName, UpdateSourceTrigger=LostFocus}"
                                                     ElementStyle="{StaticResource CellText}" EditingElementStyle="{StaticResource CellEdit}" />
                             </DataGrid.Columns>
                         </DataGrid>
@@ -312,24 +313,24 @@
                     <DockPanel Grid.Row="2" Margin="0,12,0,6">
                         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
                             <Button Padding="10,4" Margin="4,0,0,0" Click="FillPreset_Click"
-                                    ToolTip="Give the preset a line for every setting on the page that it doesn't have yet, from the settings' default values"
-                                    Content="Add missing settings" />
-                            <Button Style="{StaticResource MiniButton}" Click="AddEntry_Click" ToolTip="Add a line">
+                                    ToolTip="{l:T MenuBuilderPanel.GivePresetLineEvery}"
+                                    Content="{l:T MenuBuilderPanel.AddMissingSettings}" />
+                            <Button Style="{StaticResource MiniButton}" Click="AddEntry_Click" ToolTip="{l:T MenuBuilderPanel.AddLine}">
                                 <TextBlock Style="{StaticResource IconText}" Text="&#xE710;" />
                             </Button>
-                            <Button Style="{StaticResource MiniButton}" Click="RemoveEntry_Click" ToolTip="Remove the selected lines">
+                            <Button Style="{StaticResource MiniButton}" Click="RemoveEntry_Click" ToolTip="{l:T MenuBuilderPanel.RemoveSelectedLines}">
                                 <TextBlock Style="{StaticResource IconText}" Text="&#xE74D;" />
                             </Button>
                         </StackPanel>
-                        <TextBlock x:Name="EntriesTitle" Text="Values" FontWeight="SemiBold" VerticalAlignment="Center" />
+                        <TextBlock x:Name="EntriesTitle" Text="{l:T MenuBuilderPanel.Values}" FontWeight="SemiBold" VerticalAlignment="Center" />
                     </DockPanel>
                     <Border Grid.Row="3" Style="{StaticResource Card}" ClipToBounds="True">
                         <DataGrid x:Name="EntryGrid" AutoGenerateColumns="False" CanUserAddRows="False" HeadersVisibility="Column" GridLinesVisibility="None"
                                   BorderThickness="0" Background="Transparent" SelectionMode="Extended" SelectionUnit="FullRow" CellStyle="{StaticResource GridCell}">
                             <DataGrid.Columns>
-                                <DataGridTextColumn Header="Setting" Width="*" Binding="{Binding VarId, UpdateSourceTrigger=LostFocus}"
+                                <DataGridTextColumn Header="{l:T MenuBuilderPanel.Setting}" Width="*" Binding="{Binding VarId, UpdateSourceTrigger=LostFocus}"
                                                     ElementStyle="{StaticResource CellText}" EditingElementStyle="{StaticResource CellEdit}" />
-                                <DataGridTextColumn Header="Value" Width="130" Binding="{Binding Value, UpdateSourceTrigger=LostFocus}"
+                                <DataGridTextColumn Header="{l:T MenuBuilderPanel.Value}" Width="130" Binding="{Binding Value, UpdateSourceTrigger=LostFocus}"
                                                     ElementStyle="{StaticResource CellText}" EditingElementStyle="{StaticResource CellEdit}" />
                             </DataGrid.Columns>
                         </DataGrid>
@@ -338,7 +339,7 @@
             </TabItem>
 
             <!-- the text each key needs -->
-            <TabItem Foreground="{DynamicResource TextFillColorPrimaryBrush}" Header="Strings">
+            <TabItem Foreground="{DynamicResource TextFillColorPrimaryBrush}" Header="{l:T MenuBuilderPanel.Strings}">
                 <Grid Margin="4,10,10,10" TextElement.Foreground="{DynamicResource TextFillColorPrimaryBrush}">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
@@ -346,32 +347,32 @@
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
                     <TextBlock x:Name="StringsIntro" Style="{StaticResource Hint}" Margin="0,0,0,8"
-                               Text="The menu shows text by key. Type the text for each, then add them to a strings CSV, and open that in the strings editor to save the .w3strings files." />
+                               Text="{l:T MenuBuilderPanel.MenuShowsTextKey}" />
                     <Border Grid.Row="1" Style="{StaticResource Card}" ClipToBounds="True">
                         <DataGrid x:Name="KeyGrid" AutoGenerateColumns="False" CanUserAddRows="False" HeadersVisibility="Column" GridLinesVisibility="None"
                                   BorderThickness="0" Background="Transparent" SelectionMode="Extended" SelectionUnit="FullRow" CellStyle="{StaticResource GridCell}"
                                   EnableRowVirtualization="True">
                             <DataGrid.Columns>
-                                <DataGridTextColumn Header="Key" Width="210" IsReadOnly="True" Binding="{Binding Key}" ElementStyle="{StaticResource CellText}" />
-                                <DataGridTextColumn Header="Text" Width="*" Binding="{Binding Text, UpdateSourceTrigger=LostFocus}"
+                                <DataGridTextColumn Header="{l:T Common.Key}" Width="210" IsReadOnly="True" Binding="{Binding Key}" ElementStyle="{StaticResource CellText}" />
+                                <DataGridTextColumn Header="{l:T Common.Text}" Width="*" Binding="{Binding Text, UpdateSourceTrigger=LostFocus}"
                                                     ElementStyle="{StaticResource CellText}" EditingElementStyle="{StaticResource CellEdit}" />
-                                <DataGridTextColumn Header="In the CSV" Width="100" IsReadOnly="True" Binding="{Binding InFile}" ElementStyle="{StaticResource CellText}" />
+                                <DataGridTextColumn Header="{l:T MenuBuilderPanel.CSV}" Width="100" IsReadOnly="True" Binding="{Binding InFile}" ElementStyle="{StaticResource CellText}" />
                             </DataGrid.Columns>
                         </DataGrid>
                     </Border>
                     <StackPanel Grid.Row="2" Margin="0,10,0,0">
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="First new ID" VerticalAlignment="Center" Opacity="0.7" Margin="0,0,8,0" />
+                            <TextBlock Text="{l:T MenuBuilderPanel.FirstNewID}" VerticalAlignment="Center" Opacity="0.7" Margin="0,0,8,0" />
                             <TextBox x:Name="FirstIdBox" Width="130" Style="{StaticResource CodeBox}" />
-                            <Button Margin="6,0,0,0" Padding="10,4" Click="FreeBlock_Click" ToolTip="Pick a block of IDs the game and your installed mods don't use"
-                                    Content="Find a free block" />
+                            <Button Margin="6,0,0,0" Padding="10,4" Click="FreeBlock_Click" ToolTip="{l:T MenuBuilderPanel.PickBlockIDsGame}"
+                                    Content="{l:T MenuBuilderPanel.FindFreeBlock}" />
                         </StackPanel>
                         <WrapPanel Margin="0,8,0,0">
-                            <Button Margin="0,0,6,0" Padding="10,4" Click="LoadCsv_Click" Content="Load texts from CSV…"
-                                    ToolTip="Fill in the texts from a strings CSV, matched by key" />
-                            <Button Margin="0,0,6,0" Padding="10,4" Click="CopyCsv_Click" Content="Copy CSV lines" />
-                            <Button Padding="10,4" Click="AddToCsv_Click" Style="{DynamicResource AccentButtonStyle}" Content="Add to CSV…"
-                                    ToolTip="Add the keys the CSV doesn't have yet, with new IDs, to a strings CSV (or start a new one), then open it in the strings editor" />
+                            <Button Margin="0,0,6,0" Padding="10,4" Click="LoadCsv_Click" Content="{l:T MenuBuilderPanel.LoadTextsCSV}"
+                                    ToolTip="{l:T MenuBuilderPanel.FillTextsStringsCSV}" />
+                            <Button Margin="0,0,6,0" Padding="10,4" Click="CopyCsv_Click" Content="{l:T MenuBuilderPanel.CopyCSVLines}" />
+                            <Button Padding="10,4" Click="AddToCsv_Click" Style="{DynamicResource AccentButtonStyle}" Content="{l:T MenuBuilderPanel.AddCSV}"
+                                    ToolTip="{l:T MenuBuilderPanel.AddKeysCSVDoesnt}" />
                         </WrapPanel>
                         <TextBlock x:Name="CsvText" Style="{StaticResource Hint}" />
                     </StackPanel>
@@ -379,16 +380,16 @@
             </TabItem>
 
             <!-- the script that reads the settings -->
-            <TabItem Foreground="{DynamicResource TextFillColorPrimaryBrush}" Header="Script">
+            <TabItem Foreground="{DynamicResource TextFillColorPrimaryBrush}" Header="{l:T MenuBuilderPanel.Script}">
                 <Grid Margin="4,10,10,10" TextElement.Foreground="{DynamicResource TextFillColorPrimaryBrush}">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
                     <DockPanel Margin="0,0,0,8">
-                        <Button DockPanel.Dock="Right" Padding="10,4" Click="CopyScript_Click" Content="Copy" />
+                        <Button DockPanel.Dock="Right" Padding="10,4" Click="CopyScript_Click" Content="{l:T Common.Copy}" />
                         <TextBlock Style="{StaticResource Hint}" Margin="0,0,10,0"
-                                   Text="WitcherScript that reads every setting into a variable of the right type, the way mods do it." />
+                                   Text="{l:T MenuBuilderPanel.WitcherScriptReadsEverySetting}" />
                     </DockPanel>
                     <Border Grid.Row="1" BorderThickness="1" CornerRadius="4" Padding="0,6,0,0" ClipToBounds="True"
                             BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}">
@@ -402,7 +403,7 @@
             </TabItem>
 
             <!-- what's wrong -->
-            <TabItem Foreground="{DynamicResource TextFillColorPrimaryBrush}" Header="Problems">
+            <TabItem Foreground="{DynamicResource TextFillColorPrimaryBrush}" Header="{l:T Common.Problems}">
                 <Grid Margin="4,10,10,10" TextElement.Foreground="{DynamicResource TextFillColorPrimaryBrush}">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />

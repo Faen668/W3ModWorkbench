@@ -4,6 +4,7 @@ using System.Windows;
 using W3ModWorkbench.Core;
 using W3ModWorkbench.Core.Scripts;
 using W3ModWorkbench.Core.Scripts.Navigation;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -41,7 +42,7 @@ public static class ScriptOpener
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             if (main is IMessageHost host)
-                await host.ShowMessage($"{Path.GetFileName(file.File.Path)} could not be read", ex.Message, MessageKind.Warning);
+                await host.ShowMessage(L.T("ScriptOpener.CouldNotRead", Path.GetFileName(file.File.Path)), ex.Message, MessageKind.Warning);
         }
     }
 }

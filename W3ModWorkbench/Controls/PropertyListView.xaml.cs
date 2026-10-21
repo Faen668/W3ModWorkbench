@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using W3ModWorkbench.ViewModels;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -44,7 +45,7 @@ public partial class PropertyListView : UserControl
         var menu = new ContextMenu();
         foreach (var (header, copy) in new (string, Func<PropertyRow, string>)[]
                  {
-                     ("Copy value", r => r.Value), ("Copy name", r => r.Name), ("Copy name and value", r => $"{r.Name} = {r.Value}"),
+                     (L.T("PropertyListView.CopyValue"), r => r.Value), (L.T("Common.CopyName"), r => r.Name), (L.T("PropertyListView.CopyNameValue"), r => $"{r.Name} = {r.Value}"),
                  })
         {
             var item = new MenuItem { Header = header };

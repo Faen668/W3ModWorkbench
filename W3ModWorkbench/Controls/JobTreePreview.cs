@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using W3ModWorkbench.Core.BehTrees;
 using W3ModWorkbench.Core.Cr2w;
 using W3ModWorkbench.Core.Trees;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -16,9 +17,9 @@ public sealed class JobTreePreview : Grid, ITreePreview
 {
     private readonly ResourceLocator _locator;
     private readonly AnimationPreview _preview = new();
-    private readonly ComboBox _entityBox = new() { MinWidth = 160, ToolTip = "The character the animations play on" };
-    private readonly ComboBox _categoryBox = new() { ToolTip = "The job category whose animation set is listed" };
-    private readonly TextBox _filter = new() { Margin = new Thickness(0, 6, 0, 6), ToolTip = "Show only the animations with these letters" };
+    private readonly ComboBox _entityBox = new() { MinWidth = 160, ToolTip = L.T("JobTreePreview.CharacterAnimationsPlay") };
+    private readonly ComboBox _categoryBox = new() { ToolTip = L.T("JobTreePreview.JobCategoryWhoseAnimation") };
+    private readonly TextBox _filter = new() { Margin = new Thickness(0, 6, 0, 6), ToolTip = L.T("JobTreePreview.ShowOnlyAnimationsThese") };
     private readonly ListBox _animations = new();
     private readonly TextBlock _setText = new() { TextWrapping = TextWrapping.Wrap, FontSize = 11, Opacity = 0.7, Margin = new Thickness(0, 4, 0, 0) };
     private List<(string Category, string Animset)> _categories = [];
@@ -27,7 +28,7 @@ public sealed class JobTreePreview : Grid, ITreePreview
     private (string Set, string Animation)? _played;
     private bool _entityPicked, _syncing;
 
-    private static readonly string[] EntityNames = ["Man", "Woman", "Child", "Dwarf"];
+    private static readonly string[] EntityNames = [L.T("JobTreePreview.Man"), L.T("JobTreePreview.Woman"), L.T("JobTreePreview.Child"), L.T("JobTreePreview.Dwarf")];
 
     public FrameworkElement View => this;
 
@@ -40,7 +41,7 @@ public sealed class JobTreePreview : Grid, ITreePreview
         RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
 
         var top = new DockPanel { Margin = new Thickness(0, 0, 0, 6) };
-        top.Children.Add(new TextBlock { Text = "Preview on", VerticalAlignment = VerticalAlignment.Center, Opacity = 0.75, Margin = new Thickness(0, 0, 8, 0) });
+        top.Children.Add(new TextBlock { Text = L.T("Common.Preview"), VerticalAlignment = VerticalAlignment.Center, Opacity = 0.75, Margin = new Thickness(0, 0, 8, 0) });
         _entityBox.ItemsSource = EntityNames;
         _entityBox.SelectionChanged += (_, _) =>
         {
@@ -112,7 +113,7 @@ public sealed class JobTreePreview : Grid, ITreePreview
         _syncing = false;
         if (set is null)
         {
-            _setText.Text = $"No animation set is listed for {category}.";
+            _setText.Text = L.T("JobTreePreview.NoAnimationSetListed", category);
             _names = [];
             ShowNames();
             return;
@@ -154,10 +155,10 @@ public sealed class JobTreePreview : Grid, ITreePreview
         if (other is null)
         {
             _preview.StopAnimation();
-            _preview.Message = $"{anim} isn't in {Path.GetFileName(set)}, nor another job category's set.";
+            _preview.Message = L.T("JobTreePreview.IsntNorAnotherJob", anim, Path.GetFileName(set));
             return;
         }
-        if (await PlayAsync(other, anim)) _setText.Text = $"{set}\n{anim} is in {other}";
+        if (await PlayAsync(other, anim)) _setText.Text = L.T("JobTreePreview.IsIn", set, anim, other);
     }
 
     private async Task ShowEntityAsync(string entity)

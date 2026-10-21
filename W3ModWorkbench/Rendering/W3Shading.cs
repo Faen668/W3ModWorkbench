@@ -10,6 +10,7 @@ using HelixToolkit.SharpDX.Utilities;
 using SharpDX.D3DCompiler;
 using W3ModWorkbench.Core;
 using W3ModWorkbench.Core.Cr2w;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -162,7 +163,7 @@ public static class W3Shading
     private static void AddPass(IRenderTechnique technique, string like, string name, string entry)
     {
         var standard = technique.Description.PassDescriptions?.FirstOrDefault(p => p.Name == like)
-            ?? throw new InvalidOperationException($"Helix's mesh technique has no {like} pass.");
+            ?? throw new InvalidOperationException(L.T("W3Shading.HelixsMeshTechniqueHas", like));
         var pixel = new HelixToolkit.SharpDX.Shaders.ShaderDescription("psW3Mesh_" + entry, ShaderStage.Pixel, new ShaderReflector(), Compile(entry));
         technique.AddPass(new ShaderPassDescription(name)
         {
@@ -185,14 +186,14 @@ public static class W3Shading
     {
         using var result = ShaderBytecode.Compile(Read("psW3Mesh.hlsl"), entry, "ps_5_0", ShaderFlags.OptimizationLevel3, EffectFlags.None,
             null, new Includes(), "psW3Mesh.hlsl");
-        if (result.HasErrors || result.Bytecode is null) throw new InvalidOperationException("The view's shader didn't compile: " + result.Message);
+        if (result.HasErrors || result.Bytecode is null) throw new InvalidOperationException(L.T("W3Shading.ViewsShaderDidntCompile", result.Message));
         return result.Bytecode.Data;
     }
 
     private static string Read(string name)
     {
         using var stream = typeof(W3Shading).Assembly.GetManifestResourceStream("W3ModWorkbench.Shaders." + name)
-            ?? throw new FileNotFoundException("The view's shader file isn't in the program: " + name);
+            ?? throw new FileNotFoundException(L.T("W3Shading.ViewsShaderFileIsnt", name));
         using var reader = new StreamReader(stream);
         return reader.ReadToEnd();
     }
@@ -243,11 +244,11 @@ public sealed class W3MaterialVariables : PhongMaterialVariables
         _core = core;
         _technique = technique;
         var effects = (EffectsManager)manager;
-        var device = effects.Device ?? throw new InvalidOperationException("The view has no graphics device.");
+        var device = effects.Device ?? throw new InvalidOperationException(L.T("W3Shading.ViewHasNoGraphics"));
         _constants = new SharpDX.Direct3D11.Buffer(device, W3Constants.Size, SharpDX.Direct3D11.ResourceUsage.Default,
             SharpDX.Direct3D11.BindFlags.ConstantBuffer, SharpDX.Direct3D11.CpuAccessFlags.None, SharpDX.Direct3D11.ResourceOptionFlags.None, 0);
-        _wrap = effects.StateManager!.Register(DefaultSamplers.LinearSamplerWrapAni4) ?? throw new InvalidOperationException("No sampler for the view's textures.");
-        _clamp = effects.StateManager!.Register(DefaultSamplers.IBLSampler) ?? throw new InvalidOperationException("No sampler for the view's cube maps.");
+        _wrap = effects.StateManager!.Register(DefaultSamplers.LinearSamplerWrapAni4) ?? throw new InvalidOperationException(L.T("W3Shading.NoSamplerViewsTextures"));
+        _clamp = effects.StateManager!.Register(DefaultSamplers.IBLSampler) ?? throw new InvalidOperationException(L.T("W3Shading.NoSamplerViewsCube"));
         if (core.Look is { } look)
         {
             _textures[0] = View(effects, look.Normal is null ? null : GpuTextures.Of(look.Normal));

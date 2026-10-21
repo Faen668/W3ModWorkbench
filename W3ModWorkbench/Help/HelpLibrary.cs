@@ -2,6 +2,7 @@ using System.IO;
 using System.Reflection;
 using System.Text;
 using System.Windows.Media.Imaging;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Help;
 
@@ -147,7 +148,7 @@ public static class HelpLibrary
             }
             // what a translation leaves out of its header is the English page's
             string? Field(string key) => head.GetValueOrDefault(key) ?? englishHead.GetValueOrDefault(key);
-            string englishTitle = englishHead.GetValueOrDefault("title") ?? "Untitled";
+            string englishTitle = englishHead.GetValueOrDefault("title") ?? L.T("HelpLibrary.Untitled");
             category.Pages.Add(new HelpPage
             {
                 Title = head.GetValueOrDefault("title") ?? englishTitle,

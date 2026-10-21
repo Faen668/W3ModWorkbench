@@ -10,6 +10,7 @@ using W3ModWorkbench.Core.Animation;
 using W3ModWorkbench.Core.Cr2w;
 using W3ModWorkbench.Core.Entities;
 using W3ModWorkbench.Core.Meshes;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -25,11 +26,11 @@ public sealed class AnimationPreview : Grid
     private static int TextureSize => App.TextureDetail;
     private readonly MeshView _view = new();
     private readonly TextBlock _message = new() { HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, TextWrapping = TextWrapping.Wrap, TextAlignment = TextAlignment.Center, Margin = new Thickness(20), Opacity = 0.8 };
-    private readonly Button _play = new() { Padding = new Thickness(10, 4, 10, 4), IsEnabled = false, ToolTip = "Play or pause" };
+    private readonly Button _play = new() { Padding = new Thickness(10, 4, 10, 4), IsEnabled = false, ToolTip = L.T("AnimationPreview.PlayPause") };
     private readonly TextBlock _playIcon = new() { Text = "", VerticalAlignment = VerticalAlignment.Center };
     private readonly Slider _scrub = new() { Minimum = 0, Maximum = 1, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 8, 0), IsEnabled = false };
     private readonly TextBlock _timeText = new() { VerticalAlignment = VerticalAlignment.Center, MinWidth = 104, TextAlignment = TextAlignment.Right, Margin = new Thickness(4, 0, 0, 0), FontFamily = new FontFamily("Consolas") };
-    private readonly ComboBox _speedBox = new() { MinWidth = 70, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(12, 0, 0, 0), ToolTip = "How fast it plays" };
+    private readonly ComboBox _speedBox = new() { MinWidth = 70, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(12, 0, 0, 0), ToolTip = L.T("AnimationPreview.HowFastPlays") };
     private readonly Dictionary<string, Task<BitmapSource?>> _textures = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, Cr2wFile?> _sets = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, Func<int, byte[]?>> _buffers = new(StringComparer.OrdinalIgnoreCase);
@@ -161,7 +162,7 @@ public sealed class AnimationPreview : Grid
         Unloaded += (_, _) => Pause();
         // framed again when the view changes size, as the window is laid out or resized
         _view.SizeChanged += (_, e) => { if (e.PreviousSize.Width > 0 && Math.Abs(e.NewSize.Width - e.PreviousSize.Width) > 40) Frame(); };
-        Message = "Pick something to preview";
+        Message = L.T("AnimationPreview.PickSomethingPreview");
     }
 
     /// <summary>A note over the view (what's loading, why nothing shows), or "" for none.</summary>
@@ -193,12 +194,12 @@ public sealed class AnimationPreview : Grid
         EntityPath = path;
         StopAnimation();
         _posing = null;
-        Message = $"Loading {Path.GetFileName(path)}…";
+        Message = L.T("AnimationPreview.Loading", Path.GetFileName(path));
         try
         {
             var entity = await Task.Run(() =>
             {
-                var data = locator.ReadFile(path) ?? throw new FileNotFoundException($"{path} isn't in the game's files or the archives open.");
+                var data = locator.ReadFile(path) ?? throw new FileNotFoundException(L.T("AnimationPreview.IsntGamesFilesArchives", path));
                 var e = EntityFile.Read(data);
                 e.FindOrigins(locator.ReadFile);
                 return e;
@@ -221,7 +222,7 @@ public sealed class AnimationPreview : Grid
                 }, token);
             if (token.IsCancellationRequested) return;
             var coloured = parts.Select((part, p) => (part.Mesh, LookTextures.Coloring(coloredBy[p].Entity, coloredBy[p].Appearance, drawnBy[p].Name))).ToList();
-            var progress = new Progress<(int Done, int Total)>(n => { if (!token.IsCancellationRequested && n.Total > 0) Message = $"Loading textures, {n.Done} of {n.Total}…"; });
+            var progress = new Progress<(int Done, int Total)>(n => { if (!token.IsCancellationRequested && n.Total > 0) Message = L.T("AnimationPreview.LoadingTextures", n.Done, n.Total); });
             var textures = await StageTextures.LoadAsync(coloured, locator, Texture, progress, token);
             if (token.IsCancellationRequested) return;
             _view.ShowParts(parts, textures);
@@ -234,14 +235,14 @@ public sealed class AnimationPreview : Grid
             _posed = _posing?.Rest;
             _trail = null;
             DrawSkeleton();
-            Message = parts.Count == 0 ? "The entity has no meshes to show." : _posing is null ? "The entity has no skeleton to play animations on." : "";
+            Message = parts.Count == 0 ? L.T("AnimationPreview.EntityHasNoMeshes") : _posing is null ? L.T("AnimationPreview.EntityHasNoSkeleton") : "";
         }
         catch (OperationCanceledException)
         {
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or NotSupportedException)
         {
-            if (!token.IsCancellationRequested) Message = $"{Path.GetFileName(path)} could not be shown.\n{ex.Message}";
+            if (!token.IsCancellationRequested) Message = L.T("AnimationPreview.CouldNotShown", Path.GetFileName(path), ex.Message);
         }
     }
 
@@ -354,7 +355,7 @@ public sealed class AnimationPreview : Grid
         if (_locator is not { } locator) return false;
         if (_posing is not { } posing)
         {
-            if (Message.Length == 0) Message = "The entity has no skeleton to play animations on.";
+            if (Message.Length == 0) Message = L.T("AnimationPreview.EntityHasNoSkeleton");
             return false;
         }
         var clip = await ReadClipAsync(locator, animset, animation);
@@ -362,7 +363,7 @@ public sealed class AnimationPreview : Grid
         if (clip.Clip is null || clip.Clip.BoneCount > posing.Rig.Count)
         {
             StopAnimation();
-            Message = clip.Clip is null ? clip.Why : $"{animation} is made for another skeleton than this entity's.";
+            Message = clip.Clip is null ? clip.Why : L.T("AnimationPreview.MadeAnotherSkeletonThan", animation);
             return false;
         }
         Message = "";
@@ -392,9 +393,9 @@ public sealed class AnimationPreview : Grid
                     catch (InvalidDataException) { set = null; }
                     _sets[animset] = set;
                 }
-            if (set is null) return (null, $"{Path.GetFileName(animset)} isn't in the game's files or couldn't be read.");
+            if (set is null) return (null, L.T("AnimationPreview.IsntGamesFilesCouldnt", Path.GetFileName(animset)));
             var export = set.Exports.FirstOrDefault(x => x.ClassName == "CSkeletalAnimation" && set.Object(x.Index)["name"] as string == animation);
-            if (export is null) return (null, $"{animation} isn't in {Path.GetFileName(animset)}.");
+            if (export is null) return (null, L.T("AnimationPreview.Isnt", animation, Path.GetFileName(animset)));
             try
             {
                 Func<int, byte[]?>? buffers;
@@ -404,7 +405,7 @@ public sealed class AnimationPreview : Grid
             }
             catch (Exception ex) when (ex is InvalidDataException or IndexOutOfRangeException or ArgumentException)
             {
-                return (null, $"{animation} could not be read.");
+                return (null, L.T("AnimationPreview.CouldNotRead", animation));
             }
         });
 
@@ -612,7 +613,7 @@ public sealed class AnimationPreview : Grid
             for (int v = 0; v < positions.Length; v++) positions[v] = Vector3.Transform(chunk.Positions[v], moved);
             return positions;
         });
-        _timeText.Text = $"{time,5:0.00} / {clip.Duration:0.00} s";
+        _timeText.Text = L.T("AnimationPreview.S", time, clip.Duration);
         _scrubbing = true;
         _scrub.Value = time;
         _scrubbing = false;

@@ -1,6 +1,7 @@
 using System.IO;
 using W3ModWorkbench.Core.Cr2w;
 using W3ModWorkbench.Core.Projects;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -119,20 +120,18 @@ public static class RedkitSource
     /// timeline's events are still the game's, as REDkit keeps them in an order of its own and they can't be matched.
     /// </summary>
     public static string TimelineNote(PropertySource source, string? redkitPath, string what) => source == PropertySource.Redkit
-        ? Note(source, redkitPath, what).TrimEnd('.') + ". Timeline events are read from the file the game loads, so what cooking leaves out isn't shown for them."
+        ? L.T("RedkitSource.TimelineEventsReadFile", Note(source, redkitPath, what).TrimEnd('.'))
         : Note(source, redkitPath, what);
 
     public static string Note(PropertySource source, string? redkitPath, string what) => source switch
     {
-        PropertySource.Redkit => $"Properties from REDkit's source file, which keeps what cooking leaves out: {redkitPath}",
-        PropertySource.Cooked or PropertySource.None when !FileSafety.RedkitInstalled => "REDkit isn't installed, so the properties the game's cooked files leave out can't be shown. "
-            + "With REDkit installed (free on Steam and GOG for owners of the game), they're read from its source files.",
-        PropertySource.RedkitUnreadable => $"REDkit has a source file for this {what}, but it's in an older format this tool can't read yet{Version(redkitPath)}, "
-            + $"so only what the game's cooked file keeps is shown: {redkitPath}",
-        PropertySource.Own => $"Properties from this {what} itself, as it's from a mod, a project or a file on disk: REDkit's copy would show the game's version instead.",
+        PropertySource.Redkit => L.T("RedkitSource.PropertiesREDkitsSourceFile", redkitPath),
+        PropertySource.Cooked or PropertySource.None when !FileSafety.RedkitInstalled => L.T("RedkitSource.REDkitIsntInstalledSo"),
+        PropertySource.RedkitUnreadable => L.T("RedkitSource.REDkitHasSourceFile", what, Version(redkitPath), redkitPath),
+        PropertySource.Own => L.T("RedkitSource.PropertiesItselfModProject", what),
         PropertySource.Cooked when !App.Settings.PreferRedkitProperties =>
-            $"Properties from the game's cooked file, as Settings asks: what cooking leaves out isn't shown. Turn on REDkit's source files in Settings, under Viewers, to see it.",
-        PropertySource.Cooked => $"REDkit has no source file for this {what}, so only what the game's cooked file keeps is shown.",
-        _ => $"Neither REDkit nor the game has this {what}'s resource file, so only what's known without it is shown.",
+            L.T("RedkitSource.PropertiesGamesCookedFile"),
+        PropertySource.Cooked => L.T("RedkitSource.REDkitHasNoSource", what),
+        _ => L.T("RedkitSource.NeitherREDkitNorGame", what),
     };
 }

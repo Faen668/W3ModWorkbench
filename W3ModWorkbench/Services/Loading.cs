@@ -1,4 +1,5 @@
 using System.Windows;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -10,7 +11,7 @@ namespace W3ModWorkbench;
 public sealed class LoadingReporter
 {
     private readonly object _lock = new();
-    private string _step = "Loading…";
+    private string _step = L.T("Loading.Loading");
     private string? _detail;
     private int _done, _total;
 

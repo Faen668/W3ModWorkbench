@@ -1,6 +1,7 @@
 <UserControl x:Class="W3ModWorkbench.SceneSummary"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:l="clr-namespace:W3ModWorkbench.Localisation"
              xmlns:vm="clr-namespace:W3ModWorkbench.ViewModels">
     <UserControl.Resources>
         <Style x:Key="Heading" TargetType="TextBlock">
@@ -47,19 +48,19 @@
             <WrapPanel>
                 <StackPanel Margin="0,0,22,4">
                     <TextBlock x:Name="PartsText" Style="{StaticResource StatValue}" />
-                    <TextBlock Style="{StaticResource StatLabel}" Text="Parts" />
+                    <TextBlock Style="{StaticResource StatLabel}" Text="{l:T SceneSummary.Parts}" />
                 </StackPanel>
                 <StackPanel Margin="0,0,22,4">
                     <TextBlock x:Name="LinesText" Style="{StaticResource StatValue}" />
-                    <TextBlock Style="{StaticResource StatLabel}" Text="Lines" />
+                    <TextBlock Style="{StaticResource StatLabel}" Text="{l:T SceneSummary.Lines}" />
                 </StackPanel>
                 <StackPanel Margin="0,0,22,4">
                     <TextBlock x:Name="ChoicesText" Style="{StaticResource StatValue}" />
-                    <TextBlock Style="{StaticResource StatLabel}" Text="Choices" />
+                    <TextBlock Style="{StaticResource StatLabel}" Text="{l:T SceneSummary.Choices}" />
                 </StackPanel>
                 <StackPanel Margin="0,0,22,4">
                     <TextBlock x:Name="LengthText" Style="{StaticResource StatValue}" />
-                    <TextBlock Style="{StaticResource StatLabel}" Text="Spoken" />
+                    <TextBlock Style="{StaticResource StatLabel}" Text="{l:T SceneSummary.Spoken}" />
                 </StackPanel>
             </WrapPanel>
 
@@ -80,7 +81,7 @@
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
 
-            <TextBlock Style="{StaticResource Heading}" Text="How it goes" />
+            <TextBlock Style="{StaticResource Heading}" Text="{l:T SceneSummary.HowGoes}" />
             <TextBlock x:Name="StringsText" Style="{StaticResource Small}" Margin="0,0,0,6" Visibility="Collapsed" />
             <ItemsControl x:Name="Script">
                 <ItemsControl.ItemTemplate>
@@ -110,7 +111,7 @@
             </ItemsControl>
             <TextBlock x:Name="MoreText" Style="{StaticResource Small}" Margin="0,2,0,0" />
 
-            <TextBlock Style="{StaticResource Heading}" Text="Actors" />
+            <TextBlock Style="{StaticResource Heading}" Text="{l:T Common.Actors}" />
             <ItemsControl x:Name="ActorList">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate DataType="{x:Type vm:SceneActorItem}">
@@ -127,15 +128,15 @@
             </ItemsControl>
 
             <StackPanel x:Name="CutscenesPanel">
-                <TextBlock Style="{StaticResource Heading}" Text="Cutscenes it plays" Margin="0,8,0,6" />
+                <TextBlock Style="{StaticResource Heading}" Text="{l:T SceneSummary.CutscenesPlays}" Margin="0,8,0,6" />
                 <TextBlock x:Name="CutscenesText" Style="{StaticResource Small}" />
             </StackPanel>
             <StackPanel x:Name="FactsPanel">
-                <TextBlock Style="{StaticResource Heading}" Text="Facts it checks or sets" />
+                <TextBlock Style="{StaticResource Heading}" Text="{l:T SceneSummary.FactsChecksSets}" />
                 <TextBlock x:Name="FactsText" Style="{StaticResource Small}" FontFamily="Cascadia Mono, Consolas" />
             </StackPanel>
             <StackPanel x:Name="ScriptsPanel">
-                <TextBlock Style="{StaticResource Heading}" Text="Scripts it runs" />
+                <TextBlock Style="{StaticResource Heading}" Text="{l:T SceneSummary.ScriptsRuns}" />
                 <TextBlock x:Name="ScriptsText" Style="{StaticResource Small}" FontFamily="Cascadia Mono, Consolas" />
             </StackPanel>
         </StackPanel>

@@ -5,6 +5,7 @@ using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 using W3ModWorkbench.Core.Cutscenes;
+using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
 
@@ -112,7 +113,7 @@ public sealed class CutsceneTimeline : FrameworkElement
         {
             bool Shown(CutsceneEvent e) => !HiddenKinds.Contains(e.Kind);
             var scene = c.SceneEvents.Where(Shown).ToList();
-            if (scene.Count > 0 || !OnlyBusyLanes) _lanes.Add(Pack("Scene", scene));
+            if (scene.Count > 0 || !OnlyBusyLanes) _lanes.Add(Pack(L.T("CutsceneTimeline.Scene"), scene));
             foreach (var actor in c.Actors)
             {
                 var events = actor.Events.Where(Shown).ToList();
@@ -369,7 +370,7 @@ public sealed class CutsceneTimeline : FrameworkElement
     /// <summary>An event in a line or two, for its tooltip.</summary>
     public static string Describe(CutsceneEvent e)
     {
-        string when = e.Duration > 0 ? $"{FormatTime(e.Start)} to {FormatTime(e.End)}" : FormatTime(e.Start);
+        string when = e.Duration > 0 ? L.T("CutsceneTimeline.To", FormatTime(e.Start), FormatTime(e.End)) : FormatTime(e.Start);
         string who = e.Actor is null ? "" : $"  ·  {e.Actor}";
         return $"{e.Title}\n{e.Kind}{who}  ·  {when}" + (e.Detail.Length > 0 ? $"\n{e.Detail}" : "");
     }
