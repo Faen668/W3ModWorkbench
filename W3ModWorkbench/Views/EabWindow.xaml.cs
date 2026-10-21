@@ -12,10 +12,11 @@ namespace W3ModWorkbench;
 /// <summary>One file in the EAB window: what EasyAssetBrowser has for it, and the category and tags suggested for it.</summary>
 public sealed class EabRow : INotifyPropertyChanged
 {
-    public EabRow(EntryItem item, EabAsset? asset, string origin)
+    public EabRow(EntryItem item, EabAsset? asset, string origin, string? blocked = null)
     {
         Item = item;
         Asset = asset;
+        Blocked = blocked;
         Name = asset?.Name is { Length: > 0 } name ? name : System.IO.Path.GetFileNameWithoutExtension(item.Name);
         Origin = asset?.Origin is { Length: > 0 } listed ? listed : origin;
         Category = asset?.Category ?? EasyAssetBrowser.CategoryFor(item.Path);
@@ -25,6 +26,14 @@ public sealed class EabRow : INotifyPropertyChanged
     public event PropertyChangedEventHandler? PropertyChanged;
 
     public EntryItem Item { get; }
+
+    /// <summary>
+    /// Why the file can't be suggested, or null when it can: only the game's own files (its content, its official DLC,
+    /// and REDkit's copies of them) are EasyAssetBrowser's to list, never a file only a mod has.
+    /// </summary>
+    public string? Blocked { get; }
+
+    public bool CanSuggest => Blocked is null;
 
     /// <summary>What EasyAssetBrowser lists for the file, or null when it doesn't list it.</summary>
     public EabAsset? Asset { get; }
@@ -49,13 +58,14 @@ public sealed class EabRow : INotifyPropertyChanged
     public bool Adding { get; private set; }
 
     /// <summary>Whether there's anything to suggest: tags added or taken off, a category changed, or a file EAB doesn't list to add.</summary>
-    public bool Changed => Asset is null ? Adding : Added.Any() || Removed.Any() || CategoryChanged;
+    public bool Changed => CanSuggest && (Asset is null ? Adding : Added.Any() || Removed.Any() || CategoryChanged);
 
     /// <summary>What's changed, in a few words: "+Ruin −Cave", "Meshes → Entities", "new: +Ruin".</summary>
     public string ChangeText
     {
         get
         {
+            if (!CanSuggest) return "a mod's file: can't be suggested";
             if (!Changed) return "";
             var parts = new List<string>();
             if (Asset is null) parts.Add((Category is null ? "new, no category" : "new") + (Tags.Count == 0 ? "" : ":"));
@@ -68,6 +78,7 @@ public sealed class EabRow : INotifyPropertyChanged
 
     public void SetCategory(string? category)
     {
+        if (!CanSuggest) return;
         Category = category;
         // giving a file EAB doesn't list a category suggests adding it
         if (Asset is null && category is not null) Adding = true;
@@ -76,6 +87,7 @@ public sealed class EabRow : INotifyPropertyChanged
 
     public void SetTag(string tag, bool on)
     {
+        if (!CanSuggest) return;
         if (on) Tags.Add(tag);
         else Tags.Remove(tag);
         // tagging a file EAB doesn't list suggests adding it
@@ -86,7 +98,7 @@ public sealed class EabRow : INotifyPropertyChanged
     /// <summary>Suggests adding a file EAB doesn't list, or stops; nothing for one it lists already.</summary>
     public void SetAdding(bool on)
     {
-        if (Asset is not null) return;
+        if (Asset is not null || !CanSuggest) return;
         Adding = on;
         Notify();
     }
@@ -151,9 +163,10 @@ public partial class EabWindow : Window
     }
 
     /// <summary>Opens the EAB window for files, each with the part of the game it's from as EAB names them (<paramref name="originOf"/>).</summary>
-    public static void Show(Window owner, EasyAssetBrowser eab, IReadOnlyList<EntryItem> files, Func<EntryItem, string> originOf)
+    /// <param name="blocked">Why a file can't be suggested (a file only a mod has), or null when it can.</param>
+    public static void Show(Window owner, EasyAssetBrowser eab, IReadOnlyList<EntryItem> files, Func<EntryItem, string> originOf, Func<EntryItem, string?> blocked)
     {
-        var rows = files.Take(MostFiles).Select(f => new EabRow(f, eab.Find(f.Path), originOf(f))).ToList();
+        var rows = files.Take(MostFiles).Select(f => new EabRow(f, eab.Find(f.Path), originOf(f), blocked(f))).ToList();
         new EabWindow(eab, rows, Math.Max(0, files.Count - MostFiles)).Standalone(owner).Show();
     }
 
@@ -175,7 +188,8 @@ public partial class EabWindow : Window
             {
                 var row = picked[0];
                 DetailTitle.Text = row.Name;
-                ListedText.Text = row.Asset is not null ? $"Listed on EasyAssetBrowser · {row.Item.Path}"
+                ListedText.Text = row.Blocked is { } why ? why
+                    : row.Asset is not null ? $"Listed on EasyAssetBrowser · {row.Item.Path}"
                     : row.Category is null ? $"Not listed on EasyAssetBrowser yet, and it has no category for {System.IO.Path.GetExtension(row.Item.Name)} files. "
                         + "Pick one of its categories, or type a new one, or suggest it without and leave that to its author."
                     : "Not listed on EasyAssetBrowser yet.";
@@ -186,13 +200,18 @@ public partial class EabWindow : Window
             {
                 DetailTitle.Text = picked.Count == 0 ? "Highlight a file" : $"{picked.Count:N0} files";
                 int listed = picked.Count(r => r.Asset is not null);
-                ListedText.Text = picked.Count == 0 ? "" : $"{listed:N0} listed on EasyAssetBrowser, {picked.Count - listed:N0} not yet";
+                int mods = picked.Count(r => !r.CanSuggest);
+                ListedText.Text = picked.Count == 0 ? "" : $"{listed:N0} listed on EasyAssetBrowser, {picked.Count - listed - mods:N0} not yet"
+                    + (mods > 0 ? $", and {mods:N0} only a mod has, which can't be suggested: EasyAssetBrowser lists only the game's own files" : "");
                 PathText.Text = string.Join(Environment.NewLine, picked.Take(20).Select(r => r.EabPath)) + (picked.Count > 20 ? $"{Environment.NewLine}… and {picked.Count - 20:N0} more" : "");
                 OriginText.Text = string.Join(", ", picked.Select(r => r.Origin).Distinct());
             }
             var categories = picked.Select(r => r.Category).Distinct().ToList();
             CategoryBox.Text = categories.Count == 1 ? categories[0] ?? "" : "";
-            CategoryBox.IsEnabled = picked.Count > 0;
+            // a mod's file has nothing to change: its tags go, rather than sitting there doing nothing
+            bool any = picked.Any(r => r.CanSuggest);
+            CategoryBox.IsEnabled = any;
+            TagSection.Visibility = any ? Visibility.Visible : Visibility.Collapsed;
             OpenOnSiteButton.Visibility = picked is [{ Asset: not null }] ? Visibility.Visible : Visibility.Collapsed;
             ShowAdding(picked);
             FillTags(picked);
@@ -210,7 +229,7 @@ public partial class EabWindow : Window
         _filling = true;
         try
         {
-            var unlisted = picked.Where(r => r.Asset is null).ToList();
+            var unlisted = picked.Where(r => r.Asset is null && r.CanSuggest).ToList();
             AddCheck.Visibility = unlisted.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
             AddCheck.Content = unlisted.Count switch
             {
@@ -261,7 +280,7 @@ public partial class EabWindow : Window
                     return;
                 }
                 var rows = Picked;
-                foreach (var row in rows) row.SetTag(name, on);
+                foreach (var row in rows.Where(r => r.CanSuggest)) row.SetTag(name, on);
                 // a tag on a file EAB doesn't list suggests adding it, which the add box says
                 ShowAdding(rows);
             }
@@ -373,7 +392,8 @@ public partial class EabWindow : Window
 
     // ---------------------------------------------------------------- suggesting
 
-    private List<EabRow> ChangedRows => [.. _rows.Where(r => r.Changed)];
+    // never a mod's file, however it got here
+    private List<EabRow> ChangedRows => [.. _rows.Where(r => r.Changed && r.CanSuggest)];
 
     private void UpdateChanges()
     {

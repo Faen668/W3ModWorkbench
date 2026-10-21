@@ -63,7 +63,7 @@ public partial class AssetBrowserWindow
         return i =>
         {
             var asset = eab.Find(i.Path);
-            if (category == NotInEab) { if (asset is not null || EasyAssetBrowser.CategoryFor(i.Path) is null) return false; }
+            if (category == NotInEab) { if (asset is not null || EasyAssetBrowser.CategoryFor(i.Path) is null || ItemForPath(i.Path) is null) return false; }
             else if (category is not null && asset?.Category != category) return false;
             if (include.Count > 0 && (asset is null || !include.All(t => asset.Tags.Contains(t, StringComparer.OrdinalIgnoreCase)))) return false;
             return exclude.Count == 0 || asset is null || !exclude.Any(t => asset.Tags.Contains(t, StringComparer.OrdinalIgnoreCase));
@@ -89,7 +89,8 @@ public partial class AssetBrowserWindow
         {
             any++;
             if (eab.Find(item.Path) is { } asset) counts[asset.Category] = counts.GetValueOrDefault(asset.Category) + 1;
-            else if (EasyAssetBrowser.CategoryFor(item.Path) is not null) missing++;
+            // the game's own files only: a mod's can't be suggested
+            else if (EasyAssetBrowser.CategoryFor(item.Path) is not null && ItemForPath(item.Path) is not null) missing++;
         }
         // EAB's own order of its categories
         var choices = new List<ClassChoice> { new(null, any) };
@@ -231,7 +232,32 @@ public partial class AssetBrowserWindow
         if (Eab is not { } eab) return;
         var files = Highlighted();
         if (files.Count == 0) return;
-        EabWindow.Show(this, eab, files, item => SourceOf(item) is { } source ? EabOrigin(source) : "Mod");
+        EabWindow.Show(this, eab, files, OriginOf, NotTheGames);
+    }
+
+    /// <summary>
+    /// Which part of the game a file is from, as EasyAssetBrowser names it, from the game's own copy (a mod's copy of a
+    /// game file is the game's file); REDkit's by its folder.
+    /// </summary>
+    private string OriginOf(EntryItem item)
+    {
+        var own = ItemForPath(item.Path);
+        if (own is not null && SourceOf(own) is { } source) return EabOrigin(source);
+        // REDkit's copy: dlc\<name>\ is that DLC's, anything else the base game's
+        string path = item.Path;
+        return path.StartsWith("dlc\\", StringComparison.OrdinalIgnoreCase) && path.IndexOf('\\', 4) is > 4 and var end
+            ? EabOrigin(path[4..end].ToLowerInvariant()) : "BaseGame";
+    }
+
+    /// <summary>
+    /// Why a file can't be suggested to EasyAssetBrowser, or null when it can. Only the game's own files are its to list:
+    /// content0, the official DLC, and REDkit's copies of them. A file only a mod has never is, wherever it's opened from.
+    /// </summary>
+    private string? NotTheGames(EntryItem item)
+    {
+        if (ItemForPath(item.Path) is not null) return null;
+        string mod = item.Entry.Archive is Core.RedkitDepot ? "" : $" ({item.Entry.Archive.Owner})";
+        return $"Only a mod{mod} has this file; the game and its official DLC don't. EasyAssetBrowser lists only the game's own files, so it can't be suggested.";
     }
 
     /// <summary>A part of the game as EasyAssetBrowser names it: BaseGame, HoS, BnW, dlc5.</summary>
