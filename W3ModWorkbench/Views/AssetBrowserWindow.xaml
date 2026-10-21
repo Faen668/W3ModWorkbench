@@ -192,6 +192,14 @@
                     <TextBlock Style="{StaticResource IconText}" Text="&#xE70D;" FontSize="9" Margin="8,2,0,0" />
                 </StackPanel>
             </Button>
+            <!-- only while something narrows the list -->
+            <Button x:Name="ClearFiltersButton" Margin="8,0,0,0" Click="ClearFilters_Click" Visibility="Collapsed"
+                    ToolTip="Take off every filter: the search, folder, file type, class, parts of the game and EAB tags">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Style="{StaticResource IconText}" Text="&#xE894;" Margin="0,1,0,0" />
+                    <TextBlock Margin="8,0,0,0" Text="Clear filters" />
+                </StackPanel>
+            </Button>
         </DockPanel>
         </StackPanel>
 
@@ -214,10 +222,10 @@
                     </TreeView.ItemContainerStyle>
                     <TreeView.ItemTemplate>
                         <HierarchicalDataTemplate DataType="{x:Type vm:FolderNode}" ItemsSource="{Binding Children}">
-                            <StackPanel Orientation="Horizontal">
+                            <StackPanel x:Name="Row" Orientation="Horizontal" ToolTip="{Binding ToolTip}" ToolTipService.InitialShowDelay="500">
                                 <TextBlock x:Name="Icon" Style="{StaticResource IconText}" Text="{Binding Glyph}" Margin="0,0,8,0" />
                                 <TextBlock x:Name="NameText" Text="{Binding DisplayName}" VerticalAlignment="Center" />
-                                <TextBlock Text="{Binding TotalFiles, StringFormat='  {0:N0}'}" Opacity="0.5" VerticalAlignment="Center" />
+                                <TextBlock x:Name="CountText" Text="{Binding TotalFiles, StringFormat='  {0:N0}'}" Opacity="0.5" VerticalAlignment="Center" />
                             </StackPanel>
                             <!-- Game files and Mods stand out from what's under them -->
                             <HierarchicalDataTemplate.Triggers>
@@ -225,6 +233,11 @@
                                     <Setter TargetName="Icon" Property="Foreground" Value="{DynamicResource AccentTextFillColorPrimaryBrush}" />
                                     <Setter TargetName="NameText" Property="Foreground" Value="{DynamicResource AccentTextFillColorPrimaryBrush}" />
                                     <Setter TargetName="NameText" Property="FontWeight" Value="SemiBold" />
+                                </DataTrigger>
+                                <!-- REDkit before Settings has it: greyed, its tooltip saying how to set it up -->
+                                <DataTrigger Binding="{Binding IsUnavailable}" Value="True">
+                                    <Setter TargetName="Row" Property="Opacity" Value="0.45" />
+                                    <Setter TargetName="CountText" Property="Visibility" Value="Collapsed" />
                                 </DataTrigger>
                             </HierarchicalDataTemplate.Triggers>
                         </HierarchicalDataTemplate>
@@ -266,6 +279,10 @@
                                 </MenuItem>
                                 <MenuItem x:Name="BookmarkItem" Header="Bookmark" Click="BookmarkFiles_Click" />
                                 <MenuItem Header="Other copies of this file…" Click="Copies_Click" />
+                                <MenuItem Header="What uses this file?" Click="WhatUses_Click"
+                                          ToolTip="The files that refer to it (an entity to its mesh, a mesh to its materials…) in the game, the mods and REDkit, and the files it refers to">
+                                    <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE71B;" /></MenuItem.Icon>
+                                </MenuItem>
                                 <MenuItem x:Name="EabDetailsItem" Header="View EAB details…" Click="EabDetails_Click"
                                           ToolTip="What EasyAssetBrowser has for the files: category, origin and tags, with tags to suggest">
                                     <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE946;" /></MenuItem.Icon>
@@ -287,6 +304,13 @@
                     <local:FileThumbnails x:Name="FileThumbs" Visibility="Collapsed" ShowChecks="False" ContextMenuOpening="FileGrid_ContextMenuOpening" />
                     <TextBlock x:Name="NoMatchesText" Text="No files match." HorizontalAlignment="Center" VerticalAlignment="Center" Opacity="0.6"
                                Visibility="Collapsed" IsHitTestVisible="False" />
+                    <!-- REDkit picked before Settings has it -->
+                    <StackPanel x:Name="RedkitSetupPanel" HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="460" Visibility="Collapsed">
+                        <TextBlock Text="REDkit isn't set up" FontSize="16" FontWeight="SemiBold" HorizontalAlignment="Center" />
+                        <TextBlock Margin="0,8,0,0" TextWrapping="Wrap" TextAlignment="Center" Opacity="0.75"
+                                   Text="REDkit keeps its own copies of the game's files from before they're cooked, about 230,000 of them, as world building in REDkit uses them. Set REDkit's wcc_lite in Settings (Find automatically looks in your Steam and GOG libraries) to list them here." />
+                        <Button Margin="0,14,0,0" HorizontalAlignment="Center" Padding="14,6" Click="RedkitSetup_Click" Style="{DynamicResource AccentButtonStyle}" Content="Set up REDkit in Settings…" />
+                    </StackPanel>
                 </Grid>
             </Border>
             <GridSplitter x:Name="PreviewSplitter" Grid.Column="3" Width="8" HorizontalAlignment="Stretch" Background="Transparent"

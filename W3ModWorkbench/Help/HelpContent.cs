@@ -1048,6 +1048,14 @@ Inside a script preview, Ctrl+Shift+F still searches from there, through the scr
 
 **Mod DLC** and **Mods**, under Game files in the asset browser, list each mod on its own, with everything it holds: its bundles, texture cache, compiled scripts (`precompiled.rsblob`, decompiled), loose scripts and strings. A file opened from a mod there is that mod's copy, without asking which, and what it loads comes from that mod first, then the game. A mod installed as DLC counts as a mod for this, so it never leaks into what another file loads.
 
+**REDkit**, the last heading, lists REDkit's own files: its `r4data`, about 230,000 copies of the game's files from before they were cooked, which are what world building in REDkit places, and files only REDkit has (editor templates, community action points). They open from disk, read-only, with every property REDkit shows. It's greyed out until REDkit's wcc_lite is set in Settings; pick it and **Set up REDkit in Settings…** takes you there.
+
+**Filters together**: the second row has **Folder** (words in a file's folder, not its name), **Regex** (the search and the folder box as regular expressions), **Whole game** (which parts of the game to show: the base game, Hearts of Stone, Blood and Wine, each free DLC) and, when you've turned them on, EasyAssetBrowser's categories and tags. **Clear filters** shows while any of them narrows the list and takes them all off at once. The asset browser opens again where you left it: the same folder, filters, size and place.
+
+**What uses this file?** (right-click a file) lists every file that refers to it, from the game, the installed mods and REDkit (the entities that use a mesh, the meshes that use a material, the materials that use a texture), and beside them the files it refers to itself. Double-click either to open it, or **Show in the Asset Browser** to go to it. The first time, every file's links are read (about half a minute for the game and REDkit together); they're kept, and only archives that change (a mod installed or updated) are read again. Files named as text in a script, a CSV or an XML file aren't counted.
+
+**Recent** (the clock beside the bookmarks) lists the last 30 files opened from the asset browser, and a `w3modworkbench://asset?path=…` link (from EasyAssetBrowser's site, a message, anywhere) opens the asset browser at that file once **Open files from EasyAssetBrowser's site here** is on in the EAB menu. **Copy > Link to open it in W3 Mod Workbench** makes one.
+
 **Tools > Browse game scripts** lists the game's own scripts in the main window, to read. It needs the game folder, which is found for you or set in Settings.
 """),
 

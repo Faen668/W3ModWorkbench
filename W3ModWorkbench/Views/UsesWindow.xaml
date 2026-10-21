@@ -1,0 +1,138 @@
+<Window x:Class="W3ModWorkbench.UsesWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="What uses this file" Icon="pack://application:,,,/W3ModWorkbench;component/Assets/app.ico"
+        Width="1180" Height="640" MinWidth="700" MinHeight="360"
+        WindowStartupLocation="CenterOwner" PreviewKeyDown="Window_PreviewKeyDown">
+    <Window.Resources>
+        <Style x:Key="IconText" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="{StaticResource IconFont}" />
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style x:Key="Card" TargetType="Border">
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}" />
+            <Setter Property="Background" Value="{DynamicResource CardBackgroundFillColorDefaultBrush}" />
+        </Style>
+        <Style x:Key="CellText" TargetType="TextBlock">
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+            <Setter Property="Margin" Value="4,0" />
+        </Style>
+        <Style x:Key="DimCellText" TargetType="TextBlock" BasedOn="{StaticResource CellText}">
+            <Setter Property="Opacity" Value="0.7" />
+        </Style>
+        <Style x:Key="RowCell" TargetType="DataGridCell">
+            <Setter Property="OverridesDefaultStyle" Value="True" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="MinHeight" Value="30" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="DataGridCell">
+                        <Grid SnapsToDevicePixels="True" Background="Transparent">
+                            <Rectangle x:Name="Highlight" Fill="{DynamicResource AccentFillColorDefaultBrush}" Opacity="0" />
+                            <ContentPresenter />
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Highlight" Property="Opacity" Value="0.22" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="Links" TargetType="DataGrid" BasedOn="{StaticResource {x:Type DataGrid}}">
+            <Setter Property="AutoGenerateColumns" Value="False" />
+            <Setter Property="IsReadOnly" Value="True" />
+            <Setter Property="HeadersVisibility" Value="Column" />
+            <Setter Property="GridLinesVisibility" Value="None" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="SelectionMode" Value="Extended" />
+            <Setter Property="SelectionUnit" Value="FullRow" />
+            <Setter Property="CanUserAddRows" Value="False" />
+            <Setter Property="CanUserDeleteRows" Value="False" />
+            <Setter Property="CellStyle" Value="{StaticResource RowCell}" />
+            <EventSetter Event="MouseDoubleClick" Handler="List_MouseDoubleClick" />
+            <EventSetter Event="SelectionChanged" Handler="List_SelectionChanged" />
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="16,12,16,12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Margin="0,0,0,12">
+            <TextBlock x:Name="FileTitle" FontSize="20" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+            <TextBlock x:Name="FilePath" Margin="0,2,0,0" Opacity="0.7" TextTrimming="CharacterEllipsis" />
+        </StackPanel>
+
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="3*" MinWidth="300" />
+                <ColumnDefinition Width="8" />
+                <ColumnDefinition Width="2*" MinWidth="240" />
+            </Grid.ColumnDefinitions>
+
+            <!-- the files that refer to this one, from the index -->
+            <DockPanel>
+                <TextBlock x:Name="UsedByTitle" DockPanel.Dock="Top" Margin="2,0,0,6" FontWeight="SemiBold" Text="Used by" />
+                <Border Style="{StaticResource Card}" ClipToBounds="True">
+                    <Grid>
+                        <DataGrid x:Name="UsedByList" Style="{StaticResource Links}">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="2*" MinWidth="120" ElementStyle="{StaticResource CellText}" />
+                                <DataGridTextColumn Header="Folder" Binding="{Binding Folder}" Width="3*" MinWidth="120" ElementStyle="{StaticResource DimCellText}" />
+                                <DataGridTextColumn Header="From" Binding="{Binding From}" Width="170" ElementStyle="{StaticResource DimCellText}" />
+                            </DataGrid.Columns>
+                        </DataGrid>
+                        <!-- reading every file's links, the first time -->
+                        <StackPanel x:Name="IndexPanel" VerticalAlignment="Center" Margin="32,0" Visibility="Collapsed">
+                            <TextBlock x:Name="IndexText" TextWrapping="Wrap" TextAlignment="Center" Opacity="0.8" />
+                            <ProgressBar x:Name="IndexBar" Height="4" Margin="0,12,0,0" Maximum="1" />
+                            <TextBlock x:Name="IndexDetail" Margin="0,6,0,0" TextAlignment="Center" Opacity="0.55" FontSize="12" TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+                        <TextBlock x:Name="UsedByEmpty" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="24,0" TextWrapping="Wrap" TextAlignment="Center"
+                                   Opacity="0.6" Visibility="Collapsed" IsHitTestVisible="False" />
+                    </Grid>
+                </Border>
+            </DockPanel>
+            <GridSplitter Grid.Column="1" Width="8" HorizontalAlignment="Stretch" Background="Transparent" />
+
+            <!-- the files this one refers to, from the file itself -->
+            <DockPanel Grid.Column="2">
+                <TextBlock x:Name="UsesTitle" DockPanel.Dock="Top" Margin="2,0,0,6" FontWeight="SemiBold" Text="Uses" />
+                <Border Style="{StaticResource Card}" ClipToBounds="True">
+                    <Grid>
+                        <DataGrid x:Name="UsesList" Style="{StaticResource Links}">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="2*" MinWidth="120" ElementStyle="{StaticResource CellText}" />
+                                <DataGridTextColumn Header="Folder" Binding="{Binding Folder}" Width="3*" MinWidth="100" ElementStyle="{StaticResource DimCellText}" />
+                            </DataGrid.Columns>
+                        </DataGrid>
+                        <TextBlock x:Name="UsesEmpty" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="24,0" TextWrapping="Wrap" TextAlignment="Center"
+                                   Opacity="0.6" Visibility="Collapsed" IsHitTestVisible="False" />
+                    </Grid>
+                </Border>
+            </DockPanel>
+        </Grid>
+
+        <DockPanel Grid.Row="2" Margin="0,12,0,0">
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                <Button x:Name="ShowButton" Padding="12,6" Click="Show_Click" Content="Show in the Asset Browser" ToolTip="Go to the file highlighted in either list" />
+                <Button x:Name="OpenButton" Margin="8,0,0,0" Padding="12,6" Click="Open_Click" Content="Open" ToolTip="Open the file highlighted in either list (or double-click it)" />
+                <Button x:Name="RebuildButton" Margin="8,0,0,0" Padding="12,6" Click="Rebuild_Click" Content="Read every file again"
+                        ToolTip="Forget what's known of which files use which, and read every archive again (only archives that changed are read otherwise)" />
+            </StackPanel>
+            <TextBlock x:Name="NoteText" VerticalAlignment="Center" Opacity="0.65" TextWrapping="Wrap" Margin="0,0,12,0"
+                       Text="Found from each file's links to the files it uses, as the engine loads them. A file named in a script or a CSV isn't counted." />
+        </DockPanel>
+    </Grid>
+</Window>

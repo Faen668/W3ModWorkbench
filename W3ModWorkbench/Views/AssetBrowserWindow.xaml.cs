@@ -72,6 +72,10 @@ public partial class AssetBrowserWindow : Window
         PreviewPane.TextureFor = main.FindTextureForHeaderAsync;
         ApplyView();
         ApplyPreviewPane();
+        Closing += (_, _) =>
+        {
+            if (_root is not null) SaveState();
+        };
         Closed += (_, _) =>
         {
             _instance = null;
@@ -91,7 +95,7 @@ public partial class AssetBrowserWindow : Window
             return;
         }
         _instance = new AssetBrowserWindow(main);
-        _instance.Standalone(main).Show();
+        _instance.Remembered(main, "AssetBrowser").Show();
     }
 
     private GameFilesArchive? Game => _root?.Archive as GameFilesArchive;
@@ -126,11 +130,17 @@ public partial class AssetBrowserWindow : Window
                 StatusText.Text = "Reading the game's files was stopped. Close the asset browser and open it again to read them.";
                 return;
             }
-            (_root, _modDlc, _mods, _rootGame) = (root, read.ModDlc, read.Mods, game);
+            (_root, _modDlc, _mods, _rootGame, _order) = (root, read.ModDlc, read.Mods, game, read.Order);
+            (_byArchive, _byPath, _references) = (null, null, null);
         }
-        FolderTree.ItemsSource = new[] { _root, _modDlc, _mods }.OfType<FolderNode>().ToList();
-        _root.IsExpanded = true;
-        _root.IsSelected = true;
+        await EnsureRedkitAsync();
+        ShowTree();
+        // where it was left, with the filters it had; the game's files the first time
+        if (!RestoreState())
+        {
+            _root.IsExpanded = true;
+            _root.IsSelected = true;
+        }
         RefreshView();
         SearchBox.Focus();
         await ShowPendingLinkAsync();
@@ -218,6 +228,17 @@ public partial class AssetBrowserWindow : Window
     {
         if (_root is null) return;
         var folder = FolderTree.SelectedItem as FolderNode ?? _root;
+        UpdateClearButton();
+        // REDkit before Settings has it: nothing to list, and a way to set it up
+        RedkitSetupPanel.Visibility = folder.IsUnavailable ? Visibility.Visible : Visibility.Collapsed;
+        if (folder.IsUnavailable)
+        {
+            _shown = [];
+            BindFiles();
+            NoMatchesText.Visibility = Visibility.Collapsed;
+            StatusText.Text = "REDkit isn't set up in Settings.";
+            return;
+        }
         if (!ReadRegexes()) return;
         List<EntryItem> scope = [.. folder.AllFiles()];
         // the part of the game, folder and regular expressions first; the search box is one of those when it's a regex
@@ -236,10 +257,13 @@ public partial class AssetBrowserWindow : Window
         BindFiles();
         NoMatchesText.Text = result.NoMatches(_typeFilter, _classFilter);
         NoMatchesText.Visibility = _shown.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-        string where = folder == _root ? "the game's files" : folder == _mods ? "the installed mods" : folder == _modDlc ? "the mods installed as DLC" : folder.FullPath;
+        bool redkit = folder.Archive is RedkitDepot;
+        string where = folder == _root ? "the game's files" : folder == _mods ? "the installed mods" : folder == _modDlc ? "the mods installed as DLC"
+            : folder == _redkit ? "REDkit's files" : redkit ? "REDkit's " + folder.FullPath : folder.FullPath;
         string describe = string.Join(" and ", DescribeExtra().Concat(result.Describe.Length > 0 ? [result.Describe] : []));
         StatusText.Text = $"{_shown.Count:N0} of {scope.Count:N0} files in {where}" + (describe.Length > 0 ? $" match {describe}" : "")
-            + $"   ·   {_root.Archive.Name}   ·   Double-click to open; what it loads comes from its own mod, then the game.";
+            + (redkit ? $"   ·   {folder.Archive.FilePath}   ·   Double-click to open REDkit's copy, read-only."
+                : $"   ·   {_root.Archive.Name}   ·   Double-click to open; what it loads comes from its own mod, then the game.");
         QueuePreview();
     }
 
@@ -564,19 +588,22 @@ public partial class AssetBrowserWindow : Window
 
     private TextBlock Glyph(string glyph) => new() { Style = (Style)FindResource("IconText"), Text = glyph };
 
-    /// <summary>Goes to a bookmarked folder, or to a file's folder with the file highlighted, clearing the search and class filter so it shows.</summary>
-    public async Task GoToBookmarkAsync(string path)
+    /// <summary>
+    /// Goes to a bookmarked folder, or to a file's folder with the file highlighted, clearing the filters so it shows:
+    /// in the game's files, or in REDkit's when only REDkit has the file (or <paramref name="under"/> says so).
+    /// </summary>
+    public async Task GoToBookmarkAsync(string path, FolderNode? under = null)
     {
         if (_root is null) return;
         bool folder = path.EndsWith('\\');
         int slash = path.LastIndexOf('\\');
         string folderPath = folder ? path.TrimEnd('\\') : slash > 0 ? path[..slash] : "";
-        var node = _root;
+        var node = under ?? (!folder && ItemForPath(path)?.Entry.Archive is Core.RedkitDepot && _redkit is { IsUnavailable: false } redkit ? redkit : _root);
         foreach (string part in folderPath.Split('\\', StringSplitOptions.RemoveEmptyEntries))
         {
             if (node.Children.FirstOrDefault(c => c.Name.Equals(part, StringComparison.OrdinalIgnoreCase)) is not { } child)
             {
-                StatusText.Text = $"{path} isn't in the game's files. It may have come from a mod that's no longer installed.";
+                StatusText.Text = $"{path} isn't in the game's files" + (_redkit is { IsUnavailable: false } ? " or REDkit's" : "") + ". It may have come from a mod that's no longer installed.";
                 return;
             }
             node = child;
@@ -585,6 +612,10 @@ public partial class AssetBrowserWindow : Window
         FolderBox.Clear();
         _classFilter = null;
         _typeFilter = null;
+        _eabCategory = null;
+        _eabInclude.Clear();
+        _eabExclude.Clear();
+        ApplyEab();
         if (_hiddenSources.Count > 0) SetHiddenSources([]);
         for (var up = node.Parent; up is not null; up = up.Parent) up.IsExpanded = true;
         // the tree makes the items of folders just expanded when it next lays out; select once they're there

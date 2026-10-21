@@ -42,6 +42,12 @@ public sealed class Settings
     /// <summary>Files opened from the asset browser most recently, by game path, newest first.</summary>
     public List<string> AssetRecent { get; set; } = [];
 
+    /// <summary>The folder and filters the asset browser was closed with, to open with again.</summary>
+    public AssetBrowserState AssetBrowser { get; set; } = new();
+
+    /// <summary>Where tool windows that remember it were, by window: "left,top,width,height,maximized".</summary>
+    public Dictionary<string, string> WindowBounds { get; set; } = [];
+
     /// <summary>Whether the asset browser's name and folder searches are regular expressions.</summary>
     public bool AssetSearchRegex { get; set; }
 

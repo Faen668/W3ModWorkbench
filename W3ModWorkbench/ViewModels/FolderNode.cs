@@ -58,6 +58,16 @@ public sealed class FolderNode : INotifyPropertyChanged
         if (membersInGroup) foreach (var member in members) member.SetInGroup(true);
         return group;
     }
+
+    /// <summary>A heading with nothing under it yet, greyed out, saying why and how to set it up (REDkit before Settings has it).</summary>
+    public static FolderNode Placeholder(string title, string why) =>
+        new(title, new GroupArchive(title), null) { IsHeading = true, Unavailable = why };
+
+    /// <summary>Why the heading is greyed out with nothing under it, or null when it isn't.</summary>
+    public string? Unavailable { get; private init; }
+
+    public bool IsUnavailable => Unavailable is not null;
+
     public List<FolderNode> Children { get; private set; } = [];
     public List<EntryItem> Files { get; } = [];
     public int TotalFiles { get; private set; }
@@ -66,12 +76,13 @@ public sealed class FolderNode : INotifyPropertyChanged
     /// <summary>Loose scripts opened without a project: they can be read, and edited once they are added to one.</summary>
     public bool IsLooseScripts => IsBundle && Archive is ScriptFolder { Project: null } folder && !ScriptFolder.IsGameScripts(folder.FilePath);
     public string Detail => IsBundle && !InGroup && !IsGroup ? Archive.Name : "";
-    public string Glyph => !IsBundle ? "\uE8B7" : IsGroup ? "\uE838" : IsProject ? "\uE821" : IsLooseScripts ? "\uE8A5" : Archive is GameFilesArchive ? "\uE8F1" : Archive is ScriptArchive ? "\uE943" : Archive is TextureCacheArchive ? "\uEB9F" : Archive is StringsFolder ? "\uE8D2" : "\uE7B8";
-    public string ToolTip => IsGroup ? $"{Name}: {Children.Count} archives"
+    public string Glyph => !IsBundle ? "\uE8B7" : IsGroup ? "\uE838" : IsProject ? "\uE821" : IsLooseScripts ? "\uE8A5" : Archive is RedkitDepot ? "\uEC7A" : Archive is GameFilesArchive ? "\uE8F1" : Archive is ScriptArchive ? "\uE943" : Archive is TextureCacheArchive ? "\uEB9F" : Archive is StringsFolder ? "\uE8D2" : "\uE7B8";
+    public string ToolTip => Unavailable ?? (IsBundle && Archive is RedkitDepot ? $"REDkit's own files, from before they're cooked, as REDkit places them; read-only\n{Archive.FilePath}"
+        : IsGroup ? $"{Name}: {Children.Count} archives"
         : IsBundle && Archive is GameFilesArchive ? $"Every file the game has, from {Archive.Name}, each from where the game loads it (mods first, then DLC, then content0)\n{Archive.FilePath}"
         : IsBundle && Archive is ScriptFolder { Project: { } project } ? $"Project {project.Name}: its files can be edited, saved and compiled\n{project.FilePath}"
         : IsLooseScripts ? $"Loose scripts, not in a project: editing them offers to add them to one\n{Archive.FilePath}"
-        : IsBundle ? Archive.FilePath : FullPath;
+        : IsBundle ? Archive.FilePath : FullPath);
 
     public string FullPath => Parent is null || Parent.IsBundle ? Name : Parent.FullPath + "\\" + Name;
 

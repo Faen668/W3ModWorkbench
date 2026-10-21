@@ -297,10 +297,16 @@ public partial class AssetBrowserWindow
 
     private void AfterSourcesChanged()
     {
+        AfterSourcesChangedQuietly();
+        RefreshView();
+    }
+
+    /// <summary>Says on the button which parts of the game are hidden, without listing the files again.</summary>
+    private void AfterSourcesChangedQuietly()
+    {
         SourcesText.Text = _hiddenSources.Count == 0 ? "Whole game" : $"{_hiddenSources.Count} hidden";
         SourcesButton.ToolTip = _hiddenSources.Count == 0 ? "Show only some parts of the game: the base game, Hearts of Stone, Blood and Wine, each free DLC"
             : "Hidden: " + string.Join(", ", _hiddenSources.OrderBy(SourceOrder).Select(SourceName));
-        RefreshView();
     }
 
     // ---------------------------------------------------------------- recent files

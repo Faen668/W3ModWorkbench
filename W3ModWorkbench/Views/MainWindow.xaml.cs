@@ -2143,15 +2143,17 @@ public partial class MainWindow : Window, IMessageHost
         SettingsWindow.ShowPrivacy(this);
     }
 
-    private void Settings_Click(object sender, RoutedEventArgs e)
+    private void Settings_Click(object sender, RoutedEventArgs e) => OpenSettings(this);
+
+    /// <summary>Opens Settings over a window (this one, or a tool window such as the asset browser); true when they were saved.</summary>
+    internal bool OpenSettings(Window owner)
     {
         StoreExtractOptions();
-        if (new SettingsWindow(_settings) { Owner = this }.ShowDialog() == true)
-        {
-            OutputBox.Text = _settings.OutputFolder;
-            KeepStructureCheck.IsChecked = _settings.KeepStructure;
-            OpenWhenDoneCheck.IsChecked = _settings.OpenWhenDone;
-        }
+        if (new SettingsWindow(_settings) { Owner = owner }.ShowDialog() != true) return false;
+        OutputBox.Text = _settings.OutputFolder;
+        KeepStructureCheck.IsChecked = _settings.KeepStructure;
+        OpenWhenDoneCheck.IsChecked = _settings.OpenWhenDone;
+        return true;
     }
 
     private void StoreExtractOptions()
