@@ -1060,12 +1060,17 @@ public partial class PreviewWindow : Window, IMessageHost
         FileNameText.Text = doc.FileName;
         DetailText.Text = doc.Detail;
 
-        SaveText.Text = doc.IsEditable ? "Save" : "Save as";
-        SaveButton.IsEnabled = !doc.IsEditable || doc.IsDirty;
-        SaveButton.ToolTip = !doc.IsEditable ? "Save a copy of this file (Ctrl+S)"
+        // only the project's files are saved in place; anything else is saved as a copy
+        bool own = doc.IsEditable && doc.InProject;
+        SaveText.Text = own ? "Save" : "Save as";
+        SaveButton.IsEnabled = !own || doc.IsDirty;
+        SaveButton.ToolTip = !own ? "Save a copy of this file (Ctrl+S)"
             : doc.IsDirty ? "Save the changes to this file (Ctrl+S). Ctrl+Shift+S saves every file"
             : "No changes to save";
         EditButton.Visibility = CanEditAsProject(doc) ? Visibility.Visible : Visibility.Collapsed;
+        var scriptTools = _isBench || doc.Item.IsScript ? Visibility.Visible : Visibility.Collapsed;
+        foreach (var tool in new UIElement[] { BackButton, ForwardButton, HistoryButton, GoToSymbolButton, FindInFilesButton, SnippetButton, BuildButton, ScriptToolsDivider })
+            tool.Visibility = scriptTools;
         GoToSymbolButton.IsEnabled = ScriptDocument() is not null;
         SnippetButton.IsEnabled = doc.CanNavigate;
         BuildButton.IsEnabled = ProjectWorkspace.Current is not null;
@@ -1176,13 +1181,29 @@ public partial class PreviewWindow : Window, IMessageHost
         Application.Current.MainWindow is MainWindow main && doc.Item.DiskPath is { } disk ? main.AddToProjectAsync([disk]) : Task.FromResult(false);
 
     /// <summary>Whether the file can be copied into a project to change it: it has a game path, and the main window is there to do it.</summary>
-    public bool CanCopyToProject(PreviewDocument doc) => doc.Item.GamePath is not null && Application.Current.MainWindow is MainWindow;
+    public bool CanCopyToProject(PreviewDocument doc) => CopyPathOf(doc) is not null && Application.Current.MainWindow is MainWindow;
 
-    /// <summary>Copies a read-only file (the game's, an installed mod's, or one in an archive) into the project at its game path, and opens the copy.</summary>
+    /// <summary>
+    /// Copies a read-only file (the game's, an installed mod's, one in an archive, or a script from anywhere) into the
+    /// project at its game path, and opens the copy.
+    /// </summary>
     public Task<bool> CopyToProjectAsync(PreviewDocument doc) =>
-        Application.Current.MainWindow is MainWindow main && doc.Item.GamePath is { } gamePath
+        Application.Current.MainWindow is MainWindow main && CopyPathOf(doc) is { } gamePath
             ? main.CopyToProjectAsync([(gamePath, () => doc.Item.Data)], open: true)
             : Task.FromResult(false);
+
+    /// <summary>
+    /// Where a copy goes in a project: the file's game path, or for a loose script from elsewhere, its path under the
+    /// nearest scripts folder above it (just its name when there's none).
+    /// </summary>
+    private static string? CopyPathOf(PreviewDocument doc)
+    {
+        if (doc.Item.GamePath is { } gamePath) return gamePath;
+        if (!doc.Item.IsScript || doc.Item.DiskPath is not { } disk) return null;
+        string drive = Path.GetPathRoot(disk)!;
+        string root = ScriptFolder.RootOf(disk, drive);
+        return Path.Combine("scripts", root.Equals(drive.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase) ? Path.GetFileName(disk) : Path.GetRelativePath(root, disk));
+    }
 
     /// <summary>Starts a project for the scripts the file is in. True once there is a project open that has the file.</summary>
     public async Task<bool> CreateProjectForAsync(PreviewDocument doc)

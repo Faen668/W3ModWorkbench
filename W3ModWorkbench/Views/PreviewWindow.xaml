@@ -138,7 +138,7 @@
                         ToolTip="Build the mod (Ctrl+Shift+B)">
                     <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE90F;" VerticalAlignment="Center" />
                 </Button>
-                <Rectangle Width="1" Margin="12,6" Fill="{DynamicResource DividerStrokeColorDefaultBrush}" />
+                <Rectangle x:Name="ScriptToolsDivider" Width="1" Margin="12,6" Fill="{DynamicResource DividerStrokeColorDefaultBrush}" />
                 <Button x:Name="SplitButton" Click="Split_Click">
                     <Button.ContextMenu>
                         <ContextMenu>

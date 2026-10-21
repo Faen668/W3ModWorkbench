@@ -657,12 +657,12 @@ Right-click the project for **Project properties**, **Add files to the project**
 
 ## Editing files that aren't in the project
 
-Any loose script can still be opened, read and followed with go to definition. The first time you type in one that isn't in the open project, the editor stops and asks:
+Only the open project's files can be changed. Any other script can be opened, read and followed with go to definition, and says **read-only, not in the project** under its name. Typing in one offers a way in:
 
-- with a project open: **Add to project**, or **Edit without adding**;
-- with no project open: **Create project\u2026** from that script's folder, or **Edit without a project**.
+- with a project open: **Copy to project** puts a copy in the project's scripts folder, at its path under the nearest `scripts` folder above it, and opens the copy; the file itself is left as it is. Another kind of file can be **added to the project** instead, and is then changed where it is;
+- with no project open: **Create project\u2026** makes a project from that script's folder.
 
-A script outside the project's scripts folder can be added, but it isn't compiled with the project. A file you're editing without a project says **not in a project** under its name, and has no Compile button.
+**Save as** still saves a copy of any file wherever you like. In the tabs, the project's files have a star.
 
 The XML editor and the strings editor don't interrupt typing. When you save a file that isn't in the open project they ask once per session whether to add it.
 
@@ -688,7 +688,7 @@ The bar at the bottom says what **Compile** reads: your scripts folder (how many
 
 ## Projects
 
-Editing is done in a project: see the **Projects** page for how they work. In short, a project is a `.w3bench` file in the mod's folder that names the mod's scripts folder, lists its other files and remembers where it compiles to. Scripts that aren't in the open project are loose: the editor asks whether to add them (or to make a project for them) the first time you type in one.
+Editing is done in a project: see the **Projects** page for how they work. In short, a project is a `.w3bench` file in the mod's folder that names the mod's scripts folder, lists its other files and remembers where it compiles to. Scripts that aren't in the open project are read-only: typing in one offers to copy it into the project (or, with no project open, to make one from its folder).
 
 ## Editing and saving
 

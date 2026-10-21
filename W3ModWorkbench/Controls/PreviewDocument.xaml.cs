@@ -230,7 +230,7 @@ public partial class PreviewDocument : UserControl
 
     /// <summary>The line under the file name in the window: where it comes from, its path and its size.</summary>
     public string Detail => $"{Item.Source}  ·  {Item.Path}  ·  {Format.Bytes(_size)}"
-        + (IsDirty ? "  ·  not saved" : Item.IsScript && !IsEditable ? "  ·  read-only" : IsEditable && !InProject ? "  ·  not in a project" : "");
+        + (IsDirty ? "  ·  not saved" : Item.IsScript && !IsEditable ? "  ·  read-only" : IsEditable && !InProject ? "  ·  read-only, not in the project" : "");
 
     public string Text => Editor.Text;
 
@@ -296,11 +296,11 @@ public partial class PreviewDocument : UserControl
     /// <summary>Whether the file is part of the open project.</summary>
     public bool InProject => Item.DiskPath is { } disk && ProjectWorkspace.IsMember(disk);
 
-    /// <summary>The person chose to edit a file that isn't in a project anyway.</summary>
-    private bool _editAnyway;
-
-    /// <summary>A file can be typed in once it's in the project, or the person said to go ahead without one. Anything else asks first.</summary>
-    private void UpdateReadOnly() => Editor.IsReadOnly = !(IsEditable && (InProject || _editAnyway));
+    /// <summary>
+    /// Only the open project's files can be typed in. Anything else is read-only: typing in it offers to copy it into the
+    /// project (or, without one, to make one), so what's changed is always the project's own copy.
+    /// </summary>
+    private void UpdateReadOnly() => Editor.IsReadOnly = !(IsEditable && InProject);
 
     private void OnProjectChanged()
     {
@@ -378,7 +378,7 @@ public partial class PreviewDocument : UserControl
     /// </summary>
     public bool Save()
     {
-        if (!IsEditable) return SaveAs();
+        if (!IsEditable || !InProject) return SaveAs();
         if (!IsDirty) return true;
         byte[] data = Encode(Editor.Text);
         try
@@ -444,42 +444,43 @@ public partial class PreviewDocument : UserControl
         }
         else if (Item.Script is not null)
             _ = ShowCard("This script is read-only",
-                "Scripts can be edited when their folder is opened as a script project: use Open folder in the main window on a folder of .ws files, such as a REDkit project's workspace\\scripts.",
+                "Only your project's scripts can be changed. Copy it to the project from Script Bench's tree (right-click it), or open a project with Project > Open project in the main window.",
                 MessageKind.Info, primary: "OK", anchor: at);
         else
             _ = ShowCard(null, "Files inside bundles are read-only. Save as makes a copy you can change.", MessageKind.Info, anchor: at, autoClose: true);
     }
 
     /// <summary>
-    /// A loose script is typed in for the first time. With a project open it offers to add the file to it; without one,
-    /// to make a project from the script's folder. Either way the person can edit without, and a project isn't forced on anyone.
+    /// A loose file outside the project is typed in. Only the project's files are changed: a script is copied into the
+    /// project's scripts folder (the file here is left as it is), another file can be added to the project. Without a
+    /// project, a script's folder can be made into one.
     /// </summary>
     private async Task AskToJoinProjectAsync(PreviewWindow host)
     {
         if (ProjectWorkspace.Current is { } project)
         {
-            string note = Item.IsScript && !Path.GetFullPath(Item.DiskPath!).StartsWith(project.ScriptsPath.TrimEnd('\\') + "\\", StringComparison.OrdinalIgnoreCase)
-                ? " It isn't in the project's scripts folder, so it's part of the project but isn't compiled with it." : "";
-            var choice = await Ask($"{FileName} isn't in {project.Name}",
-                $"Add it to the project to edit it with the project's other files.{note}", MessageKind.Question, "Add to project", "Edit without adding");
-            if (choice == MessageChoice.Primary) await host.AddToProjectAsync(this);
-            else if (choice == MessageChoice.Secondary) EditWithoutProject();
+            if (Item.IsScript)
+            {
+                if (await ShowCard($"{FileName} isn't in {project.Name}",
+                        $"Only the project's scripts can be changed. Copy it into {project.ScriptsFolder} to change it there; this file is left as it is.",
+                        MessageKind.Question, primary: "Copy to project", secondary: "Close"))
+                    await host.CopyToProjectAsync(this);
+            }
+            else if (await ShowCard($"{FileName} isn't in {project.Name}",
+                         "Only the project's files can be changed. Add it to the project to change it with the project's other files.",
+                         MessageKind.Question, primary: "Add to project", secondary: "Close"))
+                await host.AddToProjectAsync(this);
+        }
+        else if (Item.IsScript)
+        {
+            if (await ShowCard("This script isn't in a project",
+                    "Only a project's scripts can be changed. A project (a .w3bench file) keeps the mod's scripts folder, its other files and how it's built; make one from this script's folder to change it.",
+                    MessageKind.Question, primary: "Create project…", secondary: "Close"))
+                await host.CreateProjectForAsync(this);
         }
         else
-        {
-            var choice = await Ask("This script isn't in a project",
-                "A project (a .w3bench file) keeps the mod's scripts folder, its other files and where it compiles to, and Compile works on it. "
-                + "Make one from this script's folder, or edit the file on its own.", MessageKind.Question, "Create project…", "Edit without a project");
-            if (choice == MessageChoice.Primary) await host.CreateProjectForAsync(this);
-            else if (choice == MessageChoice.Secondary) EditWithoutProject();
-        }
-    }
-
-    private void EditWithoutProject()
-    {
-        _editAnyway = true;
-        UpdateReadOnly();
-        Editor.TextArea.Focus();
+            _ = ShowCard("This file is read-only", "Only a project's files can be changed. Open a project and add it, or Save as makes a copy of your own.",
+                MessageKind.Info, primary: "OK");
     }
 
     /// <summary>Saves the text somewhere else: as it is now for a project's file, otherwise exactly as it was read.</summary>
