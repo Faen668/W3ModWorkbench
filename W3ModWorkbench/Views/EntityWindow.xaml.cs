@@ -429,7 +429,7 @@ public partial class EntityWindow : Window, IMessageHost
         var cts = _meshLoad = new CancellationTokenSource();
         if (dressed)
             GeneratedNote.ShowText($"{DressedLook} is put together by the app, not an appearance in the game's files: the player's entity is only "
-                + "a neck seam, and the game dresses him in what's equipped. This is his default gear (his head, starting armour, hair and both swords), "
+                + "a neck seam, and the game dresses him in what's equipped. This is his default gear (his head, starting armour and both swords), "
                 + "as the scene and cutscene previews dress him. It isn't saved anywhere and changes nothing.");
         else GeneratedNote.Visibility = Visibility.Collapsed;
         var token = cts.Token;
