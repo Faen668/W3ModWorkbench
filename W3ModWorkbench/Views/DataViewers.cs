@@ -31,6 +31,7 @@ public static class DataViewers
         new("Animation set", AnimSetWindow.CanShow, AnimSetWindow.Open, AnimSetWindow.OpenFile),
         new("Rig", RigWindow.CanShow, RigWindow.Open, RigWindow.OpenFile),
         new("Sound", SoundWindow.CanShow, SoundWindow.Open, SoundWindow.OpenFile),
+        new("Material", MaterialWindow.CanShow, MaterialWindow.Open, MaterialWindow.OpenFile),
     ];
 
     /// <summary>Whether a file's name says a viewer here shows it.</summary>
@@ -44,15 +45,16 @@ public static class DataViewers
     public static void OpenFile(string file, ResourceLocator locator, Window owner) =>
         Viewers.First(v => v.Shows(file)).OpenFile(file, locator, owner);
 
-    /// <summary>
-    /// A file a property refers to, opened in its own viewer (any of the tool's), read from the project, the archives
-    /// open or the game; its path is copied when there's no viewer for it.
-    /// </summary>
     /// <summary>Whether a viewer in the tool opens a file of this name: one of these, or the mesh, entity, scene, cutscene, behaviour tree, XML or texture viewer.</summary>
     public static bool CanOpen(string path) =>
         CanShow(path) || MeshWindow.CanShow(path) || CutsceneWindow.CanShow(path) || SceneWindow.CanShow(path) || EntityWindow.CanShow(path)
         || BehTreeWindow.CanShow(path) || XmlWindow.CanOpen(path) || TextureWindow.CanShow(path);
 
+    /// <summary>
+    /// A file a property refers to, opened in its own viewer (any of the tool's), read from the project, the archives
+    /// open or the game; its path is copied when there's no viewer for it. Sound events, sound banks, sounds and voice
+    /// lines are read from the game's sound caches and speech files.
+    /// </summary>
     public static async Task OpenLinkAsync(string path, ResourceLocator locator, Window owner, IMessageHost host)
     {
         // a sound event, a sound bank by its name, or a sound or voice line, which the sound caches and speech files have

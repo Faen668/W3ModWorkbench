@@ -49,6 +49,11 @@ public sealed class MeshMaterialItem : INotifyPropertyChanged
 
     public string Title => $"Material {Index}" + (Current.Shader.Length > 0 ? $"  ·  {Current.Shader}" : "") + (NeedsSave ? "  (changed)" : "");
     public string Source => Current.Source == "in the mesh" ? "In the mesh" + (Current.Bases.FirstOrDefault() is { } b ? $", based on {System.IO.Path.GetFileName(b)}" : "") : Current.Source;
+    /// <summary>The material file to open in the material viewer: its own .w2mi, or for one kept in the mesh, what it's based on.</summary>
+    public string? MaterialLink => Current.IsFile || Current.IsGraph ? Current.Source : Current.Bases.FirstOrDefault();
+    public string MaterialLinkText => Current.IsFile || Current.IsGraph ? "Open the material" : MaterialLink is { } b ? $"Open its base, {System.IO.Path.GetFileName(b)}" : "";
+    public Visibility MaterialLinkVisibility => MaterialLink is null ? Visibility.Collapsed : Visibility.Visible;
+
     public string SourceTip => string.Join("\n", new[] { Current.Source }.Concat(Current.Bases.Select(b => "based on " + b)));
     public ObservableCollection<TextureChoice> Options { get; } = [];
     public ObservableCollection<MaterialParameterItem> Parameters { get; } = [];
@@ -142,7 +147,7 @@ public sealed class MeshMaterialItem : INotifyPropertyChanged
             Parameters.Add(new MaterialParameterItem(parameter, own, inBase, (item, value) => SetParameter(item.Parameter, value)));
         }
         _suppress = false;
-        foreach (string name in new[] { nameof(Selected), nameof(Title), nameof(Source), nameof(SourceTip), nameof(Textures), nameof(ResetVisibility), nameof(ParametersHeader) })
+        foreach (string name in new[] { nameof(Selected), nameof(Title), nameof(Source), nameof(SourceTip), nameof(MaterialLink), nameof(MaterialLinkText), nameof(MaterialLinkVisibility), nameof(Textures), nameof(ResetVisibility), nameof(ParametersHeader) })
             Raise(name);
     }
 

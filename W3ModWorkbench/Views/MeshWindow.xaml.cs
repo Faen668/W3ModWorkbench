@@ -595,6 +595,11 @@ public partial class MeshWindow : Window, IMessageHost
             material.ResetParameter(parameter.Parameter);
     }
 
+    private void OpenMaterial_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.Tag is string path) _ = DataViewers.OpenLinkAsync(path, _locator, this, this);
+    }
+
     private async void PickParameterTexture_Click(object sender, RoutedEventArgs e)
     {
         if ((sender as FrameworkElement)?.Tag is not MaterialParameterItem parameter || OwnerOf(parameter) is not { } material) return;

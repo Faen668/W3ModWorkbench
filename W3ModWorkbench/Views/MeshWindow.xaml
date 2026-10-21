@@ -174,7 +174,15 @@
                                             <Border BorderThickness="1" CornerRadius="6" Padding="10,8" Margin="0,0,0,8" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}">
                                                 <StackPanel>
                                                     <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
-                                                    <TextBlock Text="{Binding Source}" Opacity="0.75" FontSize="11" TextTrimming="CharacterEllipsis" ToolTip="{Binding SourceTip}" Margin="0,2,0,6" />
+                                                    <TextBlock Text="{Binding Source}" Opacity="0.75" FontSize="11" TextTrimming="CharacterEllipsis" ToolTip="{Binding SourceTip}" Margin="0,2,0,2" />
+                                                    <Button HorizontalAlignment="Left" Margin="0,0,0,6" Cursor="Hand" Click="OpenMaterial_Click" Tag="{Binding MaterialLink}"
+                                                            Visibility="{Binding MaterialLinkVisibility}" ToolTip="Open it in the material viewer: every parameter, a live preview, and what uses it">
+                                                        <Button.Template>
+                                                            <ControlTemplate TargetType="Button">
+                                                                <TextBlock Text="{Binding MaterialLinkText}" FontSize="11" Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}" />
+                                                            </ControlTemplate>
+                                                        </Button.Template>
+                                                    </Button>
                                                     <TextBlock Text="Colour texture" Opacity="0.7" FontSize="11" Margin="0,0,0,3" />
                                                     <ComboBox ItemsSource="{Binding Options}" SelectedItem="{Binding Selected}" DisplayMemberPath="Label" ToolTip="{Binding Selected.Path}" />
                                                     <TextBlock Text="{Binding Status}" Opacity="0.7" FontSize="11" Margin="0,4,0,0" TextWrapping="Wrap" />

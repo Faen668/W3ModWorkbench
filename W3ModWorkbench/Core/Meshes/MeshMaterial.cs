@@ -205,8 +205,10 @@ public sealed class MeshMaterial
     /// <summary>An object's flags, from the file's table of objects.</summary>
     private static int ExportFlagsOf(Cr2wFile file, int export)
     {
+        // the older layout (154 and before) keeps its table elsewhere, and no flags a copy needs
+        if (file.Legacy is not null || file.Data.Length < 40 + 4 * 13) return 0;
         int at = BitConverter.ToInt32(file.Data, 40 + 4 * 12) + export * 24 + 2;
-        return BitConverter.ToUInt16(file.Data, at);
+        return at >= 0 && at + 2 <= file.Data.Length ? BitConverter.ToUInt16(file.Data, at) : 0;
     }
 
     /// <summary>Follows an instance's base, adding what each base sets that nothing nearer sets.</summary>

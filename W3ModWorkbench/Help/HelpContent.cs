@@ -511,6 +511,18 @@ The game's sounds are in the Asset Browser's game files: the sound cache's banks
 Every sound plays, Wwise Opus, Wwise Vorbis and PlatinumGames' ADPCM alike (surround sounds mixed down to stereo): all 90,995 of the game's sounds, at their exact lengths. The controller's vibration waveforms in `fx_haptic.bnk` are 2 kHz signals for its motors, played at 48 kHz. Sounds are read from the game's own files, so REDkit isn't needed. A bank's sound kept in another bank (a media bank) is played from there; one a bank keeps only the start of, to begin it at once, is played whole from the sound cache.
 """),
 
+        new(Basics, "Materials", "\uE790", """
+Double-click a `.w2mi` (a material instance) or a `.w2mg` (a shader graph), or select it and press **Enter**, to open it in the material viewer; a mesh viewer's **Open the material** opens a mesh's too. A material instance sets some of its shader's parameters (its textures, colours and numbers) and takes the rest from what it's based on: another instance, and in the end the shader graph, which declares every parameter and its default. REDkit doesn't open these; here they can be looked at and changed.
+
+- **Parameters** lists every parameter it has, grouped: textures with their pictures, colours as swatches, numbers, vectors. Its own are in bold; the rest say where they come from (uncheck **Inherited too** to see only its own). Narrow them by some letters (**Ctrl+F**).
+- **Change any**: type a value, drag a number's slider, click a colour's swatch for its red, green, blue and alpha, or pick a texture (**…**) from the game or an open mod. A changed parameter becomes the material's own; take it away again to give it back its base's value. **Undo changes** (**Ctrl+Z**) puts everything back.
+- **The preview** draws the material as the game draws it, on the game's sphere or box, or on a mesh that uses it (picked in **Preview on**, with the mesh's other materials as they are), and follows every change at once. **Spin** (**P**) turns it slowly; **Fit** (**F**) frames it again.
+- **Based on** shows what it's built on, nearest first, and how many parameters each gives; click one to open it. **Used by** lists the meshes and materials that use it: from the Asset Browser's index of the whole game when the Asset Browser is open, else the folders round it. Double-click one to open it, or right-click a mesh to preview the material on it.
+- **Save to project** (**Ctrl+S**) saves the changes into the open project at the material's own game path, so every mesh that uses it changes in the mod. **Save as new material** saves it, changed or not, as a new `.w2mi` based on the same thing (a shader graph's on the graph itself), for meshes to be pointed at with the mesh viewer's **Other material…**. Closing with changes not saved asks first.
+
+**Properties** has the file's own properties. Every one of REDkit's materials and shader graphs reads (1,967).
+"""),
+
         new(Basics, "Communities", "\uE716", """
 Double-click a `.w2comm`, or select it and press **Enter**, to open it in the community viewer. One a property refers to opens from the other viewers too, and a file on disk opens from **Open files** or by dropping it on the window.
 

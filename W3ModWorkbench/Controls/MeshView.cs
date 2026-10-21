@@ -1138,6 +1138,13 @@ public sealed class MeshView : Border
         UpdateCamera();
     }
 
+    /// <summary>Turns the camera round what it looks at by some degrees, as a turntable turns (a material's preview spinning).</summary>
+    public void Orbit(double degrees)
+    {
+        _yaw = (_yaw + degrees) % 360;
+        UpdateCamera();
+    }
+
     /// <summary>
     /// The angle the view starts from, before anything is shown: round from -Y (0) and down from level, in degrees.
     /// The game's characters face +Y, so 180 looks them in the face; a prop reads better from the default three-quarter view.
