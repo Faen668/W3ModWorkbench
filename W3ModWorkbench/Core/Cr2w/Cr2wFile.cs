@@ -181,6 +181,15 @@ public sealed class Cr2wFile
     /// <summary>The import a handle or soft reference points at, when it points at one.</summary>
     public Cr2wImport? Import(RedHandle handle) => handle.Import is int i && i < Imports.Count ? Imports[i] : null;
 
+    /// <summary>
+    /// The path of the file a reference points at: an import's, or, for a soft reference in the older layout (154 and
+    /// before), the dependency's it's numbered in. Null when it points at none.
+    /// </summary>
+    public string? PathOf(RedHandle handle) =>
+        handle.Soft && Legacy is { } legacy
+            ? handle.Import is int d && d < legacy.Dependencies.Count ? legacy.Dependencies[d] : null
+            : Import(handle)?.Path;
+
     /// <summary>The object a handle points at inside this file, when it points at one.</summary>
     public RedObject? Object(RedHandle handle) => handle.Export is int i && i < Exports.Count ? Object(i) : null;
 

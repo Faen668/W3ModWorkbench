@@ -112,6 +112,14 @@ public static class ObjectTree
         _ => null,
     };
 
+    /// <summary>A tag list's tags joined, from the bytes it's kept as; "" when there are none.</summary>
+    public static string Tags(Cr2wFile file, object? value) => value switch
+    {
+        byte[] raw => string.Join(", ", file.Tags(raw)),
+        RedObject holder => Tags(file, holder["tags"]),
+        _ => Short(value) ?? "",
+    };
+
     /// <summary>A game time kept as seconds since midnight ({m_seconds}) as hours and minutes.</summary>
     public static string? GameTime(object? value) =>
         value is RedObject t ? $"{t.Integer("m_seconds") / 3600 % 24}:{t.Integer("m_seconds") / 60 % 60:00}" : null;

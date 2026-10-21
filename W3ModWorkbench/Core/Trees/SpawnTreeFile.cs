@@ -40,7 +40,7 @@ public static class SpawnTreeFile
             d.Integer("maxSpawnedAtOnce").ToString(),
             d["override"] is true ? "yes" : "",
             ObjectTree.Short(d["forcedAppearance"]) ?? "",
-            ObjectTree.Short(d["tags"]) ?? "",
+            ObjectTree.Tags(file, d["tags"]),
         ]).ToList();
         int entries = root?.All().Count(n => n.Tint == Entry) ?? 0;
         return new TreeDocument
@@ -60,7 +60,7 @@ public static class SpawnTreeFile
 
     /// <summary>A soft or hard reference's file path, or "".</summary>
     private static string Reference(Cr2wFile file, object? value) =>
-        value is RedHandle { Import: int i } && i < file.Imports.Count ? file.Imports[i].Path : "";
+        value is RedHandle h ? file.PathOf(h) ?? "" : "";
 
     private static TreeLook Look(Cr2wFile file, RedObject o, string link)
     {
@@ -70,7 +70,7 @@ public static class SpawnTreeFile
         TreeLook Make(uint tint, string kind, string title, string detail = "") => new(tint, kind, name ?? title, detail, label);
 
         if (ObjectTree.IsA(c, "ISpawnTreeInitializer"))
-            return Make(Initializer, "Initializer", ObjectTree.Words(c, "CSpawnTreeInitializer", "CSpawnTree", "ISpawnTreeInitializer"), InitializerDetail(o));
+            return Make(Initializer, "Initializer", ObjectTree.Words(c, "CSpawnTreeInitializer", "CSpawnTree", "ISpawnTreeInitializer"), InitializerDetail(file, o));
         switch (c)
         {
             case "CSpawnTreeParallelNode": return Make(Composite, "Parallel", "Parallel", "runs all of its branches");
@@ -90,10 +90,10 @@ public static class SpawnTreeFile
                 string definition = o["creatureDefinition"] as string ?? "?";
                 long min = o.Integer("quantityMin", 1), max = o.Integer("quantityMax", 1);
                 string count = min == max ? $"{min}" : $"{min} to {max}";
-                return Make(Entry, "Spawn entry", $"Entry {definition}", $"{count} of them" + Spawner(o));
+                return Make(Entry, "Spawn entry", $"Entry {definition}", $"{count} of them" + Spawner(file, o));
             }
             case "CCreaturePartyEntry":
-                return Make(Entry, "Party", "Party", $"{Format.Count(o.Array("subDefinitions").Count, "member")}" + Spawner(o));
+                return Make(Entry, "Party", "Party", $"{Format.Count(o.Array("subDefinitions").Count, "member")}" + Spawner(file, o));
             case "CSpawnTreeEntrySubDefinition":
                 return Make(Entry, "Party member", $"{o["partyMemberId"] as string ?? "Member"}", o["creatureDefinition"] as string ?? "");
             case "CWorkEntryGenerator" or "CWanderAndWorkEntryGenerator":
@@ -112,8 +112,8 @@ public static class SpawnTreeFile
     }
 
     /// <summary>A spawn entry's spawn point tags, when it has any.</summary>
-    private static string Spawner(RedObject o) =>
-        o.Struct("baseSpawner") is { } s && ObjectTree.Short(s["tags"]) is { Length: > 0 } tags ? $"  ·  at {tags}" : "";
+    private static string Spawner(Cr2wFile file, RedObject o) =>
+        o.Struct("baseSpawner") is { } s && ObjectTree.Tags(file, s["tags"]) is { Length: > 0 } tags ? $"  ·  at {tags}" : "";
 
     /// <summary>What a condition node tests: each fact, its comparison and value, joined by "and".</summary>
     private static string Conditions(Cr2wFile file, RedObject o)
@@ -138,10 +138,10 @@ public static class SpawnTreeFile
     }
 
     /// <summary>An initializer's settings that say what it does: a guard area's tag, a spawner's tags, an AI's tree.</summary>
-    private static string InitializerDetail(RedObject o)
+    private static string InitializerDetail(Cr2wFile file, RedObject o)
     {
         if (ObjectTree.Short(o["guardAreaTag"]) is { } guard) return $"guard area {guard}";
-        if (o.Struct("spawner") is { } spawner && ObjectTree.Short(spawner["tags"]) is { Length: > 0 } tags) return $"at {tags}";
+        if (o.Struct("spawner") is { } spawner && ObjectTree.Tags(file, spawner["tags"]) is { Length: > 0 } tags) return $"at {tags}";
         foreach (var (name, _, value) in o.Properties)
             if (name is not ("id" or "graphPosX" or "graphPosY" or "comment" or "overrideDeepInitializers") && ObjectTree.Short(value) is { Length: > 0 and < 40 } text)
                 return $"{name} {text}";

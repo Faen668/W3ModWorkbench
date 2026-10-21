@@ -443,6 +443,18 @@ A **steering graph** is how an NPC moves towards its goal: **groups** run all th
 Both are drawn as the behaviour tree viewer draws a tree, from the root down, coloured by kind (the colours are listed under it), with a label over a node saying why its parent goes to it: a node's comment (a time of day, a quest fact), or its place among its parent's children. Drag to move, use the wheel to zoom, double-click a node to fold its branch, and **Find** (**Ctrl+F**) marks the nodes whose name, class, comment or settings have the words. Click a node to see its properties on the right (a steering task's or test's under it), and the button by **Fit** to see the file's own. Every one of REDkit's spawn trees and steering graphs reads (558).
 """),
 
+        new(Basics, "Communities", "\uE716", """
+Double-click a `.w2comm`, or select it and press **Enter**, to open it in the community viewer. One a property refers to opens from the other viewers too, and a file on disk opens from **Open files** or by dropping it on the window.
+
+A community is who lives somewhere and when. Its type is at the top (**CST_Global**, or **CST_Template** for one other communities use), with how many entries, story phases and timetables it has.
+
+**Spawnset** lists its entries as REDkit's community editor does: each entry's ID and comment, then a row for each of its entities (the entity template spawned, its appearances, spawn tags and map pin) and each of its story phases (the quest tags it spawns in, whether it's hidden, then each spawn time: when, how many, and the respawn delay), with the timetable the phase keeps, where they spawn and despawn, and whether they start in an action point. An entry's rows are kept together, every other entry shaded. Click a row to see its entry's, entity's, story phase's and spawn time's properties on the right; double-click it (or **Open the template**) to open the entity template, and **Its timetable** goes to the story phase's timetable.
+
+**Timetables** lists each timetable by name: at each time of day, the layer whose action points it uses, and each action category there with its weight and the action point tags it takes. Click a row to see the timetable's properties and which story phases keep it.
+
+The search at the top (**Ctrl+F**) narrows both lists to the entries and timetables with the words (an entry, a template, a story phase, a timetable, a tag). Every one of REDkit's communities reads (2,515).
+"""),
+
         new(Basics, "Scenes", "", """
 Double-click a `.w2scene`, or select it and press **Enter**, to open it in the scene viewer. The preview pane shows it too: how many parts, lines and choices it has, how it starts with its lines in words, who's in it, the cutscenes it plays, and the facts and scripts it uses. A scene file on disk opens from **Open files** or by dropping it on the window.
 
