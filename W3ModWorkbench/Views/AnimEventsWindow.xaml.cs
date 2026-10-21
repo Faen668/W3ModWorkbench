@@ -240,6 +240,12 @@ public partial class AnimEventsWindow : Window, IMessageHost
         Tabs.SelectedItem = EventTab;
     }
 
+    /// <summary>Opens the sound a sound event plays, by its name.</summary>
+    private void Timeline_EventOpened(object? sender, AnimEvent ev)
+    {
+        if (AnimEvent.Text(ev.Object["soundEventName"]) is { Length: > 0 } sound && sound != "None") SoundWindow.OpenEvent(sound, _locator, this);
+    }
+
     private void Timeline_TimePicked(object? sender, float time)
     {
         Preview.Pause();

@@ -48,10 +48,32 @@ public static class DataViewers
     /// A file a property refers to, opened in its own viewer (any of the tool's), read from the project, the archives
     /// open or the game; its path is copied when there's no viewer for it.
     /// </summary>
+    /// <summary>Whether a viewer in the tool opens a file of this name: one of these, or the mesh, entity, scene, cutscene, behaviour tree, XML or texture viewer.</summary>
+    public static bool CanOpen(string path) =>
+        CanShow(path) || MeshWindow.CanShow(path) || CutsceneWindow.CanShow(path) || SceneWindow.CanShow(path) || EntityWindow.CanShow(path)
+        || BehTreeWindow.CanShow(path) || XmlWindow.CanOpen(path) || TextureWindow.CanShow(path);
+
     public static async Task OpenLinkAsync(string path, ResourceLocator locator, Window owner, IMessageHost host)
     {
-        bool viewable = CanShow(path) || MeshWindow.CanShow(path) || CutsceneWindow.CanShow(path) || SceneWindow.CanShow(path) || EntityWindow.CanShow(path)
-            || BehTreeWindow.CanShow(path) || XmlWindow.CanOpen(path) || TextureWindow.CanShow(path);
+        // a sound event, a sound bank by its name, or a sound or voice line, which the sound caches and speech files have
+        if (path.StartsWith(SoundLinks.Event, StringComparison.Ordinal))
+        {
+            SoundWindow.OpenEvent(path[SoundLinks.Event.Length..], locator, owner);
+            return;
+        }
+        if (path.StartsWith(SoundLinks.Bank, StringComparison.Ordinal))
+        {
+            string bank = path[SoundLinks.Bank.Length..];
+            path = Core.Sounds.SoundCacheArchive.Banks + (bank.EndsWith(".bnk", StringComparison.OrdinalIgnoreCase) ? bank : bank + ".bnk");
+        }
+        if (SoundLinks.IsSound(path))
+        {
+            var sound = await SoundLinks.ReadAsync(path);
+            if (sound is null) await host.ShowMessage("Not found", $"{path}\n\nIt isn't in the game's sound caches or speech files.", MessageKind.Warning);
+            else SoundWindow.Open(path, sound.Value.Source, sound.Value.Data, locator, owner);
+            return;
+        }
+        bool viewable = CanOpen(path);
         if (!viewable)
         {
             try { Clipboard.SetText(path); }

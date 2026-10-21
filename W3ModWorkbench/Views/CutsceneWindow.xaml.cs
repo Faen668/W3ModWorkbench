@@ -212,8 +212,12 @@ public partial class CutsceneWindow : Window, IMessageHost
     /// The dialog lines' voices, from the game's speech files (in English, as the words are): the cutscene marks when
     /// each line is said, and the scene that plays it says which line it is. Lines with no voice are left silent.
     /// </summary>
+    // each dialog line's string ID, in the order of the Dialogs tab, once found
+    private List<uint?> _lineIds = [];
+
     private async Task LoadVoicesAsync(string game, CutsceneFile c, List<uint?> ids)
     {
+        _lineIds = ids;
         if (W3Strings.Language("en") is not { } en) return;
         var marks = c.SceneEvents.Where(e => e.Kind == CutsceneEventKind.Dialog).OrderBy(e => e.Start).ToList();
         if (marks.Count != ids.Count) return;
@@ -765,6 +769,46 @@ public partial class CutsceneWindow : Window, IMessageHost
         ShowEvent(item.Event);
         Timeline.Selected = item.Event;
         Timeline.Reveal(item.Event);
+    }
+
+    /// <summary>The sound event a list's picked event plays, when it's a sound event.</summary>
+    private static string? SoundOf(object? item) =>
+        (item is CutsceneEventItem picked ? picked.Event : null)?.Source?["soundEventName"] is { } name
+        && Core.Animation.AnimEvent.Text(name) is { Length: > 0 } sound && sound != "None" ? sound : null;
+
+    private void OpenEventSound(DataGrid grid)
+    {
+        if (SoundOf(grid.SelectedItem) is { } sound) SoundWindow.OpenEvent(sound, _locator, this);
+        else _ = Message.Show(null, "The event picked plays no sound event.", MessageKind.Info, primary: "OK");
+    }
+
+    private void OpenEventSound_Click(object sender, RoutedEventArgs e) =>
+        OpenEventSound(((sender as MenuItem)?.Parent as ContextMenu)?.PlacementTarget as DataGrid ?? EventGrid);
+
+    private void EventSound_DoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is DataGrid grid && SoundOf(grid.SelectedItem) is not null) OpenEventSound(grid);
+    }
+
+    /// <summary>Opens the picked dialog line's voice in the sound viewer, in English as the cutscene plays it.</summary>
+    private void OpenVoiceLine()
+    {
+        if (DialogGrid.SelectedItem is not CutsceneDialogRow row) return;
+        if (row.Line - 1 < _lineIds.Count && _lineIds[row.Line - 1] is { } id)
+            _ = DataViewers.OpenLinkAsync($@"speech\en\{id}.wem", _locator, this, this);
+        else
+            _ = Message.Show(null, "This line's string isn't known: the scene that plays the cutscene wasn't found.", MessageKind.Info, primary: "OK");
+    }
+
+    private void OpenVoiceLine_Click(object sender, RoutedEventArgs e) => OpenVoiceLine();
+
+    private void DialogGrid_MouseDoubleClick(object sender, MouseButtonEventArgs e) => OpenVoiceLine();
+
+    private void CopyLineId_Click(object sender, RoutedEventArgs e)
+    {
+        if (DialogGrid.SelectedItem is not CutsceneDialogRow row || row.Line - 1 >= _lineIds.Count || _lineIds[row.Line - 1] is not { } id) return;
+        try { Clipboard.SetText(id.ToString()); }
+        catch (System.Runtime.InteropServices.COMException) { }
     }
 
     private void DialogGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)

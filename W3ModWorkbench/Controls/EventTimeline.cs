@@ -39,6 +39,9 @@ public sealed class EventTimeline : FrameworkElement
     /// <summary>Raised when an event is clicked, with it.</summary>
     public event EventHandler<AnimEvent>? EventClicked;
 
+    /// <summary>Raised when an event is double-clicked, to open what it plays (its sound).</summary>
+    public event EventHandler<AnimEvent>? EventOpened;
+
     /// <summary>Raised when a moment is clicked or dragged to, with the time.</summary>
     public event EventHandler<float>? TimePicked;
 
@@ -207,6 +210,7 @@ public sealed class EventTimeline : FrameworkElement
         {
             Selected = picked;
             EventClicked?.Invoke(this, picked);
+            if (e.ClickCount == 2) EventOpened?.Invoke(this, picked);
             return;
         }
         if (p.X < HeaderWidth) return;

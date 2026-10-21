@@ -77,10 +77,19 @@ public partial class SoundWindow : Window, IMessageHost
     public static void OpenFile(string file, ResourceLocator locator, Window owner) =>
         new SoundWindow(Path.GetFileName(file), file, () => File.ReadAllBytes(file), locator).Standalone(owner).Show();
 
+    /// <summary>Opens a sound event by its name: the sounds it can play, each to play, and what its actions do.</summary>
+    public static void OpenEvent(string name, ResourceLocator locator, Window owner) =>
+        new SoundWindow(SoundLinks.Event + name, "sound event", () => [], locator).Standalone(owner).Show();
+
     public Task ShowMessage(string? title, string message, MessageKind kind) => Message.Show(title, message, kind, primary: "OK");
 
     private async Task LoadAsync()
     {
+        if (_path.StartsWith(SoundLinks.Event, StringComparison.Ordinal))
+        {
+            await ShowEventAsync(_path[SoundLinks.Event.Length..]);
+            return;
+        }
         byte[] data;
         try
         {
@@ -139,7 +148,8 @@ public partial class SoundWindow : Window, IMessageHost
             PlayButton.IsEnabled = WavButton.IsEnabled = false;
             return;
         }
-        if (_bank is null) DetailText.Text = Summary(info);
+        // a bank's or an event's own summary stays; a sound alone is summed up by what it says about itself
+        if (_bank is null && !_path.StartsWith(SoundLinks.Event, StringComparison.Ordinal)) DetailText.Text = Summary(info);
         DetailList.ItemsSource = Details(info, where);
         WaveMessage.Text = SoundDecoder.CanPlay(info.Codec) ? "Reading the sound…" : $"{info.CodecName} sounds can't be played yet; everything the sound says about itself is under Details.";
         WaveMessage.Visibility = Visibility.Visible;
@@ -309,21 +319,41 @@ public partial class SoundWindow : Window, IMessageHost
         SoundsNote.Text = "Reading the bank's sounds…";
         Tabs.SelectedItem = SoundsTab;
 
+        var rows = await RowsAsync(bank.Sounds, bank);
+        SoundGrid.ItemsSource = rows;
+        SoundsTab.Header = $"Sounds ({rows.Count:N0})";
+        int playable = rows.Count(r => r.Info is { } i && SoundDecoder.CanPlay(i.Codec));
+        SoundsNote.Text = $"{Format.Count(rows.Count, "sound")} the bank plays or keeps; {playable:N0} can be played here. Click one to play it.";
+        PickFirst(rows);
+    }
+
+    private void PickFirst(List<SoundRow> rows)
+    {
+        if (rows.FirstOrDefault(r => r.Info is { } i && SoundDecoder.CanPlay(i.Codec)) is { } first) SoundGrid.SelectedItem = first;
+        else if (rows.Count > 0) SoundGrid.SelectedIndex = 0;
+    }
+
+    /// <summary>
+    /// The rows of sounds, each where the game keeps it: streamed (whole, even when a bank keeps its start), in the bank
+    /// shown (<paramref name="own"/>), or in another bank (a media bank), with what the sound says about itself.
+    /// </summary>
+    private async Task<List<SoundRow>> RowsAsync(IReadOnlyList<BankSound> sounds, SoundBank? own)
+    {
         string? game = GameLocator.Resolve(null);
         var caches = game is null ? [] : await SoundCache.ForGame(game);
-        // a sound neither kept in it nor streamed is kept in another bank (a media bank): the index says which
+        // a sound neither kept in the bank nor streamed is kept in another bank: the index says which
         SoundBankIndex? index = null;
-        if (game is not null && bank.Sounds.Any(s => !bank.Embedded.ContainsKey(s.SourceId) && !caches.Any(c => c.Has($"{s.SourceId}.wem"))))
+        if (game is not null && sounds.Any(s => own?.Embedded.ContainsKey(s.SourceId) != true && !caches.Any(c => c.Has($"{s.SourceId}.wem"))))
         {
             SoundsNote.Text = "Finding the banks that keep its sounds…";
             index = await SoundBankIndex.ForGame(game);
         }
-        var rows = await Task.Run(() =>
+        return await Task.Run(() =>
         {
             var list = new List<SoundRow>();
             var seen = new HashSet<uint>();
             var others = new Dictionary<string, SoundBank?>(StringComparer.OrdinalIgnoreCase);
-            foreach (var sound in bank.Sounds)
+            foreach (var sound in sounds)
             {
                 if (!seen.Add(sound.SourceId)) continue;
                 // a streamed sound first: a bank may keep the start of one too, to begin it at once, but only the start
@@ -333,9 +363,9 @@ public partial class SoundWindow : Window, IMessageHost
                     list.Add(new SoundRow(sound.SourceId, sound, false, null, sound.Kind, Info(cache.ReadHead(streamed))));
                     continue;
                 }
-                if (bank.Embedded.ContainsKey(sound.SourceId))
+                if (own is not null && own.Embedded.ContainsKey(sound.SourceId))
                 {
-                    list.Add(new SoundRow(sound.SourceId, sound, true, null, sound.Kind, Info(bank.EmbeddedSound(sound.SourceId))));
+                    list.Add(new SoundRow(sound.SourceId, sound, true, null, sound.Kind, Info(own.EmbeddedSound(sound.SourceId))));
                     continue;
                 }
                 string? other = index?.KeptIn.GetValueOrDefault(sound.SourceId);
@@ -343,17 +373,80 @@ public partial class SoundWindow : Window, IMessageHost
                     others[other] = caches.FirstOrDefault(c => c.Has(other))?.Read(other) is { } data ? SoundBank.Read(data) : null;
                 list.Add(new SoundRow(sound.SourceId, sound, false, other, sound.Kind, Info(other is null ? null : others[other]?.EmbeddedSound(sound.SourceId))));
             }
-            // those it keeps that no object of its own plays (another bank's)
-            foreach (var id in bank.Embedded.Keys.Where(seen.Add))
-                list.Add(new SoundRow(id, null, true, null, "another bank's object", Info(bank.EmbeddedSound(id))));
+            // those the bank keeps that no object of its own plays (another bank's)
+            if (own is not null)
+                foreach (var id in own.Embedded.Keys.Where(seen.Add))
+                    list.Add(new SoundRow(id, null, true, null, "another bank's object", Info(own.EmbeddedSound(id))));
             return list;
         });
+    }
+
+    /// <summary>The name Wwise gives an action's type.</summary>
+    private static string ActionName(ushort type) => (type >> 8) switch
+    {
+        0x04 => type == 0x0403 ? "Plays" : "Plays and continues",
+        0x01 => "Stops",
+        0x02 => "Pauses",
+        0x03 => "Resumes",
+        0x12 => "Sets a state",
+        0x19 => "Sets a switch",
+        0x13 or 0x14 => "Sets a game parameter",
+        0x06 or 0x07 => "Mutes or unmutes",
+        0x0A or 0x0B => "Sets the volume",
+        0x08 or 0x09 => "Sets the pitch",
+        0x0E or 0x0F => "Sets a low-pass filter",
+        0x1E => "Seeks",
+        0x1C => "Posts an event",
+        _ => $"Action 0x{type:X4}",
+    };
+
+    /// <summary>A sound event: the sounds its play actions can play (a random container's choices, a switch's cases), and its actions.</summary>
+    private async Task ShowEventAsync(string name)
+    {
+        string? game = GameLocator.Resolve(null);
+        if (game is null)
+        {
+            BusyText.Text = "The game folder isn't set, so the event can't be looked up. Set it in Settings.";
+            return;
+        }
+        BusyText.Text = $"Finding the sound event {name} in the game's sound banks…";
+        var index = await SoundBankIndex.ForGame(game);
+        uint id = SoundBankIndex.Hash(name);
+        if (!index.Events.TryGetValue(id, out var e))
+        {
+            BusyText.Text = $"No sound bank has an event named {name} (ID {id}).";
+            return;
+        }
+        BusyText.Visibility = Visibility.Collapsed;
+        Body.Visibility = Visibility.Visible;
+        _soundId = id;
+        BanksTab.Visibility = Visibility.Collapsed;
+        DetailsTab.Header = "Sound details";
+        Title = $"{name} - Sound event";
+        TitleText.Text = name;
+        var sounds = index.SoundsOf(name);
+        string does = string.Join(", ", e.Actions.Select(a => ActionName(a.Action)).Distinct());
+        DetailText.Text = $"Wwise sound event {id} in {Path.GetFileNameWithoutExtension(e.Bank)}  ·  {(does.Length > 0 ? does : "does nothing")}  ·  "
+                        + (sounds.Count == 0 ? "plays no sound" : Format.Count(sounds.Count, "sound") + " it can play");
+        InfoText.Text = $"{name}   ·   in {SoundCacheArchive.Banks}{e.Bank}";
+        ObjectList.ItemsSource = e.Actions.Select(a => new DetailRow(ActionName(a.Action), $"object {a.Target}")).Prepend(new DetailRow("In bank", e.Bank)).ToList();
+        ObjectsTab.Header = $"Actions ({e.Actions.Count:N0})";
+        Tabs.SelectedItem = SoundsTab;
+        if (sounds.Count == 0)
+        {
+            SoundsNote.Text = e.Actions.Any(a => a.Action >> 8 == 0x04) ? "Its play actions play no sound the banks have." : $"It plays nothing: it {does.ToLowerInvariant()}.";
+            WaveMessage.Text = "The event plays no sound.";
+            WaveMessage.Visibility = Visibility.Visible;
+            PlayButton.IsEnabled = WavButton.IsEnabled = false;
+            return;
+        }
+        SoundsNote.Text = "Reading its sounds…";
+        var rows = await RowsAsync(sounds.Select(s => s.Sound).ToList(), null);
         SoundGrid.ItemsSource = rows;
         SoundsTab.Header = $"Sounds ({rows.Count:N0})";
-        int playable = rows.Count(r => r.Info is { } i && SoundDecoder.CanPlay(i.Codec));
-        SoundsNote.Text = $"{Format.Count(rows.Count, "sound")} the bank plays or keeps; {playable:N0} can be played here. Click one to play it.";
-        if (rows.FirstOrDefault(r => r.Info is { } i && SoundDecoder.CanPlay(i.Codec)) is { } first) SoundGrid.SelectedItem = first;
-        else if (rows.Count > 0) SoundGrid.SelectedIndex = 0;
+        SoundsNote.Text = rows.Count == 1 ? "The sound it plays. Click it to play it."
+            : $"The {rows.Count:N0} sounds it can play (one of them each time, or several together, as its containers choose). Click one to play it.";
+        PickFirst(rows);
     }
 
     private static WemInfo? Info(byte[]? riff)
@@ -365,8 +458,8 @@ public partial class SoundWindow : Window, IMessageHost
 
     private async void SoundGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (SoundGrid.SelectedItem is not SoundRow row || _bank is not { } bank) return;
-        byte[]? riff = row.InBank ? bank.EmbeddedSound(row.Id) : null;
+        if (SoundGrid.SelectedItem is not SoundRow row) return;
+        byte[]? riff = row.InBank ? _bank?.EmbeddedSound(row.Id) : null;
         string where = row.InBank ? $"In {Path.GetFileName(_path)}" : row.OtherBank is { } other ? $"In {SoundCacheArchive.Banks}{other}" : $"Streamed: {SoundCacheArchive.Streamed}{row.Id}.wem";
         if (riff is null && GameLocator.Resolve(null) is { } game)
         {
@@ -390,8 +483,8 @@ public partial class SoundWindow : Window, IMessageHost
 
     private void OpenSound_Click(object sender, RoutedEventArgs e)
     {
-        if (SoundGrid.SelectedItem is not SoundRow row || _bank is not { } bank) return;
-        if (row.InBank && bank.EmbeddedSound(row.Id) is { } riff)
+        if (SoundGrid.SelectedItem is not SoundRow row) return;
+        if (row.InBank && _bank?.EmbeddedSound(row.Id) is { } riff)
             new SoundWindow($"{row.Id}.wem", $"in {Path.GetFileName(_path)}", () => riff, _locator).Standalone(this).Show();
         else if (row.OtherBank is { } other)
             _ = OpenFromOtherBankAsync(row.Id, other);

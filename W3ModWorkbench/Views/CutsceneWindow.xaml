@@ -411,7 +411,13 @@
                                 </DockPanel>
                                 <local:PropertyListView x:Name="AnimationProperties" Grid.Row="1" Margin="0,8,0,0" NameColumnWidth="190" TypeColumnWidth="0" />
                                 <TextBlock Grid.Row="2" Style="{StaticResource Heading}" Text="Event track" Margin="2,10,0,6" />
-                                <DataGrid x:Name="AnimationEvents" Grid.Row="3" Style="{StaticResource Grid}" SelectionChanged="AnimationEvents_SelectionChanged">
+                                <DataGrid x:Name="AnimationEvents" Grid.Row="3" Style="{StaticResource Grid}" SelectionChanged="AnimationEvents_SelectionChanged"
+                                          MouseDoubleClick="EventSound_DoubleClick" ToolTip="Double-click a sound event to hear it">
+                                    <DataGrid.ContextMenu>
+                                        <ContextMenu>
+                                            <MenuItem Header="Open its sound" Click="OpenEventSound_Click" />
+                                        </ContextMenu>
+                                    </DataGrid.ContextMenu>
                                     <DataGrid.Columns>
                                         <DataGridTextColumn Header="Time" Binding="{Binding Time}" Width="70" ElementStyle="{StaticResource CodeCellText}" />
                                         <DataGridTextColumn Header="Kind" Binding="{Binding Kind}" Width="90" ElementStyle="{StaticResource CellText}" />
@@ -428,7 +434,14 @@
                                             Content="Save sound…" ToolTip="Save its music and effects, each voiced line and the two mixed, as WAV files in a folder" />
                                     <TextBlock x:Name="DialogNote" Style="{StaticResource Small}" TextWrapping="Wrap" VerticalAlignment="Center" />
                                 </DockPanel>
-                                <DataGrid x:Name="DialogGrid" Style="{StaticResource Grid}" SelectionChanged="DialogGrid_SelectionChanged">
+                                <DataGrid x:Name="DialogGrid" Style="{StaticResource Grid}" SelectionChanged="DialogGrid_SelectionChanged"
+                                          MouseDoubleClick="DialogGrid_MouseDoubleClick" ToolTip="Double-click a line to open its voice">
+                                    <DataGrid.ContextMenu>
+                                        <ContextMenu>
+                                            <MenuItem Header="Open the voice line" Click="OpenVoiceLine_Click" />
+                                            <MenuItem Header="Copy the string ID" Click="CopyLineId_Click" />
+                                        </ContextMenu>
+                                    </DataGrid.ContextMenu>
                                     <DataGrid.Columns>
                                         <DataGridTextColumn Header="Time" Binding="{Binding Time}" Width="64" ElementStyle="{StaticResource CodeCellText}" />
                                         <DataGridTextColumn Header="Actor" Binding="{Binding Actor}" Width="90" ElementStyle="{StaticResource CellText}" />
@@ -504,9 +517,11 @@
                                     <TextBlock x:Name="SearchPlaceholder" Margin="33,0,0,0" Opacity="0.55" VerticalAlignment="Center" IsHitTestVisible="False"
                                                Text="Search events, e.g. sword or mus_  (Ctrl+F)" />
                                 </Grid>
-                                <DataGrid x:Name="EventGrid" Grid.Row="1" Style="{StaticResource Grid}" SelectionChanged="EventGrid_SelectionChanged">
+                                <DataGrid x:Name="EventGrid" Grid.Row="1" Style="{StaticResource Grid}" SelectionChanged="EventGrid_SelectionChanged"
+                                          MouseDoubleClick="EventSound_DoubleClick">
                                     <DataGrid.ContextMenu>
                                         <ContextMenu>
+                                            <MenuItem Header="Open its sound" Click="OpenEventSound_Click" />
                                             <MenuItem Header="Copy" Click="CopyEvent_Click" />
                                             <MenuItem Header="Copy what" Click="CopyEventTitle_Click" />
                                         </ContextMenu>

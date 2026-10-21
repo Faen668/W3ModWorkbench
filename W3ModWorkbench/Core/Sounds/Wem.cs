@@ -165,6 +165,12 @@ public sealed class SoundBank
 
     public required IReadOnlyList<RiffChunk> Sections { get; init; }
 
+    /// <summary>Its objects as kept: each one's type, ID, and where its data (after its ID) is in the bank and how long.</summary>
+    public required IReadOnlyList<(byte Type, uint Id, int Offset, int Length)> Hierarchy { get; init; }
+
+    /// <summary>The bank's bytes, which <see cref="Hierarchy"/> points into.</summary>
+    public byte[] Data => _data;
+
     private byte[] _data = [];
 
     /// <summary>A sound the bank keeps, as a Wwise RIFF file, or null.</summary>
@@ -186,6 +192,7 @@ public sealed class SoundBank
         var index = new List<(uint Id, int Offset, int Size)>();
         var sounds = new List<BankSound>();
         var objects = new Dictionary<string, int>();
+        var hierarchy = new List<(byte, uint, int, int)>();
         uint version = 0, id = 0;
         int data = -1;
         for (int at = 0; at + 8 <= bank.Length;)
@@ -218,6 +225,7 @@ public sealed class SoundBank
                         string kind = KindOf(type);
                         objects[kind] = objects.GetValueOrDefault(kind) + 1;
                         uint objectId = BinaryPrimitives.ReadUInt32LittleEndian(bank.AsSpan(i + 5));
+                        hierarchy.Add((type, objectId, i + 9, length - 4));
                         // a sound: its source after its ID (the codec's plugin, how it's kept, the source's ID, its size)
                         if (type == 2 && length >= 4 + 14)
                             sounds.Add(Source(bank, i + 9, objectId, "Sound"));
@@ -233,7 +241,7 @@ public sealed class SoundBank
         if (data >= 0)
             foreach (var (soundId, offset, size) in index)
                 if (offset >= 0 && size > 0 && data + offset + size <= bank.Length) embedded.TryAdd(soundId, (data + offset, size));
-        return new SoundBank { Version = version, Id = id, Embedded = embedded, Sounds = sounds, Objects = objects, Sections = sections, _data = bank };
+        return new SoundBank { Version = version, Id = id, Embedded = embedded, Sounds = sounds, Objects = objects, Sections = sections, Hierarchy = hierarchy, _data = bank };
     }
 
     /// <summary>A source as a sound object or a music track keeps it: the codec's plugin, how it's kept (0 in the bank, 1 and 2 streamed), its ID and size.</summary>

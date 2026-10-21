@@ -46,6 +46,12 @@
         <DataTemplate DataType="{x:Type vm:SceneLineRow}">
             <Border x:Name="Mark" CornerRadius="4" Padding="4,2" Margin="-4,1" Background="Transparent">
             <Grid ToolTip="{Binding Tip}">
+                <Grid.ContextMenu>
+                    <ContextMenu>
+                        <MenuItem Header="Open the voice line" Click="OpenLine_Click" Tag="{Binding}" />
+                        <MenuItem Header="Copy the string ID" Click="CopyLineId_Click" Tag="{Binding}" />
+                    </ContextMenu>
+                </Grid.ContextMenu>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="170" />

@@ -169,7 +169,24 @@ public sealed class PropertyRow(string name, string type, string value, int dept
         return chain;
     }
 
-    private static void Add(List<PropertyRow> rows, string name, string type, object? value, int depth, Cr2wFile file, PropertyRow? parent, HashSet<RedObject> path)
+    /// <summary>
+    /// What a value opens, when it's something the tool can open: a sound event or a sound bank, by what the property is
+    /// (an item of an array by its array's name: soundEvents, soundBanksDependency), or a file named by its path.
+    /// </summary>
+    private static string? LinkOf(string name, string text)
+    {
+        if (text.Length == 0 || text == "None") return null;
+        string what = name.ToLowerInvariant();
+        if (what is "burnedaudiotrackname" || what.Contains("soundbank") || what.Contains("banksdependency")) return SoundLinks.Bank + text;
+        bool sound = what.Contains("sound") || what.Contains("walla") || what.Contains("music");
+        bool notAnEvent = what.Contains("identification") || what.Contains("monster") || what.Contains("attacktype") || what.Contains("bonemapping")
+                          || what.Contains("listener") || what.Contains("info") || what.Contains("type") || what.Contains("param");
+        if (sound && !notAnEvent && (what.Contains("event") || what is "soundname" or "soundonfocus" or "soundofffocus")) return SoundLinks.Event + text;
+        return (text.Contains('\\') || text.Contains('/')) && DataViewers.CanOpen(text) ? text : null;
+    }
+
+    private static void Add(List<PropertyRow> rows, string name, string type, object? value, int depth, Cr2wFile file, PropertyRow? parent, HashSet<RedObject> path,
+        string? context = null)
     {
         if (depth > 12) return;
         switch (value)
@@ -184,7 +201,7 @@ public sealed class PropertyRow(string name, string type, string value, int dept
             case List<object?> list:
                 var array = Child(rows, new PropertyRow(name, type, list.Count == 0 ? "empty" : list.Count == 1 ? "1 item" : $"{list.Count:N0} items", depth, null), parent);
                 string element = type.Contains(',') ? type[(type.LastIndexOf(',') + 1)..] : "";
-                for (int i = 0; i < list.Count && i < MostItems; i++) Add(rows, $"[{i}]", element, list[i], depth + 1, file, array, path);
+                for (int i = 0; i < list.Count && i < MostItems; i++) Add(rows, $"[{i}]", element, list[i], depth + 1, file, array, path, name);
                 if (list.Count > MostItems) Child(rows, new PropertyRow("…", "", $"and {list.Count - MostItems:N0} more", depth + 1, null), array);
                 break;
             case RedHandle h when file.Import(h) is { } import:
@@ -201,10 +218,14 @@ public sealed class PropertyRow(string name, string type, string value, int dept
                 }
                 break;
             case byte[] raw:
-                Child(rows, new PropertyRow(name, type, Raw(raw, type, file), depth, null), parent);
+                string rawText = Raw(raw, type, file);
+                Child(rows, new PropertyRow(name, type, rawText, depth, type == "StringAnsi" ? LinkOf(context ?? name, rawText) : null), parent);
                 break;
             case bool b:
                 Child(rows, new PropertyRow(name, type, b ? "true" : "false", depth, null) { Bool = b }, parent);
+                break;
+            case string or Core.Cr2w.RedEnum when Text(value) is var words:
+                Child(rows, new PropertyRow(name, type, words, depth, value is string ? LinkOf(context ?? name, words) : null), parent);
                 break;
             default:
                 Child(rows, new PropertyRow(name, type, Text(value), depth, null), parent);
@@ -222,6 +243,9 @@ public sealed class PropertyRow(string name, string type, string value, int dept
             case "TagList":
                 var tags = file.Tags(raw);
                 return tags.Count == 0 ? "no tags" : string.Join(", ", tags);
+            case "StringAnsi":
+                // an 8-bit string, kept as its bytes by the reader
+                return Core.Animation.AnimEvent.Text(raw) ?? Text(raw);
         }
         // an enum named like a struct (S…): its value's name
         if (raw.Length == 2 && Rtti.Value.Enums.Contains(type) && (raw[0] | raw[1] << 8) is var n && n < file.Names.Count) return file.Names[n];

@@ -404,7 +404,7 @@ public partial class AnimSetWindow : Window, IMessageHost
         var events = EventsOf(animation);
         Timeline.Show(events, animation.Duration);
         TimelineTitle.Text = $"{animation.Name}: {Format.Count(events.Count, "event")} on {Format.Count(events.Select(e => e.Track).Distinct().Count(), "track")}"
-            + "; click an event for its properties, the ruler to go to a moment, the wheel to zoom";
+            + "; click an event for its properties, double-click a sound to hear it, click the ruler to go to a moment, the wheel to zoom";
     }
 
     /// <summary>Where the motion extraction has the character at a time: its move and its turn.</summary>
@@ -452,6 +452,12 @@ public partial class AnimSetWindow : Window, IMessageHost
             + (from is { } f ? $"  ·  from {f.Item2}" : "  ·  kept in the set");
         EventProperties.Show(PropertyRow.Of(ev.Object, from?.Item1 ?? _set!.File));
         Tabs.SelectedItem = EventTab;
+    }
+
+    /// <summary>Opens the sound a sound event plays, by its name.</summary>
+    private void Timeline_EventOpened(object? sender, AnimEvent ev)
+    {
+        if (AnimEvent.Text(ev.Object["soundEventName"]) is { Length: > 0 } sound && sound != "None") SoundWindow.OpenEvent(sound, _locator, this);
     }
 
     private void Timeline_TimePicked(object? sender, float time)

@@ -1232,6 +1232,23 @@ public partial class SceneWindow : Window, IMessageHost
         return _playing.Token;
     }
 
+    /// <summary>Opens a line's voice in the sound viewer: in the language picked, or English when that one has no voice for it.</summary>
+    private async void OpenLine_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.Tag is not SceneLineRow { StringId: { } id }) return;
+        var language = LanguageBox.SelectedItem as W3Language ?? W3Strings.Languages[0];
+        string path = $@"speech\{language.Handle}\{id}.wem";
+        if (await SoundLinks.ReadAsync(path) is null && W3Strings.Language("en") is { } en && en != language) path = $@"speech\{en.Handle}\{id}.wem";
+        await DataViewers.OpenLinkAsync(path, _locator, this, this);
+    }
+
+    private void CopyLineId_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.Tag is not SceneLineRow { StringId: { } id }) return;
+        try { Clipboard.SetText(id.ToString()); }
+        catch (System.Runtime.InteropServices.COMException) { }
+    }
+
     private void PlayLine_Click(object sender, RoutedEventArgs e)
     {
         if ((sender as FrameworkElement)?.Tag is not SceneLineRow row) return;

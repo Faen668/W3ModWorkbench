@@ -234,7 +234,7 @@
                     <TextBlock x:Name="TimelineTitle" DockPanel.Dock="Top" Style="{StaticResource Small}" Margin="2,0,0,4"
                                Text="Pick an animation to see its events; click an event for its properties, the ruler to go to a moment, the wheel to zoom" />
                     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                        <local:EventTimeline x:Name="Timeline" EventClicked="Timeline_EventClicked" TimePicked="Timeline_TimePicked" />
+                        <local:EventTimeline x:Name="Timeline" EventClicked="Timeline_EventClicked" EventOpened="Timeline_EventOpened" TimePicked="Timeline_TimePicked" />
                     </ScrollViewer>
                 </DockPanel>
             </Border>

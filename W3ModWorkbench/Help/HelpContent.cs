@@ -506,6 +506,8 @@ The game's sounds are in the Asset Browser's game files: the sound cache's banks
 - **A bank** lists every sound it plays or keeps, kept in it or streamed, with its codec, channels, length and size: click one to play it, or right-click to open it in a window of its own. **Objects** counts its objects by kind (sounds, events, actions, containers, music tracks, buses…) and its sections.
 - **Save as WAV** saves the sound as a WAV file anything can play; **Save .wem** saves it as the game keeps it.
 
+**Sound events** are how the game plays its sounds: an animation's footstep plays `g_footstep_walk`, an entity's emitter or a scene plays others. Wherever one is named (in a property list, on an animation's event timeline, in a cutscene's events) it opens in the sound viewer with every sound it can play: its play actions and the containers under them (a footstep's variations, a voice's takes), each to click and hear. **Actions** says what the event does (plays, stops, sets a switch…). Click a sound event link in any property list, double-click a sound on an event timeline, or right-click an event in the cutscene viewer. A sound bank named in a property (`soundBanksDependency`, a cutscene's audio track) opens the bank, and a dialog line in the scene or cutscene viewer opens its voice (right-click it).
+
 Every sound plays, Wwise Opus and Wwise Vorbis alike (surround sounds mixed down to stereo): of the game's 90,995 sounds, 90,926 play at their exact lengths. The 69 that don't are the controller's vibration waveforms in `fx_haptic.bnk` (PTADPCM), which show their details. A bank's sound kept in another bank (a media bank) is played from there; one a bank keeps only the start of, to begin it at once, is played whole from the sound cache.
 """),
 
