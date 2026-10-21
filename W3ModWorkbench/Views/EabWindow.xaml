@@ -29,6 +29,29 @@
             <Setter Property="Opacity" Value="0.7" />
         </Style>
         <!-- bold rather than in the accent colour, which the highlight is in too -->
+        <!-- whole rows highlight, in a soft accent tint as the asset browser's list does; no cell of its own is picked or edited -->
+        <Style x:Key="RowCell" TargetType="DataGridCell">
+            <Setter Property="OverridesDefaultStyle" Value="True" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="MinHeight" Value="32" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="DataGridCell">
+                        <Grid SnapsToDevicePixels="True" Background="Transparent">
+                            <Rectangle x:Name="Highlight" Fill="{DynamicResource AccentFillColorDefaultBrush}" Opacity="0" />
+                            <ContentPresenter SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}" />
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Highlight" Property="Opacity" Value="0.22" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
         <Style x:Key="ChangedCellText" TargetType="TextBlock" BasedOn="{StaticResource CellText}">
             <Setter Property="FontWeight" Value="SemiBold" />
         </Style>
@@ -74,6 +97,7 @@
             <Border Style="{StaticResource Card}" ClipToBounds="True">
                 <DataGrid x:Name="Files" AutoGenerateColumns="False" IsReadOnly="True" HeadersVisibility="Column" GridLinesVisibility="None"
                           BorderThickness="0" Background="Transparent" SelectionMode="Extended" SelectionUnit="FullRow" CanUserAddRows="False"
+                          CanUserDeleteRows="False" CanUserResizeRows="False" CellStyle="{StaticResource RowCell}"
                           SelectionChanged="Files_SelectionChanged">
                     <DataGrid.Columns>
                         <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="2*" MinWidth="120" ElementStyle="{StaticResource CellText}" />
@@ -87,9 +111,10 @@
             <GridSplitter Grid.Column="1" Width="8" HorizontalAlignment="Stretch" Background="Transparent" />
 
             <!-- what EAB has for the files highlighted, and their tags to change -->
-            <Border Grid.Column="2" Style="{StaticResource Card}" Padding="14,4,14,12">
+            <Border Grid.Column="2" Style="{StaticResource Card}" Padding="14,4,4,4">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <StackPanel x:Name="Details">
+                    <!-- clear of the scroll bar on the right, and of the card's edge at the bottom -->
+                    <StackPanel x:Name="Details" Margin="0,0,14,14">
                         <TextBlock x:Name="DetailTitle" Margin="0,8,0,0" FontSize="16" FontWeight="SemiBold" TextWrapping="Wrap" />
                         <TextBlock x:Name="ListedText" Margin="0,2,0,0" Opacity="0.7" TextWrapping="Wrap" />
 
@@ -118,6 +143,7 @@
                             </StackPanel>
                         </Grid>
 
+                        <StackPanel x:Name="TagSection">
                         <TextBlock Style="{StaticResource FieldName}" Text="EAB tags" />
                         <TextBlock x:Name="TagsHint" Opacity="0.55" FontSize="12" TextWrapping="Wrap" Margin="0,0,0,4"
                                    Text="Tick the tags the files should have. A filled box means some of the files highlighted have it." />
@@ -129,6 +155,7 @@
                                 <TextBlock x:Name="NewTagPlaceholder" Text="A new tag" Margin="10,0,0,0" VerticalAlignment="Center" Opacity="0.5" IsHitTestVisible="False" />
                             </Grid>
                         </DockPanel>
+                        </StackPanel>
 
                         <Button x:Name="OpenOnSiteButton" Margin="0,16,0,0" HorizontalAlignment="Left" Padding="10,6" Click="OpenOnSite_Click"
                                 ToolTip="Show the file on EasyAssetBrowser's site">

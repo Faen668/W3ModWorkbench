@@ -160,7 +160,8 @@ public partial class EabWindow : Window
                 var row = picked[0];
                 DetailTitle.Text = row.Name;
                 ListedText.Text = row.Asset is not null ? $"Listed on EasyAssetBrowser · {row.Item.Path}"
-                    : row.Category is null ? $"EasyAssetBrowser has no category for {System.IO.Path.GetExtension(row.Item.Name)} files, so it can't list this one."
+                    : row.Category is null ? $"EasyAssetBrowser lists meshes, entities, decals (.xbm), particles, communities and SpeedTree trees (.srt) for world building. "
+                        + $"It has no category for {System.IO.Path.GetExtension(row.Item.Name)} files, so this one can't be tagged."
                     : "Not listed on EasyAssetBrowser yet. Give it tags to suggest adding it.";
                 PathText.Text = row.EabPath;
                 OriginText.Text = row.Origin;
@@ -169,14 +170,19 @@ public partial class EabWindow : Window
             {
                 DetailTitle.Text = picked.Count == 0 ? "Highlight a file" : $"{picked.Count:N0} files";
                 int listed = picked.Count(r => r.Asset is not null);
-                ListedText.Text = picked.Count == 0 ? "" : $"{listed:N0} listed on EasyAssetBrowser, {picked.Count - listed:N0} not yet";
+                int cannot = picked.Count(r => r.Category is null);
+                ListedText.Text = picked.Count == 0 ? "" : $"{listed:N0} listed on EasyAssetBrowser, {picked.Count - listed - cannot:N0} not yet"
+                    + (cannot > 0 ? $", and {cannot:N0} of kinds it doesn't list, which tags leave alone" : "");
                 PathText.Text = string.Join(Environment.NewLine, picked.Take(20).Select(r => r.EabPath)) + (picked.Count > 20 ? $"{Environment.NewLine}… and {picked.Count - 20:N0} more" : "");
                 OriginText.Text = string.Join(", ", picked.Select(r => r.Origin).Distinct());
             }
             var categories = picked.Select(r => r.Category).Distinct().ToList();
             CategoryBox.SelectedItem = categories.Count == 1 ? categories[0] : null;
-            CategoryBox.IsEnabled = picked.Any(r => r.Category is not null);
-            OpenOnSiteButton.IsEnabled = picked.Count == 1 && picked[0].Asset is not null;
+            // a file of a kind EAB doesn't list has no tags to give: the section goes rather than sitting there greyed out
+            bool canTag = picked.Any(r => r.Category is not null);
+            CategoryBox.IsEnabled = canTag;
+            TagSection.Visibility = canTag ? Visibility.Visible : Visibility.Collapsed;
+            OpenOnSiteButton.Visibility = picked is [{ Asset: not null }] ? Visibility.Visible : Visibility.Collapsed;
             FillTags(picked);
         }
         finally
@@ -209,13 +215,21 @@ public partial class EabWindow : Window
                 IsChecked = with == 0 ? false : with == picked.Count ? true : null,
             };
             string name = tag;
-            box.Click += (_, _) =>
+            bool? last = box.IsChecked;
+            // however it's changed (a click, Space, a screen reader), and from some the first change gives it to all
+            void Changed()
             {
-                // from some, the first click gives it to all
-                bool on = box.IsChecked != false;
-                box.IsChecked = on;
+                bool on = box.IsChecked == true || (last is null && box.IsChecked == false);
+                last = on;
+                if (box.IsChecked != on)
+                {
+                    box.IsChecked = on;
+                    return;
+                }
                 foreach (var row in Picked.Where(r => r.Category is not null)) row.SetTag(name, on);
-            };
+            }
+            box.Checked += (_, _) => Changed();
+            box.Unchecked += (_, _) => Changed();
             TagPanel.Children.Add(box);
         }
     }
