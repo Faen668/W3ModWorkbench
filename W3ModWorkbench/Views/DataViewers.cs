@@ -30,6 +30,7 @@ public static class DataViewers
         new("Animation events", AnimEventsWindow.CanShow, AnimEventsWindow.Open, AnimEventsWindow.OpenFile),
         new("Animation set", AnimSetWindow.CanShow, AnimSetWindow.Open, AnimSetWindow.OpenFile),
         new("Rig", RigWindow.CanShow, RigWindow.Open, RigWindow.OpenFile),
+        new("Sound", SoundWindow.CanShow, SoundWindow.Open, SoundWindow.OpenFile),
     ];
 
     /// <summary>Whether a file's name says a viewer here shows it.</summary>

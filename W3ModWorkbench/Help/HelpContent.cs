@@ -496,6 +496,19 @@ The window is laid out as REDkit's skeleton editor: the skeleton in 3D on the le
 **Properties** has the rig's properties (its speeds, LODs and control rig), from REDkit's copy when there is one. Every one of REDkit's rigs reads (420), the oldest (137 and before) too.
 """),
 
+        new(Basics, "Sounds and voice lines", "\uE767", """
+The game's sounds are in the Asset Browser's game files: the sound cache's banks under `sounds\banks` (each a Wwise sound bank, `.bnk`), its streamed sounds under `sounds\streamed` (each a Wwise sound, `.wem`, named by its ID), and the voice lines of each language installed under `speech\<language>` (named by the ID of the string they say). Double-click one, or select it and press **Enter**, to open it in the sound viewer.
+
+- **The waveform** shows the left channel over the right, with a ruler of seconds, the part it loops shaded and its marked points. Click or drag on it to go to a moment. **Space** plays and pauses, **Home** stops and goes back to the start, **L** loops.
+- **A voice line** shows its words, in its own language or any other picked, who says it, its string ID and its lip sync. **Copy ID** (**Ctrl+C**) copies the string ID.
+- **Details** has everything the sound says about itself: its codec, channels and the speakers they're for, its rate, length, bitrate, loop and marked points, its size and the parts it's made of.
+- **Played by** lists the banks that play a streamed sound, through a sound object or a music track. Double-click one to open it.
+- **A bank** lists every sound it plays or keeps, kept in it or streamed, with its codec, channels, length and size: click one to play it, or right-click to open it in a window of its own. **Objects** counts its objects by kind (sounds, events, actions, containers, music tracks, buses…) and its sections.
+- **Save as WAV** saves the sound as a WAV file anything can play; **Save .wem** saves it as the game keeps it.
+
+Wwise Opus and PCM sounds play: every voice line, most of the sounds the banks keep and some of the streamed ones. Wwise Vorbis sounds (much of the music and some effects) show their details but don't play yet.
+"""),
+
         new(Basics, "Communities", "\uE716", """
 Double-click a `.w2comm`, or select it and press **Enter**, to open it in the community viewer. One a property refers to opens from the other viewers too, and a file on disk opens from **Open files** or by dropping it on the window.
 

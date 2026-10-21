@@ -28,6 +28,15 @@ public sealed class W3Speech
 
     public bool Has(uint stringId) => _sounds.ContainsKey(stringId);
 
+    /// <summary>Every line it has a sound for: the string's ID and the sound's size.</summary>
+    public IEnumerable<(uint StringId, long Size)> Lines => _sounds.Select(s => (s.Key, s.Value.Size));
+
+    /// <summary>Every line's sound with where it lies in the file (its length first, then the sound).</summary>
+    public IEnumerable<(uint StringId, long Offset, long Size)> Index => _sounds.Select(s => (s.Key, s.Value.Offset, s.Value.Size));
+
+    /// <summary>Whether a line has a lip sync.</summary>
+    public bool HasLipSync(uint stringId) => _lipSyncs.ContainsKey(stringId);
+
     /// <summary>Reads a speech file's list of lines; the sounds are read when they're asked for.</summary>
     public static W3Speech Open(string path, W3Language language)
     {

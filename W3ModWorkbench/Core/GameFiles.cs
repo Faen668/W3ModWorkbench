@@ -1,10 +1,11 @@
 using System.IO;
+using W3ModWorkbench.Core.Sounds;
 using W3ModWorkbench.Core.Textures;
 
 namespace W3ModWorkbench.Core;
 
 /// <summary>
-/// The game's own files, as one archive to browse: the bundles and texture caches of content0 and the official DLC
+/// The game's own files, as one archive to browse: the bundles, texture caches, sound caches and voice lines of content0 and the official DLC
 /// (<see cref="OfficialDlc"/>), each game path once, from where the game would load it (the DLC over content0). Nothing
 /// a mod adds is in it, in mods or installed as DLC. Each file stays an entry of the archive it's in, so it's read,
 /// previewed, opened and copied as from that archive.
@@ -31,7 +32,7 @@ public sealed class GameFilesArchive : IArchive
 
     public bool ReadsFromDisk => false;
 
-    /// <summary>The bundles and texture caches it's made of, in the order the game looks in them.</summary>
+    /// <summary>The bundles, texture caches, sound caches and speech files it's made of, in the order the game looks in them.</summary>
     public IReadOnlyList<IArchive> Parts { get; }
 
     /// <summary>
@@ -54,6 +55,7 @@ public sealed class GameFilesArchive : IArchive
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var bundles = new List<IArchive>();
         var caches = new List<TextureCacheArchive>();
+        var sounds = new List<IArchive>();
         var used = new Dictionary<string, int>();
         foreach (var (content, kind) in folders)
         {
@@ -79,15 +81,29 @@ public sealed class GameFilesArchive : IArchive
                     any = true;
                 }
                 catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException) { }
+            // its sounds and voice lines, beside its texture cache: the official DLC's speech files are empty
+            string folder = kind == "content0" ? Path.GetDirectoryName(content)! : content;
+            foreach (string file in new[] { Path.Combine(folder, "soundspc.cache") }.Concat(Directory.Exists(folder) ? Directory.GetFiles(folder, "*pc.w3speech") : []))
+                if (File.Exists(file) && new FileInfo(file).Length > 64)
+                    try
+                    {
+                        progress?.Invoke(Path.GetFileName(file));
+                        sounds.Add(file.EndsWith(".cache", StringComparison.OrdinalIgnoreCase) ? SoundCacheArchive.Open(file) : SpeechArchive.Open(file));
+                        any = true;
+                    }
+                    catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or EndOfStreamException) { }
             if (any) used[kind] = used.GetValueOrDefault(kind) + 1;
         }
         foreach (var cache in caches)
             foreach (var entry in cache.Entries)
                 if (seen.Add(entry.Path)) entries.Add(entry);
+        foreach (var archive in sounds)
+            foreach (var entry in archive.Entries)
+                if (seen.Add(entry.Path)) entries.Add(entry);
 
         var parts = new List<string>();
         if (used.ContainsKey("content0")) parts.Add("content0");
         if (used.GetValueOrDefault("DLC") is > 0 and var dlcs) parts.Add($"{dlcs} DLC");
-        return new GameFilesArchive(game, entries, [.. bundles, .. caches], string.Join(", ", parts));
+        return new GameFilesArchive(game, entries, [.. bundles, .. caches, .. sounds], string.Join(", ", parts));
     }
 }

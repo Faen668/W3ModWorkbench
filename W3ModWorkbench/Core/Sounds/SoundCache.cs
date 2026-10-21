@@ -26,6 +26,12 @@ public sealed class SoundCache
 
     public bool Has(string name) => _files.ContainsKey(name);
 
+    /// <summary>Every file in the cache, by its name (a bank's, <c>name.bnk</c>, or a streamed sound's ID, <c>123.wem</c>), and its size.</summary>
+    public IEnumerable<(string Name, long Size)> Files => _files.Select(f => (f.Key, f.Value.Size));
+
+    /// <summary>Every file in the cache with where it lies in it.</summary>
+    public IEnumerable<(string Name, long Offset, long Size)> Index => _files.Select(f => (f.Key, f.Value.Offset, f.Value.Size));
+
     /// <summary>Reads a cache's list of files; the files are read when they're asked for.</summary>
     public static SoundCache Open(string path)
     {
@@ -64,6 +70,17 @@ public sealed class SoundCache
         using var fs = new FileStream(Path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
         fs.Position = file.Offset;
         var data = new byte[file.Size];
+        fs.ReadExactly(data);
+        return data;
+    }
+
+    /// <summary>The start of a file in the cache (enough for a sound's "fmt "), or null when it hasn't got it.</summary>
+    public byte[]? ReadHead(string name, int bytes = 4096)
+    {
+        if (!_files.TryGetValue(name, out var file)) return null;
+        using var fs = new FileStream(Path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        fs.Position = file.Offset;
+        var data = new byte[Math.Min(bytes, file.Size)];
         fs.ReadExactly(data);
         return data;
     }
