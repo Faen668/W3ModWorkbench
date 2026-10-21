@@ -18,7 +18,7 @@ public partial class AssetBrowserWindow
     /// The free DLC by folder name, as CD PROJEKT named them. Those after dlc16 came with the Remastered update and have
     /// no names of their own; theirs say what their files are (there's no dlc19).
     /// </summary>
-    private static readonly Dictionary<string, string> FreeDlcNames = new(StringComparer.OrdinalIgnoreCase)
+    private static Dictionary<string, string> FreeDlcNames => new(StringComparer.OrdinalIgnoreCase)
     {
         ["dlc1"] = L.T("AssetBrowserWindow.TemerianArmorSet"),
         ["dlc2"] = L.T("AssetBrowserWindow.BeardHairstyleSet"),

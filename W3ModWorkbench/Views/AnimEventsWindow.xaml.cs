@@ -31,7 +31,7 @@ public partial class AnimEventsWindow : Window, IMessageHost
     private string? _animation;
     private bool _syncing;
 
-    private static readonly (string Name, string Path)[] Entities =
+    private static (string Name, string Path)[] Entities =>
     [
         ("Geralt", @"characters\player_entities\geralt\geralt_player.w2ent"),
         (L.T("AnimEventsWindow.Man"), JobTreeFile.PreviewEntities[0]), (L.T("AnimEventsWindow.Woman"), JobTreeFile.PreviewEntities[1]),

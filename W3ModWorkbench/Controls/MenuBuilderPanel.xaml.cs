@@ -55,7 +55,7 @@ public partial class MenuBuilderPanel : UserControl
         public override string ToString() => Label;
     }
 
-    private static readonly KindChoice[] Kinds =
+    private static KindChoice[] Kinds =>
     [
         new(MenuVarKind.Toggle, L.T("MenuBuilderPanel.ToggleOff")),
         new(MenuVarKind.Slider, L.T("MenuBuilderPanel.Slider")),

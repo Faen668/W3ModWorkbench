@@ -39,7 +39,7 @@ public partial class TextureWindow : Window, IMessageHost
     private double _zoom = 1;
 
     private TextureWindow(string path, string title, string detail, TextureInfo? info, Func<byte[]> readPixels, DecodedImage? picture, int mips,
-        List<(string Name, string Value)> facts, Func<byte[]?>? resource, ResourceLocator? locator, int slice = 0)
+        List<(string Name, string Value)> facts, Func<byte[]?>? resource, ResourceLocator? locator, int slice = 0, string? origin = null)
     {
         InitializeComponent();
         _locator = locator ?? GameLocatorOnly();
@@ -49,7 +49,7 @@ public partial class TextureWindow : Window, IMessageHost
         _picture = picture;
         _facts = facts;
         _resource = resource;
-        _origin = facts.FirstOrDefault(f => f.Name == "Cache").Value;
+        _origin = origin;
         Title = L.T("TextureWindow.Texture2", title);
         int width = info?.Width ?? picture!.Width, height = info?.Height ?? picture!.Height;
         for (int level = 0; level < mips; level++)
@@ -119,7 +119,7 @@ public partial class TextureWindow : Window, IMessageHost
         {
             using var fs = new FileStream(archive.FilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
             return TextureCacheArchive.ReadPixels(fs, info);
-        }, null, info.Mips, CacheFacts(entry), resource, locator, slice).Standalone(owner).Show();
+        }, null, info.Mips, CacheFacts(entry), resource, locator, slice, archive.FilePath).Standalone(owner).Show();
     }
 
     /// <summary>

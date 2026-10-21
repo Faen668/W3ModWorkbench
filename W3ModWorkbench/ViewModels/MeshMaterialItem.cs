@@ -7,7 +7,7 @@ using W3ModWorkbench.Localisation;
 namespace W3ModWorkbench.ViewModels;
 
 /// <summary>A texture that can be put on a material's chunks: one of the material's own, or any other picked.</summary>
-public sealed record TextureChoice(string Label, string? Path);
+public sealed record TextureChoice(string Label, string? Path, bool Picked = false);
 
 /// <summary>
 /// One of a mesh's materials in the mesh viewer: where it's from, its parameters and textures, and the texture its
@@ -62,7 +62,7 @@ public sealed class MeshMaterialItem : INotifyPropertyChanged
     public ObservableCollection<MaterialParameterItem> Parameters { get; } = [];
     public string ParametersHeader => L.T("MeshMaterialItem.ParametersOwn", Parameters.Count, Current.Own.Count);
     public List<MaterialTexture> Textures => Current.Textures;
-    public Visibility ResetVisibility => !NeedsSave && !Options.Any(o => o.Label.StartsWith("Picked:")) ? Visibility.Collapsed : Visibility.Visible;
+    public Visibility ResetVisibility => !NeedsSave && !Options.Any(o => o.Picked) ? Visibility.Collapsed : Visibility.Visible;
 
     public TextureChoice? Selected
     {
@@ -117,7 +117,7 @@ public sealed class MeshMaterialItem : INotifyPropertyChanged
     {
         Current = Current.WithOwn(own);
         IsEdited = true;
-        Fill(Current, Options.FirstOrDefault(o => o.Label.StartsWith("Picked:")) is { } picked && ReferenceEquals(picked, _selected) ? picked.Path : null);
+        Fill(Current, Options.FirstOrDefault(o => o.Picked) is { } picked && ReferenceEquals(picked, _selected) ? picked.Path : null);
         _changed(this);
     }
 
@@ -136,7 +136,7 @@ public sealed class MeshMaterialItem : INotifyPropertyChanged
         Options.Clear();
         foreach (var texture in material.Textures.Where(t => t.Path.EndsWith(".xbm", StringComparison.OrdinalIgnoreCase)))
             Options.Add(new TextureChoice($"{texture.Parameter}: {System.IO.Path.GetFileName(texture.Path)}", texture.Path));
-        if (picked is not null) Options.Insert(0, new TextureChoice(L.T("MeshMaterialItem.Picked", System.IO.Path.GetFileName(picked)), picked));
+        if (picked is not null) Options.Insert(0, new TextureChoice(L.T("MeshMaterialItem.Picked", System.IO.Path.GetFileName(picked)), picked, Picked: true));
         Options.Add(new TextureChoice(L.T("MeshMaterialItem.NonePlainGrey"), null));
         var diffuse = material.Diffuse;
         _selected = picked is not null ? Options[0]

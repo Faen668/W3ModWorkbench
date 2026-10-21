@@ -28,7 +28,7 @@ public sealed class JobTreePreview : Grid, ITreePreview
     private (string Set, string Animation)? _played;
     private bool _entityPicked, _syncing;
 
-    private static readonly string[] EntityNames = [L.T("JobTreePreview.Man"), L.T("JobTreePreview.Woman"), L.T("JobTreePreview.Child"), L.T("JobTreePreview.Dwarf")];
+    private static string[] EntityNames => [L.T("JobTreePreview.Man"), L.T("JobTreePreview.Woman"), L.T("JobTreePreview.Child"), L.T("JobTreePreview.Dwarf")];
 
     public FrameworkElement View => this;
 

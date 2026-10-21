@@ -21,7 +21,7 @@ public static class DataViewers
         (path, source, data, locator, owner, archive) => TreeFileWindow.Open(path, source, data, read, kind, locator, owner, archive, extra),
         (file, locator, owner) => TreeFileWindow.OpenFile(file, read, kind, locator, owner, extra));
 
-    private static readonly Viewer[] Viewers =
+    private static Viewer[] Viewers =>
     [
         Tree(L.T("DataViewers.SpawnTree"), SpawnTreeFile.IsSpawnTree, SpawnTreeFile.Read),
         Tree(L.T("DataViewers.SteeringGraph"), SteeringFile.IsSteering, SteeringFile.Read),

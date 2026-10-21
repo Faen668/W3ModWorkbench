@@ -84,7 +84,7 @@ public partial class MaterialWindow : Window, IMessageHost
     }
 
     // shapes the game itself has, so the preview needs nothing but the game
-    private static readonly Shape[] Shapes =
+    private static Shape[] Shapes =>
     [
         new(L.T("MaterialWindow.Sphere"), @"engine\reference_level\level_assets\tags\materials\sphere.w2mesh", ShapeKind.Shape),
         new(L.T("MaterialWindow.Box"), @"engine\meshes\editor\box.w2mesh", ShapeKind.Shape),

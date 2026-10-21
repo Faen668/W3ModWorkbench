@@ -274,15 +274,17 @@ public partial class UsageGraphWindow : Window
     /// <summary>The mod a box's file belongs to, or "Game Script" for the game's own scripts.</summary>
     private static string OriginOf(ScriptFile file)
     {
-        if (file.Source.Equals(L.T("Common.GameScripts"), StringComparison.OrdinalIgnoreCase) || W3ModWorkbench.Core.Scripts.ScriptFolder.IsGameScripts(file.SourceKey)) return L.T("UsageGraphWindow.GameScript");
+        if (W3ModWorkbench.Core.Scripts.ScriptFolder.IsGameScripts(file.SourceKey)) return L.T("UsageGraphWindow.GameScript");
+        // a mod's loose scripts are indexed from mods\<mod>\content\scripts: the mod is the folder's name, not the label
+        string scripts = file.SourceKey.TrimEnd('\\', '/');
+        string? content = System.IO.Path.GetDirectoryName(scripts), mod = content is null ? null : System.IO.Path.GetDirectoryName(content);
+        if (mod is not null && System.IO.Path.GetFileName(scripts).Equals("scripts", StringComparison.OrdinalIgnoreCase)
+            && System.IO.Path.GetFileName(content).Equals("content", StringComparison.OrdinalIgnoreCase)
+            && System.IO.Path.GetFileName(System.IO.Path.GetDirectoryName(mod)).Equals("mods", StringComparison.OrdinalIgnoreCase))
+            return System.IO.Path.GetFileName(mod);
         string name = file.Source;
         int slash = name.IndexOf('\\');
-        if (slash > 0) name = name[..slash];
-        // the scripts index names a mod's loose scripts with this label: the mod's name is what's around the placeholder
-        string[] around = L.T("ScriptCorpus.LooseScripts", "\u0001").Split('\u0001');
-        return around.Length == 2 && name.Length > around[0].Length + around[1].Length
-            && name.StartsWith(around[0], StringComparison.OrdinalIgnoreCase) && name.EndsWith(around[1], StringComparison.OrdinalIgnoreCase)
-            ? name[around[0].Length..^around[1].Length] : name;
+        return slash > 0 ? name[..slash] : name;
     }
 
     private static ToolTip SitesTip(UsageEdge edge)

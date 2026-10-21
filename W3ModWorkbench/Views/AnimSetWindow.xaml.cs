@@ -34,7 +34,7 @@ public partial class AnimSetWindow : Window, IMessageHost
     private Cr2wFile? _redkit;
     private bool _syncing;
 
-    private static readonly (string Name, string Path)[] People =
+    private static (string Name, string Path)[] People =>
     [
         ("Geralt", @"characters\player_entities\geralt\geralt_player.w2ent"),
         (L.T("AnimSetWindow.Man"), JobTreeFile.PreviewEntities[0]), (L.T("AnimSetWindow.Woman"), JobTreeFile.PreviewEntities[1]),
