@@ -464,6 +464,17 @@ public sealed partial class HelpRenderer(FrameworkElement owner, Action<string> 
         "NULL", "out", "optional", "saved", "editable", "const", "inlined", "hint", "final", "cleanup", "reward", "autobind", "single",
     };
 
+    private static readonly HashSet<string> PythonKeywords = new(StringComparer.Ordinal)
+    {
+        "import", "from", "as", "def", "class", "return", "if", "elif", "else", "for", "while", "in", "not", "and", "or", "is",
+        "with", "try", "except", "finally", "raise", "pass", "break", "continue", "lambda", "yield", "None", "True", "False", "print",
+    };
+
+    private static readonly HashSet<string> PowerShellKeywords = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "foreach", "if", "else", "elseif", "function", "param", "return", "in", "while", "for", "switch", "try", "catch", "finally",
+    };
+
     private static readonly HashSet<string> Types = new(StringComparer.Ordinal) { "int", "float", "bool", "string", "name", "array", "byte", "Uint64", "Int32" };
 
     private void Colour(InlineCollection inlines, string code, string language)
@@ -474,14 +485,15 @@ public sealed partial class HelpRenderer(FrameworkElement owner, Action<string> 
                 foreach (var (text, kind) in WitcherScriptTokens(code)) inlines.Add(Token(text, kind));
                 break;
             case "xml":
-                foreach (Match m in Regex.Matches(code, @"(<!--.*?-->)|(</?[\w:.\-]+)|([\w:.\-]+)(=)(""[^""]*"")|(/?>)|([^<]+)", RegexOptions.Singleline))
+                // spaces and words one at a time, so the space before an attribute doesn't take the attribute with it
+                foreach (Match m in Regex.Matches(code, @"(<!--.*?-->)|(</?[\w:.\-]+|<\?[\w:.\-]+)|([\w:.\-]+)(\s*=\s*)(""[^""]*""|'[^']*')|(/?>|\?>)|(\s+|[^<\s=/>?]+|.)", RegexOptions.Singleline))
                 {
                     if (m.Groups[1].Success) inlines.Add(Token(m.Value, "comment"));
                     else if (m.Groups[2].Success) inlines.Add(Token(m.Value, "keyword"));
                     else if (m.Groups[3].Success)
                     {
                         inlines.Add(Token(m.Groups[3].Value, "type"));
-                        inlines.Add(new Run("="));
+                        inlines.Add(new Run(m.Groups[4].Value));
                         inlines.Add(Token(m.Groups[5].Value, "string"));
                     }
                     else if (m.Groups[6].Success) inlines.Add(Token(m.Value, "keyword"));
@@ -498,12 +510,44 @@ public sealed partial class HelpRenderer(FrameworkElement owner, Action<string> 
                 }
                 if (at < code.Length) inlines.Add(new Run(code[at..]));
                 break;
-            case "py" or "python" or "ini" or "ps" or "powershell":
-                foreach (string line in code.Split('\n').Select((l, i) => i == 0 ? l : "\n" + l))
+            case "ini":
+                // [Section] as a keyword, the key as a type, the value as a string, ; comments
+                foreach (Match m in Regex.Matches(code, @"^([ \t]*)(?:(;[^\n]*)|(\[[^\]\n]*\])|([^=\n;]+?)([ \t]*=[ \t]*)([^\n]*)|([^\n]*))", RegexOptions.Multiline))
                 {
-                    int hash = line.IndexOf(language is "ini" ? ';' : '#');
-                    if (hash >= 0) { inlines.Add(new Run(line[..hash])); inlines.Add(Token(line[hash..], "comment")); }
-                    else inlines.Add(new Run(line));
+                    if (m.Index > 0 && code[m.Index - 1] == '\n') inlines.Add(new Run("\n"));
+                    inlines.Add(new Run(m.Groups[1].Value));
+                    if (m.Groups[2].Success) inlines.Add(Token(m.Groups[2].Value, "comment"));
+                    else if (m.Groups[3].Success) inlines.Add(Token(m.Groups[3].Value, "keyword"));
+                    else if (m.Groups[4].Success)
+                    {
+                        inlines.Add(Token(m.Groups[4].Value, "type"));
+                        inlines.Add(new Run(m.Groups[5].Value));
+                        inlines.Add(Token(m.Groups[6].Value, "string"));
+                    }
+                    else inlines.Add(new Run(m.Groups[7].Value));
+                }
+                break;
+            case "cmd" or "bat":
+                // each line's command as a keyword, its switches as types, quoted text as strings, REM and :: comments
+                foreach (Match m in Regex.Matches(code, @"(^[ \t]*(?:rem\b|::)[^\n]*)|(^[ \t]*[^\s""]+)|(""[^""\n]*"")|((?<=\s)--?[\w-]+|(?<=\s)/[A-Za-z?]\b)|(\s+|[^\s""]+)", RegexOptions.Multiline | RegexOptions.IgnoreCase))
+                {
+                    if (m.Groups[1].Success) inlines.Add(Token(m.Value, "comment"));
+                    else if (m.Groups[2].Success) inlines.Add(Token(m.Value, "keyword"));
+                    else if (m.Groups[3].Success) inlines.Add(Token(m.Value, "string"));
+                    else if (m.Groups[4].Success) inlines.Add(Token(m.Value, "type"));
+                    else inlines.Add(new Run(m.Value));
+                }
+                break;
+            case "py" or "python" or "ps" or "powershell":
+                var words = language is "py" or "python" ? PythonKeywords : PowerShellKeywords;
+                foreach (Match m in Regex.Matches(code, @"(#[^\n]*)|(""(?:\\.|[^""\\\n])*""|'(?:\\.|[^'\\\n])*')|(\$\w+|-[A-Za-z]\w*)|(\b\d+(?:\.\d+)?\b)|([A-Za-z_]\w*)|(\s+|.)"))
+                {
+                    if (m.Groups[1].Success) inlines.Add(Token(m.Value, "comment"));
+                    else if (m.Groups[2].Success) inlines.Add(Token(m.Value, "string"));
+                    else if (m.Groups[3].Success && language is "ps" or "powershell") inlines.Add(Token(m.Value, "type"));
+                    else if (m.Groups[4].Success) inlines.Add(Token(m.Value, "number"));
+                    else if (m.Groups[5].Success) inlines.Add(Token(m.Value, words.Contains(m.Value) ? "keyword" : ""));
+                    else inlines.Add(new Run(m.Value));
                 }
                 break;
             default:

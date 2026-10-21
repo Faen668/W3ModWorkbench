@@ -1086,7 +1086,7 @@ public partial class PreviewDocument : UserControl
                 count += files.Count;
             }
             return (rows, count == 1 ? L.T("PreviewDocument.Change") : L.T("PreviewDocument.Changes2", count));
-        }, L.T("PreviewDocument.NothingScriptsSearchedChanges"));
+        }, workspace.GameScriptsFolder is null ? L.T("PreviewDocument.ChangesNoGame") : L.T("PreviewDocument.NothingScriptsSearchedChanges"));
     }
 
     /// <summary>Shift+Alt+H: a class's bases, subtypes and states, or a function's base versions and overrides.</summary>
@@ -2163,6 +2163,16 @@ public partial class PreviewDocument : UserControl
 
     private void NextDiff_Click(object sender, RoutedEventArgs e) => GoToDifference(1);
 
+    private void PreviousDiff_Click(object sender, RoutedEventArgs e) => GoToDifference(-1);
+
+    /// <summary>The search bar over the file, as Ctrl+F opens it, with the selected text to look for.</summary>
+    private void FindInFile_Click(object sender, RoutedEventArgs e)
+    {
+        if (Editor.SelectionLength > 0 && !Editor.SelectedText.Contains('\n')) _search.SearchPattern = Editor.SelectedText;
+        _search.Open();
+        _search.Reactivate();
+    }
+
     private void ClearDiff_Click(object sender, RoutedEventArgs e) => Host?.StopComparing(this);
 
     // ---------------------------------------------------------------- message card
@@ -2252,7 +2262,7 @@ public partial class PreviewDocument : UserControl
             : L.T("PreviewDocument.OpensGamesVersionBeside");
         CompareOpenMenuItem.IsEnabled = Host?.HasOtherFiles(this) == true;
         SnippetMenuItem.IsEnabled = CompleteMenuItem.IsEnabled = RefactorMenuItem.IsEnabled = FormatMenuItem.IsEnabled = !Editor.IsReadOnly;
-        NextDiffMenuItem.Visibility = ClearDiffMenuItem.Visibility = HasDiff ? Visibility.Visible : Visibility.Collapsed;
+        NextDiffMenuItem.Visibility = PreviousDiffMenuItem.Visibility = ClearDiffMenuItem.Visibility = HasDiff ? Visibility.Visible : Visibility.Collapsed;
     }
 
     /// <summary>Underlines the name a Ctrl+click would follow.</summary>

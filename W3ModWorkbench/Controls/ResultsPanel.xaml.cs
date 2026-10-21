@@ -258,7 +258,7 @@ public partial class ResultsPanel : UserControl
         SetTitle(title, "");
         _rows = [];
         List.ItemsSource = null;
-        FoldButton.Visibility = Visibility.Collapsed;
+        FoldButton.Visibility = PreviousButton.Visibility = NextButton.Visibility = Visibility.Collapsed;
         StatusText.Text = status;
         Busy.Visibility = Visibility.Visible;
         StatusPanel.Visibility = Visibility.Visible;
@@ -279,6 +279,7 @@ public partial class ResultsPanel : UserControl
         StatusText.Text = empty;
         StatusPanel.Visibility = rows.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         FoldButton.Visibility = rows.Count(r => r.IsHeader) > 1 ? Visibility.Visible : Visibility.Collapsed;
+        PreviousButton.Visibility = NextButton.Visibility = rows.Count(r => r.CanOpen) > 1 ? Visibility.Visible : Visibility.Collapsed;
         Refresh();
         if (rows.Count > 0) List.ScrollIntoView(rows[0]);
     }
@@ -381,6 +382,15 @@ public partial class ResultsPanel : UserControl
         List.SelectedItem = row;
         List.ScrollIntoView(row);
         return row;
+    }
+
+    private void Previous_Click(object sender, RoutedEventArgs e) => StepAndOpen(-1);
+
+    private void Next_Click(object sender, RoutedEventArgs e) => StepAndOpen(1);
+
+    private void StepAndOpen(int step)
+    {
+        if (Step(step) is { } row) Open?.Invoke(row, false);
     }
 
     private void Activate(ResultRow row)

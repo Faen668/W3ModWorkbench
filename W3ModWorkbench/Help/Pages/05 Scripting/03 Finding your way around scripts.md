@@ -32,7 +32,7 @@ Some classes, structs, enums and global functions have no script at all: the eng
 
 ## Who uses this, who changes this
 
-These open a list under the files. Click a line to go there; {{F4}} and {{Shift+F4}} step through it.
+These open a list under the files. Click a line to go there; the arrows at the top of the list, or {{F4}} and {{Shift+F4}}, step through it.
 
 | Command | Lists |
 |---|---|
@@ -42,7 +42,13 @@ These open a list under the files. Click a line to go there; {{F4}} and {{Shift+
 | **Show usage graph** | a picture of what calls a function, and what calls those, up to six levels |
 | **Find in files** ({{Ctrl+Shift+F}}) | plain text through every script |
 
+**Who else changes this** is for one of the game's functions or classes, or your own wrap of one: put the cursor on its name. On `OnSpawned` in `game\player\playerWitcher.ws`, it lists every `@wrapMethod` of it, yours and the installed mods', each with its mod:
+
+![Who else changes W3PlayerWitcher.OnSpawned: this project and two installed mods](bench-changes.jpg)
+
+It looks through your project, the other open projects, every mod in the game's `mods` folder (compiled ones too) and the game's scripts. An empty list means nothing you have installed changes it, which is the case for most of the game's functions. Try it on one a mod you have is known to change.
+
 ## Comparing
 
-- On a mod's copy of one of the game's scripts, **Compare with game version** opens the game's beside it with the differences marked: green added, red removed, amber changed. {{F8}} steps through them.
+- On a mod's copy of one of the game's scripts, **Compare with game version** opens the game's beside it with the differences marked: green added, red removed, amber changed. **Next difference** and **Previous difference** on the right-click menu ({{F8}} and {{Shift+F8}}) step through them.
 - **Compare with an open file** compares any two open files.

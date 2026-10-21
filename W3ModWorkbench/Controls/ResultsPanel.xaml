@@ -104,6 +104,17 @@
                         Background="Transparent" BorderThickness="0" Focusable="False" ToolTip="{l:T Common.CloseEsc}" Click="Close_Click">
                     <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE711;" FontSize="10" />
                 </Button>
+                <!-- F4 and Shift+F4 as buttons: the next or previous place, opened -->
+                <Button x:Name="NextButton" DockPanel.Dock="Right" Width="28" Height="28" MinWidth="0" Padding="0" Margin="0,0,4,0"
+                        Background="Transparent" BorderThickness="0" Focusable="False" Click="Next_Click" Visibility="Collapsed"
+                        ToolTip="{l:T ResultsPanel.NextPlace}">
+                    <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE70D;" FontSize="12" />
+                </Button>
+                <Button x:Name="PreviousButton" DockPanel.Dock="Right" Width="28" Height="28" MinWidth="0" Padding="0" Margin="0,0,2,0"
+                        Background="Transparent" BorderThickness="0" Focusable="False" Click="Previous_Click" Visibility="Collapsed"
+                        ToolTip="{l:T ResultsPanel.PreviousPlace}">
+                    <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE70E;" FontSize="12" />
+                </Button>
                 <Button x:Name="FoldButton" DockPanel.Dock="Right" Width="28" Height="28" MinWidth="0" Padding="0" Margin="0,0,4,0"
                         Background="Transparent" BorderThickness="0" Focusable="False" Click="Fold_Click" Visibility="Collapsed">
                     <TextBlock x:Name="FoldIcon" FontFamily="{StaticResource IconFont}" FontSize="12" />

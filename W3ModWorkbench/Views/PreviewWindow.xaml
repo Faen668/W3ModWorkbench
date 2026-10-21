@@ -139,6 +139,9 @@
                         ToolTip="{l:T PreviewWindow.StubGeneratorWriteWrap}">
                     <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE70F;" VerticalAlignment="Center" />
                 </Button>
+                <ToggleButton x:Name="HintsButton" Margin="4,0,0,0" Click="Hints_Click" Padding="10,6">
+                    <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE8EC;" VerticalAlignment="Center" />
+                </ToggleButton>
                 <Button x:Name="BuildButton" Margin="4,0,0,0" Click="Build_Click" Padding="10,6" ToolTipService.ShowOnDisabled="True"
                         ToolTip="{l:T PreviewWindow.BuildModCtrlShift}">
                     <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE90F;" VerticalAlignment="Center" />

@@ -9,7 +9,8 @@ keywords: edit type autocomplete suggest snippets ctrl+j rename f2 save encoding
 
 - Type straight into one of your project's scripts. {{Ctrl+Z}} and {{Ctrl+Y}} undo and redo.
 - A dot on the tab, `●` in the title and **not saved** under the name mark changes that aren't saved.
-- **Save** ({{Ctrl+S}}) writes the file in the encoding it had, so nothing changes but what you typed. {{Ctrl+Shift+S}} saves every changed file.
+- **Save** ({{Ctrl+S}}) writes the file in the encoding it had, so nothing changes but what you typed. **Save all** on a tab's right-click menu ({{Ctrl+Shift+S}}) saves every changed file.
+- **Find in this file** on the right-click menu ({{Ctrl+F}}) opens the search bar over the file, with what's selected to look for. {{F3}} and {{Shift+F3}}, or its arrows, go to the next and previous match.
 - Closing with changes asks first: **Save**, **Don't save**, or **Cancel**.
 
 ## Names as you type
@@ -38,7 +39,7 @@ The game's scripts and your installed mods are read once, when Script Bench open
 
 ## Parameter names and unused names
 
-- Small labels before each argument say which parameter it fills: `MaxF(a: total, b: 100.0)`. By default they show while {{Ctrl+Alt}} is held, so the code looks as it is until you want to know; [[Settings]] can show them always, or never.
+- Small labels before each argument say which parameter it fills: `MaxF(a: total, b: 100.0)`. By default they show while {{Ctrl+Alt}} is held, so the code looks as it is until you want to know. The tag button in Script Bench's toolbar shows them all the time, and [[Settings]] can turn them off.
 - A local variable, parameter or private field that's never used is faded, so leftovers stand out. Rest the mouse on one to see why. A parameter the function can't do without isn't faded: an event's, a timer's, or one a wrapped or overriding function has to keep.
 
 ![Parameter names in calls, and unused names faded](bench-hints.jpg)

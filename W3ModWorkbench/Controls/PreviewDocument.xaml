@@ -153,7 +153,8 @@
                                            LineNumbersForeground="{DynamicResource TextFillColorTertiaryBrush}">
                         <!-- only scripts keep this menu: other files get none -->
                         <avalonEdit:TextEditor.ContextMenu>
-                            <ContextMenu Opened="ContextMenu_Opened">
+                            <!-- in the app's font: a menu takes the editor's code font otherwise -->
+                            <ContextMenu Opened="ContextMenu_Opened" FontFamily="{x:Static SystemFonts.MessageFontFamily}" FontSize="14">
                                 <MenuItem Header="{l:T PreviewDocument.GoDefinition}" InputGestureText="F12" Click="GoToDefinition_Click" />
                                 <MenuItem Header="{l:T PreviewDocument.OpenDefinitionSide}" InputGestureText="Ctrl+F12" Click="GoToDefinitionSide_Click" />
                                 <MenuItem Header="{l:T PreviewDocument.FindAllReferences}" InputGestureText="Shift+F12" Click="FindReferences_Click" />
@@ -178,10 +179,13 @@
                                 <MenuItem x:Name="BackMenuItem" Header="{l:T PreviewDocument.Back}" InputGestureText="Alt+Left" Click="Back_Click" />
                                 <MenuItem x:Name="ForwardMenuItem" Header="{l:T PreviewDocument.Forward}" InputGestureText="Alt+Right" Click="Forward_Click" />
                                 <MenuItem Header="{l:T PreviewDocument.GoSymbolFile}" Click="GoToSymbolInFile_Click" />
+                                <MenuItem Header="{l:T ScriptBench.Menu.FindInFile}" InputGestureText="Ctrl+F" Click="FindInFile_Click"
+                                          ToolTip="{l:T ScriptBench.Menu.FindInFileTip}" />
                                 <Separator />
                                 <MenuItem x:Name="CompareGameMenuItem" Header="{l:T PreviewDocument.CompareGameVersion}" Click="CompareGame_Click" />
                                 <MenuItem x:Name="CompareOpenMenuItem" Header="{l:T PreviewDocument.CompareOpenFile}" Click="CompareOpen_Click" />
                                 <MenuItem x:Name="NextDiffMenuItem" Header="{l:T PreviewDocument.NextDifference}" InputGestureText="F8" Click="NextDiff_Click" />
+                                <MenuItem x:Name="PreviousDiffMenuItem" Header="{l:T ScriptBench.Menu.PreviousDifference}" InputGestureText="Shift+F8" Click="PreviousDiff_Click" />
                                 <MenuItem x:Name="ClearDiffMenuItem" Header="{l:T PreviewDocument.StopComparing}" Click="ClearDiff_Click" />
                                 <Separator />
                                 <MenuItem Header="{l:T Common.Copy}" Command="ApplicationCommands.Copy" />

@@ -22,18 +22,18 @@ Find in files lives in [[Script Bench]]: press {{Ctrl+Shift+F}} there, or use th
    - **A folder…** of your choosing, which then stays in the list.
 4. **Files** narrows it by file name, or by path when the pattern has a `\` in it. Use `;` between patterns and `!` to leave some out. Leave it empty to search every script.
 
-```ini title="Files patterns"
-player*            files whose names start with player
-game\gui\*         everything under the game's gui folder
-*menu*; !*old*     names with menu in them, but not old
-```
+| In **Files** | Finds |
+|---|---|
+| `player*` | files whose names start with player |
+| `game\gui\*` | everything under the game's gui folder |
+| `*menu*; !*old*` | names with menu in them, but not old |
 
-```ini title="Regular expressions (with .* on)"
-Get\w+Price\(          GetItemPrice(, GetItemPriceModified( ...
-^\s*@wrapMethod        every wrapped method
-FactsAdd\("q1\d\d      facts of the q1xx quests being set
-```
+| A regular expression (with **.\*** on) | Finds |
+|---|---|
+| `Get\w+Price\(` | `GetItemPrice(`, `GetItemPriceModified(` … |
+| `^\s*@wrapMethod` | every wrapped method |
+| `FactsAdd\("q1\d\d` | facts of the q1xx quests being set |
 
-Every match is listed under its file with its line number. Click one, or press {{Enter}}, to open it at the match. {{F4}} and {{Shift+F4}} step through them, and clicking a file's name folds its lines. A script you've changed but not saved is searched as it is in its tab.
+Every match is listed under its file with its line number. Click one, or press {{Enter}}, to open it at the match. The arrows at the top of the list, or {{F4}} and {{Shift+F4}}, step through them, and clicking a file's name folds its lines. A script you've changed but not saved is searched as it is in its tab.
 
 > tip: To find where one particular function or variable is used, rather than every place its name is written, right-click it and choose **Find references** ({{Shift+F12}}). See [[Finding your way around scripts]].

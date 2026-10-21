@@ -577,6 +577,8 @@ public partial class PreviewWindow : Window, IMessageHost
         Add(L.T("Common.CopyPath"), () => Clipboard.SetText(doc.Item.Path));
         Add(L.T("PreviewWindow.OpenExternalEditor"), () => OpenExternally(doc));
         if (doc.IsEditable) Add(L.T("Common.Save"), () => doc.Save(), doc.IsDirty, "Ctrl+S");
+        var unsaved = AllOpenDocuments().Where(d => d.IsDirty).ToList();
+        if (unsaved.Count > 0 || doc.IsEditable) Add(L.T("PreviewWindow.SaveAll"), () => SaveAll(unsaved), unsaved.Count > 0, "Ctrl+Shift+S");
         Add(L.T("Common.Save3"), () => doc.SaveAs());
     }
 
@@ -1081,8 +1083,9 @@ public partial class PreviewWindow : Window, IMessageHost
             : L.T("PreviewWindow.NoChangesSave");
         EditButton.Visibility = CanEditAsProject(doc) ? Visibility.Visible : Visibility.Collapsed;
         var scriptTools = _isBench || doc.Item.IsScript ? Visibility.Visible : Visibility.Collapsed;
-        foreach (var tool in new UIElement[] { BackButton, ForwardButton, HistoryButton, GoToSymbolButton, FindInFilesButton, SnippetButton, StubButton, BuildButton, ScriptToolsDivider })
+        foreach (var tool in new UIElement[] { BackButton, ForwardButton, HistoryButton, GoToSymbolButton, FindInFilesButton, SnippetButton, StubButton, HintsButton, BuildButton, ScriptToolsDivider })
             tool.Visibility = scriptTools;
+        UpdateHintsButton();
         GoToSymbolButton.IsEnabled = ScriptDocument() is not null;
         SnippetButton.IsEnabled = doc.CanNavigate;
         BuildButton.IsEnabled = ProjectWorkspace.Current is not null;
@@ -1557,6 +1560,21 @@ public partial class PreviewWindow : Window, IMessageHost
 
 
     private void Split_Click(object sender, RoutedEventArgs e) => ToggleSplit();
+
+    /// <summary>The names of parameters in calls, always shown or not: Off and While Ctrl+Alt is held stay in Settings.</summary>
+    private void UpdateHintsButton()
+    {
+        bool always = App.Settings.ParameterHints == "Always";
+        HintsButton.IsChecked = always;
+        HintsButton.ToolTip = always ? L.T("ScriptBench.Hints.ShownTip") : L.T("ScriptBench.Hints.HiddenTip");
+    }
+
+    private void Hints_Click(object sender, RoutedEventArgs e)
+    {
+        App.Settings.ParameterHints = HintsButton.IsChecked == true ? "Always" : "Held";
+        App.Settings.Save();
+        ApplySettings();
+    }
 
     private void Back_Click(object sender, RoutedEventArgs e) => GoBack();
 
