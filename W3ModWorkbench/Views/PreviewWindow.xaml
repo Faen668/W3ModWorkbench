@@ -21,6 +21,9 @@
     <!-- Script Bench: the project's scripts, the game's and the installed mods' -->
     <DockPanel x:Name="BenchPanel" Visibility="Collapsed" Margin="12,12,0,14">
         <DockPanel DockPanel.Dock="Top" Margin="0,0,0,8">
+            <Button DockPanel.Dock="Right" Click="BenchHide_Click" Padding="8,5" Margin="4,0,0,0" ToolTip="{l:T PreviewWindow.HideScriptsPane}">
+                <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE89F;" VerticalAlignment="Center" />
+            </Button>
             <Button DockPanel.Dock="Right" Click="BenchCollapse_Click" Padding="8,5" Margin="4,0,0,0" ToolTip="{l:T PreviewWindow.CollapseEveryFolder}">
                 <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE8C5;" VerticalAlignment="Center" />
             </Button>
@@ -99,6 +102,29 @@
             </TreeView.ContextMenu>
         </TreeView>
     </DockPanel>
+    <!-- the tree folded away: a thin strip down the window's edge, all of it the button that slides it back out -->
+    <Button x:Name="BenchShowButton" Visibility="Collapsed" Margin="0,12,0,14" Click="BenchShow_Click" Cursor="Hand"
+            ToolTip="{l:T PreviewWindow.ShowScriptsPane}" Focusable="False">
+        <Button.Template>
+            <ControlTemplate TargetType="Button">
+                <Border x:Name="Strip" CornerRadius="0,4,4,0" Background="Transparent">
+                    <TextBlock x:Name="Arrow" FontFamily="{StaticResource IconFont}" Text="&#xE76C;" FontSize="10"
+                               HorizontalAlignment="Center" VerticalAlignment="Center" Opacity="0.6"
+                               Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                </Border>
+                <ControlTemplate.Triggers>
+                    <Trigger Property="IsMouseOver" Value="True">
+                        <Setter TargetName="Strip" Property="Background" Value="{DynamicResource SubtleFillColorSecondaryBrush}" />
+                        <Setter TargetName="Arrow" Property="Opacity" Value="1" />
+                        <Setter TargetName="Arrow" Property="Foreground" Value="{DynamicResource AccentTextFillColorPrimaryBrush}" />
+                    </Trigger>
+                    <Trigger Property="IsPressed" Value="True">
+                        <Setter TargetName="Strip" Property="Background" Value="{DynamicResource SubtleFillColorTertiaryBrush}" />
+                    </Trigger>
+                </ControlTemplate.Triggers>
+            </ControlTemplate>
+        </Button.Template>
+    </Button>
     <GridSplitter x:Name="BenchSplitter" Grid.Column="1" Width="10" Visibility="Collapsed" HorizontalAlignment="Stretch"
                   ResizeDirection="Columns" ResizeBehavior="PreviousAndNext" Background="Transparent" Focusable="False" />
 

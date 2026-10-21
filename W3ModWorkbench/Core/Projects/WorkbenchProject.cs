@@ -34,9 +34,6 @@ public sealed class WorkbenchProject
     /// <summary>The mod's scripts folder, relative to the project file. Everything in it is part of the project and is what Compile builds.</summary>
     public string ScriptsFolder { get; set; } = "scripts";
 
-    /// <summary>Where Compile writes the .rsblob: relative to the project file, or a full path. Asked for the first time when empty.</summary>
-    public string? CompileOutput { get; set; }
-
     /// <summary>
     /// Whether Build puts the scripts in the mod's <c>content\scripts</c> as they are, as the mod's source beside the
     /// compiled <c>content\precompiled.rsblob</c> that Build always makes. Off when it isn't set.
@@ -112,9 +109,6 @@ public sealed class WorkbenchProject
         if (joined.Length == 0) joined = "Mod";
         return joined.StartsWith("mod", StringComparison.OrdinalIgnoreCase) ? "mod" + joined[3..] : "mod" + joined;
     }
-
-    /// <summary>The compiled scripts' file, as a full path, or null while none is chosen.</summary>
-    [JsonIgnore] public string? CompileOutputPath => string.IsNullOrWhiteSpace(CompileOutput) ? null : Resolve(CompileOutput);
 
     // ---------------------------------------------------------------- files
 

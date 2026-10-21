@@ -63,6 +63,7 @@ public static class StandaloneCompiler
             progress?.Report("Compiling…");
             var (blob, problems) = Build(project, Overriding(vanilla, gameScripts, project), installed, Rtti.LoadBuiltIn(), log, cancel);
             if (blob is null) return Failed(problems, log);
+            messages.AddRange(problems);
 
             Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(output))!);
             File.WriteAllBytes(output, blob);
@@ -137,7 +138,7 @@ public static class StandaloneCompiler
 
     /// <summary>
     /// Compiles the parsed project against the game's and the installed mods' declarations and the engine's: the
-    /// blob, or null with the problems. Nothing is written. The game's and the mods' files are only read, so the same
+    /// blob, or null with the problems. A blob comes with its warnings, if any, as problems that aren't errors. Nothing is written. The game's and the mods' files are only read, so the same
     /// ones can be used for compile after compile.
     /// </summary>
     internal static (byte[]? Blob, List<CompileMessage> Problems) Build(List<SourceFile> project, List<SourceFile> vanillaFiles, List<SourceFile> installed,
@@ -163,17 +164,31 @@ public static class StandaloneCompiler
         symbols.AddRttiProperties(rtti);
         symbols.AddRttiFunctions(rtti);
         if (membersProblem.Count > 0) return (null, membersProblem);
+        var typeProblems = UnknownTypes.Check(symbols, project);
+        if (typeProblems.Count > 0)
+            return (null, [.. typeProblems.Select(p => new CompileMessage(true, p.File, Math.Max(p.Line, 1), p.Text))]);
         var extensionProblems = Extensions.Check(symbols, project);
         if (extensionProblems.Count > 0)
             return (null, [.. extensionProblems.Select(p => new CompileMessage(true, p.File, Math.Max(p.Line, 1), p.Text))]);
+        var (defaultErrors, defaultWarnings) = DefaultValues.Check(symbols, project);
+        if (defaultErrors.Count > 0)
+            return (null, [.. defaultErrors.Select(p => new CompileMessage(true, p.File, Math.Max(p.Line, 1), p.Text))]);
+        // wcc_lite's warnings, pass by pass: incomplete classes, state machines without an autostate, then what compiling the functions finds
+        var found = IncompleteClasses.Check(symbols, project, vanillaFiles.Concat(installed))
+            .Concat(DefaultValues.AutoStates(symbols, project, vanillaFiles.Concat(installed))).Concat(defaultWarnings).ToList();
+        var warnings = new List<CompileMessage>();
+        void AddWarnings() => warnings.AddRange(found.Select(p => new CompileMessage(false, p.File, Math.Max(p.Line, 1), p.Text)));
         cancel.ThrowIfCancellationRequested();
         try
         {
-            return (Assembler.Assemble(symbols, project), []);
+            var blob = Assembler.Assemble(symbols, project, found);
+            AddWarnings();
+            return (blob, warnings);
         }
         catch (CompileFailedException ex)
         {
-            return (null, [.. ex.Problems.Select(p => new CompileMessage(true, p.File, Math.Max(p.Line, 1), p.Text))]);
+            AddWarnings();
+            return (null, [.. ex.Problems.Select(p => new CompileMessage(true, p.File, Math.Max(p.Line, 1), p.Text)), .. warnings]);
         }
     }
 

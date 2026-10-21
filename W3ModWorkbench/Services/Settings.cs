@@ -108,6 +108,9 @@ public sealed class Settings
     /// <summary>The width of Script Bench's tree of scripts.</summary>
     public double BenchTreeWidth { get; set; } = 300;
 
+    /// <summary>Whether Script Bench's tree of scripts is open, or folded away to a strip with a button to open it again.</summary>
+    public bool BenchTreeShown { get; set; } = true;
+
     /// <summary>Where the game strings search reads from: "Game" (the .w3strings files), "REDkit" (its strings database) or "File" (<see cref="StringsDatabasePath"/>).</summary>
     public string GameStringsSource { get; set; } = "Game";
 
@@ -126,9 +129,6 @@ public sealed class Settings
     public bool FindWholeWord { get; set; }
     public bool FindRegex { get; set; }
     public bool FindSubfolders { get; set; } = true;
-
-    /// <summary>Where each scripts folder's compiled blob was last saved, from before projects had a .w3bench file. A new project picks its entry up.</summary>
-    public Dictionary<string, string> CompileOutputs { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>How the main window lists files: Details, or Small, Medium or Large thumbnails.</summary>
     public string FileView { get; set; } = "Details";

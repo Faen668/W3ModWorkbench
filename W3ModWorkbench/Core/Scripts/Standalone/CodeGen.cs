@@ -65,10 +65,15 @@ public sealed partial class FunctionCompiler
     private int _line;
     // what's wrong, statement by statement: like wcc_lite, a function is compiled through to the end to find all of it
     private readonly List<CompileException> _errors = [];
+    // what wcc_lite warns about, which doesn't stop the compile: told as it's found, so an error later in the function doesn't lose it
+    private readonly Action<int, string>? _warn;
+    private readonly FunctionSpecifiers _specifiers;
 
     private FunctionCompiler(Symbols symbols, Tables tables, FunctionDecl decl, string? thisClass, Wrap wrap,
-        Dictionary<string, Ty> parms, Dictionary<string, Ty> locals, Ty returnType)
+        Dictionary<string, Ty> parms, Dictionary<string, Ty> locals, Ty returnType, Action<int, string>? warn)
     {
+        _warn = warn;
+        _specifiers = decl.Specifiers;
         _symbols = symbols;
         _tables = tables;
         _thisClass = thisClass;
@@ -80,7 +85,8 @@ public sealed partial class FunctionCompiler
         _returnType = returnType;
     }
 
-    public static CompiledBody Compile(Symbols symbols, Tables tables, FunctionDecl decl, string? thisClass, Wrap wrap)
+    /// <param name="warn">Told each warning, with its line.</param>
+    public static CompiledBody Compile(Symbols symbols, Tables tables, FunctionDecl decl, string? thisClass, Wrap wrap, Action<int, string>? warn = null)
     {
         var raw = new List<(string, TypeRef)>();
         if (decl.Body is not null) CollectLocals(decl.Body, raw);
@@ -96,7 +102,7 @@ public sealed partial class FunctionCompiler
         var localMap = new Dictionary<string, Ty>();
         foreach (var (name, ty) in locals) localMap[name] = ty;
 
-        var compiler = new FunctionCompiler(symbols, tables, decl, thisClass, wrap, parms, localMap, ret);
+        var compiler = new FunctionCompiler(symbols, tables, decl, thisClass, wrap, parms, localMap, ret, warn);
         var body = decl.Body ?? [];
         if (body.Count > 0)
         {

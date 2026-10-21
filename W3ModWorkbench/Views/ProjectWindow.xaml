@@ -65,16 +65,6 @@
                 </Grid>
                 <TextBlock x:Name="ScriptsHint" Style="{StaticResource Hint}" Text="{l:T ProjectWindow.EveryWsFilePart}" />
 
-                <TextBlock Style="{StaticResource Label}" Text="{l:T ProjectWindow.CompileScripts}" />
-                <Grid>
-                    <TextBox x:Name="OutputBox" Padding="8,6,40,6" />
-                    <Button HorizontalAlignment="Right" Margin="0,0,4,0" Padding="6,3" Background="Transparent" BorderThickness="0"
-                            Click="BrowseOutput_Click" ToolTip="{l:T ProjectWindow.ChooseWhereCompileScripts}">
-                        <TextBlock Style="{StaticResource Icon}" Text="&#xE8DA;" />
-                    </Button>
-                </Grid>
-                <TextBlock Style="{StaticResource Hint}" Text="{l:T ProjectWindow.WhereProjectCompileScripts}" />
-
                 <TextBlock Style="{StaticResource Label}" Text="{l:T ProjectWindow.WhenModBuilt}" />
                 <CheckBox x:Name="BuildLooseCheck" Content="{l:T ProjectWindow.AlsoShipLooseScripts}" MinWidth="0" Margin="0,2,0,0"
                           ToolTip="{l:T ProjectWindow.WsFilesGoMod}" />

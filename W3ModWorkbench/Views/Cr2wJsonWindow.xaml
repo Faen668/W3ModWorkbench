@@ -151,30 +151,6 @@
                 </StackPanel>
             </Grid>
         </DataTemplate>
-        <!-- the recipe list's rows: the chosen one a wash of the accent behind ordinary text, as the app's grids have -->
-        <Style x:Key="WashItem" TargetType="ListBoxItem" BasedOn="{StaticResource {x:Type ListBoxItem}}">
-            <Setter Property="Padding" Value="10,4" />
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="ListBoxItem">
-                        <Grid SnapsToDevicePixels="True" Background="Transparent" Margin="2,1">
-                            <Border x:Name="Hover" CornerRadius="4" Background="{DynamicResource ListBoxItemUnselectedBackgroundPointerOverThemeBrush}" Visibility="Collapsed" />
-                            <Border x:Name="Highlight" CornerRadius="4" Background="{DynamicResource AccentFillColorDefaultBrush}" Opacity="0" />
-                            <ContentPresenter Margin="{TemplateBinding Padding}" />
-                        </Grid>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Hover" Property="Visibility" Value="Visible" />
-                            </Trigger>
-                            <Trigger Property="IsSelected" Value="True">
-                                <Setter TargetName="Hover" Property="Visibility" Value="Collapsed" />
-                                <Setter TargetName="Highlight" Property="Opacity" Value="0.22" />
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
     </Window.Resources>
 
     <Grid>

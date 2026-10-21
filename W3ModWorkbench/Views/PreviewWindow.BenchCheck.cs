@@ -154,6 +154,6 @@ public partial class PreviewWindow
         var messages = _problems.Values.SelectMany(l => l).ToList();
         var compiler = CompilerChoice.Pick(null, App.Settings.GameFolder, preferBuiltIn: true) ?? CurrentCompiler();
         if (compiler is null) return;
-        ShowCompileResult(L.T("ScriptBench.Check.Title"), project, new CompileResult(messages.Count == 0, messages, ""), "", TimeSpan.Zero, compiler, check: true, live: true);
+        ShowCompileResult(L.T("ScriptBench.Check.Title"), project, new CompileResult(messages.Count == 0, messages, ""), "", TimeSpan.Zero, compiler, live: true);
     }
 }

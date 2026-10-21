@@ -328,6 +328,8 @@ public sealed partial class FunctionCompiler
     {
         int end = NewLabel();
         int at;
+        if (info.Specifiers.IsEntry && !_specifiers.IsEntry && !_specifiers.IsEvent)
+            _warn?.Invoke(line, $"Entry function '{info.Name}' should be called only from events or other entry functions."); // loc-ignore: wcc_lite's words
         if (info.Specifiers.IsEntry && !isSuper)
             at = Add(new Ins(Op.EntryFunc) { C = _tables.Name(info.Name) });
         else if (isSuper || viaParent || info.IsFinalCall)

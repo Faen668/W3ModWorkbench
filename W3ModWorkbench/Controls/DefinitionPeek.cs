@@ -223,6 +223,14 @@ internal static class DefinitionPeek
     {
         var block = new TextBlock { FontFamily = new FontFamily("Cascadia Mono, Consolas, Courier New"), FontSize = 12.5 };
         block.SetResourceReference(TextBlock.ForegroundProperty, "TextFillColorPrimaryBrush");
+        Fill(block, lines, palette);
+        return block;
+    }
+
+    /// <summary>Puts the lines, coloured with the WitcherScript grammar, in a text block that's there already.</summary>
+    internal static void Fill(TextBlock block, string[] lines, WitcherScriptColorizer.Palette palette)
+    {
+        block.Inlines.Clear();
         var grammar = TextMateGrammar.WitcherScript;
         TextMateGrammar.Rule? open = null;
         var tokens = new List<Token>();
@@ -254,6 +262,5 @@ internal static class DefinitionPeek
                 start = end;
             }
         }
-        return block;
     }
 }

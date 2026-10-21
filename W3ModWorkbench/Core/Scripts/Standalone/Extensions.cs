@@ -44,6 +44,10 @@ public static class Extensions
                 else if (!symbols.Classes.ContainsKey(cls))
                     problems.Add(new(file, At(field.Annotation, field.Line), $"@addField cannot add '{cls}::{name}' because the class '{cls}' is not defined.")); // loc-ignore
             }
+        // then each added field's type, as wcc_lite creates the property
+        foreach (var (file, field) in fields)
+            if (field.Annotation?.Class is { } cls && symbols.Classes.ContainsKey(cls))
+                problems.AddRange(UnknownTypes.CheckAddedField(symbols, file, field, cls));
         return problems;
     }
 

@@ -38,7 +38,6 @@ Everything in `scripts` is compiled with the mod. Everything in `workspace` is p
 | **Name** | the project's name |
 | **Mod name** | the folder Build makes and Install puts in the game's `mods` folder. It must start with `mod`. |
 | **Scripts folder** | where the mod's scripts are. Every `.ws` file in it is compiled. |
-| **Compile scripts to…** | where **Project > Compile scripts to…** writes a `.rsblob`, to try your scripts somewhere of your own |
 | **When the mod is built** | **Also ship the loose scripts** puts your `.ws` files beside the compiled ones. See [[Building and installing]]. |
 | **Author**, **version**, **description** | go in the built mod's `info.json` |
 | **Other files** | menus, strings, notes, anything else you add to the project |

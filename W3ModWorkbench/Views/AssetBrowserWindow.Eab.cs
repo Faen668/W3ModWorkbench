@@ -184,14 +184,15 @@ public partial class AssetBrowserWindow
         menu.Items.Add(Item(L.T("AssetBrowserWindow.OpenGitHubRepository"), "", (_, _) => OpenLink(EasyAssetBrowser.Repository)));
         menu.Items.Add(Item(L.T("AssetBrowserWindow.ReadTagsAgainGitHub"), "", (_, _) => _ = LoadEabAsync(true), _settings.EasyAssetBrowserOn));
         menu.Items.Add(new Separator());
+        // a link, as the rows beside it have icons of what they are, and a tick in its place while it's on
+        bool linked = AppLinks.IsRegistered;
         var links = new MenuItem
         {
             Header = L.T("AssetBrowserWindow.OpenFilesEasyAssetBrowsersSite"),
-            IsCheckable = true,
-            IsChecked = AppLinks.IsRegistered,
+            Icon = Glyph(linked ? "" : ""),
             ToolTip = L.T("AssetBrowserWindow.LetsLinkEasyAssetBrowsersSite"),
         };
-        links.Click += (_, _) => SiteLinks_Click(links.IsChecked);
+        links.Click += (_, _) => SiteLinks_Click(!linked);
         menu.Items.Add(links);
         menu.Items.Add(Item(L.T("AssetBrowserWindow.PrivacyNotice"), "", (_, _) => SettingsWindow.ShowPrivacy(this)));
         menu.Items.Add(Item(L.T("AssetBrowserWindow.TurnEasyAssetBrowserTagsOff"), "", (_, _) => TurnEabOff(deleteLists: false)));

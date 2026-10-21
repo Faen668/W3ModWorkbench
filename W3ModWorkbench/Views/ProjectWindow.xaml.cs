@@ -66,7 +66,6 @@ public partial class ProjectWindow : Window
             _modTouched = true;
             ScriptsBox.Text = existing.ScriptsFolder;
             _scriptsTouched = true;
-            OutputBox.Text = existing.CompileOutput ?? "";
             BuildLooseCheck.IsChecked = existing.BuildLooseScripts == true;
             AuthorBox.Text = existing.Author;
             VersionBox.Text = existing.Version;
@@ -180,21 +179,6 @@ public partial class ProjectWindow : Window
         ScriptsBox.Text = relative.Replace('\\', '/');
     }
 
-    private void BrowseOutput_Click(object sender, RoutedEventArgs e)
-    {
-        string start = FullRoot() is { } root ? root : "";
-        var dialog = new SaveFileDialog
-        {
-            Title = L.T("ProjectWindow.WhereShouldCompiledScripts"),
-            FileName = "precompiled.rsblob",
-            Filter = L.T("ProjectWindow.CompiledScriptsRsblobRsblob"),
-            InitialDirectory = Directory.Exists(start) ? start : "",
-            OverwritePrompt = false,
-        };
-        if (dialog.ShowDialog(this) != true) return;
-        OutputBox.Text = Stored(dialog.FileName);
-    }
-
     /// <summary>A path the way the project file keeps it: relative to the project folder when it's inside it.</summary>
     private string Stored(string path)
     {
@@ -247,9 +231,6 @@ public partial class ProjectWindow : Window
                 // the workspace holds the game files the mod changes; it's part of the project from the start
                 Directory.CreateDirectory(project.WorkspacePath);
                 project.Add(project.WorkspacePath);
-                // a folder that was compiled before projects had files keeps the output it was given
-                if (OutputBox.Text.Trim().Length == 0 && App.Settings.CompileOutputs.TryGetValue(project.ScriptsPath, out string? before))
-                    OutputBox.Text = Stored(before);
             }
             else
             {
@@ -260,7 +241,6 @@ public partial class ProjectWindow : Window
                 project.Include = [.. _files.OrderBy(f => f, StringComparer.OrdinalIgnoreCase)];
                 Directory.CreateDirectory(project.ScriptsPath);
             }
-            project.CompileOutput = OutputBox.Text.Trim().Length == 0 ? null : OutputBox.Text.Trim().Replace('\\', '/');
             project.BuildLooseScripts = BuildLooseCheck.IsChecked == true;
             project.Author = AuthorBox.Text.Trim();
             // kept only when it isn't what the name gives anyway

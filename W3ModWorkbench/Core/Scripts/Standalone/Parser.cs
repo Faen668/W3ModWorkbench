@@ -120,6 +120,7 @@ public sealed class Parser
         {
             if (Cur.Kind != TokKind.Ident) throw Error(L.T("Parser.ExpectedDeclaration"));
             string word = Cur.Text;
+            if (cls.Line == 0) cls.Line = Cur.Line;
             switch (word)
             {
                 case "import":

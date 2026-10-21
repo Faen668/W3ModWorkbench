@@ -1337,13 +1337,13 @@ public partial class PreviewWindow : Window, IMessageHost
     private object? _resultsShowing;
 
     /// <summary>
-    /// Saves the project's changed files, then compiles the project with wcc_lite (or the built-in compiler) into the file chosen for it
-    /// (asked the first time, or when <paramref name="chooseOutput"/>), and lists its warnings and errors under the files. A
-    /// <paramref name="check"/> compiles into a file of its own that isn't kept, only to say what's wrong: Script Bench's Compile.
+    /// Saves the project's changed files, then compiles the project with wcc_lite (or the built-in compiler) and lists its warnings
+    /// and errors under the files. It's compiled into a file of its own first; when that works, it goes in the built mod as
+    /// <c>content\precompiled.rsblob</c>, where Build puts it too, so an older one there is never left beside a failed compile.
     /// </summary>
     /// <param name="doc">The tab it's compiled from, which messages show in; null in Script Bench with no tab of the project's open.</param>
     /// <param name="folder">The project's files, when there's no tab to tell them by.</param>
-    private async Task CompileAsync(PreviewDocument? doc, bool chooseOutput, ScriptFolder? folder = null, bool check = false)
+    private async Task CompileAsync(PreviewDocument? doc, ScriptFolder? folder = null)
     {
         if ((doc is null ? folder : ProjectOf(doc)) is not { } project || _compile is not null) return;
         Task<bool> Card(string title, string message, MessageKind kind, string primary, string? secondary = null) =>
@@ -1366,31 +1366,8 @@ public partial class PreviewWindow : Window, IMessageHost
         }
 
         var definition = project.Project!;
-        string? output = check ? Path.Combine(Path.GetTempPath(), "W3ModWorkbench", "check-" + Guid.NewGuid().ToString("N"), "blob.rsblob")
-            : definition.CompileOutputPath;
-        if (!check && (chooseOutput || output is null || !Directory.Exists(Path.GetDirectoryName(output))))
-        {
-            string start = definition.CompileOutputPath is { } before && Path.GetDirectoryName(before) is { } dir
-                && Directory.Exists(dir) ? dir : definition.Root;
-            var dialog = new SaveFileDialog
-            {
-                Title = L.T("PreviewWindow.WhereShouldCompiledScripts", project.Owner),
-                FileName = "precompiled.rsblob",
-                InitialDirectory = start,
-                Filter = L.T("PreviewWindow.CompiledScriptsRsblobRsblob"),
-            };
-            if (dialog.ShowDialog(this) != true) return;
-            output = dialog.FileName;
-            definition.CompileOutput = definition.ToStored(output);
-            try
-            {
-                definition.Save();
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            {
-                _ = Card(L.T("PreviewWindow.ProjectCouldNotSaved"), L.T("PreviewWindow.CompilingGoesAheadBut", Path.GetFileName(definition.FilePath), ex.Message), MessageKind.Warning, "OK");
-            }
-        }
+        string compiled = Path.Combine(Path.GetTempPath(), "W3ModWorkbench", "compile-" + Guid.NewGuid().ToString("N"), "precompiled.rsblob");
+        string output = Path.Combine(definition.BuiltModPath, "content", "precompiled.rsblob");
 
         var cancel = _compile = new CancellationTokenSource();
         _resultsShowing = cancel;
@@ -1410,8 +1387,13 @@ public partial class PreviewWindow : Window, IMessageHost
         var watch = Stopwatch.StartNew();
         try
         {
-            var result = await compiler.CompileAsync(project.FilePath, output!, progress, cancel.Token, Path.GetFileName(definition.BuiltModPath));
-            ShowCompileResult(title, project, result, output!, watch.Elapsed, compiler, check);
+            var result = await compiler.CompileAsync(project.FilePath, compiled, progress, cancel.Token, Path.GetFileName(definition.BuiltModPath));
+            if (result.Success)
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(output)!);
+                File.Copy(compiled, output, overwrite: true);
+            }
+            ShowCompileResult(title, project, result, output, watch.Elapsed, compiler);
         }
         catch (OperationCanceledException)
         {
@@ -1426,7 +1408,7 @@ public partial class PreviewWindow : Window, IMessageHost
             _compile = null;
             foreach (var window in OpenWindows) window.UpdateHeader();
             UpdateBenchStatus();
-            if (check) TryDelete(Path.GetDirectoryName(output!)!);
+            TryDelete(Path.GetDirectoryName(compiled)!);
         }
     }
 
@@ -1438,7 +1420,7 @@ public partial class PreviewWindow : Window, IMessageHost
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            // a check's left-over in the temp folder
+            // a compile's left-over in the temp folder
         }
     }
 
@@ -1446,20 +1428,11 @@ public partial class PreviewWindow : Window, IMessageHost
     /// Project > Compile scripts: compiles the open project in a preview window, where its warnings and errors are listed, each
     /// opening its line. One of the project's files that's open already is used, or its first script is opened for it.
     /// </summary>
-    public static async Task CompileProjectAsync(MainWindow main, bool chooseOutput)
+    public static async Task CompileProjectAsync(MainWindow main)
     {
-        if (!chooseOutput)
-        {
-            if (BenchFor(main) is { } bench)
-            {
-                bench.BringForward();
-                await bench.BenchCompileAsync();
-            }
-            return;
-        }
-        if (await ProjectDocumentAsync(main) is not { Host: { } host } doc) return;
-        host.BringForward();
-        await host.CompileAsync(doc, chooseOutput);
+        if (BenchFor(main) is not { } bench) return;
+        bench.BringForward();
+        await bench.BenchCompileAsync();
     }
 
     /// <summary>A build whose scripts didn't compile: the errors in a preview window, as Compile scripts lists them.</summary>
@@ -1491,7 +1464,7 @@ public partial class PreviewWindow : Window, IMessageHost
 
     /// <summary>The compiler's warnings and errors, grouped by file, each opening its line. The log is a button away.</summary>
     /// <param name="live">What checking as you type found: no compile ran, so nothing is said of saving or of a log.</param>
-    private void ShowCompileResult(string title, ScriptFolder project, CompileResult result, string output, TimeSpan took, CompilerChoice compiler, bool check = false, bool live = false)
+    private void ShowCompileResult(string title, ScriptFolder project, CompileResult result, string output, TimeSpan took, CompilerChoice compiler, bool live = false)
     {
         if (Results.Visibility != Visibility.Visible) OpenResultsPanel();
         int errors = result.Messages.Count(m => m.IsError), warnings = result.Messages.Count - errors;
@@ -1540,7 +1513,7 @@ public partial class PreviewWindow : Window, IMessageHost
             : errors > 0 ? L.T("PreviewWindow.FailedCount", L.T("Count.Error", errors)) + (warnings > 0 ? $", {L.T("Count.Warning", warnings)}" : "")
             : L.T("PreviewWindow.Failed");
         string empty = live ? L.T("ScriptBench.Check.NoProblems")
-            : result.Success ? check ? L.T("PreviewWindow.CompiledNoWarningsBuild") : L.T("PreviewWindow.CompiledNoWarningsSaved", output)
+            : result.Success ? L.T("PreviewWindow.CompiledNoWarningsSaved", output)
             : result.Failure ?? L.T("PreviewWindow.DidntCompileScripts", compiler.Name);
         Results.ShowRows(title, summary, rows, empty);
         if (live)
@@ -1550,11 +1523,11 @@ public partial class PreviewWindow : Window, IMessageHost
         }
 
         var actions = new List<(string, Action)>();
-        if (result.Success && !check)
+        if (result.Success)
             actions.Add((L.T("PreviewWindow.ShowFolder"), () => Process.Start("explorer.exe", $"/select,\"{output}\"")));
         string logName = compiler.Kind == CompilerKind.WccLite ? "wcc_lite.log" : "compiler.log";
         actions.Add((L.T("PreviewWindow.ShowLog"), () => ShowAlone(new PreviewItem(logName, title, System.Text.Encoding.UTF8.GetBytes(result.Log)), this)));
-        Results.SetActions(result.Success ? (check ? L.T("PreviewWindow.CheckedNothingKept") : L.T("PreviewWindow.Saved", output)) + (compiler.Kind == CompilerKind.BuiltIn ? L.T("PreviewWindow.CompiledBuiltCompiler") : "")
+        Results.SetActions(result.Success ? L.T("PreviewWindow.Saved", output) + (compiler.Kind == CompilerKind.BuiltIn ? L.T("PreviewWindow.CompiledBuiltCompiler") : "")
             : compiler.Kind == CompilerKind.WccLite ? L.T("PreviewWindow.NothingSavedWccLites") : L.T("PreviewWindow.NothingSavedCompilersLog"), [.. actions]);
     }
 
@@ -1664,6 +1637,8 @@ public partial class PreviewWindow : Window, IMessageHost
             doc?.Save();
         else if (key == Key.S && mods == (ModifierKeys.Control | ModifierKeys.Shift))
             SaveAll(AllOpenDocuments().Where(d => d.IsDirty));
+        else if (key == Key.B && mods == ModifierKeys.Control && _isBench)
+            ToggleBenchTree();
         else if (key == Key.B && mods == (ModifierKeys.Control | ModifierKeys.Shift))
         {
             // builds the mod, as Project > Build does in the main window

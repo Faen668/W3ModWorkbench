@@ -24,6 +24,7 @@ On the left are all the scripts your mod can reach, in three groups:
 - **Filter scripts** at the top shows only scripts whose name or folder has what you type ({{Esc}} clears it).
 - The buttons beside it read everything again, show the file in front in the tree, and collapse everything.
 - Drag the line between the tree and the tabs to make either wider.
+- To give the code more room, fold the tree away with the button at the end of its row, or {{Ctrl+B}}. It folds to a thin strip at the window's edge: click the strip (or press {{Ctrl+B}} again) and it slides back at the width it had, and Script Bench remembers which way you left it.
 
 ## Your own scripts
 

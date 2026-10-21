@@ -69,23 +69,78 @@ public partial class PreviewWindow
         _isBench = true;
         _benchMain = main;
         Width = Math.Max(Width, 1280);
-        BenchColumn.Width = new GridLength(App.Settings.BenchTreeWidth is > 120 and < 1200 ? App.Settings.BenchTreeWidth : 300);
-        BenchColumn.MinWidth = 180;
-        BenchSplitterColumn.Width = GridLength.Auto;
-        BenchPanel.Visibility = Visibility.Visible;
-        BenchSplitter.Visibility = Visibility.Visible;
         BenchStatus.Visibility = Visibility.Visible;
+        SetBenchTreeShown(App.Settings.BenchTreeShown, animate: false);
         BenchTree.ItemsSource = _benchRoots;
         ProjectWorkspace.Changed += BenchProjectChanged;
         Closed += (_, _) =>
         {
             ProjectWorkspace.Changed -= BenchProjectChanged;
-            App.Settings.BenchTreeWidth = BenchColumn.ActualWidth;
+            if (App.Settings.BenchTreeShown && BenchPanel.Visibility == Visibility.Visible) App.Settings.BenchTreeWidth = BenchColumn.ActualWidth;
             if (_bench == this) _bench = null;
         };
         UpdateHeader();
         SetUpBenchCheck();
         _ = BuildBenchAsync();
+    }
+
+    /// <summary>The tree's width while it's open, as it was last dragged.</summary>
+    private static double BenchTreeWidth => App.Settings.BenchTreeWidth is > 120 and < 1200 ? App.Settings.BenchTreeWidth : 300;
+
+    /// <summary>The strip the tree folds to: a thin edge with an arrow to slide it back out.</summary>
+    private const double BenchStripWidth = 16;
+
+    private void BenchHide_Click(object sender, RoutedEventArgs e) => ToggleBenchTree();
+
+    private void BenchShow_Click(object sender, RoutedEventArgs e) => ToggleBenchTree();
+
+    /// <summary>Ctrl+B and the pane buttons: folds the tree of scripts away, or opens it again at the width it had.</summary>
+    private void ToggleBenchTree()
+    {
+        bool show = BenchPanel.Visibility != Visibility.Visible;
+        if (!show) App.Settings.BenchTreeWidth = BenchColumn.ActualWidth;
+        App.Settings.BenchTreeShown = show;
+        App.Settings.Save();
+        SetBenchTreeShown(show, animate: true);
+        if (show) BenchTree.Focus();
+        else Current?.FocusEditor();
+    }
+
+    /// <summary>
+    /// Opens or folds the tree. It slides, kept at its open width and cut off by its column, so it moves out of the way rather
+    /// than squeezing its folders up as the column narrows.
+    /// </summary>
+    private void SetBenchTreeShown(bool show, bool animate)
+    {
+        double open = BenchTreeWidth;
+        BenchSplitterColumn.Width = show ? GridLength.Auto : new GridLength(0);
+        BenchSplitter.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+        BenchShowButton.Visibility = Visibility.Collapsed;
+        BenchPanel.Visibility = Visibility.Visible;
+        BenchPanel.HorizontalAlignment = HorizontalAlignment.Right;
+        BenchPanel.Width = open - BenchPanel.Margin.Left - BenchPanel.Margin.Right;
+        void Done()
+        {
+            if (show)
+            {
+                BenchColumn.Width = new GridLength(open);
+                BenchColumn.MinWidth = 180;
+                BenchPanel.Width = double.NaN;
+                BenchPanel.HorizontalAlignment = HorizontalAlignment.Stretch;
+            }
+            else
+            {
+                BenchPanel.Visibility = Visibility.Collapsed;
+                BenchShowButton.Visibility = Visibility.Visible;
+            }
+        }
+        if (animate) ColumnAnimator.Slide(BenchColumn, show ? open : BenchStripWidth, Done);
+        else
+        {
+            BenchColumn.MinWidth = 0;
+            BenchColumn.Width = new GridLength(show ? open : BenchStripWidth);
+            Done();
+        }
     }
 
     private void BenchProjectChanged()
@@ -926,10 +981,10 @@ public partial class PreviewWindow
 
     private void BenchCompile_Click(object sender, RoutedEventArgs e) => _ = BenchCompileAsync();
 
-    /// <summary>F7 or Compile: compiles the project's scripts to check them, listing what's wrong under the tabs. Nothing is kept.</summary>
+    /// <summary>F7 or Compile: compiles the project's scripts into its mod's content folder, listing what's wrong under the tabs.</summary>
     private async Task BenchCompileAsync()
     {
         if (_benchMain?.ProjectArchive is not { } project) return;
-        await CompileAsync(Current is { } doc && ProjectOf(doc) is not null ? doc : null, chooseOutput: false, project, check: true);
+        await CompileAsync(Current is { } doc && ProjectOf(doc) is not null ? doc : null, project);
     }
 }

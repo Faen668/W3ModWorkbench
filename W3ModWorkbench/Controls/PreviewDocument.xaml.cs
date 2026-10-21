@@ -1214,7 +1214,7 @@ public partial class PreviewDocument : UserControl
     /// </summary>
     public void ToggleOutline()
     {
-        bool show = OutlineHost.Visibility != Visibility.Visible;
+        bool show = !_outlineShown;
         SetOutlineShown(show);
         if (show) Outline.FocusFilter();
         else Editor.TextArea.Focus();
@@ -1226,25 +1226,50 @@ public partial class PreviewDocument : UserControl
         _outlineWanted = show;
         App.Settings.ShowOutline = show;
         App.Settings.Save();
-        ApplyOutline();
+        ApplyOutline(animate: true);
     }
 
     private bool? _outlineWanted;
 
-    /// <summary>Shows or hides the outline side bar as Settings says, for a script.</summary>
-    public void ApplyOutline()
+    /// <summary>Whether the side bar is shown or on its way in, and whether it's still sliding.</summary>
+    private bool _outlineShown, _outlineSliding;
+
+    /// <summary>
+    /// Shows or hides the outline side bar as Settings says, for a script. Turned on or off by its button it slides, as Script
+    /// Bench's tree of scripts does: kept at its own width and cut off by its column, so its rows don't squeeze up.
+    /// </summary>
+    public void ApplyOutline(bool animate = false)
     {
         bool show = OutlineBar.Visibility == Visibility.Visible && (_outlineWanted ?? App.Settings.ShowOutline);
         OutlineToggle.IsChecked = show;
-        if (show == (OutlineHost.Visibility == Visibility.Visible))
+        if (show == _outlineShown)
         {
-            if (show) OutlineColumn.Width = new GridLength(App.Settings.OutlineWidth);
+            if (show && !_outlineSliding) OutlineColumn.Width = new GridLength(App.Settings.OutlineWidth);
             return;
         }
-        OutlineHost.Visibility = OutlineSplitter.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+        _outlineShown = show;
+        double width = App.Settings.OutlineWidth;
+        OutlineHost.Visibility = Visibility.Visible;
+        OutlineSplitter.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
         OutlineSplitterColumn.Width = new GridLength(show ? 6 : 0);
-        OutlineColumn.Width = new GridLength(show ? App.Settings.OutlineWidth : 0);
-        OutlineColumn.MinWidth = show ? 160 : 0;
+        OutlineHost.HorizontalAlignment = HorizontalAlignment.Left;
+        OutlineHost.Width = width;
+        void Done()
+        {
+            _outlineSliding = false;
+            OutlineHost.Width = double.NaN;
+            OutlineHost.HorizontalAlignment = HorizontalAlignment.Stretch;
+            if (show) OutlineColumn.MinWidth = 160;
+            else OutlineHost.Visibility = Visibility.Collapsed;
+        }
+        _outlineSliding = animate && IsLoaded;
+        if (_outlineSliding) ColumnAnimator.Slide(OutlineColumn, show ? width : 0, Done);
+        else
+        {
+            OutlineColumn.MinWidth = 0;
+            OutlineColumn.Width = new GridLength(show ? width : 0);
+            Done();
+        }
         if (show)
         {
             _outlineStale = true;

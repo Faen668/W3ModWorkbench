@@ -145,6 +145,36 @@
                 <Setter Property="VirtualizingPanel.IsVirtualizing" Value="True" />
                 <Setter Property="VirtualizingPanel.VirtualizationMode" Value="Recycling" />
             </Style>
+            <!-- A list's rows, as a viewer's table has them: the chosen one a soft wash of the accent behind ordinary text
+                 (not the plain ListBox's solid highlight). Every ListBox gets it; a list with rows of its own bases them on it. -->
+            <Style x:Key="WashItem" TargetType="ListBoxItem" BasedOn="{StaticResource {x:Type ListBoxItem}}">
+                <Setter Property="Padding" Value="10,4" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="ListBoxItem">
+                            <Grid SnapsToDevicePixels="True" Background="Transparent" Margin="2,1">
+                                <Border x:Name="Hover" CornerRadius="4" Background="{DynamicResource ListBoxItemUnselectedBackgroundPointerOverThemeBrush}" Visibility="Collapsed" />
+                                <Border x:Name="Highlight" CornerRadius="4" Background="{DynamicResource AccentFillColorDefaultBrush}" Opacity="0" />
+                                <ContentPresenter Margin="{TemplateBinding Padding}" HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                                  VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                            </Grid>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsEnabled" Value="False">
+                                    <Setter Property="Opacity" Value="0.5" />
+                                </Trigger>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="Hover" Property="Visibility" Value="Visible" />
+                                </Trigger>
+                                <Trigger Property="IsSelected" Value="True">
+                                    <Setter TargetName="Hover" Property="Visibility" Value="Collapsed" />
+                                    <Setter TargetName="Highlight" Property="Opacity" Value="0.22" />
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+            <Style TargetType="ListBoxItem" BasedOn="{StaticResource WashItem}" />
         </ResourceDictionary>
     </Application.Resources>
 </Application>

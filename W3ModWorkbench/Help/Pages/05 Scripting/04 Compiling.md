@@ -15,7 +15,7 @@ Press **Compile** in [[Script Bench]]'s bottom bar ({{F7}}, or **Project > Compi
 
 You don't have to wait for **Compile** to find most mistakes: Script Bench checks your scripts the same way as you type, and underlines what's wrong (see [[Writing scripts]]).
 
-Compile only checks: nothing is kept. **Build** is what puts the compiled scripts in your mod (see [[Building and installing]]). **Project > Compile scripts to…** writes a `.rsblob` wherever you choose, to try it.
+When they compile, the scripts go in your built mod as `content\precompiled.rsblob` (in the project's `mod…` folder), the same place **Build** puts them (see [[Building and installing]]). When they don't, the one that's there is left as it was.
 
 ## Two compilers
 
@@ -43,6 +43,19 @@ The file and line, then what's wrong, in the same words REDkit uses. Some common
 | **Function 'x' can't return a value** / **should return a value** | a `return` with or without a value where the function says otherwise |
 | **@wrapMethod cannot wrap 'Class::x' because it is not defined** | the class has no such function in this game version |
 | **@wrapMethod Wrapper 'Class::x' must contain a 'wrappedMethod' token** | a wrapper must call `wrappedMethod` |
+| **Unknown type 'X' for property 'y'** | a misspelt type, or one from a mod you haven't installed: on a variable, a parameter, a local or what a function returns (`__return`) |
+| **Unable to parse value** | a `default` that can't be read as its variable's type: a name the enum hasn't got, a word for a number, or text for a bool that isn't true or false |
+| **Property 'x' does not exist in 'Class'** | a `default` for a variable the class hasn't got |
+
+REDkit's warnings don't stop the compile, and the built-in compiler gives the same ones:
+
+| Warning | Means |
+|---|---|
+| **Class X is not marked as abstract, but has missing functions!** | a class it extends declares functions without a body (`function F();`) that yours doesn't write. Each is listed under it. |
+| **State machine 'X' has no autostate** | a `statemachine class` that doesn't say which state it starts in, with `default autoState = 'Idle';` |
+| **Entry function 'x' should be called only from events or other entry functions** | an `entry function` called from an ordinary function |
+
+The built-in compiler adds one REDkit doesn't give: a bool `default` such as `falsesss`. REDkit takes it, as it reads only how the value starts, but it's likely a typo.
 
 > note: WitcherScript has no `++` or `--`: write `i += 1`. And a `@replaceMethod` or `@wrapMethod` must be followed straight by `function`, without `public` or `private`.
 

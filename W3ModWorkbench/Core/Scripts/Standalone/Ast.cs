@@ -68,6 +68,8 @@ public sealed class ClassDecl
     public string? Parent;
     public string? StateMachineOf;
     public bool IsImport, IsAbstract, IsStateMachine, IsStruct;
+    /// <summary>The line the declaration starts on, which is where wcc_lite says a problem with the class is.</summary>
+    public int Line;
     public List<FieldDecl> Fields = [];
     public List<FunctionDecl> Methods = [];
     public List<DefaultAssignment> Defaults = [];

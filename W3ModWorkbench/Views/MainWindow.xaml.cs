@@ -616,9 +616,8 @@ public partial class MainWindow : Window, IMessageHost
         Add(L.T("MainWindow.RefreshProject"), "", () => _ = ReloadProjectAsync(), project is not null);
         Add(L.T("MainWindow.OpenProjectFolder"), "", () => ProjectReveal_Click(this, new RoutedEventArgs()), project is not null);
         menu.Items.Add(new Separator());
-        Add(L.T("MainWindow.CompileScripts"), "", () => _ = PreviewWindow.CompileProjectAsync(this, chooseOutput: false), project is not null)
+        Add(L.T("MainWindow.CompileScripts"), "", () => _ = PreviewWindow.CompileProjectAsync(this), project is not null)
             .ToolTip = L.T("MainWindow.CompileProjectsScriptsScript");
-        Add(L.T("MainWindow.CompileScripts2"), "", () => _ = PreviewWindow.CompileProjectAsync(this, chooseOutput: true), project is not null);
         Add(project is null ? L.T("MainWindow.BuildMod") : L.T("MainWindow.Build2", project.ModFolderName.Replace("_", "__")), "Ctrl+Shift+B", () => _ = BuildModAsync(), project is not null);
         Add(project is null ? L.T("MainWindow.InstallMod") : L.T("MainWindow.Install4", project.ModFolderName.Replace("_", "__")), "", () => _ = InstallModAsync(), project is not null);
         menu.Items.Add(new Separator());

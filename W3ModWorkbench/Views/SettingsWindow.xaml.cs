@@ -88,7 +88,7 @@ public partial class SettingsWindow : Window, IMessageHost
         GameFolderBox.Text = settings.GameFolder;
         GameFolderBox.TextChanged += (_, _) => { UpdateGameStatus(); UpdateWccStatus(); UpdateLanguageStatus(); };
         UpdateGameStatus();
-        DocumentsBox.Text = settings.GameDocumentsFolder;
+        DocumentsBox.Text = settings.GameDocumentsFolder is { Length: > 0 } documents ? documents : GameDocuments.Default;
         DocumentsBox.TextChanged += (_, _) => UpdateDocumentsStatus();
         UpdateDocumentsStatus();
         WccBox.Text = settings.WccLitePath;
@@ -216,6 +216,7 @@ public partial class SettingsWindow : Window, IMessageHost
     {
         bool dark = Themes.IsDark(SelectedTheme);
         SampleCode.Content = DefinitionPeek.Code(SampleLines, dark ? WitcherScriptColorizer.Palette.Dark : WitcherScriptColorizer.Palette.Light);
+        if (_loaded) UpdateEditorSample();
 
         PresetPanel.Children.Clear();
         foreach (var preset in Themes.Presets)
@@ -352,6 +353,7 @@ public partial class SettingsWindow : Window, IMessageHost
     private void UpdateDocumentsStatus()
     {
         string folder = DocumentsBox.Text.Trim();
+        if (string.Equals(folder.TrimEnd('\\', '/'), GameDocuments.Default, StringComparison.OrdinalIgnoreCase)) folder = "";
         string used = folder.Length == 0 ? GameDocuments.Default : folder;
         string[] known = ["input.settings", "user.settings", "dx12user.settings", "mods.settings"];
         var has = Directory.Exists(used) ? known.Where(f => File.Exists(Path.Combine(used, f))).ToList() : [];
@@ -372,7 +374,7 @@ public partial class SettingsWindow : Window, IMessageHost
             DocumentsBox.Text = folder;
     }
 
-    private void DefaultDocuments_Click(object sender, RoutedEventArgs e) => DocumentsBox.Text = "";
+    private void DefaultDocuments_Click(object sender, RoutedEventArgs e) => DocumentsBox.Text = GameDocuments.Default;
 
     private void UpdateMergerStatus()
     {
@@ -551,13 +553,16 @@ public partial class SettingsWindow : Window, IMessageHost
         if (_loaded) UpdateEditorSample();
     }
 
+    /// <summary>The code colours for the light or dark mode picked.</summary>
+    private WitcherScriptColorizer.Palette SamplePalette => Themes.IsDark(SelectedTheme) ? WitcherScriptColorizer.Palette.Dark : WitcherScriptColorizer.Palette.Light;
+
     /// <summary>A few lines of code in the font size and tab width picked, with a tab shown as the space it takes.</summary>
     private void UpdateEditorSample()
     {
         if (FontSizeBox.SelectedIndex < 0 || TabWidthBox.SelectedIndex < 0) return;
         EditorSample.FontSize = FontSizes[FontSizeBox.SelectedIndex];
         string tab = new(' ', TabWidths[TabWidthBox.SelectedIndex]);
-        EditorSample.Text = $"function OnSpawned(data : SEntitySpawnData)\n{{\n{tab}if (IsAlive())\n{tab}{{\n{tab}{tab}Heal(10);\n{tab}}}\n}}"; // loc-ignore: code
+        DefinitionPeek.Fill(EditorSample, $"function OnSpawned(data : SEntitySpawnData)\n{{\n{tab}if (IsAlive())\n{tab}{{\n{tab}{tab}Heal(10);\n{tab}}}\n}}".Split('\n'), SamplePalette); // loc-ignore: code
         UpdateFormatSample();
     }
 
@@ -587,7 +592,7 @@ public partial class SettingsWindow : Window, IMessageHost
     {
         if (TabWidthBox.SelectedIndex < 0) return;
         var result = Core.Scripts.Formatting.ScriptFormatter.Format(FormatSampleCode, PickedFormat());
-        FormatSample.Text = result.Text.Replace("\t", new string(' ', TabWidths[TabWidthBox.SelectedIndex]));
+        DefinitionPeek.Fill(FormatSample, result.Text.Replace("\r", "").Replace("\t", new string(' ', TabWidths[TabWidthBox.SelectedIndex])).Split('\n'), SamplePalette);
     }
 
     // ---------------------------------------------------------------- privacy
@@ -642,7 +647,9 @@ public partial class SettingsWindow : Window, IMessageHost
         _settings.Cr2wRecipesFolder = RecipesBox.Text.Trim();
         _settings.GameFolder = GameFolderBox.Text.Trim();
         GameScripts.GameFolder = _settings.GameFolder;
-        _settings.GameDocumentsFolder = DocumentsBox.Text.Trim();
+        // The usual folder is kept as empty, so it follows Documents if that moves later
+        string documentsFolder = DocumentsBox.Text.Trim().TrimEnd('\\', '/');
+        _settings.GameDocumentsFolder = string.Equals(documentsFolder, GameDocuments.Default, StringComparison.OrdinalIgnoreCase) ? "" : documentsFolder;
         GameDocuments.Override = _settings.GameDocumentsFolder;
         _settings.WccLitePath = WccBox.Text.Trim().Trim('"');
         _settings.ScriptMergerPath = MergerBox.Text.Trim().Trim('"');

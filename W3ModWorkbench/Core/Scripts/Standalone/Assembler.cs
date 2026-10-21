@@ -59,7 +59,11 @@ public sealed class Assembler
 
     private Assembler(Symbols symbols) => _symbols = symbols;
 
-    public static byte[] Assemble(Symbols symbols, IReadOnlyList<SourceFile> modFiles) => new Assembler(symbols).Run(modFiles);
+    /// <param name="warnings">Where what wcc_lite warns about while compiling the functions goes, which doesn't stop the compile.</param>
+    public static byte[] Assemble(Symbols symbols, IReadOnlyList<SourceFile> modFiles, List<CompileProblem>? warnings = null) =>
+        new Assembler(symbols) { _warnings = warnings }.Run(modFiles);
+
+    private List<CompileProblem>? _warnings;
 
     private byte[] Run(IReadOnlyList<SourceFile> modFiles)
     {
@@ -317,7 +321,8 @@ public sealed class Assembler
     {
         try
         {
-            plan.Compiled = FunctionCompiler.Compile(_symbols, _tables, plan.Decl, plan.ThisClass, plan.Wrap);
+            plan.Compiled = FunctionCompiler.Compile(_symbols, _tables, plan.Decl, plan.ThisClass, plan.Wrap,
+                (line, text) => _warnings?.Add(new CompileProblem(plan.File, line, text)));
         }
         catch (CompileErrorsException ex)
         {
