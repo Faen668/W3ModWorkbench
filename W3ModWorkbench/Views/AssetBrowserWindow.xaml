@@ -138,6 +138,14 @@
             </Grid>
         </DockPanel>
         <DockPanel Margin="0,8,0,0" LastChildFill="False">
+            <!-- EasyAssetBrowser is off until the user agrees to it going online -->
+            <Button x:Name="EabOffButton" DockPanel.Dock="Right" Click="EabOff_Click"
+                    ToolTip="Categories and tags for the game's assets from EasyAssetBrowser, a fan project by Vincent.02. Off until you turn it on, as it reads them from GitHub.">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Style="{StaticResource IconText}" Text="&#xE8EC;" Margin="0,1,0,0" />
+                    <TextBlock Margin="8,0,0,0" Text="EasyAssetBrowser tags…" />
+                </StackPanel>
+            </Button>
             <!-- EasyAssetBrowser's categories and tags, named as its own -->
             <StackPanel x:Name="EabPanel" DockPanel.Dock="Right" Orientation="Horizontal">
                 <TextBlock Text="EAB category" VerticalAlignment="Center" Margin="12,0,8,0" Opacity="0.7" />
@@ -268,6 +276,8 @@
                                     <MenuItem Header="Name" Click="CopyName_Click" />
                                     <MenuItem Header="Folder" Click="CopyFolder_Click" />
                                     <MenuItem Header="Location on disk" Click="CopyLocation_Click" />
+                                    <MenuItem Header="Link to open it in W3 Mod Workbench" Click="CopyAppLink_Click"
+                                              ToolTip="A w3modworkbench:// link that shows the file in the Asset Browser, for a web page or a message" />
                                 </MenuItem>
                                 <MenuItem Header="Show in Explorer" Click="Reveal_Click" />
                             </ContextMenu>

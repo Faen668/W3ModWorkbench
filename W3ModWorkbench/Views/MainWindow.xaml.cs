@@ -72,10 +72,22 @@ public partial class MainWindow : Window, IMessageHost
         ApplyView();
         ApplyPreviewPane();
         UpdateRecentList();
+        // started by a link to a game file: the tool starts as it would, then shows the file in the Asset Browser
+        var link = args is [var arg] ? AppLinks.Parse(arg) : null;
+        if (link is not null) args = [];
         if (args.Length > 0)
             Loaded += async (_, _) => await LoadPathsAsync(args);
         else if (_settings.ReopenLastProject && File.Exists(_settings.LastProject))
             Loaded += async (_, _) => await OpenProjectAsync(_settings.LastProject, quiet: true);
+        if (link is not null) Loaded += (_, _) => AssetBrowserWindow.ShowLink(this, link);
+    }
+
+    /// <summary>Shows a game file a link names (<see cref="AppLinks"/>) in the Asset Browser, handed over by a copy of the tool started with it.</summary>
+    public void OpenLink(string text)
+    {
+        if (AppLinks.Parse(text) is not { } link) return;
+        if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal;
+        AssetBrowserWindow.ShowLink(this, link);
     }
 
     // ---------------------------------------------------------------- loading
@@ -2123,6 +2135,12 @@ public partial class MainWindow : Window, IMessageHost
     {
         AboutPopup.IsOpen = false;
         SettingsWindow.ShowNotices(this);
+    }
+
+    private void AboutPrivacy_Click(object sender, RoutedEventArgs e)
+    {
+        AboutPopup.IsOpen = false;
+        SettingsWindow.ShowPrivacy(this);
     }
 
     private void Settings_Click(object sender, RoutedEventArgs e)

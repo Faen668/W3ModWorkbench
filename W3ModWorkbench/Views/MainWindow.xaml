@@ -539,6 +539,10 @@
                                 <Run Text="WitcherScript syntax highlighting by WebSpam, from his witcherscript-vscode extension, used with permission. Code view by AvalonEdit. Decompiler gaps filled with help from Aelto's tw3-cahirb, and the built-in compiler is a port of the one WebSpam wrote for it." />
                                 <Hyperlink Click="AboutNotices_Click">Third-party notices</Hyperlink>
                             </TextBlock>
+                            <TextBlock Style="{StaticResource AboutHint}">
+                                <Run Text="Collects nothing about you and works offline; it goes online only for EasyAssetBrowser tags, which are off until you turn them on." />
+                                <Hyperlink Click="AboutPrivacy_Click">Privacy notice</Hyperlink>
+                            </TextBlock>
                             <TextBlock Style="{StaticResource AboutHint}"
                                        Text="An unofficial fan-made tool, not affiliated with or endorsed by CD PROJEKT RED. The Witcher, REDkit and REDengine are trademarks of CD PROJEKT S.A." />
                             <TextBlock x:Name="AboutSettingsText" Style="{StaticResource AboutHint}" />

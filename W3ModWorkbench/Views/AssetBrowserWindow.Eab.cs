@@ -22,7 +22,7 @@ public partial class AssetBrowserWindow
     /// <summary>Reads EasyAssetBrowser's lists (from the cache, or GitHub once a day or when <paramref name="refresh"/>) and shows them.</summary>
     private async Task LoadEabAsync(bool refresh)
     {
-        if (!_settings.UseEasyAssetBrowser) return;
+        if (!_settings.EasyAssetBrowserOn) return;
         if (Eab is null || refresh) EabStatus = "Reading EasyAssetBrowser's tags…";
         ApplyEab();
         await EasyAssetBrowser.LoadAsync(refresh);
@@ -36,9 +36,10 @@ public partial class AssetBrowserWindow
     /// <summary>Shows or hides the EAB filters and columns, as it's on and its lists are read.</summary>
     private void ApplyEab()
     {
-        bool on = _settings.UseEasyAssetBrowser;
-        var visible = on ? Visibility.Visible : Visibility.Collapsed;
-        EabPanel.Visibility = visible;
+        bool on = _settings.EasyAssetBrowserOn;
+        // while it's off, one button that asks to turn it on
+        EabPanel.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+        EabOffButton.Visibility = on ? Visibility.Collapsed : Visibility.Visible;
         EabCategoryColumn.Visibility = EabTagsColumn.Visibility = on && Eab is not null ? Visibility.Visible : Visibility.Collapsed;
         EabCategoryBox.IsEnabled = EabTagsButton.IsEnabled = on && Eab is not null;
         EabButton.ToolTip = Eab is { } eab
@@ -51,7 +52,7 @@ public partial class AssetBrowserWindow
     /// <summary>Whether the EAB category and tags picked leave a file, or null when none is picked.</summary>
     private Func<EntryItem, bool>? EabFilter(bool withCategory)
     {
-        if (!_settings.UseEasyAssetBrowser || Eab is not { } eab) return null;
+        if (!_settings.EasyAssetBrowserOn || Eab is not { } eab) return null;
         string? category = withCategory ? _eabCategory : null;
         if (category is null && _eabInclude.Count == 0 && _eabExclude.Count == 0) return null;
         var include = _eabInclude.ToList();
@@ -67,7 +68,7 @@ public partial class AssetBrowserWindow
 
     private IEnumerable<string> DescribeEab()
     {
-        if (!_settings.UseEasyAssetBrowser || Eab is null) yield break;
+        if (!_settings.EasyAssetBrowserOn || Eab is null) yield break;
         if (_eabCategory is not null) yield return $"EAB category {_eabCategory}";
         if (_eabInclude.Count > 0) yield return "EAB tags " + string.Join(" + ", _eabInclude.Order(StringComparer.OrdinalIgnoreCase));
         if (_eabExclude.Count > 0) yield return "no EAB tag " + string.Join(" or ", _eabExclude.Order(StringComparer.OrdinalIgnoreCase));
@@ -171,24 +172,20 @@ public partial class AssetBrowserWindow
         menu.Items.Add(Item("View EAB details of the highlighted files…", "\uE946", EabDetails_Click, Eab is not null && Highlighted().Count > 0));
         menu.Items.Add(Item("Open EasyAssetBrowser", "", (_, _) => OpenLink(EasyAssetBrowser.Site)));
         menu.Items.Add(Item("Open its GitHub repository", "", (_, _) => OpenLink(EasyAssetBrowser.Repository)));
-        menu.Items.Add(Item("Read the tags again from GitHub", "", (_, _) => _ = LoadEabAsync(true), _settings.UseEasyAssetBrowser));
+        menu.Items.Add(Item("Read the tags again from GitHub", "", (_, _) => _ = LoadEabAsync(true), _settings.EasyAssetBrowserOn));
         menu.Items.Add(new Separator());
-        var use = new MenuItem { Header = "Use EasyAssetBrowser's tags", IsCheckable = true, IsChecked = _settings.UseEasyAssetBrowser };
-        use.Click += (_, _) =>
+        var links = new MenuItem
         {
-            _settings.UseEasyAssetBrowser = use.IsChecked;
-            _settings.Save();
-            if (!use.IsChecked)
-            {
-                _eabCategory = null;
-                _eabInclude.Clear();
-                _eabExclude.Clear();
-            }
-            ApplyEab();
-            if (use.IsChecked) _ = LoadEabAsync(false);
-            else RefreshView();
+            Header = "Open files from EasyAssetBrowser's site here",
+            IsCheckable = true,
+            IsChecked = AppLinks.IsRegistered,
+            ToolTip = "Lets a link on EasyAssetBrowser's site (w3modworkbench://…) open the file in this Asset Browser. Windows asks the first time.",
         };
-        menu.Items.Add(use);
+        links.Click += (_, _) => SiteLinks_Click(links.IsChecked);
+        menu.Items.Add(links);
+        menu.Items.Add(Item("Privacy notice", "", (_, _) => SettingsWindow.ShowPrivacy(this)));
+        menu.Items.Add(Item("Turn EasyAssetBrowser tags off", "", (_, _) => TurnEabOff(deleteLists: false)));
+        menu.Items.Add(Item("Turn them off and delete the downloaded lists", "", (_, _) => TurnEabOff(deleteLists: true)));
         menu.IsOpen = true;
 
         MenuItem Item(string header, string glyph, RoutedEventHandler click, bool enabled = true)
@@ -197,6 +194,27 @@ public partial class AssetBrowserWindow
             item.Click += click;
             return item;
         }
+    }
+
+    /// <summary>The button EasyAssetBrowser shows as while it's off: asks to turn it on, saying what that means.</summary>
+    private void EabOff_Click(object sender, RoutedEventArgs e)
+    {
+        if (!EabConsentWindow.Ask(this)) return;
+        ApplyEab();
+        _ = LoadEabAsync(false);
+    }
+
+    /// <summary>Turns EasyAssetBrowser's tags off, so the tool doesn't go online, and when asked deletes the lists it downloaded.</summary>
+    private void TurnEabOff(bool deleteLists)
+    {
+        _settings.EasyAssetBrowserOn = false;
+        _settings.Save();
+        _eabCategory = null;
+        _eabInclude.Clear();
+        _eabExclude.Clear();
+        EasyAssetBrowser.Forget(deleteLists);
+        ApplyEab();
+        RefreshView();
     }
 
     /// <summary>Opens the EAB window for the files highlighted: what EasyAssetBrowser has for them, and their tags to suggest.</summary>
@@ -216,6 +234,56 @@ public partial class AssetBrowserWindow
         "bob" => "BnW",
         _ => source,
     };
+
+    // ---------------------------------------------------------------- links from EasyAssetBrowser's site
+
+    private AppLink? _pendingLink;
+
+    /// <summary>Opens the asset browser at a file a link names (<see cref="AppLinks"/>), highlighted, and opens it when the link says to.</summary>
+    public static void ShowLink(MainWindow main, AppLink link)
+    {
+        Open(main);
+        if (_instance is { } browser) _ = browser.ShowLinkAsync(link);
+    }
+
+    private async Task ShowLinkAsync(AppLink link)
+    {
+        // the game's files are still being read: once they are
+        if (FolderTree.ItemsSource is null)
+        {
+            _pendingLink = link;
+            return;
+        }
+        Activate();
+        await GoToBookmarkAsync(link.Path);
+        if (link.Open && _shown.FirstOrDefault(i => i.Path.Equals(link.Path, StringComparison.OrdinalIgnoreCase)) is { } file) OpenItem(file);
+    }
+
+    private async Task ShowPendingLinkAsync()
+    {
+        if (_pendingLink is not { } link) return;
+        _pendingLink = null;
+        await ShowLinkAsync(link);
+    }
+
+    /// <summary>Has Windows open the tool's links (as EasyAssetBrowser's site has) with this copy of the tool, or stops it.</summary>
+    private void SiteLinks_Click(bool on)
+    {
+        try
+        {
+            if (on) AppLinks.Register();
+            else AppLinks.Unregister();
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or System.IO.IOException or System.Security.SecurityException)
+        {
+            MessageBox.Show(this, $"Windows wouldn't let the tool {(on ? "register" : "remove")} its links: {ex.Message}", "W3 Mod Workbench", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
+    private void CopyAppLink_Click(object sender, RoutedEventArgs e)
+    {
+        if (Highlighted() is { Count: > 0 } items) Clipboard.SetText(string.Join(Environment.NewLine, items.Select(i => AppLinks.For(i.Path))));
+    }
 
     internal static void OpenLink(string url)
     {

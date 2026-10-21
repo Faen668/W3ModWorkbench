@@ -20,6 +20,12 @@ public partial class App : Application
             Shutdown(CommandLine.Run(e.Args));
             return;
         }
+        // a link to a game file, from a web page (w3modworkbench://asset?path=…): the copy already running shows it, when there is one
+        if (e.Args is [var arg] && AppLinks.Parse(arg) is not null && AppLinks.SendToRunning(arg))
+        {
+            Shutdown(0);
+            return;
+        }
         ApplyTheme(Settings.Theme, Settings.ThemePreset);
 
         // Text boxes give everything inside them the text cursor, their scroll bars included.
@@ -57,6 +63,9 @@ public partial class App : Application
                 reporting = false;
             }
         };
-        new MainWindow(e.Args).Show();
+        var main = new MainWindow(e.Args);
+        main.Show();
+        AppLinks.Listen(link => Dispatcher.InvokeAsync(() => main.OpenLink(link)));
+        AppLinks.KeepRegistrationCurrent();
     }
 }

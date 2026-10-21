@@ -79,7 +79,7 @@ The animation decoder (`Core/Animation`) was written the same way: WolvenKit's s
 
 ## Asset categories and tags: EasyAssetBrowser by Vincent.02
 
-The Asset Browser's **EAB category** and **EAB tags** filters and columns, and the EasyAssetBrowser window, show the categories and tags of Vincent.02's EasyAssetBrowser, a site for finding assets for world building. They're read from its GitHub repository while the tool runs and kept in a cache on your computer; none of its data is included with the tool. Tags you suggest from the tool go to that repository as an issue, for its author to review. Used with Vincent.02's agreement.
+The Asset Browser's **EAB category** and **EAB tags** filters and columns, and the EasyAssetBrowser window, show the categories and tags of Vincent.02's EasyAssetBrowser, a site for finding assets for world building. They're off until you turn them on; then they're read from its GitHub repository and kept in a cache on your computer (see PRIVACY.md). None of its data is included with the tool. Tags you suggest from the tool go to that repository as an issue, for its author to review. Used with Vincent.02's agreement.
 
 - Site: https://dev-cube.net/eab/
 - Project: https://github.com/vincocrafter/EasyAssetBrowser

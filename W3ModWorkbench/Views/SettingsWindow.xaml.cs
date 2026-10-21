@@ -321,6 +321,18 @@ public partial class SettingsWindow : Window, IMessageHost
         PreviewWindow.ShowAlone(new PreviewItem("THIRD-PARTY-NOTICES.md", "W3 Mod Workbench", text), owner);
     }
 
+    /// <summary>Shows PRIVACY.md from the app folder, or a short built-in summary if it is missing.</summary>
+    public static void ShowPrivacy(Window owner)
+    {
+        string path = Path.Combine(AppContext.BaseDirectory, "PRIVACY.md");
+        byte[] text = File.Exists(path)
+            ? File.ReadAllBytes(path)
+            : System.Text.Encoding.UTF8.GetBytes("PRIVACY.md is missing from the app folder.\n\n"
+                + "W3 Mod Workbench collects no information about you. It works offline and goes online only for EasyAssetBrowser tags, "
+                + "which are off until you turn them on: it then downloads their lists from GitHub, which sees your IP address as with any download.\n");
+        PreviewWindow.ShowAlone(new PreviewItem("PRIVACY.md", "W3 Mod Workbench", text), owner);
+    }
+
     /// <summary>Shows the LICENSE file shipped next to the exe, or the built-in copy if it is missing.</summary>
     public static void ShowLicence(Window owner)
     {

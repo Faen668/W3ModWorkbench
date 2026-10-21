@@ -92,6 +92,18 @@ public sealed class EasyAssetBrowser
         }
     }
 
+    /// <summary>Lets go of the lists read, as EasyAssetBrowser is turned off, and deletes the ones downloaded when <paramref name="deleteCache"/>.</summary>
+    public static void Forget(bool deleteCache)
+    {
+        Current = null;
+        if (!deleteCache) return;
+        try
+        {
+            if (Directory.Exists(CacheFolder)) Directory.Delete(CacheFolder, true);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+    }
+
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(60) };
 
     /// <summary>Downloads the category list and every list it names into a new folder, then puts it in place of the cache.</summary>

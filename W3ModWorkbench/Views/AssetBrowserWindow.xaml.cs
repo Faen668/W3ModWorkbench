@@ -133,6 +133,7 @@ public partial class AssetBrowserWindow : Window
         _root.IsSelected = true;
         RefreshView();
         SearchBox.Focus();
+        await ShowPendingLinkAsync();
         await LoadEabAsync(false);
     }
 
@@ -225,7 +226,7 @@ public partial class AssetBrowserWindow : Window
         List<EntryItem> left = extra is null ? scope : [.. scope.Where(extra)];
         var result = FileFilterResult.Apply(left, search, _typeFilter, _classFilter);
         // the EAB categories count what the other filters leave; the one picked narrows the list, type and class
-        if (Eab is not null && _settings.UseEasyAssetBrowser)
+        if (Eab is not null && _settings.EasyAssetBrowserOn)
         {
             FillEabCategories(result.Shown);
             if (EabFilter(withCategory: true) is { } inCategory) result = FileFilterResult.Apply([.. left.Where(inCategory)], search, _typeFilter, _classFilter);
@@ -416,7 +417,7 @@ public partial class AssetBrowserWindow : Window
             return;
         }
         OpenCopyItem.Visibility = items.Count == 1 && CopiesOf(items[0]).Count > 1 ? Visibility.Visible : Visibility.Collapsed;
-        EabDetailsItem.Visibility = _settings.UseEasyAssetBrowser && Eab is not null ? Visibility.Visible : Visibility.Collapsed;
+        EabDetailsItem.Visibility = _settings.EasyAssetBrowserOn && Eab is not null ? Visibility.Visible : Visibility.Collapsed;
         BookmarkItem.Header = items.All(i => IsBookmarked(i.Path)) ? "Remove bookmark" : "Bookmark";
     }
 
