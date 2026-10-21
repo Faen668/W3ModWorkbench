@@ -88,6 +88,32 @@ public partial class FilePreview : UserControl
         PreviewEmptyText.Text = message ?? "";
     }
 
+    /// <summary>
+    /// Reads every texture of the meshes shown several at once, as the viewers do, saying how many are done, and puts
+    /// them on together once they're all read, rather than one material after another.
+    /// </summary>
+    private async Task ShowTexturesAsync(List<(MeshFile Mesh, System.Numerics.Matrix4x4 Place)> parts,
+        IReadOnlyList<(ColorShift? First, ColorShift? Second)?> colorings, ResourceLocator locator, string detail, CancellationToken token)
+    {
+        var first = parts[0].Mesh;
+        var progress = new Progress<(int Done, int Total)>(n =>
+        {
+            if (!token.IsCancellationRequested && n.Total > 0 && n.Done < n.Total) PreviewDetail.Text = $"{detail}  ·  textures {n.Done} of {n.Total}…";
+        });
+        List<(int Part, int Material, System.Windows.Media.Imaging.BitmapSource? Picture, MaterialLook? Look, bool LeaveOut)> textures;
+        try
+        {
+            textures = await StageTextures.LoadAsync(parts.Select((p, i) => (p.Mesh, colorings[i])).ToList(), locator, PreviewTexture(locator), progress, token);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+        if (token.IsCancellationRequested || !ReferenceEquals(PreviewMesh.Mesh, first)) return;
+        PreviewMesh.ShowParts(parts, textures);
+        PreviewDetail.Text = detail;
+    }
+
     /// <summary>The preview's textures, smaller than the viewers', each read once for the file shown.</summary>
     private static Func<string, Task<System.Windows.Media.Imaging.BitmapSource?>> PreviewTexture(ResourceLocator locator)
     {
@@ -166,15 +192,8 @@ public partial class FilePreview : UserControl
                 ShowPreview(item.Glyph, null, mesh: mesh);
                 int triangles = MeshView.Drawn(mesh, 0).Sum(c => c.Triangles);
                 PreviewDetail.Text = detail + $"  ·  {triangles:N0} triangles, {mesh.LodCount} LOD{(mesh.LodCount == 1 ? "" : "s")}  ·  double-click to open";
-                // the colour textures, smaller than the viewer's, each put on as soon as it's read
-                for (int i = 0; i < mesh.Materials.Count; i++)
-                {
-                    int material = i;
-                    var (picture, look, leaveOut) = await Task.Run(() => LookTextures.ForMaterial(mesh, material, locator, PreviewTexture(locator)), token);
-                    if (token.IsCancellationRequested || !ReferenceEquals(PreviewMesh.Mesh, mesh)) return;
-                    if (leaveOut) PreviewMesh.LeaveOut(0, material);
-                    else PreviewMesh.SetTexture(material, picture, look);
-                }
+                // the colour textures, smaller than the viewer's, all read at once, as the viewers read them, then put on together
+                await ShowTexturesAsync([(mesh, System.Numerics.Matrix4x4.Identity)], [null], locator, detail, token);
             }
             else if (CutsceneWindow.CanShow(item.Name))
             {
@@ -226,20 +245,8 @@ public partial class FilePreview : UserControl
                 ShowPreview(item.Glyph, null, mesh: parts[0].Mesh);
                 PreviewMesh.ShowParts(parts);
                 PreviewDetail.Text = detail + $"  ·  {what}, {Format.Count(parts.Count, "mesh", "meshes")}  ·  double-click to open";
-                var texture = PreviewTexture(locator);
-                for (int p = 0; p < parts.Count; p++)
-                {
-                    var coloring = LookTextures.Coloring(entity, entity.DefaultAppearance?.Name, drawnBy[p].Name);
-                    for (int m = 0; m < parts[p].Mesh.Materials.Count; m++)
-                    {
-                        int part = p, material = m;
-                        var mesh = parts[p].Mesh;
-                        var (picture, look, leaveOut) = await Task.Run(() => LookTextures.ForMaterial(mesh, material, locator, texture, coloring), token);
-                        if (token.IsCancellationRequested || !ReferenceEquals(PreviewMesh.Mesh, parts[0].Mesh)) return;
-                        if (leaveOut) PreviewMesh.LeaveOut(part, material);
-                        else PreviewMesh.SetTexture(part, material, picture, look);
-                    }
-                }
+                var colorings = drawnBy.Select(c => LookTextures.Coloring(entity, entity.DefaultAppearance?.Name, c.Name)).ToList();
+                await ShowTexturesAsync(parts, colorings, locator, PreviewDetail.Text, token);
             }
             else if (SceneWindow.CanShow(item.Name))
             {
