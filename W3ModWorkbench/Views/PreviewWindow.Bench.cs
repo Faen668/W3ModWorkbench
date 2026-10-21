@@ -828,7 +828,8 @@ public partial class PreviewWindow
             + (overrides > 0 ? $", {overrides} overriding the game's" : "") + $") against {against}, with {with}.";
         BenchStatusText.ToolTip = $"Your scripts: {project.ScriptsPath}\nThe game's scripts: {(compiler?.GameScripts ?? _gameScripts ?? "not found")}"
             + (compiler?.ModsFolder is { } modsFolder && compiler.Kind == CompilerKind.BuiltIn ? $"\nInstalled mods: {modsFolder} (your own mod's installed build is left out)" : "")
-            + "\n\nCompile checks the scripts and lists what's wrong; Build puts the compiled scripts in the mod. The compiler is chosen in Settings";
+            + $"\n\nCompile checks the scripts and lists what's wrong. Build puts them in the mod as content\\precompiled.rsblob"
+            + (project.BuildLooseScripts == true ? ", with the .ws files beside it in content\\scripts" : "") + " (Project properties). The compiler is chosen in Settings";
     }
 
     private void BenchCompile_Click(object sender, RoutedEventArgs e) => _ = BenchCompileAsync();

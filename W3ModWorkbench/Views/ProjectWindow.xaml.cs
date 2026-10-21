@@ -66,8 +66,7 @@ public partial class ProjectWindow : Window
             ScriptsBox.Text = existing.ScriptsFolder;
             _scriptsTouched = true;
             OutputBox.Text = existing.CompileOutput ?? "";
-            BuildCompiledCheck.IsChecked = existing.BuildCompiledScripts ?? true;
-            BuildLooseCheck.IsChecked = existing.BuildLooseScripts ?? existing.BuildCompiledScripts == false;
+            BuildLooseCheck.IsChecked = existing.BuildLooseScripts == true;
             AuthorBox.Text = existing.Author;
             VersionBox.Text = existing.Version;
             DescriptionBox.Text = existing.Description;
@@ -257,7 +256,6 @@ public partial class ProjectWindow : Window
                 Directory.CreateDirectory(project.ScriptsPath);
             }
             project.CompileOutput = OutputBox.Text.Trim().Length == 0 ? null : OutputBox.Text.Trim().Replace('\\', '/');
-            project.BuildCompiledScripts = BuildCompiledCheck.IsChecked == true;
             project.BuildLooseScripts = BuildLooseCheck.IsChecked == true;
             project.Author = AuthorBox.Text.Trim();
             // kept only when it isn't what the name gives anyway

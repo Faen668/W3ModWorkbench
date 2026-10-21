@@ -37,14 +37,8 @@ public sealed class WorkbenchProject
     public string? CompileOutput { get; set; }
 
     /// <summary>
-    /// Whether Build compiles the scripts into the mod's <c>content\precompiled.rsblob</c>, as REDkit publishes a mod.
-    /// Null until it's chosen: Build asks the first time.
-    /// </summary>
-    public bool? BuildCompiledScripts { get; set; }
-
-    /// <summary>
-    /// Whether Build puts the scripts in the mod's <c>content\scripts</c> as they are: for the game to compile when there's no
-    /// blob, or as the mod's source beside one. Null until it's chosen: Build asks the first time.
+    /// Whether Build puts the scripts in the mod's <c>content\scripts</c> as they are, as the mod's source beside the
+    /// compiled <c>content\precompiled.rsblob</c> that Build always makes. Off when it isn't set.
     /// </summary>
     public bool? BuildLooseScripts { get; set; }
 

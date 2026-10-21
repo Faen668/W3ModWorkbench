@@ -2231,7 +2231,6 @@ public partial class MainWindow : Window, IMessageHost
                     MessageKind.Warning, primary: "Build anyway", secondary: "Cancel"))
                 return false;
         }
-        if (!await ChooseScriptsBuildAsync(project)) return false;
         var compiler = PreviewWindow.CurrentCompiler();
         _building = true;
         try
@@ -2267,50 +2266,6 @@ public partial class MainWindow : Window, IMessageHost
         {
             _building = false;
         }
-    }
-
-    /// <summary>
-    /// The first build of a project with scripts asks how they go in the mod: compiled into content\precompiled.rsblob,
-    /// as REDkit publishes, and whether the loose scripts go too. The answers are kept in the project (Project properties
-    /// changes them). False when it was cancelled.
-    /// </summary>
-    private async Task<bool> ChooseScriptsBuildAsync(WorkbenchProject project)
-    {
-        if (project.BuildCompiledScripts is not null && project.BuildLooseScripts is not null) return true;
-        if (!Directory.Exists(project.ScriptsPath) || !Directory.EnumerateFiles(project.ScriptsPath, "*.ws", SearchOption.AllDirectories).Any()) return true;
-
-        if (project.BuildCompiledScripts is null)
-        {
-            var compile = await Message.Ask("Compile the scripts into the mod?",
-                "Compiled, the scripts go in the mod as content\\precompiled.rsblob, the way REDkit publishes a mod: they're checked as the mod is built, "
-                + "and the game loads them as they are. Not compiled, they go in content\\scripts for the game to compile when it starts.\n\n"
-                + "This is kept in the project: Project properties changes it.",
-                MessageKind.Question, "Compile them", "Don't compile");
-            if (compile == MessageChoice.Cancel) return false;
-            project.BuildCompiledScripts = compile == MessageChoice.Primary;
-        }
-        if (project.BuildLooseScripts is null)
-        {
-            if (project.BuildCompiledScripts == true)
-            {
-                var loose = await Message.Ask("Ship the loose scripts too?",
-                    "Beside the compiled scripts, the .ws files can go in content\\scripts as the mod's source, for others to read or merge. "
-                    + "An info.json tells the game to run the compiled ones and leave the loose ones alone.",
-                    MessageKind.Question, "Compiled only", "Compiled and loose");
-                if (loose == MessageChoice.Cancel) return false;
-                project.BuildLooseScripts = loose == MessageChoice.Secondary;
-            }
-            else project.BuildLooseScripts = true;
-        }
-        try
-        {
-            project.Save();
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            ShowError($"The project could not be saved\n\nThe build goes ahead, but the choice wasn't kept. {ex.Message}");
-        }
-        return true;
     }
 
     /// <summary>

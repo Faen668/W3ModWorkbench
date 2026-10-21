@@ -59,16 +59,15 @@ public static class ModBuilder
 
             var scripts = Directory.Exists(project.ScriptsPath)
                 ? Directory.EnumerateFiles(project.ScriptsPath, "*.ws", SearchOption.AllDirectories).ToList() : [];
-            bool compile = scripts.Count > 0 && project.BuildCompiledScripts != false;
-            bool loose = scripts.Count > 0 && (project.BuildLooseScripts ?? !compile);
-            if (scripts.Count > 0 && !compile && !loose)
-                return Failed("The project has scripts, but Project properties has neither Compile the scripts nor Ship the loose scripts ticked, so the mod would have none. Tick one and build again.");
+            // the scripts always go in compiled, as REDkit publishes a mod; the loose ones beside them when the project says so
+            bool compile = scripts.Count > 0;
+            bool loose = compile && project.BuildLooseScripts == true;
 
             // compiled, as REDkit publishes a mod: content\precompiled.rsblob
             if (compile)
             {
                 if (compiler is null)
-                    return Failed(CompilerChoice.NothingToCompileWith + ". Or untick Compile scripts in Project properties to ship the scripts loose instead.");
+                    return Failed(CompilerChoice.NothingToCompileWith + ".");
                 progress?.Report(compiler.Kind == CompilerKind.WccLite ? "Compiling the scripts with wcc_lite (about a minute)…" : "Compiling the scripts…");
                 // compiled to a file of its own first: the compilers won't write into a build, which only Build itself fills
                 string temp = Path.Combine(Path.GetTempPath(), "W3ModWorkbench", "build-" + Guid.NewGuid().ToString("N"));
@@ -95,7 +94,7 @@ public static class ModBuilder
                 made.Add($"{scripts.Count:N0} script{(scripts.Count == 1 ? "" : "s")} compiled into content\\precompiled.rsblob, by {compiler.Name}");
             }
 
-            // loose, as they are: the game compiles them when it starts, or beside a blob they're the mod's source
+            // loose, as they are: beside the blob they're the mod's source, for others to read or merge
             if (loose)
             {
                 foreach (string script in scripts)
@@ -105,7 +104,7 @@ public static class ModBuilder
                     Directory.CreateDirectory(Path.GetDirectoryName(target)!);
                     File.Copy(script, target);
                 }
-                made.Add($"{scripts.Count:N0} script{(scripts.Count == 1 ? "" : "s")} in content\\scripts" + (compile ? ", as source" : ""));
+                made.Add($"{scripts.Count:N0} script{(scripts.Count == 1 ? "" : "s")} in content\\scripts, as source");
             }
 
             // with both, info.json tells the game to run the blob and leave the loose copies alone, as REDkit's own does

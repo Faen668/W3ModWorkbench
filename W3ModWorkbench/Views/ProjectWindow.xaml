@@ -62,24 +62,22 @@
                         <TextBlock Style="{StaticResource Icon}" Text="&#xE8DA;" />
                     </Button>
                 </Grid>
-                <TextBlock x:Name="ScriptsHint" Style="{StaticResource Hint}" Text="Every .ws file in it is part of the project, and it's what Compile builds. It's made if it isn't there yet." />
+                <TextBlock x:Name="ScriptsHint" Style="{StaticResource Hint}" Text="Every .ws file in it is part of the project, and it's what Compile and Build compile. It's made if it isn't there yet." />
 
-                <TextBlock Style="{StaticResource Label}" Text="Compiled scripts" />
+                <TextBlock Style="{StaticResource Label}" Text="Compile scripts to…" />
                 <Grid>
                     <TextBox x:Name="OutputBox" Padding="8,6,40,6" />
                     <Button HorizontalAlignment="Right" Margin="0,0,4,0" Padding="6,3" Background="Transparent" BorderThickness="0"
-                            Click="BrowseOutput_Click" ToolTip="Choose where Compile writes the .rsblob">
+                            Click="BrowseOutput_Click" ToolTip="Choose where Compile scripts to… writes the .rsblob">
                         <TextBlock Style="{StaticResource Icon}" Text="&#xE8DA;" />
                     </Button>
                 </Grid>
-                <TextBlock Style="{StaticResource Hint}" Text="Where Project > Compile scripts writes the .rsblob, to check the scripts or try them. Leave it empty to be asked at the first compile." />
+                <TextBlock Style="{StaticResource Hint}" Text="Where Project > Compile scripts to… writes a .rsblob, to try the scripts somewhere of your own. Script Bench's Compile only checks them, and Build puts them in the mod. Leave it empty to be asked." />
 
                 <TextBlock Style="{StaticResource Label}" Text="When the mod is built" />
-                <CheckBox x:Name="BuildCompiledCheck" Content="Compile the scripts into content\precompiled.rsblob" IsChecked="True" MinWidth="0" Margin="0,2,0,0"
-                          ToolTip="The way REDkit publishes a mod: the scripts are checked as the mod is built, and the game loads them as they are" />
-                <CheckBox x:Name="BuildLooseCheck" Content="Ship the loose scripts in content\scripts" MinWidth="0" Margin="0,6,0,0"
-                          ToolTip="Without compiled scripts, the game compiles these when it starts. Beside them, they're the mod's source, and an info.json tells the game to run the compiled ones" />
-                <TextBlock Style="{StaticResource Hint}" Text="Build asks the first time when these haven't been chosen. At least one is needed for the scripts to go in the mod." />
+                <CheckBox x:Name="BuildLooseCheck" Content="Also ship the loose scripts in content\scripts" MinWidth="0" Margin="0,2,0,0"
+                          ToolTip="The .ws files go in the mod beside the compiled scripts, as its source for others to read or merge. An info.json tells the game to run the compiled ones" />
+                <TextBlock Style="{StaticResource Hint}" Text="Build always compiles the scripts into content\precompiled.rsblob, the way REDkit publishes a mod: they're checked as the mod is built, and the game loads them as they are." />
 
                 <TextBlock Style="{StaticResource Label}" Text="Author and version" />
                 <Grid>
