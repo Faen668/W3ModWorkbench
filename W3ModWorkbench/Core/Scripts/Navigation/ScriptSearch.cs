@@ -78,17 +78,26 @@ public static class ScriptSearch
     /// Every line in the workspace's scripts that matches <paramref name="pattern"/>, one hit per match.
     /// Comments and strings are searched too, as in any text search.
     /// </summary>
-    public static List<ScriptHit> Text(Regex pattern, ScriptFile current, IReadOnlyList<ScriptIndex> layers, CancellationToken cancel)
+    public static List<ScriptHit> Text(Regex pattern, ScriptFile current, IReadOnlyList<ScriptIndex> layers, CancellationToken cancel) =>
+        Text(pattern, FilesOf(current, layers), null, cancel);
+
+    /// <summary>
+    /// Every line in <paramref name="files"/> that matches <paramref name="pattern"/>, in their order. A file's text
+    /// comes from <paramref name="unsaved"/> when it's there (keyed by <see cref="ScriptFile.Key"/>), so changes
+    /// not saved yet are searched as they are.
+    /// </summary>
+    public static List<ScriptHit> Text(Regex pattern, IReadOnlyList<ScriptFile> files, IReadOnlyDictionary<string, string>? unsaved,
+        CancellationToken cancel, IProgress<int>? progress = null)
     {
-        var files = FilesOf(current, layers);
         var hits = new ConcurrentBag<(int Order, ScriptHit Hit)>();
-        int count = 0;
+        int count = 0, done = 0;
         Parallel.For(0, files.Count, new ParallelOptions { CancellationToken = cancel }, (i, loop) =>
         {
+            if (Interlocked.Increment(ref done) % 200 == 0) progress?.Report(done);
             string text;
             try
             {
-                text = files[i].Text;
+                text = unsaved is not null && unsaved.TryGetValue(files[i].Key, out var edited) ? edited : files[i].Text;
             }
             catch (Exception)
             {

@@ -62,6 +62,18 @@ public static class FolderSearch
         return files;
     }
 
+    /// <summary>
+    /// Whether a file passes <paramref name="filters"/>, as <see cref="Files"/> reads them: by its name, or by its
+    /// path (under its folder) for a wildcard with a \ or / in it, such as <c>game\player\*</c>.
+    /// </summary>
+    public static Func<string, bool> PathFilter(string filters)
+    {
+        var (include, exclude) = ParseFilters(filters.Replace('/', '\\'));
+        if (include.Count == 0 && exclude.Count == 0) return _ => true;
+        bool Matches(Regex r, string path) => r.IsMatch(r.ToString().Contains(@"\\") ? path : Path.GetFileName(path));
+        return path => (include.Count == 0 || include.Any(r => Matches(r, path))) && !exclude.Any(r => Matches(r, path));
+    }
+
     private static (List<Regex> Include, List<Regex> Exclude) ParseFilters(string filters)
     {
         var include = new List<Regex>();

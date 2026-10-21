@@ -40,6 +40,10 @@ public partial class PreviewWindow
     private readonly Dictionary<string, BenchNode> _gameByPath = new(StringComparer.OrdinalIgnoreCase);
 
     private string? _gameScripts;
+    private string? _modsFolder;
+
+    /// <summary>The game's scripts as the tree lists them, for a script opened without a tab to open it from.</summary>
+    private ScriptFolder? _gameArchive;
     private int _benchBuild;
     private TaskCompletionSource<string?>? _benchName;
     private Func<string, string?>? _benchNameCheck;
@@ -111,7 +115,7 @@ public partial class PreviewWindow
         string? gameScripts = Core.Scripts.Standalone.StandaloneCompiler.FindGameScripts(App.Settings.WccLitePath, gameFolder);
         string? modsFolder = gameFolder is null ? null : Path.Combine(gameFolder, "mods");
 
-        var (game, gameByPath) = await Task.Run(() => GameGroup(gameScripts));
+        var (game, gameByPath, gameArchive) = await Task.Run(() => GameGroup(gameScripts));
         if (build != _benchBuild) return;
         BenchNode mine;
         try
@@ -134,6 +138,8 @@ public partial class PreviewWindow
         if (build != _benchBuild) return;
 
         _gameScripts = gameScripts;
+        _gameArchive = gameArchive;
+        _modsFolder = modsFolder is not null && Directory.Exists(modsFolder) ? modsFolder : null;
         _gameByPath.Clear();
         foreach (var (path, node) in gameByPath) _gameByPath[path] = node;
         _mine = mine;
@@ -230,7 +236,7 @@ public partial class PreviewWindow
     }
 
     /// <summary>The game's scripts, read-only, and each by its path under the scripts folder.</summary>
-    private static (BenchNode Heading, Dictionary<string, BenchNode> ByPath) GameGroup(string? gameScripts)
+    private static (BenchNode Heading, Dictionary<string, BenchNode> ByPath, ScriptFolder? Archive) GameGroup(string? gameScripts)
     {
         var byPath = new Dictionary<string, BenchNode>(StringComparer.OrdinalIgnoreCase);
         var heading = new BenchNode
@@ -242,7 +248,7 @@ public partial class PreviewWindow
         if (gameScripts is null || !Directory.Exists(gameScripts))
         {
             heading.Add(BenchNode.Note(BenchGroup.Game, "The game's scripts weren't found", "Set the game folder in Settings (Ctrl+, in the main window)"));
-            return (heading, byPath);
+            return (heading, byPath, null);
         }
         var archive = ScriptFolder.Open(gameScripts);
         var files = archive.Entries.OfType<LooseScriptEntry>().Where(e => e.IsScript)
@@ -257,7 +263,7 @@ public partial class PreviewWindow
             byPath[relative] = node;
             return node;
         });
-        return (heading, byPath);
+        return (heading, byPath, archive);
     }
 
     /// <summary>The installed mods, each read when it's expanded: a compiled one from its blob, decompiled, others from their loose scripts.</summary>
@@ -480,10 +486,35 @@ public partial class PreviewWindow
         }
     }
 
-    /// <summary>A compile error's file, opened at its line, when there's no tab to open it from.</summary>
-    private void OpenBenchFile(ScriptFile file, int offset, int length)
+    /// <summary>
+    /// A compile error's or a search's file, opened at the place, when there's no tab to open it from: from the tree
+    /// when it lists the file, so it opens as the tree would, else read as it is (an installed mod's not unfolded yet).
+    /// </summary>
+    private async void OpenBenchFile(ScriptFile file, int offset, int length)
     {
-        if (_benchKeys.TryGetValue(file.Key, out var node)) _ = OpenBenchNodeAsync(node, offset, length);
+        if (_benchKeys.TryGetValue(file.Key, out var node))
+        {
+            _ = OpenBenchNodeAsync(node, offset, length);
+            return;
+        }
+        if (FindOpen(file.Key) is { Host: { } host } open)
+        {
+            host.ShowDocument(open);
+            open.Reveal(offset, length);
+            return;
+        }
+        byte[] data;
+        try
+        {
+            data = await Task.Run(file.Read);
+        }
+        catch (Exception ex)
+        {
+            await BenchMessage.Show($"{file.Path} could not be read", ex.Message, MessageKind.Warning, primary: "OK");
+            return;
+        }
+        var workspace = _gameArchive is { } game && _benchMain is { } main ? ScriptWorkspace.For(game, main.OpenArchives) : null;
+        ShowAt(new PreviewItem(file.Path, file.Source, data, file, workspace), this, offset, length);
     }
 
     private void BenchLocate_Click(object sender, RoutedEventArgs e) => LocateInBench(Current);

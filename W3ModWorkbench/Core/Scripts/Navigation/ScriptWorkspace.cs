@@ -270,6 +270,13 @@ public sealed class ScriptWorkspace
         }
     }
 
+    /// <summary>
+    /// The installed mods' compiled scripts, decompiled, each mod's files in the folder's order: the same ones go to
+    /// definition reads, so they're decompiled once whichever asks first.
+    /// </summary>
+    public static async Task<List<(string Mod, IReadOnlyList<ScriptFile> Files)>> InstalledBlobsAsync(string modsFolder) =>
+        [.. (await BlobsIndex(Path.GetFullPath(modsFolder))).Select(b => (b.Mod, b.Index.Files))];
+
     /// <summary>mods\X\content\*.rsblob, decompiled and indexed like an opened blob, one index per mod in the folder's order.</summary>
     private static List<(string Mod, ScriptIndex Index)> IndexBlobs(string modsFolder)
     {

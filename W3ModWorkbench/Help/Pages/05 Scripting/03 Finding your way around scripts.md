@@ -9,7 +9,8 @@ Script Bench knows where everything in the game's scripts, the installed mods an
 
 ## Going to a definition
 
-- Hold {{Ctrl}} and click a name, or put the cursor on it and press {{F12}}, to jump to where it's declared. Names that lead somewhere get a faint underline.
+- Hold {{Ctrl}} and click a name, or put the cursor on it and press {{F12}}, to jump to where it's declared. Names that lead somewhere get a faint underline once the scripts are read, a few seconds after the bench opens. On a declaration that changes nothing elsewhere (the game's own native functions, say), it lists where the name is used instead.
+- Every use of the name the cursor is on is marked through the file with a soft box, so you can see at a glance where a variable is set and read.
 - Rest the mouse on a name to see its declaration in a popup, with its file, what it belongs to, and the number behind an enum value.
 - {{Ctrl+Alt}}+click or {{Ctrl+F12}} opens it in the other group, so the code you came from stays in view.
 - {{Alt+Left}} (or the mouse's back button) goes back to where you jumped from, {{Alt+Right}} forward again. The clock button at the top lists where you've been.

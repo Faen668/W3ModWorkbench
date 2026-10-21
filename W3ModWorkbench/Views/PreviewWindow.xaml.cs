@@ -838,7 +838,7 @@ public partial class PreviewWindow : Window, IMessageHost
     /// Fills the results panel from a search that runs in the background. A new search stops the one before.
     /// <paramref name="work"/> returns the lines and a short summary such as "12 references in 4 files".
     /// </summary>
-    public async void ShowResults(PreviewDocument from, string title, string busy, Func<CancellationToken, (List<ResultRow> Rows, string Summary)> work,
+    public async void ShowResults(PreviewDocument? from, string title, string busy, Func<CancellationToken, (List<ResultRow> Rows, string Summary)> work,
         string empty, params (string Label, Action Run)[] actions)
     {
         _search?.Cancel();
@@ -909,11 +909,18 @@ public partial class PreviewWindow : Window, IMessageHost
     private void FindInFiles()
     {
         OpenResultsPanel();
-        Results.ShowFind(Current?.SelectedText is { Length: > 0 and < 200 } selected && !selected.Contains('\n') ? selected : null);
+        if (_isBench) RefreshBenchScopes();
+        string? selected = Current?.SelectedText is { Length: > 0 and < 200 } text && !text.Contains('\n') ? text : null;
+        Results.ShowFind(selected ?? (Results.FindText.Length == 0 && App.Settings.FindText.Length > 0 ? App.Settings.FindText : null));
     }
 
     private async void Results_FindRequested(System.Text.RegularExpressions.Regex pattern, string text)
     {
+        if (_isBench)
+        {
+            BenchFind(pattern, text);
+            return;
+        }
         if (ScriptDocument() is not { } doc)
         {
             Results.ShowRows(FindTitle, "", [], "Find in files searches from a script. Open a .ws file first.");

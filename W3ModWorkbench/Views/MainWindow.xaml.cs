@@ -1624,7 +1624,7 @@ public partial class MainWindow : Window, IMessageHost
             menu.Items.Add(item);
             return item;
         }
-        Add("Find in files…", "Ctrl+Shift+F", () => FindInFilesWindow.Open(this));
+        Add("Find in files…", "Ctrl+Shift+F", () => PreviewWindow.FindInBench(this));
         Add("Asset Browser", "Ctrl+Shift+A", () => _ = BrowseGameFilesAsync());
         Add("Browse game scripts", "", () => _ = BrowseGameScriptsAsync());
         menu.Items.Add(new Separator());
@@ -1695,8 +1695,6 @@ public partial class MainWindow : Window, IMessageHost
     }
 
     private void OpenStubGenerator() => StubWindow.Open(this, GameLocator.Resolve(null));
-
-    private void FindInFiles_Click(object sender, RoutedEventArgs e) => FindInFilesWindow.Open(this);
 
     private void BrowseGame_Click(object sender, RoutedEventArgs e) => _ = BrowseGameScriptsAsync();
 
@@ -1972,7 +1970,7 @@ public partial class MainWindow : Window, IMessageHost
         }
         else if (Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && e.Key == Key.F)
         {
-            FindInFilesWindow.Open(this);
+            PreviewWindow.FindInBench(this);
             e.Handled = true;
         }
         else if (Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && e.Key == Key.G)

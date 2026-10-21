@@ -38,6 +38,12 @@ public sealed partial class DefinitionFinder(ParsedScript doc, IReadOnlyList<Scr
     private readonly string _code = doc.Code;
     private readonly IReadOnlyList<ScriptIndex> _layers = [new ScriptIndex(doc.Symbols), .. workspace];
 
+    /// <summary>Whether a word is one of the language's own, such as function or int, which leads nowhere.</summary>
+    public static bool IsKeyword(string word) => Keywords.Contains(word);
+
+    /// <summary>Whether the word starting at <paramref name="start"/> is the name in a declaration in this script.</summary>
+    public bool IsDeclaration(int start) => _doc.Symbols.Any(s => s.Offset == start);
+
     /// <summary>The identifier at or just before an offset, if any.</summary>
     public (int Start, int Length)? WordAt(int offset)
     {

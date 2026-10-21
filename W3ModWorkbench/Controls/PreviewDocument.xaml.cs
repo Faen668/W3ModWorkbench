@@ -81,6 +81,11 @@ public partial class PreviewDocument : UserControl
     private ParsedScript? _doc;
     private (int Start, int Length) _probed; // the last word checked for a link
     private bool _probedFound;
+    private bool _linkWaits; // waiting for the scripts to be read before underlining
+
+    // every use of the word at the caret, marked
+    private readonly WordMarks _marks = new();
+    private readonly DispatcherTimer _marksTimer = new() { Interval = TimeSpan.FromMilliseconds(150) };
     private (int Offset, int Length)? _pendingReveal;
     private double? _pendingScroll;
 
@@ -185,6 +190,7 @@ public partial class PreviewDocument : UserControl
                 if (_workspace is not null) _hintTimer.Start();
             };
             UpdateOutline();
+            SetUpWordMarks();
         }
         else if (IsXml(item.Path))
         {
@@ -257,6 +263,14 @@ public partial class PreviewDocument : UserControl
             Editor.TextArea.TextView.LineTransformers.Insert(0, new WitcherScriptColorizer(Editor.Document, _dark) { View = Editor.TextArea.TextView });
         else if (IsXml(Item.Path))
             Editor.TextArea.TextView.LineTransformers.Insert(0, new XmlColorizer(Editor.Document, _dark) { View = Editor.TextArea.TextView });
+
+        // the uses of the word at the caret: a grey that's quieter than the selection's accent
+        var shade = _dark ? Color.FromArgb(0x2E, 0xFF, 0xFF, 0xFF) : Color.FromArgb(0x1F, 0x00, 0x00, 0x00);
+        var fill = new SolidColorBrush(shade);
+        fill.Freeze();
+        var edge = new Pen(new SolidColorBrush(Color.FromArgb((byte)(shade.A * 2), shade.R, shade.G, shade.B)), 1);
+        edge.Freeze();
+        (_marks.Fill, _marks.Edge) = (fill, edge);
 
         _link.Brush = TryFindResource("AccentTextFillColorPrimaryBrush") as Brush;
         if (_link.Brush is SolidColorBrush link)
@@ -573,6 +587,102 @@ public partial class PreviewDocument : UserControl
         _pendingScroll = other.Editor.VerticalOffset;
     }
 
+    // ---------------------------------------------------------------- the word at the caret
+
+    /// <summary>Most uses of a word marked at once: past this it's a common word, and marking it says nothing.</summary>
+    private const int MaxMarks = 2000;
+
+    /// <summary>Marks every use of the name at the caret, or of the name selected, through the file, as code editors do.</summary>
+    private void SetUpWordMarks()
+    {
+        Editor.TextArea.TextView.BackgroundRenderers.Add(_marks);
+        _marksTimer.Tick += (_, _) =>
+        {
+            _marksTimer.Stop();
+            UpdateWordMarks();
+        };
+        void Later()
+        {
+            _marksTimer.Stop();
+            _marksTimer.Start();
+        }
+        Editor.TextArea.Caret.PositionChanged += (_, _) => Later();
+        Editor.TextArea.SelectionChanged += (_, _) => Later();
+        // the marks belong to the text as it was: gone at once, and found again once typing stops
+        Editor.TextChanged += (_, _) =>
+        {
+            SetMarks(0, []);
+            Later();
+        };
+    }
+
+    private void UpdateWordMarks()
+    {
+        var document = Editor.Document;
+        (int Start, int Length)? word = null;
+        if (Editor.TextArea.Selection.IsEmpty) word = WordAround(document, Editor.CaretOffset);
+        else if (Editor.SelectionLength is > 0 and < 100 && WordAround(document, Editor.SelectionStart) is { } at
+                 && at.Start == Editor.SelectionStart && at.Length == Editor.SelectionLength)
+            word = at;
+        if (word is not { } w || DefinitionFinder.IsKeyword(document.GetText(w.Start, w.Length)))
+        {
+            SetMarks(0, []);
+            return;
+        }
+        string code = document.Text, name = code.Substring(w.Start, w.Length);
+        var found = new List<int>();
+        for (int i = code.IndexOf(name, StringComparison.OrdinalIgnoreCase); i >= 0 && found.Count <= MaxMarks;
+             i = code.IndexOf(name, i + name.Length, StringComparison.OrdinalIgnoreCase))
+        {
+            int end = i + name.Length;
+            if (i > 0 && ScriptParser.IsWordChar(code[i - 1]) || end < code.Length && ScriptParser.IsWordChar(code[end])) continue;
+            found.Add(i);
+        }
+        // the one at the caret alone says nothing; a word used everywhere would cover the page
+        SetMarks(w.Length, found.Count is > 1 and <= MaxMarks ? found : []);
+    }
+
+    private void SetMarks(int length, List<int> offsets)
+    {
+        if (_marks.Offsets.Count == 0 && offsets.Count == 0) return;
+        (_marks.Length, _marks.Offsets) = (length, offsets);
+        Editor.TextArea.TextView.InvalidateLayer(KnownLayer.Selection);
+    }
+
+    /// <summary>The name at or just before an offset, if any.</summary>
+    private static (int Start, int Length)? WordAround(TextDocument document, int offset)
+    {
+        int start = offset, end = offset;
+        while (start > 0 && ScriptParser.IsWordChar(document.GetCharAt(start - 1))) start--;
+        while (end < document.TextLength && ScriptParser.IsWordChar(document.GetCharAt(end))) end++;
+        return end > start && ScriptParser.IsWordStart(document.GetCharAt(start)) ? (start, end - start) : null;
+    }
+
+    /// <summary>Draws a soft box behind each use of the word at the caret that's on screen.</summary>
+    private sealed class WordMarks : IBackgroundRenderer
+    {
+        public List<int> Offsets { get; set; } = [];
+        public int Length { get; set; }
+        public Brush? Fill { get; set; }
+        public Pen? Edge { get; set; }
+
+        public KnownLayer Layer => KnownLayer.Selection;
+
+        public void Draw(TextView textView, DrawingContext drawingContext)
+        {
+            if (Length == 0 || Offsets.Count == 0 || !textView.VisualLinesValid || textView.VisualLines.Count == 0) return;
+            int first = textView.VisualLines[0].FirstDocumentLine.Offset, last = textView.VisualLines[^1].LastDocumentLine.EndOffset;
+            int i = Offsets.BinarySearch(first);
+            for (i = i < 0 ? ~i : i; i < Offsets.Count && Offsets[i] <= last; i++)
+            {
+                if (Offsets[i] + Length > textView.Document.TextLength) break;
+                var builder = new BackgroundGeometryBuilder { CornerRadius = 3, AlignToWholePixels = true };
+                builder.AddSegment(textView, new TextSegment { StartOffset = Offsets[i], Length = Length });
+                if (builder.CreateGeometry() is { } geometry) drawingContext.DrawGeometry(Fill, Edge, geometry);
+            }
+        }
+    }
+
     // ---------------------------------------------------------------- go to definition
 
     private void SetUpDefinitions()
@@ -638,6 +748,16 @@ public partial class PreviewDocument : UserControl
     /// </summary>
     private void UpdateLink()
     {
+        // the scripts are still being read: try again once they are, without waiting for the mouse to move
+        if (_workspace is { IsReady: false } && !_linkWaits)
+        {
+            _linkWaits = true;
+            _workspace.Ready.ContinueWith(_ => Dispatcher.BeginInvoke(() =>
+            {
+                _linkWaits = false;
+                UpdateLink();
+            }), TaskScheduler.Default);
+        }
         if (!Editor.TextArea.TextView.IsMouseOver
             || Finder() is not { } finder || OffsetAtMouse() is not { } offset || finder.WordAt(offset) is not { } word)
         {
@@ -647,7 +767,8 @@ public partial class PreviewDocument : UserControl
         if (_probed != word)
         {
             _probed = word;
-            _probedFound = finder.Find(word.Start, word.Length).Count > 0;
+            // a declaration leads to its uses when it changes nothing else
+            _probedFound = finder.Find(word.Start, word.Length).Count > 0 || finder.IsDeclaration(word.Start);
         }
         SetLink(_probedFound ? word : null, strong: (Keyboard.Modifiers & ModifierKeys.Control) != 0);
 
@@ -702,7 +823,12 @@ public partial class PreviewDocument : UserControl
         if (Finder() is not { } finder || finder.WordAt(offset) is not { } word) return;
 
         var targets = finder.Find(word.Start, word.Length);
-        if (targets.Count == 1)
+        if (targets.Count == 0 && finder.IsDeclaration(word.Start))
+        {
+            // already at the declaration, and it changes nothing elsewhere: where it's used is where to go
+            await FindReferencesAsync(word.Start);
+        }
+        else if (targets.Count == 1)
         {
             await NavigateAsync(targets[0], toSide);
         }

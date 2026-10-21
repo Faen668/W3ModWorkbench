@@ -182,6 +182,55 @@ public partial class ResultsPanel : UserControl
     /// <summary>The find box asks for a search: the pattern, and the text typed for the title.</summary>
     public event Action<Regex, string>? FindRequested;
 
+    /// <summary>A place to look was picked from the list (not set from code).</summary>
+    public event Action<string>? ScopePicked;
+
+    private bool _settingScopes;
+
+    /// <summary>Fills the Look in list with the places a search can look, picking <paramref name="selected"/> (or the first).</summary>
+    public void SetScopes(IReadOnlyList<string> scopes, string? selected)
+    {
+        _settingScopes = true;
+        ScopeBox.ItemsSource = scopes;
+        ScopeBox.SelectedItem = selected is not null && scopes.Contains(selected) ? selected : scopes.FirstOrDefault();
+        _settingScopes = false;
+    }
+
+    /// <summary>The place picked in the Look in list.</summary>
+    public string? Scope => ScopeBox.SelectedItem as string;
+
+    /// <summary>Which files, by name: wildcards, with ! to leave some out. Empty is every file.</summary>
+    public string FileFilter
+    {
+        get => FilesBox.Text;
+        set => FilesBox.Text = value;
+    }
+
+    public string FindText => FindBox.Text;
+
+    public bool MatchCase
+    {
+        get => MatchCaseToggle.IsChecked == true;
+        set => MatchCaseToggle.IsChecked = value;
+    }
+
+    public bool WholeWord
+    {
+        get => WholeWordToggle.IsChecked == true;
+        set => WholeWordToggle.IsChecked = value;
+    }
+
+    public bool UseRegex
+    {
+        get => RegexToggle.IsChecked == true;
+        set => RegexToggle.IsChecked = value;
+    }
+
+    private void ScopeBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!_settingScopes && ScopeBox.SelectedItem is string scope) ScopePicked?.Invoke(scope);
+    }
+
     public ResultsPanel()
     {
         InitializeComponent();
@@ -297,7 +346,7 @@ public partial class ResultsPanel : UserControl
         FindBar.Visibility = Visibility.Visible;
         if (!string.IsNullOrEmpty(text)) FindBox.Text = text;
         if (_rows.Count == 0 && Busy.Visibility != Visibility.Visible)
-            ShowRows("Find in files", "", [], "Type what to look for and press Enter. Every script open, and the game's, is searched.");
+            ShowRows("Find in files", "", [], "Type what to look for and press Enter. Look in says where: your mod, the game's scripts, the installed mods (compiled ones decompiled), REDkit's scripts or any folder.");
         Dispatcher.BeginInvoke(() =>
         {
             FindBox.Focus();
