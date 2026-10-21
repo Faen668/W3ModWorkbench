@@ -27,8 +27,8 @@ public sealed class AnimationPreview : Grid
     private readonly Button _play = new() { Padding = new Thickness(10, 4, 10, 4), IsEnabled = false, ToolTip = "Play or pause" };
     private readonly TextBlock _playIcon = new() { Text = "", VerticalAlignment = VerticalAlignment.Center };
     private readonly Slider _scrub = new() { Minimum = 0, Maximum = 1, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 8, 0), IsEnabled = false };
-    private readonly TextBlock _timeText = new() { VerticalAlignment = VerticalAlignment.Center, MinWidth = 96, FontFamily = new FontFamily("Consolas") };
-    private readonly ComboBox _speedBox = new() { MinWidth = 70, VerticalAlignment = VerticalAlignment.Center, ToolTip = "How fast it plays" };
+    private readonly TextBlock _timeText = new() { VerticalAlignment = VerticalAlignment.Center, MinWidth = 104, TextAlignment = TextAlignment.Right, Margin = new Thickness(4, 0, 0, 0), FontFamily = new FontFamily("Consolas") };
+    private readonly ComboBox _speedBox = new() { MinWidth = 70, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(12, 0, 0, 0), ToolTip = "How fast it plays" };
     private readonly Dictionary<string, Task<BitmapSource?>> _textures = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, Cr2wFile?> _sets = new(StringComparer.OrdinalIgnoreCase);
     private readonly System.Diagnostics.Stopwatch _clock = new();
@@ -40,7 +40,8 @@ public sealed class AnimationPreview : Grid
     private Matrix4x4 _placing = Matrix4x4.Identity;
     private BoneTransform[] _pose = [];
     private float _time, _playedFrom, _speed = 1;
-    private bool _playing, _scrubbing, _framed;
+    private bool _playing, _scrubbing;
+    private (Vector3 Min, Vector3 Max)? _travel;
     private double _nextDraw;
     private CancellationTokenSource? _load;
     private int _animationVersion;
@@ -85,6 +86,8 @@ public sealed class AnimationPreview : Grid
         SetRow(bar, 1);
         Children.Add(bar);
         Unloaded += (_, _) => Pause();
+        // framed again when the view changes size, as the window is laid out or resized
+        _view.SizeChanged += (_, e) => { if (e.PreviousSize.Width > 0 && Math.Abs(e.NewSize.Width - e.PreviousSize.Width) > 40) Frame(); };
         Message = "Pick something to preview";
     }
 
@@ -137,7 +140,7 @@ public sealed class AnimationPreview : Grid
             if (token.IsCancellationRequested) return;
             _view.ShowParts(parts, textures);
             _view.FitToView();
-            _framed = false;
+            _travel = null;
             _posing = await Task.Run(() => FindRig(look, parts.Select(p => p.Mesh).ToList(), locator), token);
             Message = parts.Count == 0 ? "The entity has no meshes to show." : _posing is null ? "The entity has no skeleton to play animations on." : "";
         }
@@ -248,15 +251,65 @@ public sealed class AnimationPreview : Grid
         _placing = Placing(_clip, posing);
         _scrub.Maximum = Math.Max(0.01, _clip.Duration);
         _scrub.IsEnabled = _play.IsEnabled = true;
+        _travel = Travel(_clip, posing, _placing);
         SetTime(0);
-        // the first animation frames the actor, once the view has its size
-        if (!_framed)
-        {
-            _framed = true;
-            _view.FitToView();
-        }
+        // each animation frames the actor over all of its moves, from the angle the view is at
+        Frame();
         if (play) Play();
         return true;
+    }
+
+    /// <summary>
+    /// Points the camera at the actor over the animation playing: a box round its bones, from the ground up and padded for
+    /// the body round them, so the whole of it is in the picture whatever the view's shape. The meshes' own bounds are
+    /// used before an animation plays.
+    /// </summary>
+    private void Frame()
+    {
+        if (_travel is not var (min, max))
+        {
+            _view.FitToView();
+            return;
+        }
+        var pad = new Vector3(0.2f, 0.2f, 0.15f);
+        min -= pad;
+        max += pad;
+        min.Z = Math.Min(min.Z, 0);
+        _view.FitTo(min, max);
+    }
+
+    /// <summary>
+    /// A box round the actor's bones over the whole of an animation, sampled through it, as an attack lunges and a walk
+    /// travels; null when the rig has too few bones to tell.
+    /// </summary>
+    private static (Vector3 Min, Vector3 Max)? Travel(AnimationClip clip, Posing posing, Matrix4x4 placing)
+    {
+        var rig = posing.Rig;
+        if (rig.Count < 2) return null;
+        int pelvis = Array.FindIndex(rig.Names, n => n.Equals("pelvis", StringComparison.OrdinalIgnoreCase));
+        if (pelvis < 0) pelvis = 1;
+        var pose = new BoneTransform[rig.Count];
+        var model = new Matrix4x4[rig.Count];
+        var min = new Vector3(float.MaxValue);
+        var max = new Vector3(float.MinValue);
+        const int samples = 12;
+        for (int s = 0; s <= samples; s++)
+        {
+            rig.Pose.CopyTo(pose, 0);
+            clip.Sample(clip.Duration * s / samples, pose);
+            KeepRoot(rig, pose);
+            rig.ToModel(pose, model);
+            var middle = Vector3.Transform(model[pelvis].Translation, placing);
+            foreach (var bone in model)
+            {
+                var at = Vector3.Transform(bone.Translation, placing);
+                // helper bones a rig keeps far off (cameras, a trajectory) aren't the body
+                if (Vector3.Distance(at, middle) > 3) continue;
+                min = Vector3.Min(min, at);
+                max = Vector3.Max(max, at);
+            }
+        }
+        return min.X <= max.X ? (min, max) : null;
     }
 
     /// <summary>Leaves the rig's root where it stands, as the game places a character's root itself.</summary>

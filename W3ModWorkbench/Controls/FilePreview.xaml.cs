@@ -225,7 +225,13 @@ public partial class FilePreview : UserControl
                 try
                 {
                     byte[] data = await ReadAsync(item.Entry);
-                    entity = await Task.Run(() => Core.Entities.EntityFile.Read(data), token);
+                    entity = await Task.Run(() =>
+                    {
+                        // with the templates it includes found, whose colour entries dye its parts
+                        var e = Core.Entities.EntityFile.Read(data);
+                        e.FindOrigins(locator.ReadFile);
+                        return e;
+                    }, token);
                     var look = await Task.Run(() => entity.Look(entity.DefaultAppearance, locator.ReadFile), token);
                     (parts, drawnBy, _, _) = await Task.Run(() => EntityWindow.ReadMeshes(look, locator, token), token);
                 }

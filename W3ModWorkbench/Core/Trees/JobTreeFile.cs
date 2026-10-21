@@ -121,12 +121,15 @@ public static class JobTreeFile
         return PreviewEntities[0];
     }
 
-    /// <summary>Whole characters in one entity, the game's background crowd, to preview animations on.</summary>
+    /// <summary>
+    /// Community NPCs to preview animations on, a man, a woman, a child and a dwarf: whole characters with their own
+    /// appearances (dyed as the game dyes them) and skeletons, so a child is a child's size.
+    /// </summary>
     public static readonly string[] PreviewEntities =
     [
-        @"characters\models\crowd_npc\background_crowd\novigrad_citizen_01\twals_01_ma__novigrad_citizen.w2ent",
-        @"characters\models\crowd_npc\background_crowd\novigrad_citizen_woman_community_01\twals_01_wa__novigrad_citizen_woman_community.w2ent",
-        @"characters\models\crowd_npc\background_crowd\novigrad_child_boy_01\twals_01_cma__novigrad_child_boy_01.w2ent",
-        @"characters\models\crowd_npc\background_crowd\novigrad_dwarf_01\twals_01_da__novigrad_dwarf.w2ent",
+        @"gameplay\community\community_npcs\novigrad\regular\novigrad_citizen_man.w2ent",
+        @"gameplay\community\community_npcs\novigrad\regular\novigrad_citizen_woman.w2ent",
+        @"gameplay\community\community_npcs\nml\regular\verden_warchild_boy.w2ent",
+        @"gameplay\community\community_npcs\novigrad\nonhumans\dwarf_man.w2ent",
     ];
 }
