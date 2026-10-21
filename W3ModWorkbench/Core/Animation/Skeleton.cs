@@ -22,14 +22,19 @@ public sealed class Skeleton
     public static Skeleton Read(byte[] data)
     {
         var file = Cr2wFile.Read(data);
-        return FromObject(file.First("CSkeleton") ?? throw new InvalidDataException("There's no skeleton in it: it has no CSkeleton."));
+        return FromObject(file.First("CSkeleton") ?? throw new InvalidDataException("There's no skeleton in it: it has no CSkeleton."), file);
     }
 
-    /// <summary>A skeleton from its CSkeleton object: a rig file's, or one kept inside another file (a face's).</summary>
-    public static Skeleton FromObject(RedObject skeleton)
+    /// <summary>
+    /// A skeleton from its CSkeleton object: a rig file's, or one kept inside another file (a face's). Its file, when
+    /// given, reads the bones of the older layout (154 and before), which are kept otherwise.
+    /// </summary>
+    public static Skeleton FromObject(RedObject skeleton, Cr2wFile? file = null)
     {
-        var names = skeleton.Array("bones").OfType<RedObject>().Select(b => b["nameAsCName"] as string ?? b["name"] as string ?? "").ToArray();
-        var parents = skeleton.Array("parentIndices").Select(p => p is short s ? s : (short)-1).ToArray();
+        var bones = file?.Array(skeleton, "bones") ?? skeleton.Array("bones");
+        // the older layout keeps a bone's name as an 8-bit string, read as its bytes
+        var names = bones.OfType<RedObject>().Select(b => b["nameAsCName"] as string ?? AnimEvent.Text(b["name"]) ?? "").ToArray();
+        var parents = (file?.Array(skeleton, "parentIndices") ?? skeleton.Array("parentIndices")).Select(p => p is short s ? s : (short)-1).ToArray();
         if (parents.Length != names.Length) throw new InvalidDataException("The skeleton's bones and parents don't match.");
 
         var pose = new BoneTransform[names.Length];

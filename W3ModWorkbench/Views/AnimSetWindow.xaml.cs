@@ -1,0 +1,353 @@
+using System.IO;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Input;
+using W3ModWorkbench.Core;
+using W3ModWorkbench.Core.Animation;
+using W3ModWorkbench.Core.Cr2w;
+using W3ModWorkbench.Core.Trees;
+using W3ModWorkbench.ViewModels;
+
+namespace W3ModWorkbench;
+
+/// <summary>
+/// An animation set (.w2anims) as REDkit's animation browser shows it: its animations listed with their lengths,
+/// frames, events and how far they move the character, the one picked playing on a character in 3D (the skeleton
+/// drawn over it, a bone's path traced, as asked), its properties and motion extraction, and its events along a
+/// timeline, both those the set keeps and those of the events files it names.
+/// </summary>
+public partial class AnimSetWindow : Window, IMessageHost
+{
+    private readonly string _path;
+    private readonly string _source;
+    private readonly Func<byte[]> _readData;
+    private readonly ResourceLocator _locator;
+    private readonly string? _origin;
+    private readonly IArchive? _archive;
+    private readonly string? _diskFile;
+    private AnimSetFile? _set;
+    private readonly Dictionary<RedObject, (Cr2wFile File, string Name)> _eventFiles = [];
+    private List<AnimEvent> _outside = [];
+    private List<(string Name, string Path)> _entities = [];
+    private AnimSetAnimation? _animation;
+    private Cr2wFile? _redkit;
+    private bool _syncing;
+
+    private static readonly (string Name, string Path)[] People =
+    [
+        ("Geralt", @"characters\player_entities\geralt\geralt_player.w2ent"),
+        ("Man", JobTreeFile.PreviewEntities[0]), ("Woman", JobTreeFile.PreviewEntities[1]),
+        ("Child", JobTreeFile.PreviewEntities[2]), ("Dwarf", JobTreeFile.PreviewEntities[3]),
+    ];
+
+    private sealed record AnimationItem(AnimSetAnimation Animation, int Events)
+    {
+        public string Name => Animation.Name;
+        public float Length => Animation.Duration;
+        public string LengthText => $"{Animation.Duration:0.00} s";
+        public int Frames => Animation.Frames;
+        public float Moves => Animation.Travel.Distance;
+        public string MovesText => Animation.Motion is null ? "" : $"{Moves:0.00} m";
+        public float Turns => Math.Abs(Animation.Travel.TurnDegrees);
+        public string TurnsText => Animation.Motion is null ? "" : $"{Animation.Travel.TurnDegrees:0}°";
+        public int Bones => Animation.Bones;
+        public long Size => Animation.KeptSize;
+        public string SizeText => Animation.KeptSize > 0 ? Format.Bytes(Animation.KeptSize) : "";
+    }
+
+    private AnimSetWindow(string path, string source, Func<byte[]> readData, ResourceLocator locator, string? origin, IArchive? archive = null, string? diskFile = null)
+    {
+        InitializeComponent();
+        _path = path;
+        _source = source;
+        _readData = readData;
+        _locator = locator;
+        _origin = origin;
+        _archive = archive;
+        _diskFile = diskFile;
+        Title = $"{Path.GetFileName(path)} - Animation set";
+        InfoText.Text = $"{path}   ·   {source}";
+        Preview.TimeChanged += (_, time) =>
+        {
+            Timeline.Time = time;
+            if (Preview.Duration > 0 && Math.Abs(Timeline.Duration - Preview.Duration) > 0.001f) Timeline.Duration = Preview.Duration;
+            ShowMotionAt(time);
+        };
+        Loaded += async (_, _) => await LoadAsync();
+        Closed += (_, _) => Preview.Pause();
+    }
+
+    public static bool CanShow(string name) => AnimSetFile.IsAnimSet(name);
+
+    public static void Open(string path, string source, byte[] data, ResourceLocator locator, Window owner, IArchive? archive = null) =>
+        new AnimSetWindow(path, source, () => data, locator, archive?.FilePath, archive).Standalone(owner).Show();
+
+    public static void OpenFile(string file, ResourceLocator locator, Window owner) =>
+        new AnimSetWindow(Path.GetFileName(file), file, () => File.ReadAllBytes(file), locator, file, diskFile: file).Standalone(owner).Show();
+
+    public Task ShowMessage(string? title, string message, MessageKind kind) => Message.Show(title, message, kind, primary: "OK");
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            _set = await Task.Run(() => AnimSetFile.Read(_readData()));
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or NotSupportedException)
+        {
+            BusyText.Text = "The animation set could not be read.\n\n" + ex.Message;
+            return;
+        }
+        var set = _set;
+        // played from as read, its buffers beside it on disk, or where the game keeps it
+        Preview.UseSet(_path, set.File, n => _diskFile is { } disk && File.Exists($"{disk}.{n}.buffer") ? File.ReadAllBytes($"{disk}.{n}.buffer") : _locator.ReadBuffer(_path, n, _archive));
+        BusyText.Visibility = Visibility.Collapsed;
+        Body.Visibility = Visibility.Visible;
+        AnimationsTab.Header = $"Animations ({set.Animations.Count:N0})";
+        int events = set.Animations.Sum(a => a.Events.Count);
+        InfoText.Text = $"{_path}   ·   {_source}   ·   CR2W {set.File.Version}, {Format.Count(set.Animations.Count, "animation")}, {Format.Count(events, "event")}"
+            + $", {set.Animations.Sum(a => a.Duration):0.#} s in all";
+        SetNote.Text = "Reading the events files it names…";
+        ShowAnimations();
+        FileProperties.Show(PropertyRow.Of(set.Resource, set.File));
+        _ = LoadRedkitAsync();
+        _ = LoadOutsideEventsAsync();
+
+        // the character: the kind the set's folder is for, or a creature of its name
+        _entities = [.. People];
+        int pick = await Task.Run(() => PickEntity());
+        _syncing = true;
+        EntityBox.ItemsSource = _entities.Select(e => e.Name).ToList();
+        EntityBox.SelectedIndex = pick;
+        _syncing = false;
+        await LoadEntityAsync();
+        if (AnimationGrid.Items.Count > 0 && AnimationGrid.SelectedIndex < 0) AnimationGrid.SelectedIndex = 0;
+    }
+
+    /// <summary>
+    /// The character the set is most likely for: Geralt, a woman, a child, a dwarf or a man by the words of its folder,
+    /// else a creature whose template is named as the set's folder is (wolf for animations\monsters\wolf), added to the list.
+    /// </summary>
+    private int PickEntity()
+    {
+        // a file opened from a folder is known by its whole path, the game's folders in it
+        var words = (_diskFile ?? _path).ToLowerInvariant().Split(['\\', '/'], StringSplitOptions.RemoveEmptyEntries);
+        var folders = words.Take(words.Length - 1).ToList();
+        bool Has(string w) => folders.Any(f => f == w || f.StartsWith(w + "_", StringComparison.Ordinal));
+        if (Has("geralt") || Has("player")) return 0;
+        if (Has("woman") || Has("women")) return 2;
+        if (Has("child") || Has("children")) return 3;
+        if (Has("dwarf")) return 4;
+        if (Has("man") || Has("men") || Has("npc") || Has("community")) return 1;
+        // a creature's: the deepest folder that isn't a generic one, found among the creatures' templates
+        var generic = new HashSet<string> { "animations", "monsters", "animals", "combat", "exploration", "gameplay", "quest", "work", "community", "cutscenes", "scenes", "dlc" };
+        var entities = _locator.AllPaths(".w2ent");
+        foreach (var folder in folders.AsEnumerable().Reverse().Where(f => !generic.Contains(f) && f.Length > 2))
+        {
+            var found = entities.Where(e => e.Contains(@"characters\npc_entities", StringComparison.OrdinalIgnoreCase)
+                    && Path.GetFileNameWithoutExtension(e).Contains(folder, StringComparison.OrdinalIgnoreCase))
+                .OrderBy(e => e.Length).FirstOrDefault();
+            if (found is null) continue;
+            _entities.Add((Path.GetFileNameWithoutExtension(found), found));
+            return _entities.Count - 1;
+        }
+        return 1;
+    }
+
+    private async Task LoadEntityAsync()
+    {
+        if (EntityBox.SelectedIndex < 0) return;
+        await Preview.LoadEntityAsync(_entities[EntityBox.SelectedIndex].Path, _locator);
+        ShowBones();
+        if (_animation is { } playing) await PlayAsync(playing);
+    }
+
+    /// <summary>The bones of the character's rig, to trace one of.</summary>
+    private void ShowBones()
+    {
+        var names = Preview.Rig?.Names ?? [];
+        string? traced = TraceBox.SelectedItem as string;
+        _syncing = true;
+        TraceBox.ItemsSource = new[] { "(none)" }.Concat(names).ToList();
+        TraceBox.SelectedItem = traced is not null && names.Contains(traced) ? traced : "(none)";
+        _syncing = false;
+    }
+
+    /// <summary>The events of the events files the set names, on its animations, each track named with its file.</summary>
+    private async Task LoadOutsideEventsAsync()
+    {
+        var files = _set!.EventFiles;
+        var owners = new Dictionary<RedObject, (Cr2wFile, string)>();
+        _outside = await Task.Run(() =>
+        {
+            var events = new List<AnimEvent>();
+            foreach (var path in files)
+            {
+                try
+                {
+                    // REDkit's copy first: cooking leaves out the events' track names
+                    var redkit = RedkitSource.Read(path)?.Path is { } source ? File.ReadAllBytes(source) : null;
+                    if ((redkit ?? _locator.ReadFile(path)) is not { } data) continue;
+                    var read = AnimEventsFile.Read(data);
+                    foreach (var e in read.Events) owners[e.Object] = (read.File, Path.GetFileName(path));
+                    events.AddRange(read.Events);
+                }
+                catch (InvalidDataException) { }
+            }
+            return events;
+        });
+        foreach (var (o, f) in owners) _eventFiles[o] = f;
+        SetNote.Text = files.Count == 0 ? "The set names no events files; its events are its own."
+            : $"Events from the set and {string.Join(", ", files.Select(Path.GetFileName))} ({Format.Count(_outside.Count, "event")})";
+        ShowAnimations();
+        if (_animation is { } shown) ShowEvents(shown);
+    }
+
+    private List<AnimEvent> EventsOf(AnimSetAnimation animation) =>
+        [.. animation.Events, .. _outside.Where(e => e.Animation == animation.Name)];
+
+    private void ShowAnimations()
+    {
+        if (_set is null) return;
+        string text = FilterBox.Text.Trim();
+        var counts = _outside.GroupBy(e => e.Animation).ToDictionary(g => g.Key, g => g.Count());
+        var items = _set.Animations.Where(a => text.Length == 0 || a.Name.Contains(text, StringComparison.OrdinalIgnoreCase))
+            .Select(a => new AnimationItem(a, a.Events.Count + counts.GetValueOrDefault(a.Name))).ToList();
+        _syncing = true;
+        AnimationGrid.ItemsSource = items;
+        AnimationGrid.SelectedItem = items.FirstOrDefault(i => i.Animation == _animation);
+        _syncing = false;
+    }
+
+    private void AnimationGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_syncing || AnimationGrid.SelectedItem is not AnimationItem item) return;
+        _ = PlayAsync(item.Animation);
+    }
+
+    /// <summary>Shows an animation's properties and events and plays it.</summary>
+    private async Task PlayAsync(AnimSetAnimation animation)
+    {
+        _animation = animation;
+        var a = animation;
+        AnimationTitle.Text = a.Name;
+        AnimationDetail.Text = $"{a.Duration:0.000} s  ·  {a.Frames:N0} frames at {a.FramesPerSecond:0.#} a second  ·  {Format.Count(a.Bones, "bone")} moved  ·  {a.BufferKind}"
+            + (a.SourceSize > 0 ? $", {Format.Bytes(a.KeptSize)} in the file of {Format.Bytes(a.SourceSize)} before compressing" : "");
+        // REDkit's copy, when it has the animation, for what cooking left out
+        var own = a.Animation;
+        var file = _set!.File;
+        if (_redkit is { } redkit && redkit.Exports.FirstOrDefault(x => x.ClassName == "CSkeletalAnimation" && redkit.Object(x.Index)["name"] as string == a.Name) is { } kept)
+            (own, file) = (redkit.Object(kept.Index), redkit);
+        AnimationProperties.Show(own is null ? [] : PropertyRow.Of(own, file));
+        var (distance, turn) = a.Travel;
+        MotionEnd.Text = a.Motion is null ? "none: the animation doesn't move the character" : $"{Motion(a.Duration)}   ({distance:0.00} m over the ground, turned {turn:0.#}°)";
+        ShowMotionAt(0);
+        ShowEvents(a);
+        if (await Preview.PlayAsync(_path, a.Name)) Timeline.Duration = Preview.Duration;
+    }
+
+    private void ShowEvents(AnimSetAnimation animation)
+    {
+        var events = EventsOf(animation);
+        Timeline.Show(events, animation.Duration);
+        TimelineTitle.Text = $"{animation.Name}: {Format.Count(events.Count, "event")} on {Format.Count(events.Select(e => e.Track).Distinct().Count(), "track")}"
+            + "; click an event for its properties, the ruler to go to a moment, the wheel to zoom";
+    }
+
+    /// <summary>Where the motion extraction has the character at a time: its move and its turn.</summary>
+    private string Motion(float time)
+    {
+        if (_animation?.Motion is not { } motion) return "";
+        var (p, yaw) = motion.At(time);
+        return $"translation {p.X,6:0.00}; {p.Y,6:0.00}; {p.Z,6:0.00}   rotation {yaw * 180 / MathF.PI,7:0.0}°";
+    }
+
+    private void ShowMotionAt(float time)
+    {
+        if (_animation is not { } a) return;
+        MotionNow.Text = a.Motion is null ? "" : $"{Motion(time)}   at {time:0.00} s";
+        var (distance, turn) = a.Travel;
+        MotionText.Text = a.Motion is null ? $"{a.Name} doesn't move the character as a whole."
+            : $"{a.Name} moves the character {distance:0.00} m and turns it {turn:0.#}° by its end; the character stays in place here, as the game moves it along that.";
+    }
+
+    private void EntityBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_syncing || EntityBox.SelectedIndex < 0) return;
+        _ = LoadEntityAsync();
+    }
+
+    private void Overlay_Click(object sender, RoutedEventArgs e)
+    {
+        Preview.ShowBones = BonesCheck.IsChecked == true;
+        Preview.ShowBoneNames = NamesCheck.IsChecked == true;
+    }
+
+    private void TraceBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_syncing) return;
+        Preview.TracedBone = TraceBox.SelectedItem is string bone && bone != "(none)" ? bone : null;
+    }
+
+    private void Timeline_EventClicked(object? sender, AnimEvent ev)
+    {
+        Preview.Pause();
+        Preview.SetTime(ev.Start);
+        EventTitle.Text = ev.Label;
+        var from = _eventFiles.TryGetValue(ev.Object, out var outside) ? outside : ((Cr2wFile, string)?)null;
+        EventDetail.Text = $"{ev.Object.ClassName}  ·  track {ev.Track}  ·  at {ev.Start:0.000} s" + (ev.Duration > 0 ? $" for {ev.Duration:0.000} s" : "") + $"  ·  {ev.Animation}"
+            + (from is { } f ? $"  ·  from {f.Item2}" : "  ·  kept in the set");
+        EventProperties.Show(PropertyRow.Of(ev.Object, from?.Item1 ?? _set!.File));
+        Tabs.SelectedItem = EventTab;
+    }
+
+    private void Timeline_TimePicked(object? sender, float time)
+    {
+        Preview.Pause();
+        Preview.SetTime(time);
+        Timeline.Time = time;
+    }
+
+    /// <summary>Says where the set's properties come from, and keeps REDkit's copy for its animations' properties.</summary>
+    private async Task LoadRedkitAsync()
+    {
+        var (path, origin) = (_path, _origin);
+        var from = await Task.Run(() => RedkitSource.For(path, origin));
+        _redkit = from.Redkit;
+        if (from.Redkit?.First("CSkeletalAnimationSet") is { } own) FileProperties.Show(PropertyRow.Of(own, from.Redkit));
+        SourceNoteBar.Show(from.Source, from.RedkitPath ?? origin, "animation set");
+        if (_animation is { } shown && _redkit is not null) _ = PlayAsync(shown);
+    }
+
+    private void FilterBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        FilterPlaceholder.Visibility = FilterBox.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
+        ShowAnimations();
+    }
+
+    private void Properties_LinkClicked(object? sender, string path) => _ = DataViewers.OpenLinkAsync(path, _locator, this, this);
+
+    private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (Message.IsOpen) return;
+        if (e.Key == Key.F && Keyboard.Modifiers == ModifierKeys.Control)
+        {
+            Tabs.SelectedItem = AnimationsTab;
+            FilterBox.Focus();
+            FilterBox.SelectAll();
+            e.Handled = true;
+            return;
+        }
+        if (e.OriginalSource is TextBox) return;
+        if (e.Key == Key.Space)
+        {
+            if (Preview.IsPlaying) Preview.Pause(); else Preview.Play();
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Escape)
+        {
+            Close();
+            e.Handled = true;
+        }
+    }
+}

@@ -236,6 +236,16 @@ public sealed class AnimationClip
                     var span = d.AsSpan(at);
                     return Unit(new Quaternion(BinaryPrimitives.ReadSingleLittleEndian(span), BinaryPrimitives.ReadSingleLittleEndian(span[4..]),
                         BinaryPrimitives.ReadSingleLittleEndian(span[8..]), BinaryPrimitives.ReadSingleLittleEndian(span[12..])));
+                case "ABOCM_AsFloat_XYZSignedWInLastBit":
+                {
+                    // X, Y and Z as floats, W made from them, the last bit of Z's saying it's negative
+                    var xyz = d.AsSpan(at);
+                    uint zBits = BinaryPrimitives.ReadUInt32LittleEndian(xyz[8..]);
+                    float x = BinaryPrimitives.ReadSingleLittleEndian(xyz), y = BinaryPrimitives.ReadSingleLittleEndian(xyz[4..]);
+                    float z = BitConverter.UInt32BitsToSingle(zBits & ~1u);
+                    float w = MathF.Sqrt(MathF.Max(0, 1 - x * x - y * y - z * z));
+                    return Unit(new Quaternion(x, y, z, (zBits & 1) != 0 ? -w : w));
+                }
                 default:
                     throw new InvalidDataException($"An animation packs its orientations in a way this doesn't read ({method}).");
             }

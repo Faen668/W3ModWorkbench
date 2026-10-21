@@ -31,6 +31,7 @@ public sealed class AnimationPreview : Grid
     private readonly ComboBox _speedBox = new() { MinWidth = 70, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(12, 0, 0, 0), ToolTip = "How fast it plays" };
     private readonly Dictionary<string, Task<BitmapSource?>> _textures = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, Cr2wFile?> _sets = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, Func<int, byte[]?>> _buffers = new(StringComparer.OrdinalIgnoreCase);
     private readonly System.Diagnostics.Stopwatch _clock = new();
     private static readonly float[] Speeds = [0.1f, 0.25f, 0.5f, 0.75f, 1f, 1.5f, 2f];
 
@@ -48,6 +49,68 @@ public sealed class AnimationPreview : Grid
     private int _animationVersion;
 
     private sealed record Posing(Skeleton Rig, Matrix4x4[] Rest, List<MeshFile> Meshes, List<(int Bone, bool ByName)[]> Maps);
+
+    private bool _showBones, _showNames;
+    private string? _traced;
+    private List<Vector3>? _trail;
+    private Matrix4x4[]? _posed;
+
+    /// <summary>The rig the entity is posed with, or null.</summary>
+    public Skeleton? Rig => _posing?.Rig;
+
+    /// <summary>Whether the skeleton is drawn over the character, as it's posed.</summary>
+    public bool ShowBones
+    {
+        get => _showBones;
+        set { _showBones = value; DrawSkeleton(); }
+    }
+
+    /// <summary>Whether the bones' names are drawn beside them, with the skeleton.</summary>
+    public bool ShowBoneNames
+    {
+        get => _showNames;
+        set { _showNames = value; DrawSkeleton(); }
+    }
+
+    /// <summary>A bone whose path over the animation is drawn, as REDkit's trajectory tool draws it, or null.</summary>
+    public string? TracedBone
+    {
+        get => _traced;
+        set { _traced = value; _trail = Trail(); DrawSkeleton(); }
+    }
+
+    /// <summary>The path the traced bone takes over the whole of the animation playing, placed as the actor is.</summary>
+    private List<Vector3>? Trail()
+    {
+        if (_traced is null || _clip is not { } clip || _posing is not { } posing) return null;
+        int bone = Array.FindIndex(posing.Rig.Names, n => n.Equals(_traced, StringComparison.OrdinalIgnoreCase));
+        if (bone < 0) return null;
+        var pose = new BoneTransform[posing.Rig.Count];
+        var model = new Matrix4x4[posing.Rig.Count];
+        int samples = Math.Clamp((int)(clip.Duration * 30), 2, 600);
+        var trail = new List<Vector3>(samples + 1);
+        for (int s = 0; s <= samples; s++)
+        {
+            Sample(clip, posing.Rig, clip.Duration * s / samples, pose, _fit);
+            posing.Rig.ToModel(pose, model);
+            trail.Add(Vector3.Transform(model[bone].Translation, _placing));
+        }
+        return trail;
+    }
+
+    /// <summary>The skeleton and the traced path over the character, as asked for, or nothing.</summary>
+    private void DrawSkeleton()
+    {
+        var rig = _posing?.Rig;
+        bool bones = (_showBones || _showNames) && rig is not null && _posed is not null;
+        if (!bones && _trail is null)
+        {
+            _view.ShowSkeleton(null, null);
+            return;
+        }
+        _view.ShowSkeleton(bones ? _posed : null, bones ? rig!.Parents : null, rig is null || _traced is null ? -1 : Array.FindIndex(rig.Names, n => n.Equals(_traced, StringComparison.OrdinalIgnoreCase)),
+            0, bones && _showNames ? rig!.Names : null, _trail);
+    }
 
     /// <summary>Raised as the time shown changes, while playing or scrubbing.</summary>
     public event EventHandler<float>? TimeChanged;
@@ -143,6 +206,9 @@ public sealed class AnimationPreview : Grid
             _view.FitToView();
             _travel = null;
             _posing = await Task.Run(() => FindRig(look, parts.Select(p => p.Mesh).ToList(), locator), token);
+            _posed = _posing?.Rest;
+            _trail = null;
+            DrawSkeleton();
             Message = parts.Count == 0 ? "The entity has no meshes to show." : _posing is null ? "The entity has no skeleton to play animations on." : "";
         }
         catch (OperationCanceledException)
@@ -204,6 +270,19 @@ public sealed class AnimationPreview : Grid
     }
 
     /// <summary>
+    /// A set already read, to play from by <paramref name="key"/>, its buffers read by <paramref name="buffers"/>: a set
+    /// opened from a folder, which the game's files don't have.
+    /// </summary>
+    public void UseSet(string key, Cr2wFile set, Func<int, byte[]?> buffers)
+    {
+        lock (_sets)
+        {
+            _sets[key] = set;
+            _buffers[key] = buffers;
+        }
+    }
+
+    /// <summary>
     /// Plays an animation of a set by its name, from the start, looping. False, with why in the view, when it isn't in
     /// the set, can't be read, or is made for another skeleton.
     /// </summary>
@@ -232,8 +311,10 @@ public sealed class AnimationPreview : Grid
             if (export is null) return (null, $"{animation} isn't in {Path.GetFileName(animset)}.");
             try
             {
-                var archive = locator.Find(animset)?.Archive;
-                return (AnimationClip.Read(set, set.Object(export.Index), n => locator.ReadBuffer(animset, n, archive)), "");
+                Func<int, byte[]?>? buffers;
+                lock (_sets) _buffers.TryGetValue(animset, out buffers);
+                var archive = buffers is null ? locator.Find(animset)?.Archive : null;
+                return (AnimationClip.Read(set, set.Object(export.Index), buffers ?? (n => locator.ReadBuffer(animset, n, archive))), "");
             }
             catch (Exception ex) when (ex is InvalidDataException or IndexOutOfRangeException or ArgumentException)
             {
@@ -254,6 +335,7 @@ public sealed class AnimationPreview : Grid
         _scrub.Maximum = Math.Max(0.01, _clip.Duration);
         _scrub.IsEnabled = _play.IsEnabled = true;
         _travel = Travel(_clip, posing, _placing, _fit);
+        _trail = Trail();
         SetTime(0);
         // each animation frames the actor over all of its moves, from the angle the view is at
         Frame();
@@ -382,6 +464,8 @@ public sealed class AnimationPreview : Grid
         var model = new Matrix4x4[posing.Rig.Count];
         posing.Rig.ToModel(_pose, model);
         for (int i = 0; i < model.Length; i++) model[i] *= _placing;
+        _posed = model;
+        if (_showBones || _showNames) DrawSkeleton();
         var bones = posing.Meshes.Select((m, i) => Skinning.BoneMatrices(m, posing.Maps[i], posing.Rest, model)).ToList();
         _view.Pose((part, chunk) => part < bones.Count ? Skinning.Pose(chunk, bones[part]) : null);
         _timeText.Text = $"{time,5:0.00} / {clip.Duration:0.00} s";
@@ -418,6 +502,9 @@ public sealed class AnimationPreview : Grid
         _clip = null;
         _time = 0;
         _view.Pose(null);
+        _posed = _posing?.Rest;
+        _trail = null;
+        DrawSkeleton();
         _scrub.IsEnabled = _play.IsEnabled = false;
         _scrubbing = true;
         _scrub.Value = 0;

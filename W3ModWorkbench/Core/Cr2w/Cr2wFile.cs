@@ -168,6 +168,20 @@ public sealed class Cr2wFile
         catch (Exception ex) when (ex is InvalidDataException or ArgumentOutOfRangeException or IndexOutOfRangeException) { return []; }
     }
 
+    /// <summary>
+    /// An array property of the older layout (154 and before) that was kept as its bytes, read as its elements; the
+    /// property as it was read otherwise, or empty when it can't be.
+    /// </summary>
+    public List<object?> Array(RedObject owner, string name)
+    {
+        if (owner[name] is List<object?> list) return list;
+        if (owner[name] is not byte[] || !owner.Spans.TryGetValue(name, out var span)) return [];
+        string type = owner.Properties.First(p => p.Name == name).Type;
+        if (!type.StartsWith('@')) return [];
+        try { return new RedReader(this, Data, span.Start, span.End).ReadOldArray(type[1..]); }
+        catch (Exception ex) when (ex is InvalidDataException or ArgumentOutOfRangeException or IndexOutOfRangeException) { return []; }
+    }
+
     /// <summary>A TagList's tags. It's kept as its bytes: a count, then that many names.</summary>
     public List<string> Tags(byte[] raw)
     {

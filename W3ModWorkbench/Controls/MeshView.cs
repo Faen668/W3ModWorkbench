@@ -57,6 +57,7 @@ public sealed class MeshView : Border
     private bool _showFloor;
     // what's drawn over the meshes to see how they're made: their box, normals, bones and collision
     private readonly GroupModel3D _debug = new();
+    private readonly GroupModel3D _skeleton = new();
     private bool _showBounds, _showNormals, _showBones, _vertexColors;
     private IReadOnlyList<(Vector3[] Vertices, int[] Triangles)> _collision = [];
     private readonly Dictionary<int, MeshGeometryModel3D> _chunks = [];
@@ -119,6 +120,7 @@ public sealed class MeshView : Border
         _viewport.Items.Add(_floor);
         _viewport.Items.Add(_models);
         _viewport.Items.Add(_debug);
+        _viewport.Items.Add(_skeleton);
         Child = _viewport;
         // the window's see-through backdrop doesn't show through Direct3D's picture, so it's cleared to the theme's
         // own background, following the theme as it changes
@@ -843,8 +845,71 @@ public sealed class MeshView : Border
         }
     }
 
+    /// <summary>
+    /// A skeleton drawn over everything, in the game's space: a line from each bone to its parent, the one picked in
+    /// the accent colour, and, as asked, each bone's axes (X red, Y green, Z blue, <paramref name="axisLength"/> long),
+    /// its name beside it, and a path (where a bone goes over an animation). Null bones clear it.
+    /// </summary>
+    public void ShowSkeleton(System.Numerics.Matrix4x4[]? bones, IReadOnlyList<short>? parents, int selected = -1, float axisLength = 0,
+        IReadOnlyList<string>? names = null, IReadOnlyList<Vector3>? path = null)
+    {
+        _skeleton.Children.Clear();
+        if (bones is not null && parents is not null)
+        {
+            var lines = new List<(Vector3, Vector3)>();
+            var helpers = new List<(Vector3, Vector3)>();
+            var picked = new List<(Vector3, Vector3)>();
+            var joints = new List<(Vector3, Vector3)>();
+            float joint = 0.006f;
+            for (int i = 0; i < bones.Length && i < parents.Count; i++)
+            {
+                var at = ToView(bones[i].Translation);
+                int parent = parents[i];
+                // a bone hung from the root (an IK target, the trajectory) is a helper, not the body: its line is faint
+                if (parent >= 0 && parent < bones.Length)
+                    (i == selected ? picked : parents[parent] < 0 ? helpers : lines).Add((ToView(bones[parent].Translation), at));
+                var marks = i == selected ? picked : joints;
+                marks.Add((at - Vector3.UnitX * joint, at + Vector3.UnitX * joint));
+                marks.Add((at - Vector3.UnitY * joint, at + Vector3.UnitY * joint));
+                marks.Add((at - Vector3.UnitZ * joint, at + Vector3.UnitZ * joint));
+            }
+            AddLines(_skeleton, helpers, Color.FromRgb(0x6A, 0x6A, 0x70), 1, onTop: true);
+            AddLines(_skeleton, lines, Color.FromRgb(0xE8, 0xE4, 0xD8), 1.6, onTop: true);
+            AddLines(_skeleton, joints, Color.FromRgb(0xF2, 0xC9, 0x4C), 2, onTop: true);
+            if (axisLength > 0)
+                for (int axis = 0; axis < 3; axis++)
+                {
+                    var axisLines = new List<(Vector3, Vector3)>();
+                    var unit = axis == 0 ? Vector3.UnitX : axis == 1 ? Vector3.UnitY : Vector3.UnitZ;
+                    foreach (var bone in bones)
+                        axisLines.Add((ToView(bone.Translation), ToView(Vector3.Transform(unit * axisLength, bone))));
+                    AddLines(_skeleton, axisLines, axis == 0 ? Color.FromRgb(0xE5, 0x48, 0x48) : axis == 1 ? Color.FromRgb(0x4C, 0xC0, 0x5A) : Color.FromRgb(0x4C, 0x8A, 0xFF), 1.2, onTop: true);
+                }
+            AddLines(_skeleton, picked, Color.FromRgb(0xC7, 0x7D, 0xFF), 3, onTop: true);
+            if (names is not null)
+            {
+                var text = new BillboardText3D();
+                for (int i = 0; i < bones.Length && i < names.Count; i++)
+                    text.TextInfo.Add(new TextInfo(names[i], ToView(bones[i].Translation))
+                    {
+                        Foreground = i == selected ? new Color4(0.78f, 0.49f, 1f, 1) : new Color4(0.95f, 0.93f, 0.88f, 1),
+                        Background = new Color4(0, 0, 0, 0.45f),
+                        Scale = 0.55f,
+                    });
+                _skeleton.Children.Add(new BillboardTextModel3D { Geometry = text, FixedSize = true, IsHitTestVisible = false, DepthBias = -100000000 });
+            }
+        }
+        if (path is { Count: > 1 })
+        {
+            var trail = new List<(Vector3, Vector3)>();
+            for (int i = 1; i < path.Count; i++) trail.Add((ToView(path[i - 1]), ToView(path[i])));
+            AddLines(_skeleton, trail, Color.FromRgb(0x3F, 0xD0, 0xE0), 2.2, onTop: true);
+        }
+        _viewport.InvalidateRender();
+    }
+
     /// <summary>Lines in 3D, in the view's space, in one colour whatever the light, so many pixels thick.</summary>
-    private static void AddLines(GroupModel3D into, List<(Vector3 A, Vector3 B)> lines, Color color, double thickness)
+    private static void AddLines(GroupModel3D into, List<(Vector3 A, Vector3 B)> lines, Color color, double thickness, bool onTop = false)
     {
         if (lines.Count == 0) return;
         var positions = new Vector3Collection(lines.Count * 2);
@@ -863,6 +928,8 @@ public sealed class MeshView : Border
             Thickness = thickness,
             EnableViewFrustumCheck = false,
             IsHitTestVisible = false,
+            // pulled nearly to the camera, to be seen through the body round it
+            DepthBias = onTop ? -100000000 : 0,
         });
     }
 

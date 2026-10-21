@@ -466,6 +466,32 @@ The window is laid out as REDkit's animation events editor: the animation picked
 **File** has the file's own properties, from REDkit's copy when there is one. Every one of REDkit's animation events files reads (346).
 """),
 
+        new(Basics, "Animation sets", "\uE714", """
+Double-click a `.w2anims`, or select it and press **Enter**, to open it in the animation set viewer. An animation set keeps the animations a kind of character plays for something (a weapon's attacks, a job's work, a creature's moves), each with the events it fires (sounds, footsteps, effects, things scripts hear), and names the events files kept apart from it.
+
+The window is laid out as REDkit's animation browser: the animation picked playing on a character in 3D at the top left, the set's animations at the top right, and the picked animation's events along a timeline underneath.
+
+- **The animations** are in a table: each one's length, frames, events, how far it moves and turns the character, how many bones it moves and the data it keeps in the file. Click a heading to sort by it, narrow them by some letters (**Ctrl+F**), and click one to play it.
+- **The character** is Geralt, a man, a woman, a child or a dwarf as the set's folder is for, or a creature whose template is named as the set's folder is (the bear's set plays on a grizzly); pick another in **Preview on**. An animation made for another build plays in proportion. Play, pause, drag to any moment and change the speed under the view; **Space** plays and pauses.
+- **Bones** draws the skeleton over the character as it moves, **Names** writes each bone's name beside it, and **Trace** draws the path a bone takes over the whole animation (pick `r_weapon` to see a sword's swing), as REDkit's trajectory tool does.
+- **Animation** has the animation's properties, from REDkit's copy when there is one, and its motion extraction: where it has moved and turned the character by its end and at the moment shown. The character stays in place in the view, as the game moves it along that.
+- **The timeline** has a row for each track, the set's own events and those of the events files it names (from REDkit's copies, which keep their tracks' names). Click an event to go to it and see its properties under **Event**.
+
+**Properties** has the set's own properties. Every one of REDkit's animation sets reads (450), and 25,293 of their animations play.
+"""),
+
+        new(Basics, "Rigs", "\uE77B", """
+Double-click a `.w2rig`, or select it and press **Enter**, to open it in the rig viewer. A rig is a skeleton: its bones, each under a parent, in the pose they rest in, which meshes are bound to and animations move.
+
+The window is laid out as REDkit's skeleton editor: the skeleton in 3D on the left, its bones on the right.
+
+- **The view** draws a line from each bone to its parent, faint for the helper bones hung from the root (IK targets, the trajectory). **Bone names** writes each bone's name beside it, **Bone axes** draws each bone's axes (X red, Y green, Z blue), and **On a character** shows the skeleton inside a character made on it (a base character's rig, or one beside it), to see where the bones sit in the body. **Fit** (**F**) frames the whole skeleton.
+- **Bones** is a tree from the root, each bone numbered as the rig numbers it; narrow it by some letters (**Ctrl+F**). Click a bone to pick it out in the view and see where it is from its parent (position, rotation in degrees and as a quaternion, scale) and in the model.
+- **Tracks** lists the float tracks animations can drive beside the bones.
+
+**Properties** has the rig's properties (its speeds, LODs and control rig), from REDkit's copy when there is one. Every one of REDkit's rigs reads (420), the oldest (137 and before) too.
+"""),
+
         new(Basics, "Communities", "\uE716", """
 Double-click a `.w2comm`, or select it and press **Enter**, to open it in the community viewer. One a property refers to opens from the other viewers too, and a file on disk opens from **Open files** or by dropping it on the window.
 

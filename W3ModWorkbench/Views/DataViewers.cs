@@ -28,6 +28,8 @@ public static class DataViewers
         new("Community", CommunityWindow.CanShow, CommunityWindow.Open, CommunityWindow.OpenFile),
         new("Journal", JournalWindow.CanShow, JournalWindow.Open, JournalWindow.OpenFile),
         new("Animation events", AnimEventsWindow.CanShow, AnimEventsWindow.Open, AnimEventsWindow.OpenFile),
+        new("Animation set", AnimSetWindow.CanShow, AnimSetWindow.Open, AnimSetWindow.OpenFile),
+        new("Rig", RigWindow.CanShow, RigWindow.Open, RigWindow.OpenFile),
     ];
 
     /// <summary>Whether a file's name says a viewer here shows it.</summary>

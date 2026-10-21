@@ -30,7 +30,7 @@ public sealed class MimicFace
     {
         var file = Cr2wFile.Read(data);
         var face = file.First("CMimicFace") ?? throw new InvalidDataException("There's no face in it: it has no CMimicFace.");
-        var skeleton = face["mimicSkeleton"] is RedHandle s && file.Object(s) is { } bones ? Skeleton.FromObject(bones)
+        var skeleton = face["mimicSkeleton"] is RedHandle s && file.Object(s) is { } bones ? Skeleton.FromObject(bones, file)
             : throw new InvalidDataException("The face has no skeleton.");
         var controls = face["floatTrackSkeleton"] is RedHandle t && file.Object(t) is { } tracks
             ? tracks.Array("tracks").OfType<RedObject>().Select(c => c["nameAsCName"] as string ?? c["name"] as string ?? "").ToArray()

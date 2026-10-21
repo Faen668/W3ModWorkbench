@@ -199,6 +199,22 @@ internal sealed class RedReader
         return result;
     }
 
+    /// <summary>
+    /// An array of the older layout (154 and before, typed @T) that the reading of properties keeps as its bytes: its
+    /// count, then the name of its elements' type and 0xFFFF, then the elements. A rig's bones are kept so.
+    /// </summary>
+    public List<object?> ReadOldArray(string elementType)
+    {
+        int count = I32();
+        if (count < 0 || count > 50_000_000) throw new InvalidDataException("An array's length makes no sense.");
+        U16();
+        U16();
+        var list = new List<object?>(Math.Min(count, 4096));
+        for (int i = 0; i < count; i++) list.Add(ReadValue(elementType, -1));
+        if (Position != _end) throw new InvalidDataException("The array doesn't fill its property.");
+        return list;
+    }
+
     /// <summary>One value of a type. <paramref name="end"/> is where a tagged value ends, or -1 inside an array.</summary>
     private object? ReadValue(string type, int end)
     {
