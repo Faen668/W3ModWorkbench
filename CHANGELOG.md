@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Fixed: **cloth showed the wrong part of its texture**, so Yennefer's gown had a white strip down its slit and other cloth wore pieces of its hem in odd places. APEX counts a cloth's UVs from the bottom left (every cloth the game has says so), which is now read; and its triangles were wound the other way to the game's meshes, which lit cloth from the inside once it moved.
+- Fixed: **cloth was flung away when an animation looped**: an animation that runs forward (a run cycle) jumps back to its start, and the cloth was dragged after it. A jump like that now carries the cloth with it, as APEX does.
+- **Smoothing edges in the 3D views** is a setting (**Settings > Viewers**: Off, 2× or 4×), and 2× is the new default: 4× halved the frame rate of a mesh filling a big mesh viewer (24 to 32 frames a second at 2000 pixels wide, 60 with 2×), and the edges look much the same.
+
 - **The Asset Browser's star bookmarks files too**: it was greyed out unless a folder was picked in the tree. Now, with a file highlighted, it bookmarks that file (or the files highlighted), filling in when they're bookmarked already, and turns back to the folder when you click one in the tree. Every item on the file list's right-click menu, its **Copy** submenu and the **Whole game** menu has an icon now, so the text lines up.
 
 - **Cloth moves as it does in the game**: capes, skirts, dresses, coat tails and banners (`.redcloth`) are simulated in the entity, cutscene, scene and animation views, as the game's APEX cloth does it: they hang with gravity, swing as the body moves, keep off the body with its collision spheres and capsules and stay within how far each part may move. It's a port of the PhysX 3 cloth solver APEX runs, on the fabric the game cooked for each cloth with its own settings; all 592 cloth resources in the game and its DLC are read. Cutscenes keep their **Reset cloth and dangles** and **Cloth off** events. Only the level of detail drawn is simulated, a fraction of a millisecond a frame for most cloth. **Settings > Viewers > Simulate cloth as the game does** turns it off.

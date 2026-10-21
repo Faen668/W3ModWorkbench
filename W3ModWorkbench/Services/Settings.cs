@@ -155,6 +155,12 @@ public sealed class Settings
     /// <summary>How many times a second the entity viewer poses an animation as it plays; 0 for as often as the screen draws.</summary>
     public int AnimationFps { get; set; } = 30;
 
+    /// <summary>
+    /// How many samples each pixel of the 3D views takes to smooth edges: 0 (off), 2 or 4. 4 costs the graphics card
+    /// most: a mesh filling a big view drew at half the frame rate with it.
+    /// </summary>
+    public int Antialiasing { get; set; } = 2;
+
     /// <summary>Whether cloth (.redcloth: capes, skirts, coat tails) is simulated in the 3D views as it is in the game, rather than only skinned.</summary>
     public bool SimulateCloth { get; set; } = true;
 

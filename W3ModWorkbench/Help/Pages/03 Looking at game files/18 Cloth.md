@@ -16,7 +16,7 @@ The workbench simulates cloth the same way, from the game's own data. You'll see
 
 Double-click a `.redcloth` to open it in the mesh viewer, as REDkit does. Everything on the [[Meshes]] page works for it too: LODs, materials, textures, **Export OBJ**. It also has an **Apex Cloth** tab, where the cloth hangs from its bones and simulates while you look.
 
-![A cloak in the cloth viewer, swaying in a wind, with its settings](cloth-viewer.jpg)
+![Yennefer's dress in the cloth viewer, swaying in a wind, with its settings](cloth-viewer.jpg)
 
 ## The preview
 

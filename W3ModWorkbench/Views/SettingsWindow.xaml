@@ -647,6 +647,21 @@
 
                     <Border Style="{StaticResource Card}">
                         <StackPanel>
+                            <TextBlock Style="{StaticResource SectionTitle}" Text="{l:T Settings.Viewers.Antialiasing}" />
+                            <Border Style="{StaticResource SegmentRow}" Margin="0,4,0,0">
+                                <StackPanel Orientation="Horizontal">
+                                    <RadioButton x:Name="AntialiasOff" GroupName="Antialias" Style="{StaticResource Segment}" Content="{l:T Settings.Viewers.AntialiasingOff}" />
+                                    <RadioButton x:Name="Antialias2" GroupName="Antialias" Style="{StaticResource Segment}" Content="{l:T Settings.Viewers.Antialiasing2}" />
+                                    <RadioButton x:Name="Antialias4" GroupName="Antialias" Style="{StaticResource Segment}" Content="{l:T Settings.Viewers.Antialiasing4}" />
+                                </StackPanel>
+                            </Border>
+                            <TextBlock Style="{StaticResource Hint}"
+                                       Text="{l:T Settings.Viewers.AntialiasingHint}" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
                             <TextBlock Style="{StaticResource SectionTitle}" Text="{l:T Settings.Viewers.Cloth}" />
                             <CheckBox x:Name="SimulateClothCheck" Content="{l:T Settings.Viewers.SimulateCloth}" Margin="0,4,0,0" />
                             <TextBlock Style="{StaticResource Hint}"

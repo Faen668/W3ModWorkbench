@@ -135,6 +135,21 @@ public sealed class ClothSimulation
         _fromSpheres = _toSpheres;
         Skin(bones, _toTarget, _toNormal);
         _toSpheres = SpheresAt(bones);
+        // a jump further than a body moves in a step (an animation looping back to where it started, a cut) is a
+        // teleport, as APEX has it: the cloth goes with it as it is, rather than being dragged there
+        var jump = Vector3.Zero;
+        for (int i = 0; i < _count; i++) jump += _toTarget[i] - _fromTarget[i];
+        jump /= Math.Max(1, _count);
+        if (jump.Length() > Math.Max(0.3f, 15 * dt))
+        {
+            for (int i = 0; i < _count; i++)
+            {
+                _current[i] += jump;
+                _previous[i] += jump;
+                _fromTarget[i] += jump;
+            }
+            for (int s = 0; s < _fromSpheres.Length; s++) _fromSpheres[s] += new Vector4(jump, 0);
+        }
         if (dt <= 0)
         {
             ComputeNormals();

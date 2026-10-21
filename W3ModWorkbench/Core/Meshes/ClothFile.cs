@@ -50,8 +50,8 @@ public static class ClothFile
         for (int lod = 0; lod < lods.Count && lod < 8; lod++)
         {
             int first = 0;
-            foreach (var submesh in lods[lod])
-                if (asset.Submesh(submesh, chunks.Count, lod) is { } chunk)
+            foreach (var submesh in lods[lod].Submeshes)
+                if (asset.Submesh(submesh, chunks.Count, lod, lods[lod].UvOrigin) is { } chunk)
                 {
                     placed[chunk.Index] = (lod, first);
                     first += chunk.Positions.Length;
@@ -218,9 +218,11 @@ internal sealed class ApexAsset
 
     /// <summary>
     /// The submeshes of each render mesh asset, one asset a level of detail, the most detailed first: in the order the
-    /// clothing asset's graphical LODs list them when it has them, which its maps to the simulated mesh go by.
+    /// clothing asset's graphical LODs list them when it has them, which its maps to the simulated mesh go by. With each,
+    /// the corner its UVs count from (<c>textureUVOrigin</c>, after its submeshes, material names and part bounds): 0 the
+    /// top left, as the engine's do, 1 the top right, 2 the bottom left (every cloth the game has), 3 the bottom right.
     /// </summary>
-    public List<List<long>> RenderMeshes()
+    public List<(List<long> Submeshes, int UvOrigin)> RenderMeshes()
     {
         var lists = new List<(long Owner, List<long> Submeshes)>();
         foreach (var (at, kind) in _relocations.OrderBy(r => r.Key))
@@ -229,23 +231,28 @@ internal sealed class ApexAsset
             var submeshes = Enumerable.Range(0, list.Count).Select(i => Pointer(list.At + i * 8L, 1)).ToList();
             if (submeshes.All(s => s >= 0 && IsSubmesh(s))) lists.Add((Owner(at), submeshes));
         }
+        int Origin(long owner) => owner >= 0 && _objects.Any(o => o.Header == owner && o.Class == "RenderMeshAssetParameters") ? (int)U32(owner + Fields + 72) : 0;
         long clothing = First("ClothingAssetParameters");
         if (clothing >= 0 && Items(clothing + 24, 8) is { Count: > 0 } graphical)
         {
-            var ordered = new List<List<long>>();
+            var ordered = new List<(List<long>, int)>();
             for (int i = 0; i < graphical.Count; i++)
             {
                 long lod = Reference(graphical.At + i * 8L);
                 long renderMesh = lod >= 0 ? Pointer(lod + 32, 1) : -1;
-                if (lists.FirstOrDefault(l => l.Owner == renderMesh) is { Submeshes: not null } found) ordered.Add(found.Submeshes);
+                if (lists.FirstOrDefault(l => l.Owner == renderMesh) is { Submeshes: not null } found) ordered.Add((found.Submeshes, Origin(found.Owner)));
             }
             if (ordered.Count == graphical.Count) return ordered;
         }
-        return [.. lists.Select(l => l.Submeshes)];
+        return [.. lists.Select(l => (l.Submeshes, Origin(l.Owner)))];
     }
 
-    /// <summary>A submesh as a chunk: its vertex buffer's positions, normals, UVs and bones, and its triangles.</summary>
-    public MeshChunk? Submesh(long submesh, int index, int lod)
+    /// <summary>
+    /// A submesh as a chunk: its vertex buffer's positions, normals, UVs and bones, and its triangles. Its UVs are turned
+    /// to count from the top left as the engine's do (<paramref name="uvOrigin"/> says where they count from), and its
+    /// triangles wound the engine's way, which is the other way round to APEX's.
+    /// </summary>
+    public MeshChunk? Submesh(long submesh, int index, int lod, int uvOrigin)
     {
         long vertexBuffer = Pointer(submesh + Fields, 1);
         if (Array(submesh + Fields + 8) is not { } indexArray || vertexBuffer < 0) return null;
@@ -265,7 +272,11 @@ internal sealed class ApexAsset
         var normals = threes.Count > 1 ? Vectors(threes[1], vertices) : new Vector3[vertices];
         var uvs = new Vector2[vertices];
         if (twos.Count > 0)
-            for (int v = 0; v < vertices; v++) uvs[v] = new Vector2(F32(twos[0].At + v * 8L), F32(twos[0].At + v * 8L + 4));
+            for (int v = 0; v < vertices; v++)
+            {
+                float u = F32(twos[0].At + v * 8L), w = F32(twos[0].At + v * 8L + 4);
+                uvs[v] = new Vector2(uvOrigin is 1 or 3 ? 1 - u : u, uvOrigin is 2 or 3 ? 1 - w : w);
+            }
         // the bone indices are four 16-bit numbers, the last eight-byte buffer; the weights four floats, the last sixteen-byte one
         byte[] boneIndices = [];
         float[] boneWeights = [];
@@ -284,7 +295,8 @@ internal sealed class ApexAsset
         for (int i = 0; i < triangles.Length; i++)
         {
             int vertex = (int)U32(indexArray.At + i * 4L);
-            triangles[i] = vertex < vertices ? vertex : 0;
+            // each triangle's last two corners swapped, to wind it as the engine does
+            triangles[i % 3 == 0 ? i : i % 3 == 1 ? i + 1 : i - 1] = vertex < vertices ? vertex : 0;
         }
         return new MeshChunk
         {

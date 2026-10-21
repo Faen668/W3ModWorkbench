@@ -102,7 +102,8 @@ public sealed class MeshView : Border
             ShowCoordinateSystem = false,
             // the mouse is this control's: it turns the camera itself, as it always has
             IsHitTestVisible = false,
-            MSAA = MSAALevel.Four,
+            // smoothing edges takes samples of each pixel, which a big view filled with a mesh pays for most
+            MSAA = App.Settings.Antialiasing switch { 0 => MSAALevel.Disable, 4 => MSAALevel.Four, _ => MSAALevel.Two },
             // hair is alpha tested by the view's own pass; should that pass be missing, it's blended without depth between
             // its cards (sorted card by card, a nearer card's see-through parts hid those behind and a beard showed squares)
             OITRenderMode = OITRenderType.SinglePassWeighted,
