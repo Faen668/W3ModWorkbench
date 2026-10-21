@@ -13,7 +13,10 @@ namespace W3ModWorkbench;
 /// </summary>
 public partial class AssetBrowserWindow
 {
-    /// <summary>The free DLC by folder name, as CD PROJEKT named them; those after dlc16 came with the Remastered update.</summary>
+    /// <summary>
+    /// The free DLC by folder name, as CD PROJEKT named them. Those after dlc16 came with the Remastered update and have
+    /// no names of their own; theirs say what their files are (there's no dlc19).
+    /// </summary>
     private static readonly Dictionary<string, string> FreeDlcNames = new(StringComparer.OrdinalIgnoreCase)
     {
         ["dlc1"] = "Temerian Armor Set",
@@ -32,6 +35,9 @@ public partial class AssetBrowserWindow
         ["dlc14"] = "Skellige Armor Set",
         ["dlc15"] = "Where the Cat and Wolf Play…",
         ["dlc16"] = "New Finisher Animations",
+        ["dlc17"] = "Dandelion's Netflix outfit",
+        ["dlc18"] = "Netflix armour and swords for Geralt",
+        ["dlc20"] = "Netflix Nilfgaardian armour",
     };
 
     private const string BaseSource = "base";
