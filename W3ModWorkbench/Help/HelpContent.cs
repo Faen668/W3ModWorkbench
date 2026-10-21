@@ -455,6 +455,16 @@ A community is who lives somewhere and when. Its type is at the top (**CST_Globa
 The search at the top (**Ctrl+F**) narrows both lists to the entries and timetables with the words (an entry, a template, a story phase, a timetable, a tag). Every one of REDkit's communities reads (2,515).
 """),
 
+        new(Basics, "The journal", "\uE82D", """
+Double-click a `.journal`, or select it and press **Enter**, to open the journal viewer with its entry picked. One window shows the whole journal, as REDkit's journal editor does: every journal file the game, the archives open and the project have, read together (1,521 in the game, with its DLC). A journal file from a mod or a project is shown as it is in that copy.
+
+Each journal file keeps one entry, which names the entry it goes under by its GUID; the tree puts them together. Under **Quests** are the quest groups (Prologue, the chapters, the side quests, each DLC's, marked "dlc: bob" and so on), each quest with its **Descriptions**, its phases, **objectives** and **map pins**; then **Characters**, the **Bestiary**, the **Glossary**, **Tutorial** entries, **Places** and the **Storybook**. Each kind of entry has its own icon and colour, a group says how many it holds, and the tooltip says an entry's title in words.
+
+Click an entry to see its texts in words (its title, name or description, in the language last picked in the scene viewer, with a quest's objectives listed), its kind, class, unique script tag and file, then every property it has, from REDkit's copy of the file when there is one. **Copy the script tag** copies the tag scripts find it by, and a quest's **quest phase** opens from it.
+
+**Find** (**Ctrl+F**) lists the entries whose name, script tag or texts have the words, with where each is; pick one to go to it. **Tools** has REDkit's checks: duplicated unique script tags, duplicated GUIDs, and entries without a script tag.
+"""),
+
         new(Basics, "Scenes", "", """
 Double-click a `.w2scene`, or select it and press **Enter**, to open it in the scene viewer. The preview pane shows it too: how many parts, lines and choices it has, how it starts with its lines in words, who's in it, the cutscenes it plays, and the facts and scripts it uses. A scene file on disk opens from **Open files** or by dropping it on the window.
 

@@ -25,6 +25,7 @@ public static class DataViewers
         Tree("Spawn tree", SpawnTreeFile.IsSpawnTree, SpawnTreeFile.Read),
         Tree("Steering graph", SteeringFile.IsSteering, SteeringFile.Read),
         new("Community", CommunityWindow.CanShow, CommunityWindow.Open, CommunityWindow.OpenFile),
+        new("Journal", JournalWindow.CanShow, JournalWindow.Open, JournalWindow.OpenFile),
     ];
 
     /// <summary>Whether a file's name says a viewer here shows it.</summary>
