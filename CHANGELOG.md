@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 1.7.0
+
+- **Compile a folder of scripts without a project**: right-click a folder of loose scripts in the main window's tree > **Compile these scripts**. A small **Compile scripts** window lists the warnings and errors, each opening its line, with **Compile again** (F7) and **Show log**. The compiled scripts are saved beside the folder, so a mod's `content\scripts` makes `content\precompiled.rsblob`, and only when they compile. Scripts in the game's folders or an installed mod are left as they are.
 
 - Fixed: **a scene or cutscene could run the computer out of memory**, with an out-of-memory error from the 3D view (or a white window), most of all at **Full** texture detail with 4× smoothing: the tavern in the prologue took 18.5 GB. Textures are now kept decoded only small (512 pixels) beside the full texture the graphics card gets, repainted textures (dyes, hair, stubble) are painted at full size and then block-compressed as the game's own are, and a picture is no longer decoded twice. The same scene now takes about 6 GB, and the textures look the same.
 - **The 3D views recover when the graphics device fails** (out of memory, a driver reset, waking from sleep): the device is made again and drawing carries on, instead of an error box. Dragging a splitter beside a 3D view stretches its picture until the drag pauses, rather than making new graphics surfaces for every size.
