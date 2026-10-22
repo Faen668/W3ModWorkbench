@@ -16,7 +16,7 @@ public readonly record struct GrassEntry(int Slot, string Path, float Size, floa
 
 // The terrain's grass, grown round the camera in the plant cells as it moves. The engine's own placement is in its C++
 // (not in REDkit's source): here each brush plant is laid on a jittered grid whose spacing is the plant's footprint
-// (its radius across) times its size and its radius scale, kept where the ground's background texture at that point is
+// set by its radius scale, kept where the ground's background texture at that point is
 // the brush's (by the four control samples' weights) and the grass mask allows it.
 public sealed partial class WorldView3D
 {
@@ -27,6 +27,12 @@ public sealed partial class WorldView3D
 
     /// <summary>How far round the camera the terrain's grass is grown, in metres.</summary>
     public float GrassReach { get; set; } = 160;
+
+    /// <summary>Metres between plants for each unit of a brush entry's radius scale (set against REDkit's grass).</summary>
+    public float GrassSpacing { get; set; } = 0.12f;
+
+    /// <summary>The grass mask's rows counted from the north (a test switch).</summary>
+    public bool GrassMaskFromNorth { get; set; }
 
     /// <summary>The terrain's grass: its setup, its plants found by path among the kinds already set.</summary>
     public void SetGrass(GrassSetup? setup)
@@ -65,7 +71,9 @@ public sealed partial class WorldView3D
         foreach (var entry in grass.Entries)
         {
             if (!_grassKinds.TryGetValue(entry.Path, out int kind)) continue;
-            float step = MathF.Max(0.25f, entry.Footprint * entry.Size * entry.RadiusScale);
+            // the spacing follows the brush's radius scale alone (measured against REDkit: its smallest flowers are as rare
+            // as their radius scale says, not as dense as their size would make them)
+            float step = MathF.Max(0.2f, entry.RadiusScale * GrassSpacing);
             int n = Math.Max(1, (int)(PlantCell / step));
             for (int j = 0; j < n; j++)
                 for (int i = 0; i < n; i++)
@@ -75,16 +83,32 @@ public sealed partial class WorldView3D
                     var at = new Vector2(cellX * PlantCell + (i + jx) * PlantCell / n, cellY * PlantCell + (j + jy) * PlantCell / n);
                     // the grass mask, rows from the south as the terrain material reads it
                     int mx = (int)((at.X - terrain.Corner.X) / terrain.Size * grass.MaskResolution), my = (int)((at.Y - terrain.Corner.Y) / terrain.Size * grass.MaskResolution);
+                    if (GrassMaskFromNorth) my = grass.MaskResolution - 1 - my;
                     if (mx < 0 || my < 0 || mx >= grass.MaskResolution || my >= grass.MaskResolution || !grass.Mask[my * grass.MaskResolution + mx]) continue;
                     // the share of the four control samples round the point whose background texture is the brush's
                     float sx = (at.X - terrain.Corner.X) / spacing - 0.5f, sy = (terrain.Corner.Y + terrain.Size - at.Y) / spacing - 0.5f;
                     int x0 = (int)MathF.Floor(sx), y0 = (int)MathF.Floor(sy);
-                    float fx = sx - x0, fy = sy - y0, share = 0;
+                    float fx = sx - x0, fy = sy - y0, share = 0, threshold = 0;
                     for (int k = 0; k < 4; k++)
                     {
                         int xx = Math.Clamp(x0 + (k & 1), 0, _side - 1), yy = Math.Clamp(y0 + (k >> 1), 0, _side - 1);
                         float w = ((k & 1) != 0 ? fx : 1 - fx) * ((k >> 1) != 0 ? fy : 1 - fy);
-                        if ((_control[yy * _side + xx] & 31) - 1 == entry.Slot) share += w;
+                        int control = _control[yy * _side + xx], back = (control & 31) - 1;
+                        if (back == entry.Slot) share += w;
+                        threshold += ((control >> 10) & 7) / 8f * w;
+                    }
+                    // grass grows on the horizontal texture only: where the slope (the terrain material's own test, from
+                    // the ground's normal) shows the vertical one, none
+                    if (share > 0)
+                    {
+                        float H(int xx, int yy) => _heights[Math.Clamp(yy, 0, _side - 1) * _side + Math.Clamp(xx, 0, _side - 1)] / 65535f * range;
+                        float gx = (H(x0 + 1, y0) - H(x0 - 1, y0)) / (2 * spacing), gy = (H(x0, y0 - 1) - H(x0, y0 + 1)) / (2 * spacing);
+                        float nz = 1 / MathF.Sqrt(1 + gx * gx + gy * gy);
+                        float angle = MathF.Acos(Math.Clamp(nz, 0, 1)), a3 = angle * angle * angle;
+                        float tangent = Math.Clamp(angle + a3 / 3 + 2 * a3 * angle * angle / 15, 0, 1);
+                        // the shader judges the slope with the normal maps' bumps at full strength, so the vertical texture
+                        // shows as soon as the smooth ground passes the threshold: grass only below it (fading over 0.05)
+                        share *= 1 - Math.Clamp((tangent - threshold) / 0.05f, 0, 1);
                     }
                     uint h2 = Hash(h ^ 0x9E3779B9);
                     if ((h2 & 0xFFFF) / 65535f >= share) continue;
