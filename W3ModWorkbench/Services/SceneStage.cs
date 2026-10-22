@@ -258,6 +258,33 @@ public static class SceneStage
     }
 
     /// <summary>What each actor in a section's dialog set does in it.</summary>
+    /// <summary>
+    /// An actor stood in a dialog set's slot and nothing more (no events): where the slot puts it, in the stance and
+    /// face the slot gives it, for a dialog set shown on its own.
+    /// </summary>
+    public static ActorTrack Standing(SceneDialogsetSlot slot, string actor)
+    {
+        var s = slot.Source;
+        return new ActorTrack
+        {
+            Actor = actor,
+            Place = Matrix4x4.CreateRotationZ(slot.Rotation.Z * MathF.PI / 180) * Matrix4x4.CreateTranslation(slot.Position),
+            Stance = StanceOf(slot),
+            Changes = [],
+            Animations = [],
+            LookAts = [],
+            Face = new FaceLayers(null, null, null, 1).With(Named(s["actorMimicsLayer_Eyes"]), Named(s["actorMimicsLayer_Pose"]), Named(s["actorMimicsLayer_Animation"]),
+                s["actorMimicsLayer_Pose_Weight"] is { } pw ? Convert.ToSingle(pw) : null),
+            FaceChanges = [],
+            FaceAnimations = [],
+            Lines = [],
+            Placements = [],
+            PlacementBlends = [],
+            Visibility = [],
+            Additives = [],
+        };
+    }
+
     public static List<ActorTrack> Tracks(SceneSectionTimeline timeline, SceneDialogset? set)
     {
         var tracks = new List<ActorTrack>();
@@ -381,84 +408,96 @@ public static class SceneStage
                     : L.T("SceneStage.IsntDrawnEntityTemplate", name));
                 continue;
             }
-            EntityFile entity;
-            try
-            {
-                entity = EntityFile.Read(data);
-                // the colours of an appearance it takes from a template it includes are kept in that template
-                entity.FindOrigins(locator.ReadFile);
-            }
-            catch (InvalidDataException ex)
-            {
-                notes.Add(L.T("SceneStage.IsntDrawnEntityCould", name, ex.Message));
-                continue;
-            }
-            // the appearance the scene asks for, else the entity's default one
-            var filter = definition.Array("appearanceFilter").OfType<string>().ToList();
-            var appearance = entity.Appearances.FirstOrDefault(a => filter.Contains(a.Name, StringComparer.OrdinalIgnoreCase)) ?? Appearance(entity, name, locator);
-            var look = entity.Look(appearance, locator.ReadFile);
-            var (parts, drawnBy, _, missing) = EntityWindow.ReadMeshes(look, locator, token);
-            if (BodyRig(look, parts, locator) is not { } body)
-            {
-                notes.Add(L.T("SceneStage.IsntDrawnBodysRig", name));
-                continue;
-            }
-            // its face's bones go on the body's rig, for the head to be skinned to them
-            var face = Face(look, CutsceneCast.IsPlayer(template), locator);
-            var (rig, faceIndex) = face is null ? (body, []) : Merge(body, face.Skeleton);
-            // and the small rigs hung on it, for what's skinned to them (the player's scabbards)
-            rig = WithCarriedRigs(rig, look, locator);
-            var coloredBy = parts.Select(_ => (entity, appearance?.Name)).ToList();
-            var attachedTo = CutsceneCast.AttachToRig(look, parts, drawnBy, rig);
-            if (CutsceneCast.IsPlayer(template) && CutsceneCast.Dress(entity, look, rig, locator, parts, drawnBy, coloredBy, attachedTo, token))
-                notes.Add(L.T("SceneStage.PlayerWhomGameDresses", name));
-            if (parts.Count == 0)
-            {
-                notes.Add(L.T("SceneStage.IsntDrawn", name, (missing > 0 ? L.T("SceneStage.MeshesCouldNotRead") : L.T("SceneStage.EntityHasNoMeshes"))));
-                continue;
-            }
-            var rest = new Matrix4x4[rig.Count];
-            rig.ToModel(rig.Pose, rest);
-            var animationSets = AnimationSets(template, locator);
-            var bodyNames = names.Where(n => !n.EndsWith("_face", StringComparison.OrdinalIgnoreCase)).ToHashSet(StringComparer.OrdinalIgnoreCase);
-            var faceNames = names.Where(n => n.EndsWith("_face", StringComparison.OrdinalIgnoreCase)).ToHashSet(StringComparer.OrdinalIgnoreCase);
-            var motions = new Dictionary<string, MotionExtraction>(StringComparer.OrdinalIgnoreCase);
-            var clips = Clips(animationSets.Where(p => !IsFaceSet(p)).ToList(), bodyNames, rig, locator, sets, token, motions);
-            var faceClips = face is null ? new Dictionary<string, AnimationClip>(StringComparer.OrdinalIgnoreCase)
-                : Clips(animationSets.Where(IsFaceSet).ToList(), faceNames, null, locator, sets, token);
-            var notFound = bodyNames.Where(n => !clips.ContainsKey(n)).ToList();
-            // an idle its sets don't have (an adult's, on a child's or a woman's skeleton): stand in its own standing idle
-            if (notFound.Any(n => n.Contains("idle", StringComparison.OrdinalIgnoreCase))
-                && StandingIdle(animationSets.Where(p => !IsFaceSet(p)).ToList(), locator, sets) is { } own
-                && Clips(animationSets.Where(p => !IsFaceSet(p)).ToList(), [own], rig, locator, sets, token).GetValueOrDefault(own) is { } ownClip)
-            {
-                var stood = notFound.Where(n => n.Contains("idle", StringComparison.OrdinalIgnoreCase)).ToList();
-                foreach (string idle in stood) clips[idle] = ownClip;
-                notFound = [.. notFound.Except(stood)];
-                notes.Add(L.T("SceneStage.StandsOwnAnimationSets", name, own, string.Join(", ", stood)));
-            }
-            if (notFound.Count > 0) notes.Add(L.T("SceneStage.NotFoundAnimationSets", name, L.T("Count.Animation", notFound.Count), string.Join(", ", notFound.Take(3)), (notFound.Count > 3 ? "…" : "")));
-            cast.Add(new StageActor
-            {
-                Name = name,
-                Entity = entity,
-                Appearance = appearance?.Name,
-                Parts = parts,
-                DrawnBy = drawnBy,
-                ColoredBy = coloredBy,
-                AttachedTo = attachedTo,
-                Rig = rig,
-                Rest = rest,
-                Maps = parts.Select(p => Skinning.MapBones(p.Mesh, rig, rest)).ToList(),
-                Cloth = ClothRig.For([.. parts.Select(p => p.Mesh)]),
-                Clips = clips,
-                Motions = motions,
-                Face = face,
-                FaceIndex = faceIndex,
-                FaceClips = faceClips,
-            });
+            if (LoadActor(name, template, data, definition.Array("appearanceFilter").OfType<string>().ToList(), names, locator, notes, sets, token) is { } actor)
+                cast.Add(actor);
         }
         return cast;
+    }
+
+    /// <summary>
+    /// Puts together one actor from its entity template (read as <paramref name="data"/>): in the appearance the filter
+    /// asks for, else the one its voice tag or the entity gives, on its body's rig with its face and carried rigs, its
+    /// meshes mapped to the rig, and the animations <paramref name="names"/> lists read from its animation sets. Null,
+    /// with why in <paramref name="notes"/>, when it can't be. Reads from disk, so it belongs off the UI thread.
+    /// </summary>
+    public static StageActor? LoadActor(string name, string template, byte[] data, IReadOnlyList<string> filter, HashSet<string> names,
+        ResourceLocator locator, List<string> notes, Dictionary<string, Cr2wFile?> sets, CancellationToken token)
+    {
+        EntityFile entity;
+        try
+        {
+            entity = EntityFile.Read(data);
+            // the colours of an appearance it takes from a template it includes are kept in that template
+            entity.FindOrigins(locator.ReadFile);
+        }
+        catch (InvalidDataException ex)
+        {
+            notes.Add(L.T("SceneStage.IsntDrawnEntityCould", name, ex.Message));
+            return null;
+        }
+        // the appearance the scene asks for, else the entity's default one
+        var appearance = entity.Appearances.FirstOrDefault(a => filter.Contains(a.Name, StringComparer.OrdinalIgnoreCase)) ?? Appearance(entity, name, locator);
+        var look = entity.Look(appearance, locator.ReadFile);
+        var (parts, drawnBy, _, missing) = EntityWindow.ReadMeshes(look, locator, token);
+        if (BodyRig(look, parts, locator) is not { } body)
+        {
+            notes.Add(L.T("SceneStage.IsntDrawnBodysRig", name));
+            return null;
+        }
+        // its face's bones go on the body's rig, for the head to be skinned to them
+        var face = Face(look, CutsceneCast.IsPlayer(template), locator);
+        var (rig, faceIndex) = face is null ? (body, []) : Merge(body, face.Skeleton);
+        // and the small rigs hung on it, for what's skinned to them (the player's scabbards)
+        rig = WithCarriedRigs(rig, look, locator);
+        var coloredBy = parts.Select(_ => (entity, appearance?.Name)).ToList();
+        var attachedTo = CutsceneCast.AttachToRig(look, parts, drawnBy, rig);
+        if (CutsceneCast.IsPlayer(template) && CutsceneCast.Dress(entity, look, rig, locator, parts, drawnBy, coloredBy, attachedTo, token))
+            notes.Add(L.T("SceneStage.PlayerWhomGameDresses", name));
+        if (parts.Count == 0)
+        {
+            notes.Add(L.T("SceneStage.IsntDrawn", name, (missing > 0 ? L.T("SceneStage.MeshesCouldNotRead") : L.T("SceneStage.EntityHasNoMeshes"))));
+            return null;
+        }
+        var rest = new Matrix4x4[rig.Count];
+        rig.ToModel(rig.Pose, rest);
+        var animationSets = AnimationSets(template, locator);
+        var bodyNames = names.Where(n => !n.EndsWith("_face", StringComparison.OrdinalIgnoreCase)).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var faceNames = names.Where(n => n.EndsWith("_face", StringComparison.OrdinalIgnoreCase)).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var motions = new Dictionary<string, MotionExtraction>(StringComparer.OrdinalIgnoreCase);
+        var clips = Clips(animationSets.Where(p => !IsFaceSet(p)).ToList(), bodyNames, rig, locator, sets, token, motions);
+        var faceClips = face is null ? new Dictionary<string, AnimationClip>(StringComparer.OrdinalIgnoreCase)
+            : Clips(animationSets.Where(IsFaceSet).ToList(), faceNames, null, locator, sets, token);
+        var notFound = bodyNames.Where(n => !clips.ContainsKey(n)).ToList();
+        // an idle its sets don't have (an adult's, on a child's or a woman's skeleton): stand in its own standing idle
+        if (notFound.Any(n => n.Contains("idle", StringComparison.OrdinalIgnoreCase))
+            && StandingIdle(animationSets.Where(p => !IsFaceSet(p)).ToList(), locator, sets) is { } own
+            && Clips(animationSets.Where(p => !IsFaceSet(p)).ToList(), [own], rig, locator, sets, token).GetValueOrDefault(own) is { } ownClip)
+        {
+            var stood = notFound.Where(n => n.Contains("idle", StringComparison.OrdinalIgnoreCase)).ToList();
+            foreach (string idle in stood) clips[idle] = ownClip;
+            notFound = [.. notFound.Except(stood)];
+            notes.Add(L.T("SceneStage.StandsOwnAnimationSets", name, own, string.Join(", ", stood)));
+        }
+        if (notFound.Count > 0) notes.Add(L.T("SceneStage.NotFoundAnimationSets", name, L.T("Count.Animation", notFound.Count), string.Join(", ", notFound.Take(3)), (notFound.Count > 3 ? "…" : "")));
+        return new StageActor
+        {
+            Name = name,
+            Entity = entity,
+            Appearance = appearance?.Name,
+            Parts = parts,
+            DrawnBy = drawnBy,
+            ColoredBy = coloredBy,
+            AttachedTo = attachedTo,
+            Rig = rig,
+            Rest = rest,
+            Maps = parts.Select(p => Skinning.MapBones(p.Mesh, rig, rest)).ToList(),
+            Cloth = ClothRig.For([.. parts.Select(p => p.Mesh)]),
+            Clips = clips,
+            Motions = motions,
+            Face = face,
+            FaceIndex = faceIndex,
+            FaceClips = faceClips,
+        };
     }
 
     private static bool IsFaceSet(string path) => path.Contains(@"\mimics\", StringComparison.OrdinalIgnoreCase);
@@ -1508,7 +1547,7 @@ public static class SceneStage
     }
 
     /// <summary>A camera from where it stands and its angles in degrees: yaw turns it round the upright from looking along Y, pitch tilts it up.</summary>
-    private static StageCamera Camera(string name, Vector3 position, float pitch, float yaw, float fov)
+    public static StageCamera Camera(string name, Vector3 position, float pitch, float yaw, float fov)
     {
         float p = pitch * MathF.PI / 180, y = yaw * MathF.PI / 180;
         var forward = new Vector3(-MathF.Sin(y) * MathF.Cos(p), MathF.Cos(y) * MathF.Cos(p), MathF.Sin(p));

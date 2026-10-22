@@ -33,6 +33,10 @@ public static class DataViewers
         new(L.T("DataViewers.Rig"), RigWindow.CanShow, RigWindow.Open, RigWindow.OpenFile),
         new(L.T("DataViewers.Sound"), SoundWindow.CanShow, SoundWindow.Open, SoundWindow.OpenFile),
         new(L.T("DataViewers.Material"), MaterialWindow.CanShow, MaterialWindow.Open, MaterialWindow.OpenFile),
+        new(L.T("DataViewers.SimplexTree"), SimplexTreeWindow.CanShow, SimplexTreeWindow.Open, SimplexTreeWindow.OpenFile),
+        new(L.T("DataViewers.Environment"), EnvironmentWindow.CanShow, EnvironmentWindow.Open, EnvironmentWindow.OpenFile),
+        new(L.T("DataViewers.Dialogset"), DialogsetWindow.CanShow, DialogsetWindow.Open, DialogsetWindow.OpenFile),
+        new(L.T("DataViewers.ParticleSystem"), ParticleWindow.CanShow, ParticleWindow.Open, ParticleWindow.OpenFile),
     ];
 
     /// <summary>Whether a file's name says a viewer here shows it.</summary>

@@ -96,6 +96,7 @@ public sealed class MeshView : Border
     // what's drawn over the meshes to see how they're made: their box, normals, bones and collision
     private readonly GroupModel3D _debug = new();
     private readonly GroupModel3D _skeleton = new();
+    private readonly GroupModel3D _marks = new();
     private bool _showBounds, _showNormals, _showBones, _vertexColors;
     private IReadOnlyList<(Vector3[] Vertices, int[] Triangles)> _collision = [];
     private readonly Dictionary<int, MeshGeometryModel3D> _chunks = [];
@@ -160,6 +161,7 @@ public sealed class MeshView : Border
         _viewport.Items.Add(_models);
         _viewport.Items.Add(_debug);
         _viewport.Items.Add(_skeleton);
+        _viewport.Items.Add(_marks);
         Child = _viewport;
         // the view is drawn at a size set here, not the control's, so a drag that resizes it every frame (a splitter)
         // doesn't make Direct3D new surfaces for each size: those go only now and then, and dozens a second ran a
@@ -958,6 +960,30 @@ public sealed class MeshView : Border
             var trail = new List<(Vector3, Vector3)>();
             for (int i = 1; i < path.Count; i++) trail.Add((ToView(path[i - 1]), ToView(path[i])));
             AddLines(_skeleton, trail, Color.FromRgb(0x3F, 0xD0, 0xE0), 2.2, onTop: true);
+        }
+        _viewport.InvalidateRender();
+    }
+
+    /// <summary>
+    /// Marks drawn over everything, in the game's space, in place of the last ones: lines, each in its colour and so
+    /// many pixels thick, and labels beside points (a dialog set's slots and cameras). Empty lists clear them.
+    /// </summary>
+    public void ShowMarks(IReadOnlyList<(Vector3 A, Vector3 B, Color Color, double Thickness)> lines, IReadOnlyList<(string Text, Vector3 At, Color Color)> labels)
+    {
+        _marks.Children.Clear();
+        foreach (var group in lines.GroupBy(l => (l.Color, l.Thickness)))
+            AddLines(_marks, group.Select(l => (ToView(l.A), ToView(l.B))).ToList(), group.Key.Color, group.Key.Thickness, onTop: true);
+        if (labels.Count > 0)
+        {
+            var text = new BillboardText3D();
+            foreach (var (label, at, color) in labels)
+                text.TextInfo.Add(new TextInfo(label, ToView(at))
+                {
+                    Foreground = new Color4(color.R / 255f, color.G / 255f, color.B / 255f, 1),
+                    Background = new Color4(0, 0, 0, 0.55f),
+                    Scale = 0.6f,
+                });
+            _marks.Children.Add(new BillboardTextModel3D { Geometry = text, FixedSize = true, IsHitTestVisible = false, DepthBias = -100000000 });
         }
         _viewport.InvalidateRender();
     }
