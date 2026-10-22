@@ -58,7 +58,7 @@ public readonly record struct FoliageAt(
 /// </summary>
 public readonly record struct ProbesAt(Vector3 SkyTop, Vector3 SkyHorizon, float SkyShape, Vector3 SceneAdd,
     float ReflectionLight, float ReflectionShadow, float AoRadius, float AoBias, float AoPower, float AoNonAmbient,
-    float F90Grass, float F90Trees, float TreeSpecular);
+    float F90Grass, float F90Trees, float TreeSpecular, float WaterFresnel);
 
 /// <summary>
 /// An environment's tone mapping and colour grading at one hour, as the game's post-process shaders take them: the
@@ -295,7 +295,7 @@ public sealed class WorldLighting
         float t = ((hour % 24) + 24) % 24 / 24;
         float sunHeight = _sunHeight?.At(t) ?? MathF.Sin((t - 0.25f) * MathF.Tau) * 0.4f;
         float moonHeight = _moonHeight?.At(t) ?? -sunHeight;
-        float sunBearing = _bearing - (t - 0.5f) * 360;
+        float sunBearing = _bearing + 180 + (t - 0.5f) * 360;
         const string Sky = "m_sky › ";
         return new SkyAt(
             Colour(Sky + "skyColor", t, new Vector3(0.01f, 0.08f, 0.2f)),
@@ -339,8 +339,9 @@ public sealed class WorldLighting
         float t = ((hour % 24) + 24) % 24 / 24;
         const string Tree = "m_speedTree › ", Light = "m_globalLight › ", Ibl = "m_ibl › ";
         Vector4[] Random(string kind) => [.. Enumerable.Range(0, 3).Select(i =>
-            // a tint: the colour as stored (0 to 255), its strength how far from white towards it (an assumption: the
-            // engine's C++ that hands these to the shader isn't in REDkit; as plain multipliers trees came out near black)
+            // a tint: from white towards the colour as stored by its strength (the engine's shader takes 1 minus it from
+            // the constants). The C++ that fills them isn't in REDkit; of the readings tried this one matches REDkit's
+            // trees and grass over White Orchard (linear or plain multipliers came out two to three times too dark)
             new Vector4(Vector3.Max(Vector3.Zero, Vector3.Lerp(Vector3.One, Raw(Tree + kind + " › randomColor" + i, t, new Vector3(255)) / 255,
                 Setting(Tree + kind + " › randomColor" + i, t)?.W ?? 0)),
                 Value(Tree + kind + " › saturation" + i, t, 1)))];
@@ -367,7 +368,8 @@ public sealed class WorldLighting
             Colour(Base + "colorSceneAdd", t, Vector3.Zero),
             Value(Light + "envProbeReflectionScaleLight", t, 1), Value(Light + "envProbeReflectionScaleShadow", t, 1),
             Value(Ao + "radius", t, 1), Value(Ao + "bias", t, 0.1f), Value(Ao + "powerExponent", t, 2), Value(Ao + "nonAmbientInfluence", t, 0.5f),
-            Value(Pbr + "specularF90Grass", t, 1), Value(Pbr + "specularF90OtherFoliage", t, 1), Value("m_speedTree › specularScale", t, 1));
+            Value(Pbr + "specularF90Grass", t, 1), Value(Pbr + "specularF90OtherFoliage", t, 1), Value("m_speedTree › specularScale", t, 1),
+            Value("m_water › waterFresnel", t, 0.02f));
     }
 
     /// <summary>The tone mapping and colour grading at an hour (0 to 24).</summary>
@@ -438,9 +440,10 @@ public sealed class WorldLighting
         float moonHeight = _moonHeight?.At(t) ?? -sunHeight;
         float lightHeight = _lightHeight?.At(t) ?? MathF.Max(0.05f, sunHeight);
         bool moon = (_lightChoice?.At(t) ?? (sunHeight > 0 ? 1 : 0)) < 0.5f;
-        // the sun goes round once a day, on the trajectory's bearing at noon, turning the way REDkit's does (in front of
-        // its 07:00 camera at White Orchard's lake); the moon opposite it
-        float sunBearing = _bearing - (t - 0.5f) * 360;
+        // the sun goes round once a day, opposite the trajectory's bearing at noon, its bearing growing through the day:
+        // measured from REDkit's shadows over White Orchard (north-north-east at 09:10, north-north-west at 07:00); the
+        // moon opposite it
+        float sunBearing = _bearing + 180 + (t - 0.5f) * 360;
         var sun = Direction(sunBearing, sunHeight);
         var light = Direction(moon ? sunBearing + 180 : sunBearing, lightHeight);
         float vertical = Value("m_globalFog › fogVertDensity", t, -0.02f);

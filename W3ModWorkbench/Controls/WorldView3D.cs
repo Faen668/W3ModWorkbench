@@ -377,6 +377,7 @@ cbuffer Foliage : register(b8)
     float4 SceneAdd;           // the light the scene adds to the probes; the reflections' scale in shadow
     float4 AoSettings;         // the ambient occlusion's radius, bias, power, and how much it dims direct light
     float4 SpecularSettings;   // grass's f90, the other foliage's f90, the trees' specular scale
+    float4 WaterSettings;      // the environment's water Fresnel (its reflectance looking straight down); the glint's scale
 };
 
 Texture2D<float> AoMap : register(t18);
@@ -408,6 +409,7 @@ float3 SpecularAt(float3 n, float3 v, float3 l, float specularity, float roughne
 
 // the reflection of the probes' sky, by the engine's env-probe Fresnel (its grazing gain held back on rough surfaces),
 // its strength in light or in shadow; the environment's reflection colours are white at 1
+#define GlintScale WaterSettings.y
 float3 ReflectionAt(float3 n, float3 v, float specularity, float roughness, float sun)
 {
     float3 r = reflect(-v, n);
@@ -622,19 +624,24 @@ float4 WaterPS(Out i) : SV_Target
     float3 view = normalize(i.World - Eye.xyz);
     float3 reflected = reflect(view, n);
     reflected.z = abs(reflected.z);
-    float fresnel = 0.02 + 0.98 * pow(1 - saturate(dot(n, -view)), 5);
+    float fresnel = WaterSettings.x + (1 - WaterSettings.x) * pow(1 - saturate(dot(n, -view)), 5);
     float seen = SunSeen(i.World);
     float3 body = Screen(Water.rgb * (GlobalLightColour(i.World) * saturate(Light.z) * seen / 3.14159265 + AmbientAt(float3(0, 0, 1), seen)), 1).rgb;
-    float3 sky = Screen(SkySeen(reflected) * MoonSky.w, 1).rgb;
+    // the sky as it's seen: measured against REDkit's lake, the water mirrors it at its own brightness
+    float3 sky = Screen(SkySeen(reflected), 1).rgb;
     if (Paint.x > 0.5) sky = Reflection(i.World + float3(0, 0, 0.05), reflected, sky);
-    // the sun's (or moon's) highlight on a smooth surface, its spread a GGX lobe
+    // the sun's (or moon's) highlight as the game's water shader has it: GGX with alpha squared 1e-4 (its 3.183e-05 is
+    // that over pi), the visibility term, held to 1, times the light
     float3 halfway = normalize(Light.xyz - view);
-    float rough = 0.012, nh = saturate(dot(n, halfway));
-    float lobe = rough / (3.14159 * pow(nh * nh * (rough - 1) + 1, 2));
-    float3 glint = Screen(seen * LightColour.rgb * lobe * fresnel * saturate(Light.z * 4) * 0.25 * lerp(0.04, 1, FogHeight.y), 1).rgb;
+    float nh = saturate(dot(n, halfway)), nl = saturate(dot(n, Light.xyz)), nv = saturate(dot(n, -view));
+    float a2 = 1e-4, dd = nh * nh * (a2 - 1) + 1;
+    float lobe = saturate(a2 / (3.14159 * dd * dd) * nl / (4 * nl * nv + 1e-4) * fresnel);
+    // the game takes the sun's colour to the power 1/2.2 for it, a colour, not the sun's whole strength
+    float3 sunTint = pow(saturate(LightColour.rgb / max(max(LightColour.r, LightColour.g), max(LightColour.b, 1e-4))), 0.4545);
+    float3 glint = Screen(seen * sunTint * lobe * GlintScale * saturate(Light.z * 4) * lerp(0.04, 1, FogHeight.y), 1).rgb;
     // the water's colour taking over from what's under it the more water there is to look through
     // water takes the red out of what's under it first, then the green, so shallows over sand turn turquoise
-    float3 through = exp(-thickness * Water.w * float3(0.5, 0.15, 0.12));
+    float3 through = exp(-thickness * Water.w * float3(0.18, 0.13, 0.12));
     float3 colour = lerp(body, under, through);
     colour = lerp(colour, sky, fresnel) + glint;
 
@@ -840,6 +847,7 @@ float3 RandomColour(float3 gamma, float kind, float3 w)
     float4 c1 = k == 2 ? GrassRandom[1] : k == 1 ? BranchRandom[1] : TreeRandom[1];
     float4 c2 = k == 2 ? GrassRandom[2] : k == 1 ? BranchRandom[2] : TreeRandom[2];
     float4 merged = w.x * c0 + w.y * c1 + w.z * c2;
+    if (SpecularSettings.w > 0.5) merged = float4(1, 1, 1, 1);
     float lum = dot(RandomLuminance[k].rgb, gamma);
     float3 lin = pow(max(0, gamma), 2.2);
     return max(0, lum + (lin - lum) * merged.w) * merged.rgb;
@@ -1294,7 +1302,7 @@ float AoPS(float4 position : SV_Position) : SV_Target
         _grading = new Buffer(Device, Utilities.SizeOf<Grading>(), ResourceUsage.Default, BindFlags.ConstantBuffer, CpuAccessFlags.None, ResourceOptionFlags.None, 0);
         _sky = new Buffer(Device, Utilities.SizeOf<Sky>(), ResourceUsage.Default, BindFlags.ConstantBuffer, CpuAccessFlags.None, ResourceOptionFlags.None, 0);
         _lightColour = new Buffer(Device, 48, ResourceUsage.Default, BindFlags.ConstantBuffer, CpuAccessFlags.None, ResourceOptionFlags.None, 0);
-        _foliage = new Buffer(Device, 16 * 24, ResourceUsage.Default, BindFlags.ConstantBuffer, CpuAccessFlags.None, ResourceOptionFlags.None, 0);
+        _foliage = new Buffer(Device, 16 * 25, ResourceUsage.Default, BindFlags.ConstantBuffer, CpuAccessFlags.None, ResourceOptionFlags.None, 0);
         _ambientCube = new Texture2D(Device, new Texture2DDescription
         {
             Width = 6, Height = 1, MipLevels = 1, ArraySize = 1, Format = DxgiFormat.R16G16B16A16_Float,
@@ -1415,8 +1423,17 @@ float AoPS(float4 position : SV_Position) : SV_Target
     /// <summary>How wavy the water is for a weather's wind (its windScale): nearly a mirror when it's still, full waves from 0.3 up.</summary>
     private static float Waviness(float wind) => 0.12f + 0.88f * Math.Clamp(wind / 0.3f, 0, 1);
 
-    /// <summary>How much brighter the fog's colours are than the light on the ground (they're on the sky's scale).</summary>
-    public float FogScale { get; set; } = 4 / MathF.PI;
+    /// <summary>The fog colours' scale against the light, measured against REDkit (the sky at the horizon at 09:10 over White Orchard).</summary>
+    public float FogScale { get; set; } = 0.7f;
+
+    /// <summary>A scale on the sky's brightness, for matching against REDkit (1 is the environment's own).</summary>
+    public float SkyFactor { get; set; } = 1;
+
+    /// <summary>A test switch for matching against REDkit: 1 draws plants without their random colours.</summary>
+    public float PlantTest { get; set; }
+
+    /// <summary>The sun's glint on water, in the engine's units: set against REDkit's lake at 09:10.</summary>
+    public float GlintScale { get; set; } = 4;
 
     /// <summary>
     /// The scale from the light as this view adds it up (the environment's colours made linear, times their strengths)
@@ -1503,8 +1520,9 @@ float AoPS(float4 position : SV_Position) : SV_Target
             SunHorizon = V(skyAt.SunHorizon, skyAt.FogVerticalFront), SunBackHorizon = V(skyAt.SunBackHorizon, skyAt.FogVerticalBack),
             SunSky = V(skyAt.SunSky), MoonHorizon = V(skyAt.MoonHorizon), MoonBackHorizon = V(skyAt.MoonBackHorizon), MoonSky = V(skyAt.MoonSky, skyAt.ReflectedSky),
             SunAt = V(skyAt.SunDirection, skyAt.SunSize), MoonAt = V(skyAt.MoonDirection, skyAt.MoonSize),
-            // the sky and the fog are on the scale of light before the engine's Lambert divides by pi, as the ground's is now
-            SkyScale = new Vector4(skyAt.SunInfluence, skyAt.MoonInfluence, skyAt.Brightness * skyAt.VisibleScale / MathF.PI, skyAt.HorizonAttenuation),
+            // the sky at the environment's global sky brightness alone: measured against REDkit's (its sky's top at 09:10 over
+            // White Orchard), the visible sky brightness scale isn't on the sky we see
+            SkyScale = new Vector4(skyAt.SunInfluence, skyAt.MoonInfluence, skyAt.Brightness * SkyFactor, skyAt.HorizonAttenuation),
         };
         c.UpdateSubresource(ref sky, _sky);
         c.PixelShader.SetConstantBuffers(0, _frame, _textureSettings, _grading, _sky);
@@ -1513,7 +1531,7 @@ float AoPS(float4 position : SV_Position) : SV_Target
         c.PixelShader.SetConstantBuffer(7, _lightColour);
         var foliage = (_lighting ?? Fallback).Foliage(_hour);
         var alpha = (_lighting ?? Fallback).AlphaScalars;
-        var foliageData = new Vector4[24];
+        var foliageData = new Vector4[25];
         for (int k = 0; k < 3; k++)
         {
             foliageData[k] = foliage.Trees[k];
@@ -1535,7 +1553,8 @@ float AoPS(float4 position : SV_Position) : SV_Target
         foliageData[20] = V(probes.SkyHorizon, probes.ReflectionLight);
         foliageData[21] = V(probes.SceneAdd, probes.ReflectionShadow);
         foliageData[22] = new Vector4(probes.AoRadius, probes.AoBias, probes.AoPower, AllowSsao ? probes.AoNonAmbient : 0);
-        foliageData[23] = new Vector4(probes.F90Grass, probes.F90Trees, probes.TreeSpecular, 0);
+        foliageData[23] = new Vector4(probes.F90Grass, probes.F90Trees, probes.TreeSpecular, PlantTest);
+        foliageData[24] = new Vector4(probes.WaterFresnel, GlintScale, 0, 0);
         c.UpdateSubresource(foliageData, _foliage);
         c.PixelShader.SetConstantBuffer(8, _foliage);
         // the ambient cube for this light, before anything reads it
