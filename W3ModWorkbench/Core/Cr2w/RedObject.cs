@@ -229,7 +229,7 @@ internal sealed class RedReader
             case "Int32" or "Int": return I32();
             case "Uint32" or "Uint": return (uint)I32();
             case "Int64": Need(8); Position += 8; return BinaryPrimitives.ReadInt64LittleEndian(_data.AsSpan(Position - 8));
-            case "Uint64": Need(8); Position += 8; return BinaryPrimitives.ReadUInt64LittleEndian(_data.AsSpan(Position - 8));
+            case "Uint64" or "GlobalVisID": Need(8); Position += 8; return BinaryPrimitives.ReadUInt64LittleEndian(_data.AsSpan(Position - 8));
             case "Float": Need(4); Position += 4; return BinaryPrimitives.ReadSingleLittleEndian(_data.AsSpan(Position - 4));
             case "Double": Need(8); Position += 8; return BinaryPrimitives.ReadDoubleLittleEndian(_data.AsSpan(Position - 8));
             case "CName": return Name(U16());

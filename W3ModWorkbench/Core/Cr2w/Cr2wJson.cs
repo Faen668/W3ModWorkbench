@@ -804,7 +804,7 @@ public static partial class Cr2wJson
                 case "Int32" or "Int": Need(pos, 4, end); pos += 4; return (long)I32(_d, pos - 4);
                 case "Uint32" or "Uint" or "LocalizedString": Need(pos, 4, end); pos += 4; return (long)(uint)I32(_d, pos - 4);
                 case "Int64": Need(pos, 8, end); pos += 8; return BinaryPrimitives.ReadInt64LittleEndian(_d.AsSpan(pos - 8));
-                case "Uint64" or "CDateTime": Need(pos, 8, end); pos += 8; return BinaryPrimitives.ReadUInt64LittleEndian(_d.AsSpan(pos - 8));
+                case "Uint64" or "CDateTime" or "GlobalVisID": Need(pos, 8, end); pos += 8; return BinaryPrimitives.ReadUInt64LittleEndian(_d.AsSpan(pos - 8));
                 case "Float": Need(pos, 4, end); pos += 4; return Number(BinaryPrimitives.ReadSingleLittleEndian(_d.AsSpan(pos - 4)));
                 case "Double": Need(pos, 8, end); pos += 8; return Number(BinaryPrimitives.ReadDoubleLittleEndian(_d.AsSpan(pos - 8)));
                 case "CName": Need(pos, 2, end); pos += 2; return context.NameAt(U16(_d, pos - 2));
@@ -1273,7 +1273,7 @@ public static partial class Cr2wJson
                 case "Int32" or "Int": I32(checked((int)Integer(value))); return;
                 case "Uint32" or "Uint" or "LocalizedString": I32((int)checked((uint)Integer(value))); return;
                 case "Int64": Span8(s => BinaryPrimitives.WriteInt64LittleEndian(s, checked((long)Integer(value)))); return;
-                case "Uint64" or "CDateTime": Span8(s => BinaryPrimitives.WriteUInt64LittleEndian(s, checked((ulong)Integer(value)))); return;
+                case "Uint64" or "CDateTime" or "GlobalVisID": Span8(s => BinaryPrimitives.WriteUInt64LittleEndian(s, checked((ulong)Integer(value)))); return;
                 case "Float":
                 {
                     Span<byte> s = stackalloc byte[4];

@@ -138,7 +138,14 @@ public sealed class Cr2wFile
         {
             // files of 155 on can have objects either way about the zero byte before their properties
             reader = new RedReader(this, Data, export.Offset, export.Offset + export.Size, otherMarker: true);
-            result = reader.ReadObject(export.ClassName);
+            try { result = reader.ReadObject(export.ClassName); }
+            catch (InvalidDataException) when (export.Size < 16)
+            {
+                // a few classes keep only their own data, no properties (a cooked world's CClipMapCookedData, two bytes):
+                // all of it is their tail
+                reader = new RedReader(this, Data, export.Offset, export.Offset + export.Size) { Position = export.Offset };
+                result = new RedObject(export.ClassName);
+            }
         }
         // before 139 an object's properties end with a 0
         if (Version < 139 && reader.Position < export.Offset + export.Size && Data[reader.Position] == 0) reader.Position++;

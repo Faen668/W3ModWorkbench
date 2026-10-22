@@ -37,6 +37,7 @@ public static class DataViewers
         new(L.T("DataViewers.Environment"), EnvironmentWindow.CanShow, EnvironmentWindow.Open, EnvironmentWindow.OpenFile),
         new(L.T("DataViewers.Dialogset"), DialogsetWindow.CanShow, DialogsetWindow.Open, DialogsetWindow.OpenFile),
         new(L.T("DataViewers.ParticleSystem"), ParticleWindow.CanShow, ParticleWindow.Open, ParticleWindow.OpenFile),
+        new(L.T("DataViewers.World"), WorldWindow.CanShow, WorldWindow.Open, WorldWindow.OpenFile),
     ];
 
     /// <summary>Whether a file's name says a viewer here shows it.</summary>

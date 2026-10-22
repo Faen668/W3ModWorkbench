@@ -1,0 +1,710 @@
+using System.Collections.ObjectModel;
+using System.ComponentModel;
+using System.Globalization;
+using System.IO;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Documents;
+using System.Windows.Input;
+using System.Windows.Media;
+using W3ModWorkbench.Core;
+using W3ModWorkbench.Core.Cr2w;
+using W3ModWorkbench.Core.World;
+using W3ModWorkbench.ViewModels;
+using W3ModWorkbench.Localisation;
+using Vector2 = System.Numerics.Vector2;
+
+namespace W3ModWorkbench;
+
+/// <summary>
+/// A world (.w2w) as a map from above: its terrain (shaded relief, its colour map or the textures painted), its layers'
+/// entities as dots in their groups' colours, its terrain tiles, occlusion grid and simplex areas, and what's under
+/// the mouse (where, how high, which textures, which tile). The layers are a tree as REDkit's world editor lists them,
+/// each group and layer shown or hidden; a click on the map picks an entity, with its layer and template. REDkit's
+/// worlds find their layers by folder; the game's cooked worlds keep the tree inside them.
+/// </summary>
+public partial class WorldWindow : Window, IMessageHost
+{
+    private readonly string _path;
+    private readonly string _source;
+    private readonly Func<byte[]> _readData;
+    private readonly ResourceLocator _locator;
+    private readonly string? _origin;
+    private WorldFile? _world;
+    private WorldTerrainPictures? _terrain;
+    private LayerGroup? _layers;
+    private readonly List<LayerNode> _roots = [];
+    private readonly Dictionary<LayerInfo, List<MapDot>> _dots = [];
+    private readonly Dictionary<LayerInfo, LayerNode> _layerNodes = [];
+    private List<string> _areaFiles = [];
+    private string? _diskRoot;
+    private bool _diskRootFound;
+    private readonly CancellationTokenSource _closing = new();
+    private int _entities;
+    private List<MapShape> _areaShapes = [], _navShapes = [];
+    private System.Windows.Media.Imaging.BitmapSource? _navPicture;
+    private bool _navLoaded;
+
+    /// <summary>A group or a layer in the tree, shown on the map or not.</summary>
+    private sealed class LayerNode : INotifyPropertyChanged
+    {
+        private bool _shown = true, _expanded;
+        private readonly Action _changed;
+        public LayerGroup? Group { get; }
+        public LayerInfo? Layer { get; }
+        public int Colour { get; }
+        public string Title { get; }
+        public ObservableCollection<LayerNode> Children { get; } = [];
+        public Brush Swatch { get; }
+        public string CountText { get => _count; set { _count = value; Changed(nameof(CountText)); } }
+        private string _count = "";
+
+        public LayerNode(LayerGroup? group, LayerInfo? layer, int colour, Action changed)
+        {
+            Group = group;
+            Layer = layer;
+            Colour = colour;
+            _changed = changed;
+            Title = group?.Name ?? layer!.ShortName;
+            var swatch = new SolidColorBrush(WorldMap.ColorOf(colour));
+            swatch.Freeze();
+            Swatch = swatch;
+        }
+
+        public bool Shown
+        {
+            get => _shown;
+            set
+            {
+                Set(value);
+                _changed();
+            }
+        }
+
+        /// <summary>Shows or hides it and everything under it, without redrawing.</summary>
+        public void Set(bool shown)
+        {
+            _shown = shown;
+            Changed(nameof(Shown));
+            foreach (var child in Children) child.Set(shown);
+        }
+
+        public bool Expanded { get => _expanded; set { _expanded = value; Changed(nameof(Expanded)); } }
+
+        public IEnumerable<LayerInfo> Layers() => Layer is { } l ? [l] : Children.SelectMany(c => c.Layers());
+
+        public event PropertyChangedEventHandler? PropertyChanged;
+        private void Changed(string name) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+    }
+
+    /// <summary>A fact about the world for the World tab: what, its value, and a file it links to.</summary>
+    private sealed record Fact(string Label, string Value, string? Link)
+    {
+        public bool HasLink => Link is not null;
+    }
+
+    private WorldWindow(string path, string source, Func<byte[]> readData, ResourceLocator locator, string? origin)
+    {
+        InitializeComponent();
+        _path = path;
+        _source = source;
+        _readData = readData;
+        _locator = locator;
+        _origin = origin;
+        Title = L.T("WorldWindow.World2", Path.GetFileName(path));
+        InfoText.Text = $"{path}   ·   {source}";
+        LookBox.ItemsSource = new[] { L.T("WorldWindow.Relief"), L.T("WorldWindow.ColourMap"), L.T("WorldWindow.Textures") };
+        Loaded += async (_, _) => await LoadAsync();
+        Closed += (_, _) => _closing.Cancel();
+    }
+
+    public static bool CanShow(string name) => WorldFile.IsWorld(name);
+
+    public static void Open(string path, string source, byte[] data, ResourceLocator locator, Window owner, IArchive? archive = null) =>
+        new WorldWindow(path, source, () => data, locator, archive?.FilePath).Standalone(owner).Show();
+
+    public static void OpenFile(string file, ResourceLocator locator, Window owner) =>
+        new WorldWindow(file, file, () => File.ReadAllBytes(file), locator, file).Standalone(owner).Show();
+
+    public Task ShowMessage(string? title, string message, MessageKind kind) => Message.Show(title, message, kind, primary: L.T("Common.OK"));
+
+    /// <summary>Whether the world was opened from a file on disk (REDkit's depot, a mod's folder) rather than the game.</summary>
+    private bool OnDisk => _origin is not null && File.Exists(_origin) && WorldFile.IsWorld(_origin);
+
+    /// <summary>
+    /// A file of the world by its game path: from the project or the game, else, for a world opened from disk, from
+    /// the depot it's in (the folder above the world that the path is relative to).
+    /// </summary>
+    private byte[]? Read(string path)
+    {
+        if (OnDisk && Disk(path) is { } file) return File.ReadAllBytes(file);
+        try { return _locator.ReadFile(path); }
+        catch (IOException) { return null; }
+    }
+
+    private string? Disk(string path)
+    {
+        if (!_diskRootFound)
+        {
+            lock (_closing)
+            {
+                if (!_diskRootFound)
+                {
+                    for (var dir = new DirectoryInfo(Path.GetDirectoryName(_origin!)!); dir is not null; dir = dir.Parent)
+                        if (File.Exists(Path.Combine(dir.FullName, path)))
+                        {
+                            _diskRoot = dir.FullName;
+                            break;
+                        }
+                    _diskRootFound = _diskRoot is not null;
+                }
+            }
+        }
+        return _diskRoot is { } root && File.Exists(Path.Combine(root, path)) ? Path.Combine(root, path) : null;
+    }
+
+    /// <summary>The world's game path: as opened, or, from disk, relative to its depot.</summary>
+    private string GamePath => OnDisk && _diskRoot is { } root ? Path.GetRelativePath(root, _origin!) : _path;
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            var read = _readData;
+            _world = await Task.Run(() => WorldFile.Read(read(), _path));
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or NotSupportedException)
+        {
+            BusyText.Text = L.T("WorldWindow.CouldNotRead", ex.Message);
+            return;
+        }
+        var world = _world;
+        BusyText.Visibility = Visibility.Collapsed;
+        Body.Visibility = Visibility.Visible;
+        FileProperties.Show(PropertyRow.Of(world.World, world.File));
+        _ = LoadRedkitAsync();
+        if (world.Terrain is { } t)
+        {
+            Map.SetTileGrid(t.TilesPerEdge, t.Corner, t.Size);
+            await Dispatcher.InvokeAsync(() => Map.FitTo(t.Corner, t.Corner + new Vector2(t.Size)), System.Windows.Threading.DispatcherPriority.Loaded);
+        }
+        Map.SetOcclusion(world.Occlusion);
+        var token = _closing.Token;
+        try
+        {
+            // the terrain, the layer tree and the areas, then every layer's entities
+            await LoadTerrainAsync(token);
+            await LoadLayerTreeAsync(token);
+            ShowFacts();
+            await LoadEntitiesAsync(token);
+            ShowFacts();
+        }
+        catch (OperationCanceledException) { }
+    }
+
+    private async Task LoadTerrainAsync(CancellationToken token)
+    {
+        if (_world!.Terrain is not { } terrain)
+        {
+            LookBox.IsEnabled = false;
+            return;
+        }
+        // a world opened from disk finds its depot by its first tile
+        if (OnDisk && terrain.Tiles.Cast<string?>().FirstOrDefault(p => p is not null) is { } first) await Task.Run(() => Disk(first), token);
+        int total = terrain.Tiles.Cast<string?>().Count(p => p is not null);
+        var progress = new Progress<int>(n => MapProgress.Text = L.T("WorldWindow.ReadingTerrain", n, total));
+        _terrain = await Task.Run(() => WorldTerrainPictures.Load(terrain, Read, progress, token), token);
+        LookBox.SelectedIndex = 0;
+        Map.FitWorld();
+    }
+
+    private async Task LoadLayerTreeAsync(CancellationToken token)
+    {
+        var world = _world!;
+        string folder = GamePath.Contains('\\') ? Path.GetDirectoryName(GamePath)! : world.Folder;
+        (_layers, _areaFiles) = await Task.Run(() =>
+        {
+            var paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var areas = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            string prefix = folder + "\\";
+            foreach (string p in _locator.AllPaths(".w2l")) if (p.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) paths.Add(p);
+            foreach (string p in _locator.AllPaths(".w3simplex")) if (p.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) areas.Add(p);
+            if (OnDisk && _diskRoot is { } root && Directory.Exists(Path.Combine(root, folder)))
+            {
+                foreach (string f in Directory.EnumerateFiles(Path.Combine(root, folder), "*.w2l", SearchOption.AllDirectories)) paths.Add(Path.GetRelativePath(root, f));
+                foreach (string f in Directory.EnumerateFiles(Path.Combine(root, folder), "*.w3simplex", SearchOption.AllDirectories)) areas.Add(Path.GetRelativePath(root, f));
+            }
+            var tree = world.EmbeddedLayers ?? LayerGroup.FromPaths(folder, paths);
+            // layers a DLC adds to the world from its own folders (dlc\bob\levels\prolog_village, REDkit's dlc\bob\data\levels\…),
+            // in a DLC group as REDkit's world editor shows them
+            string worldName = Path.GetFileName(folder);
+            string marker = $"\\levels\\{worldName}\\";
+            var dlcLayers = _locator.AllPaths(".w2l").Where(p => p.StartsWith("dlc\\", StringComparison.OrdinalIgnoreCase) && p.Contains(marker, StringComparison.OrdinalIgnoreCase)).ToList();
+            if (OnDisk && _diskRoot is { } dlcRoot && Directory.Exists(Path.Combine(dlcRoot, "dlc")))
+                foreach (var dlc in Directory.EnumerateDirectories(Path.Combine(dlcRoot, "dlc")))
+                    foreach (var levels in new[] { Path.Combine(dlc, "levels", worldName), Path.Combine(dlc, "data", "levels", worldName) })
+                        if (Directory.Exists(levels))
+                            dlcLayers.AddRange(Directory.EnumerateFiles(levels, "*.w2l", SearchOption.AllDirectories).Select(f => Path.GetRelativePath(dlcRoot, f)));
+            var known = tree.AllLayers().Select(l => l.Path).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var byDlc = dlcLayers.Where(p => !known.Contains(p)).Distinct(StringComparer.OrdinalIgnoreCase).GroupBy(p => p.Split('\\')[1], StringComparer.OrdinalIgnoreCase).ToList();
+            if (byDlc.Count > 0)
+            {
+                var dlcGroup = new LayerGroup { Name = "DLC", Path = "dlc" };
+                foreach (var g in byDlc.OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase))
+                {
+                    string first = g.First();
+                    string dlcFolder = first[..(first.IndexOf(marker, StringComparison.OrdinalIgnoreCase) + marker.Length - 1)];
+                    var one = LayerGroup.FromPaths(dlcFolder, g);
+                    var named = new LayerGroup { Name = g.Key, Path = dlcFolder };
+                    named.Groups.AddRange(one.Groups);
+                    named.Layers.AddRange(one.Layers);
+                    dlcGroup.Groups.Add(named);
+                }
+                tree.Groups.Insert(0, dlcGroup);
+            }
+            return (tree, areas.Order(StringComparer.OrdinalIgnoreCase).ToList());
+        }, token);
+        _roots.Clear();
+        _layerNodes.Clear();
+        int colour = 0;
+        LayerNode Node(LayerGroup group, int c)
+        {
+            var node = new LayerNode(group, null, c, ShowDots);
+            foreach (var child in group.Groups.OrderBy(g => g.Name, StringComparer.OrdinalIgnoreCase)) node.Children.Add(Node(child, c));
+            foreach (var layer in group.Layers.OrderBy(l => l.ShortName, StringComparer.OrdinalIgnoreCase))
+            {
+                var leaf = new LayerNode(null, layer, c, ShowDots);
+                _layerNodes[layer] = leaf;
+                node.Children.Add(leaf);
+            }
+            node.CountText = L.T("Count.Layer", node.Layers().Count());
+            return node;
+        }
+        // the DLC group first, as REDkit lists it, then the world's own groups by name
+        foreach (var group in _layers.Groups.OrderBy(g => g.Path != "dlc").ThenBy(g => g.Name, StringComparer.OrdinalIgnoreCase)) _roots.Add(Node(group, colour++));
+        foreach (var layer in _layers.Layers.OrderBy(l => l.ShortName, StringComparer.OrdinalIgnoreCase))
+        {
+            var leaf = new LayerNode(null, layer, colour, ShowDots);
+            _layerNodes[layer] = leaf;
+            _roots.Add(leaf);
+        }
+        ShowTree();
+        LayersTab.Header = L.T("WorldWindow.Layers2", _layerNodes.Count);
+        LayerNote.Text = world.EmbeddedLayers is not null ? L.T("WorldWindow.TreeInWorld") : L.T("WorldWindow.TreeFromFolders");
+        AreasBox.ItemsSource = new[] { L.T("WorldWindow.NoAreas") }.Concat(_areaFiles.Select(Path.GetFileNameWithoutExtension)).ToList();
+        AreasBox.SelectedIndex = 0;
+        AreasBox.IsEnabled = _areaFiles.Count > 0;
+    }
+
+    /// <summary>Reads every layer's entities in the background, putting them on the map as they come.</summary>
+    private async Task LoadEntitiesAsync(CancellationToken token)
+    {
+        var layers = _layerNodes.Keys.ToList();
+        var groupOf = _layerNodes.ToDictionary(p => p.Key, p => p.Value.Colour);
+        int done = 0;
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        var found = new System.Collections.Concurrent.ConcurrentQueue<(LayerInfo Layer, List<MapDot> Dots)>();
+        var reading = Task.Run(() => Parallel.ForEach(layers, new ParallelOptions { CancellationToken = token, MaxDegreeOfParallelism = Math.Clamp(Environment.ProcessorCount - 1, 2, 8) }, layer =>
+        {
+            try
+            {
+                if (Read(layer.Path) is { } data)
+                    found.Enqueue((layer, WorldFile.Entities(data).Select(e => new MapDot(e, layer, groupOf[layer])).ToList()));
+            }
+            catch (Exception ex) when (ex is IOException or InvalidDataException) { }
+            Interlocked.Increment(ref done);
+        }), token);
+        while (!reading.IsCompleted)
+        {
+            await Task.WhenAny(reading, Task.Delay(400, token));
+            Take();
+            MapProgress.Text = L.T("WorldWindow.ReadingLayers", done, layers.Count);
+        }
+        await reading;
+        Take();
+        MapProgress.Visibility = Visibility.Collapsed;
+        foreach (var node in _roots) Count(node);
+        ShowEntities();
+
+        void Take()
+        {
+            bool any = false;
+            while (found.TryDequeue(out var item))
+            {
+                _dots[item.Layer] = item.Dots;
+                _entities += item.Dots.Count;
+                any = true;
+            }
+            if (any) ShowDots();
+        }
+    }
+
+    /// <summary>Each group's count of layers and entities, once they're read.</summary>
+    private int Count(LayerNode node)
+    {
+        if (node.Layer is { } layer)
+        {
+            int n = _dots.TryGetValue(layer, out var d) ? d.Count : 0;
+            node.CountText = n.ToString(CultureInfo.CurrentCulture);
+            return n;
+        }
+        int sum = node.Children.Sum(Count);
+        node.CountText = L.T("WorldWindow.LayersEntities", L.T("Count.Layer", node.Layers().Count()), L.T("Count.Entity", sum));
+        return sum;
+    }
+
+    private void ShowDots()
+    {
+        if (EntitiesCheck.IsChecked != true)
+        {
+            Map.SetDots([]);
+            return;
+        }
+        Map.SetDots(_dots.Where(p => _layerNodes.TryGetValue(p.Key, out var node) && node.Shown).SelectMany(p => p.Value).ToList());
+    }
+
+    private void ShowTree()
+    {
+        string filter = FilterBox.Text.Trim();
+        if (filter.Length == 0)
+        {
+            LayerTree.ItemsSource = _roots;
+            return;
+        }
+        // the layers whose names or paths have the letters, in a flat list
+        LayerTree.ItemsSource = _layerNodes.Values.Where(n => n.Layer!.Path.Contains(filter, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(n => n.Layer!.Path, StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
+    /// <summary>The World tab: the terrain, occlusion, layers, and every file the world names, each opened by a click.</summary>
+    private void ShowFacts()
+    {
+        var world = _world!;
+        var facts = new List<Fact>();
+        if (world.Terrain is { } t)
+        {
+            facts.Add(new(L.T("WorldWindow.Terrain"), L.T("WorldWindow.TerrainFact", t.Size, t.TilesPerEdge, t.TileSize, t.TileResolution, t.Lowest, t.Highest), null));
+            facts.Add(new(L.T("WorldWindow.TerrainCorner"), $"{t.Corner.X:0}, {t.Corner.Y:0}", null));
+            if (t.Material is { } m) facts.Add(new(L.T("WorldWindow.TerrainMaterial"), m, m));
+            if (_terrain is { } p) facts.Add(new(L.T("WorldWindow.TilesRead"), L.T("WorldWindow.TilesReadFact", p.TilesRead, t.Tiles.Cast<string?>().Count(x => x is not null), p.Side), null));
+        }
+        else facts.Add(new(L.T("WorldWindow.Terrain"), L.T("WorldWindow.NoTerrain"), null));
+        if (world.Occlusion is { } o) facts.Add(new(L.T("WorldWindow.Occlusion"), L.T("WorldWindow.OcclusionFact", o.Side, o.TileSize, o.Tiles.Count), null));
+        facts.Add(new(L.T("WorldWindow.Layers"), L.T("WorldWindow.LayersFact", _layerNodes.Count, _roots.Count(r => r.Group is not null), _entities), null));
+        foreach (string area in _areaFiles) facts.Add(new(L.T("WorldWindow.Areas"), area, area));
+        // every file the world's own properties name, environment and sounds included
+        void Links(RedObject o, string prefix)
+        {
+            foreach (var (name, _, value) in o.Properties)
+            {
+                if (value is RedHandle h && world.File.PathOf(h) is { Length: > 0 } path) facts.Add(new(prefix + name, path, path));
+                else if (value is RedObject inner && inner.Export is null) Links(inner, prefix + name + " › ");
+                else if (value is string s && s.Contains('\\') && name.EndsWith("Path", StringComparison.OrdinalIgnoreCase)) facts.Add(new(prefix + name, s, null));
+            }
+        }
+        Links(world.World, "");
+        FactsList.ItemsSource = facts;
+        InfoText.Text = L.T("WorldWindow.Info", _path, _source, world.File.Version, world.Terrain is { } tt ? L.T("WorldWindow.InfoTerrain", tt.Size, tt.TilesPerEdge) : L.T("WorldWindow.NoTerrain"),
+            L.T("Count.Layer", _layerNodes.Count), L.T("Count.Entity", _entities));
+    }
+
+    /// <summary>
+    /// Every entity read, as REDkit's Entities Browser lists them, those whose name, class, layer or template has the
+    /// filter's letters (at most a few thousand, as a list of tens of thousands helps no one).
+    /// </summary>
+    private void ShowEntities()
+    {
+        string filter = EntityFilterBox.Text.Trim();
+        var all = _dots.Values.SelectMany(d => d);
+        var shown = (filter.Length == 0 ? all : all.Where(d => d.Entity.Name.Contains(filter, StringComparison.OrdinalIgnoreCase)
+                || d.Entity.ClassName.Contains(filter, StringComparison.OrdinalIgnoreCase) || d.Layer.Path.Contains(filter, StringComparison.OrdinalIgnoreCase)
+                || (d.Entity.Template?.Contains(filter, StringComparison.OrdinalIgnoreCase) ?? false)))
+            .OrderBy(d => d.Title, StringComparer.OrdinalIgnoreCase).Take(5000).ToList();
+        EntityGrid.ItemsSource = shown;
+        EntitiesTab.Header = L.T("WorldWindow.Entities2", _entities);
+    }
+
+    private void EntityFilterBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        EntityFilterPlaceholder.Visibility = EntityFilterBox.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
+        ShowEntities();
+    }
+
+    private void EntityGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (EntityGrid.SelectedItem is not MapDot dot) return;
+        Map.Picked = dot;
+        Map_DotPicked(Map, dot);
+        var at = new Vector2(dot.Entity.Position.X, dot.Entity.Position.Y);
+        Map.FitTo(at - new Vector2(60), at + new Vector2(60));
+    }
+
+    private void LookBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_terrain is not { } p || LookBox.SelectedIndex < 0) return;
+        var look = (TerrainLook)LookBox.SelectedIndex;
+        Map.SetTerrain(p.Picture(look), p.Terrain.Corner, p.Terrain.Size);
+    }
+
+    private async void AreasBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (AreasBox.SelectedIndex <= 0 || AreasBox.SelectedIndex > _areaFiles.Count)
+        {
+            _areaShapes = [];
+            Map.SetShapes([.. _navShapes]);
+            return;
+        }
+        string path = _areaFiles[AreasBox.SelectedIndex - 1];
+        var terrain = _world?.Terrain;
+        try
+        {
+            var shapes = await Task.Run(() =>
+            {
+                var tree = SimplexTreeFile.Read(Read(path) ?? throw new FileNotFoundException(path));
+                var cells = terrain is { } t ? tree.Cells(t.Corner, t.Corner + new Vector2(t.Size)) : tree.Cells(tree.Reach);
+                return cells.Where(c => c.Area >= 0).Select(c => new MapShape(c.Outline, SimplexMap.ColorOf(c.Area), true, true)).ToList();
+            });
+            _areaShapes = shapes;
+            Map.SetShapes([.. _areaShapes, .. _navShapes]);
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException)
+        {
+            await ShowMessage(L.T("Common.CouldNotRead"), $"{path}\n\n{ex.Message}", MessageKind.Error);
+        }
+    }
+
+    /// <summary>
+    /// The world's navigation, read the first time it's asked for: its terrain tiles' cells (blocked ground red, ground a
+    /// navmesh takes over blue) as a picture over the map, and each navmesh's border.
+    /// </summary>
+    private async void NavigationCheck_Click(object sender, RoutedEventArgs e)
+    {
+        if (NavigationCheck.IsChecked != true)
+        {
+            Map.SetOverlay(null, default, 0);
+            Map.SetShapes([.. _areaShapes]);
+            return;
+        }
+        if (!_navLoaded && _world?.Terrain is { } terrain)
+        {
+            _navLoaded = true;
+            string folder = (GamePath.Contains('\\') ? Path.GetDirectoryName(GamePath)! : _world.Folder) + @"\navi_cooked";
+            MapProgress.Visibility = Visibility.Visible;
+            MapProgress.Text = L.T("WorldWindow.ReadingNavigation");
+            (_navPicture, _navShapes) = await Task.Run(() => LoadNavigation(terrain, folder));
+            MapProgress.Visibility = Visibility.Collapsed;
+            NavigationCheck.ToolTip = L.T("WorldWindow.NavigationRead", _navShapes.Count);
+        }
+        if (_world?.Terrain is { } t) Map.SetOverlay(_navPicture, t.Corner, t.Size);
+        Map.SetShapes([.. _areaShapes, .. _navShapes]);
+    }
+
+    private (System.Windows.Media.Imaging.BitmapSource? Picture, List<MapShape> Shapes) LoadNavigation(WorldTerrain terrain, string folder)
+    {
+        int n = terrain.TilesPerEdge, cells = 256, step = Math.Max(1, cells * n / 2048), side = cells * n / step;
+        var pixels = new byte[side * side * 4];
+        bool any = false;
+        Parallel.For(0, n * n, i =>
+        {
+            int col = i % n, row = i / n;
+            try
+            {
+                if (Read($@"{folder}\terrain_{col}x{row}.navtile") is not { } data) return;
+                var tile = NavTileFile.Read(data);
+                int per = tile.Resolution / step;
+                for (int y = 0; y < per; y++)
+                    for (int x = 0; x < per; x++)
+                    {
+                        var cell = tile.Cell(x * step, y * step);
+                        if (cell == NavCell.Walkable) continue;
+                        int o = (((n - 1 - row) * per + (per - 1 - y)) * side + col * per + x) * 4;
+                        (pixels[o], pixels[o + 1], pixels[o + 2], pixels[o + 3]) = cell == NavCell.Blocked ? ((byte)40, (byte)40, (byte)150, (byte)110) : ((byte)200, (byte)120, (byte)40, (byte)110);
+                    }
+                any = true;
+            }
+            catch (InvalidDataException) { }
+        });
+        System.Windows.Media.Imaging.BitmapSource? picture = null;
+        if (any)
+        {
+            picture = System.Windows.Media.Imaging.BitmapSource.Create(side, side, 96, 96, PixelFormats.Bgra32, null, pixels, side * 4);
+            picture.Freeze();
+        }
+        // each navmesh's border: the edges with no neighbour, or the top bit set
+        var shapes = new List<MapShape>();
+        var meshes = _locator.AllPaths(".navmesh").Where(p => p.StartsWith(folder + "\\", StringComparison.OrdinalIgnoreCase)).ToList();
+        if (OnDisk && _diskRoot is { } root && Directory.Exists(Path.Combine(root, folder)))
+            meshes.AddRange(Directory.EnumerateFiles(Path.Combine(root, folder), "*.navmesh").Select(f => Path.GetRelativePath(root, f)));
+        var edge = Color.FromRgb(0x5A, 0xC8, 0xFA);
+        foreach (string path in meshes.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            try
+            {
+                if (Read(path) is not { } data) continue;
+                var mesh = NavMeshFile.Read(data);
+                for (int i = 0; i < mesh.Triangles.Count; i++)
+                {
+                    var (a, b, c) = mesh.Triangles[i];
+                    var (na, nb, nc) = mesh.Neighbours[i];
+                    int[] corners = [a, b, c, a];
+                    int[] across = [na, nb, nc];
+                    for (int k = 0; k < 3; k++)
+                        if (across[k] == 0xFFFF || (across[k] & 0x8000) != 0)
+                        {
+                            var p0 = mesh.Vertices[corners[k]];
+                            var p1 = mesh.Vertices[corners[k + 1]];
+                            shapes.Add(new MapShape([new Vector2(p0.X, p0.Y), new Vector2(p1.X, p1.Y)], edge, false, false));
+                        }
+                }
+            }
+            catch (InvalidDataException) { }
+        }
+        return (picture, shapes);
+    }
+
+    private void Overlay_Click(object sender, RoutedEventArgs e)
+    {
+        Map.ShowTiles = TilesCheck.IsChecked == true;
+        Map.ShowOcclusion = OcclusionCheck.IsChecked == true;
+        ShowDots();
+    }
+
+    private void FitButton_Click(object sender, RoutedEventArgs e) => Map.FitWorld();
+
+    private void Map_PointerMoved(object? sender, Vector2? point)
+    {
+        if (point is not { } p)
+        {
+            HoverText.Text = L.T("WorldWindow.MouseHint");
+            return;
+        }
+        string text = $"X {p.X:0.0}   Y {p.Y:0.0}";
+        if (_terrain?.At(p) is { } at)
+        {
+            var t = _terrain.Terrain;
+            int col = (int)((p.X - t.Corner.X) / t.TileSize), row = (int)((p.Y - t.Corner.Y) / t.TileSize);
+            text += "   ·   " + L.T("WorldWindow.HoverTerrain", at.Metres, TerrainLevel.Background(at.Control), TerrainLevel.Overlay(at.Control),
+                TerrainLevel.SlopeThreshold(at.Control), $"tile_{row}_x_{col}");
+        }
+        HoverText.Text = text;
+    }
+
+    private void Map_DotPicked(object? sender, MapDot? dot)
+    {
+        if (dot is null)
+        {
+            PickedPanel.Visibility = Visibility.Collapsed;
+            return;
+        }
+        var e = dot.Entity;
+        PickedTitle.Text = $"{(dot.Title.Length > 0 ? dot.Title : L.T("WorldWindow.Unnamed"))}   ·   {e.ClassName}";
+        PickedDetail.Text = L.T("WorldWindow.PickedDetail", dot.Layer.Path, $"{e.Position.X:0.00}, {e.Position.Y:0.00}, {e.Position.Z:0.00}", e.Yaw * 180 / MathF.PI,
+            e.Template ?? L.T("WorldWindow.NoTemplate"));
+        OpenTemplateButton.IsEnabled = e.Template is not null;
+        PickedPanel.Visibility = Visibility.Visible;
+    }
+
+    private void OpenTemplate_Click(object sender, RoutedEventArgs e)
+    {
+        if (Map.Picked?.Entity.Template is { } template) _ = DataViewers.OpenLinkAsync(template, _locator, this, this);
+    }
+
+    private void OpenPickedLayer_Click(object sender, RoutedEventArgs e)
+    {
+        if (Map.Picked is { } dot) OpenLayer(dot.Layer.Path);
+    }
+
+    /// <summary>A layer's file in the properties viewer, every entity in it listed.</summary>
+    private void OpenLayer(string path)
+    {
+        if (Read(path) is { } data) PropertiesWindow.Open(path, _source, data, _locator, this);
+    }
+
+    private LayerNode? Selected => LayerTree.SelectedItem as LayerNode;
+
+    private void LayerTree_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
+    {
+        if (Selected is not { } node)
+        {
+            Map.Highlight(null);
+            return;
+        }
+        var layers = node.Layers().ToHashSet();
+        Map.Highlight(layers);
+        var dots = layers.SelectMany(l => _dots.TryGetValue(l, out var d) ? d : []).ToList();
+        if (dots.Count > 0) Map.FitToDots(dots);
+    }
+
+    private void ShowOnly_Click(object sender, RoutedEventArgs e)
+    {
+        if (Selected is not { } node) return;
+        foreach (var root in _roots) root.Set(false);
+        node.Set(true);
+        ShowDots();
+    }
+
+    private void ShowAll_Click(object sender, RoutedEventArgs e)
+    {
+        foreach (var root in _roots) root.Set(true);
+        ShowDots();
+    }
+
+    private void OpenLayer_Click(object sender, RoutedEventArgs e)
+    {
+        if (Selected?.Layer is { } layer) OpenLayer(layer.Path);
+    }
+
+    private void CopyLayerPath_Click(object sender, RoutedEventArgs e)
+    {
+        string? path = Selected?.Layer?.Path ?? Selected?.Group?.Path;
+        if (path is null) return;
+        try { Clipboard.SetText(path); }
+        catch (System.Runtime.InteropServices.COMException) { }
+    }
+
+    private void FilterBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        FilterPlaceholder.Visibility = FilterBox.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
+        ShowTree();
+    }
+
+    private void FactLink_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as Hyperlink)?.Tag is string path) _ = DataViewers.OpenLinkAsync(path, _locator, this, this);
+    }
+
+    /// <summary>Shows REDkit's own copy's properties when there is one, and says where they come from.</summary>
+    private async Task LoadRedkitAsync()
+    {
+        var (path, origin) = (_path, _origin);
+        var from = await Task.Run(() => RedkitSource.For(path, origin));
+        if (from.Redkit?.First("CGameWorld") is { } own) FileProperties.Show(PropertyRow.Of(own, from.Redkit));
+        SourceNoteBar.Show(from.Source, from.RedkitPath ?? origin, L.T("WorldWindow.World3"));
+    }
+
+    private void Properties_LinkClicked(object? sender, string path) => _ = DataViewers.OpenLinkAsync(path, _locator, this, this);
+
+    private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (Message.IsOpen) return;
+        if (e.Key == Key.F && Keyboard.Modifiers == ModifierKeys.Control)
+        {
+            Tabs.SelectedItem = LayersTab;
+            FilterBox.Focus();
+            FilterBox.SelectAll();
+            e.Handled = true;
+            return;
+        }
+        if (e.OriginalSource is TextBox) return;
+        if (e.Key == Key.F)
+        {
+            Map.FitWorld();
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Escape)
+        {
+            Close();
+            e.Handled = true;
+        }
+    }
+}
