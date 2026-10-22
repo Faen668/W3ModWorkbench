@@ -3,7 +3,7 @@ title: Building and installing
 icon: E90F
 order: 4
 summary: Turn your project into a finished mod, and put it in the game.
-keywords: build install mod bundle precompiled rsblob loose scripts info.json texture cache sound cache mods folder
+keywords: build install mod bundle precompiled rsblob loose scripts info.json texture cache sound cache mods folder dlc reddlc
 ---
 ## Build
 
@@ -25,10 +25,14 @@ build\modMyFirstMod\content\
 - With **Also ship the loose scripts** ticked in [[Projects|Project properties]], the `.ws` files go in `content\scripts` beside it, as your mod's source for others to read or merge. The `info.json` tells the game to run the compiled ones.
 - **Workspace files** are packed into the bundle, textures into the texture cache (cooked from your pictures, see [[Changing game files]]) and sounds into the sound cache.
 
+## The project's own DLC
+
+Some things only a DLC can do, such as mounting the XML that overrides the game's items (see [[Items and stats]]). Your project's own DLC is the workspace's `dlc\dlcNAME` folder, NAME being your mod's name in lower case (`modMyRebalance` gives `dlcmyrebalance`). Build makes it into `build\dlcNAME\content` beside the mod, with a `dlcNAME.reddlc` that mounts each XML file in its `data\gameplay\items` folder (and New Game+'s in `items_plus`), unless the folder has a `.reddlc` of its own.
+
 The `build` folder is made anew each time, so don't keep anything of your own in it.
 
 ## Install
 
-**Project > Install modMyFirstMod…** copies the build into the game's `mods` folder, after saying where. It only replaces that one folder. If a folder of that name is there and wasn't installed from this project (someone else's mod of the same name, say), it asks first.
+**Project > Install modMyFirstMod…** copies the build into the game's `mods` folder, after saying where, and the project's DLC, when it has one, into the game's `dlc` folder. It only replaces those folders, and never one of the game's own DLC. If a folder of that name is there and wasn't installed from this project (someone else's mod of the same name, say), it asks first.
 
 > tip: Build, install, then load a save to try your changes. Turn on the game's debug console to try `exec` functions. See [[Console commands]].

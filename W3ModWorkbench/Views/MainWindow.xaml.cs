@@ -1665,6 +1665,7 @@ public partial class MainWindow : Window, IMessageHost
         Add(L.T("MainWindow.SourceInspector"), "Ctrl+Shift+I", () => SourceInspectorWindow.Open(this));
         Add(L.T("MainWindow.LoadOrderAnalyser"), "Ctrl+Shift+L", () => LoadOrderWindow.Open(this));
         Add(L.T("MainWindow.ViewXMLOverrides"), "", () => XmlOverridesWindow.Open(this));
+        Add(L.T("ItemEditor.MenuItem"), "", () => ItemEditorWindow.Open(this));
         menu.Items.Add(new Separator());
         Add(L.T("MainWindow.ConsoleCommands"), "", () => ConsoleCommandsWindow.Open(this));
         Add(L.T("MainWindow.QuestFacts"), "", () => FactsWindow.Open(this));
@@ -2261,6 +2262,8 @@ public partial class MainWindow : Window, IMessageHost
             return;
         }
         string target = ModBuilder.InstallPath(project, game);
+        // the project's own DLC goes in the game's dlc folder beside it
+        if (Directory.Exists(Path.Combine(project.BuiltDlcPath, "content"))) target += "\n" + ModBuilder.InstallDlcPath(project, game);
         bool go = ModBuilder.Installed(project, game) switch
         {
             InstalledState.Someone => await Message.Show(L.T("MainWindow.ReplaceThatsInstalled", project.ModFolderName),

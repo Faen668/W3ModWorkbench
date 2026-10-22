@@ -8,7 +8,8 @@ namespace W3ModWorkbench.Core.Projects;
 
 /// <summary>What a build made, or why it stopped.</summary>
 /// <param name="Compiled">What compiling the scripts gave, when Build compiled them: its errors and warnings.</param>
-public sealed record BuildResult(bool Success, string ModFolder, string? Failure, IReadOnlyList<string> Made, string Log, CompileResult? Compiled = null);
+/// <param name="DlcFolder">The project's own DLC, when the workspace has one (dlc\NAME), built beside the mod.</param>
+public sealed record BuildResult(bool Success, string ModFolder, string? Failure, IReadOnlyList<string> Made, string Log, CompileResult? Compiled = null, string? DlcFolder = null);
 
 /// <summary>
 /// Makes a project's mod and installs it. Build puts the mod in the project's build folder, ready to install,
@@ -21,8 +22,11 @@ public sealed record BuildResult(bool Success, string ModFolder, string? Failure
 /// and its sounds in <c>content\soundspc.cache</c>, all made by <see cref="Packing.ModPacker"/> as REDkit's tools make them;</item>
 /// <item>the project's <c>.w3strings</c> files go in <c>content</c>.</item>
 /// </list>
-/// Install copies that folder into the game's mods folder, in place of the one installed before. Those are the only
-/// writes into the game's folder the tool makes, and only into the mod's own folder there.
+/// The workspace's <c>dlc\NAME</c> folder, NAME being the project's own DLC (<see cref="WorkbenchProject.DlcFolderName"/>),
+/// is built apart, into <c>build\dlcNAME\content</c>, with a .reddlc that mounts its item definitions (unless it has
+/// one of its own): what only a DLC can do, such as the XML that overrides the game's items.
+/// Install copies those folders into the game's mods and dlc folders, in place of the ones installed before. Those are
+/// the only writes into the game's folder the tool makes, and only into the project's own folders there.
 /// </summary>
 public static class ModBuilder
 {
@@ -46,8 +50,12 @@ public static class ModBuilder
         var made = new List<string>();
         string mod = project.BuiltModPath;
         string content = Path.Combine(mod, "content");
+        string dlc = project.BuiltDlcPath;
+        string? dlcMade = null;
         CompileResult? compiled = null;
         BuildResult Failed(string why) => new(false, mod, why, made, log.ToString(), compiled);
+        string dlcPrefix = $@"dlc\{project.DlcFolderName}\";
+        bool InDlc(string gamePath) => gamePath.Replace('/', '\\').StartsWith(dlcPrefix, StringComparison.OrdinalIgnoreCase);
 
         if (FileSafety.Protection(project.FilePath) is { } protection)
             return Failed(L.T("ModBuilder.ProjectInsideGamesFolders", protection));
@@ -59,6 +67,8 @@ public static class ModBuilder
         {
             progress?.Report(L.T("ModBuilder.ClearingLastBuild"));
             if (Directory.Exists(mod)) Directory.Delete(mod, recursive: true);
+            if (Path.GetFullPath(dlc).StartsWith(Path.GetFullPath(project.BuildPath) + "\\", StringComparison.OrdinalIgnoreCase) && Directory.Exists(dlc))
+                Directory.Delete(dlc, recursive: true);
             Directory.CreateDirectory(content);
 
             var scripts = Directory.Exists(project.ScriptsPath)
@@ -137,20 +147,72 @@ public static class ModBuilder
             if (Directory.Exists(project.WorkspacePath))
             {
                 progress?.Report(L.T("ModBuilder.PackingWorkspace"));
-                if (Packing.ModPacker.Pack(project.WorkspacePath, content, gameFile, progress, cancel, gameTexture) is { } packed)
+                if (Packing.ModPacker.Pack(project.WorkspacePath, content, gameFile, progress, cancel, gameTexture, include: p => !InDlc(p)) is { } packed)
                 {
                     made.AddRange(packed.Made);
                     foreach (string note in packed.Notes) log.AppendLine(note);
                     made.AddRange(packed.Notes.Take(10).Select(note => L.T("ModBuilder.Note", note)));
                     if (packed.Notes.Count > 10) made.Add(L.T("ModBuilder.MoreNotes", packed.Notes.Count - 10));
                 }
+                dlcMade = BuildDlc(project, gameFile, gameTexture, progress, cancel, made, log);
             }
             if (made.Count == 0) return Failed(L.T("ModBuilder.TheresNothingBuildYet"));
-            return new BuildResult(true, mod, null, made, log.ToString(), compiled);
+            return new BuildResult(true, mod, null, made, log.ToString(), compiled, dlcMade);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             return Failed(ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// The project's own DLC: the workspace's dlc\NAME folder packed into build\dlcNAME\content, with a .reddlc that
+    /// mounts each XML file in its gameplay\items folder (and New Game+'s in items_plus), unless the folder has its own.
+    /// Null when the workspace has no such folder.
+    /// </summary>
+    private static string? BuildDlc(WorkbenchProject project, Func<string, byte[]?>? gameFile, Func<string, Packing.TextureLevels?>? gameTexture,
+        IProgress<string>? progress, CancellationToken cancel, List<string> made, StringBuilder log)
+    {
+        string name = project.DlcFolderName;
+        string folder = Path.Combine(project.WorkspacePath, "dlc", name);
+        if (!Directory.Exists(folder) || !Directory.EnumerateFiles(folder, "*", SearchOption.AllDirectories).Any()) return null;
+        progress?.Report(L.T("ModBuilder.BuildingDlc", name));
+        string prefix = $@"dlc\{name}\";
+        string Xml(string sub) => Path.Combine(folder, "data", "gameplay", sub);
+        List<string> Mounted(string sub) => Directory.Exists(Xml(sub))
+            ? [.. Directory.EnumerateFiles(Xml(sub), "*.xml").Order(StringComparer.OrdinalIgnoreCase).Select(f => prefix + Path.GetRelativePath(folder, f))]
+            : [];
+        string own = Path.Combine(folder, name + ".reddlc");
+        var extra = new List<(string, string)>();
+        string? temp = null;
+        try
+        {
+            if (!File.Exists(own))
+            {
+                var normal = Mounted("items");
+                var plus = Mounted("items_plus");
+                temp = Path.Combine(Path.GetTempPath(), "W3ModWorkbench", "dlc-" + Guid.NewGuid().ToString("N"));
+                Directory.CreateDirectory(temp);
+                string reddlc = Path.Combine(temp, name + ".reddlc");
+                File.WriteAllBytes(reddlc, DlcDefinition.Make(name, normal, plus));
+                extra.Add((reddlc, prefix + name + ".reddlc"));
+                made.Add(L.T("ModBuilder.DlcDefinitionMade", name, normal.Count + plus.Count));
+            }
+            string content = Path.Combine(project.BuiltDlcPath, "content");
+            Directory.CreateDirectory(content);
+            if (Packing.ModPacker.Pack(project.WorkspacePath, content, gameFile, progress, cancel, gameTexture,
+                    include: p => p.Replace('/', '\\').StartsWith(prefix, StringComparison.OrdinalIgnoreCase), extra: extra) is { } packed)
+            {
+                made.AddRange(packed.Made.Select(m => L.T("ModBuilder.InDlc", name, m)));
+                foreach (string note in packed.Notes) log.AppendLine(note);
+            }
+            return project.BuiltDlcPath;
+        }
+        finally
+        {
+            if (temp is not null)
+                try { Directory.Delete(temp, recursive: true); }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
         }
     }
 
@@ -209,13 +271,24 @@ public static class ModBuilder
     /// <summary>Where Install puts the mod: its folder in the game's mods folder.</summary>
     public static string InstallPath(WorkbenchProject project, string gameFolder) => Path.Combine(gameFolder, "mods", project.ModFolderName);
 
+    /// <summary>Where Install puts the project's own DLC: its folder in the game's dlc folder.</summary>
+    public static string InstallDlcPath(WorkbenchProject project, string gameFolder) => Path.Combine(gameFolder, "dlc", project.DlcFolderName);
+
     /// <summary>
     /// What's in the mods folder at that name now: nothing, this project's last install, or someone else's mod (a mod
     /// of the same name, or one installed by hand), which Install would replace.
     /// </summary>
     public static InstalledState Installed(WorkbenchProject project, string gameFolder)
     {
-        string target = InstallPath(project, gameFolder);
+        // the DLC's folder counts too: someone else's DLC of that name would be replaced as well
+        var mod = InstalledAt(project, InstallPath(project, gameFolder));
+        var dlc = Directory.Exists(project.BuiltDlcPath) ? InstalledAt(project, InstallDlcPath(project, gameFolder)) : InstalledState.None;
+        return mod == InstalledState.Someone || dlc == InstalledState.Someone ? InstalledState.Someone
+            : mod == InstalledState.Ours || dlc == InstalledState.Ours ? InstalledState.Ours : InstalledState.None;
+    }
+
+    private static InstalledState InstalledAt(WorkbenchProject project, string target)
+    {
         if (!Directory.Exists(target)) return InstalledState.None;
         try
         {
@@ -244,6 +317,27 @@ public static class ModBuilder
             throw new IOException(L.T("ModBuilder.IsntModFolderName", project.ModFolderName));
         FileSafety.CheckInstallWrite(Path.Combine(target, "content", "_"));
         Directory.CreateDirectory(mods);
+        CopyInstall(project, source, target);
+
+        // the project's own DLC beside it, in the game's dlc folder; one installed before that the project no longer
+        // has is taken away, when it's this project's
+        string dlcTarget = InstallDlcPath(project, gameFolder);
+        if (Directory.Exists(Path.Combine(project.BuiltDlcPath, "content")))
+        {
+            FileSafety.CheckInstallWrite(Path.Combine(dlcTarget, "content", "_"));
+            CopyInstall(project, project.BuiltDlcPath, dlcTarget);
+        }
+        else if (InstalledAt(project, dlcTarget) == InstalledState.Ours)
+        {
+            FileSafety.CheckInstallWrite(Path.Combine(dlcTarget, "content", "_"));
+            Directory.Delete(dlcTarget, recursive: true);
+        }
+        return target;
+    });
+
+    /// <summary>A built folder copied over an installed one, which is replaced whole, marked as this project's.</summary>
+    private static void CopyInstall(WorkbenchProject project, string source, string target)
+    {
         if (Directory.Exists(target)) Directory.Delete(target, recursive: true);
         foreach (string file in Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories))
         {
@@ -253,8 +347,7 @@ public static class ModBuilder
         }
         File.WriteAllText(Path.Combine(target, InstallMarker),
             JsonSerializer.Serialize(new InstallRecord(project.FilePath, project.Name, DateTime.Now), new JsonSerializerOptions { WriteIndented = true }));
-        return target;
-    });
+    }
 
     private sealed record InstallRecord(string Project, string Name, DateTime Installed);
 }

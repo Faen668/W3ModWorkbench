@@ -99,6 +99,24 @@ public sealed class WorkbenchProject
     [JsonIgnore] public string BuiltModPath => Path.Combine(BuildPath, ModFolderName);
 
     /// <summary>
+    /// The project's own DLC folder name: dlc and the mod's name in lower case (modMyRebalance gives dlcmyrebalance),
+    /// as the game's DLC folders are named. Its files are in the workspace under dlc\NAME; Build makes them into a DLC of
+    /// their own, for what only a DLC can do, such as mounting the XML that overrides the game's item definitions.
+    /// </summary>
+    [JsonIgnore] public string DlcFolderName
+    {
+        get
+        {
+            string mod = ModFolderName;
+            string bare = mod.StartsWith("mod", StringComparison.OrdinalIgnoreCase) ? mod[3..] : mod;
+            return "dlc" + new string([.. bare.ToLowerInvariant().Where(char.IsAsciiLetterOrDigit)]);
+        }
+    }
+
+    /// <summary>The DLC Build makes from the workspace's dlc\NAME folder, ready to install.</summary>
+    [JsonIgnore] public string BuiltDlcPath => Path.Combine(BuildPath, DlcFolderName);
+
+    /// <summary>
     /// A mod folder name from a name as people write it: "This is my mod" gives modThisIsMyMod. Only letters, digits
     /// and underscores, and "mod" in front unless it's there already.
     /// </summary>

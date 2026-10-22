@@ -79,6 +79,11 @@ public static class FileSafety
         if (GameFolderOf(full) is { } game && Under(Path.Combine(game, "mods"), full)
             && Path.GetRelativePath(Path.Combine(game, "mods"), full).Contains(Path.DirectorySeparatorChar))
             return;
+        // a mod's own DLC folder under dlc, never one of the game's official DLC
+        if (GameFolderOf(full) is { } root && Under(Path.Combine(root, "dlc"), full)
+            && Path.GetRelativePath(Path.Combine(root, "dlc"), full) is var inDlc && inDlc.Contains(Path.DirectorySeparatorChar)
+            && !OfficialDlc.Is(root, inDlc[..inDlc.IndexOf(Path.DirectorySeparatorChar)]))
+            return;
         CheckWrite(full);
     }
 

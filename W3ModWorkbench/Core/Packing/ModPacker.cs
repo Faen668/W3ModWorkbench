@@ -30,15 +30,19 @@ public static class ModPacker
     /// by its path (for the texture a picture replaces), or is null. Null when the workspace has nothing to pack.
     /// </summary>
     /// <param name="gameTexture">A game bitmap's whole level chain by its path, for a texture array's slices the workspace hasn't got; or null.</param>
+    /// <param name="include">Which of the workspace's files to pack, by game path (a DLC's folder goes in a build of its own); null for all.</param>
+    /// <param name="extra">Files made for the build, packed with the workspace's: their file on disk and their game path.</param>
     public static PackResult? Pack(string workspace, string content, Func<string, byte[]?>? gameFile, IProgress<string>? progress, CancellationToken cancel,
-        Func<string, TextureLevels?>? gameTexture = null)
+        Func<string, TextureLevels?>? gameTexture = null, Func<string, bool>? include = null, IReadOnlyList<(string File, string GamePath)>? extra = null)
     {
         string root = Path.GetFullPath(workspace);
         var all = new DirectoryInfo(root).EnumerateFiles("*", SearchOption.AllDirectories)
             .Where(f => BundleWriter.Packs(f.Name, f.Length))
             .Select(f => new BundleWriter.Source(f.FullName, BundleWriter.GamePath(Path.GetRelativePath(root, f.FullName)), f.Length))
+            .Where(s => include?.Invoke(s.GamePath) ?? true)
+            .Concat((extra ?? []).Select(e => new BundleWriter.Source(e.File, e.GamePath, new FileInfo(e.File).Length)))
             .ToList();
-        var caches = new DirectoryInfo(root).GetFiles("*.cache");
+        var caches = new DirectoryInfo(root).GetFiles("*.cache").Where(c => include?.Invoke(c.Name) ?? true).ToArray();
         if (all.Count == 0 && caches.Length == 0) return null;
 
         var made = new List<string>();
