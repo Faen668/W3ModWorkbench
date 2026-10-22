@@ -729,16 +729,69 @@ public partial class WorldWindow : Window, IMessageHost
         string folder = GamePath.Contains('\\') ? Path.GetDirectoryName(GamePath)! : _world!.Folder;
         MapProgress.Visibility = Visibility.Visible;
         MapProgress.Text = L.T("WorldWindow.ReadingPlants3D");
-        var kinds = await Task.Run(() => LoadPlants3D(folder));
+        var world = _world!;
+        var (kinds, grass) = await Task.Run(() =>
+        {
+            var grassSetup = LoadGrass(world, out var brushPlants);
+            return (LoadPlants3D(folder, brushPlants), grassSetup);
+        });
         MapProgress.Visibility = Visibility.Collapsed;
         View3D.SetPlants(kinds);
+        View3D.SetGrass(grass);
     }
 
     /// <summary>
     /// Every kind of plant the world's foliage cells place, with its SpeedTree file, its pictures (each LOD's and its
     /// billboard atlas, cutouts in their alpha) and where it grows; kinds whose file can't be read are left out.
     /// </summary>
-    private List<PlantKind3D> LoadPlants3D(string folder)
+    /// <summary>
+    /// The terrain's grass: each texture slot's vegetation brush (the clip map's grassBrushes) and its plants, and the
+    /// foliage scene's grass mask; <paramref name="plants"/> gets the brushes' plant files, to load with the rest.
+    /// </summary>
+    private GrassSetup? LoadGrass(WorldFile world, out List<string> plants)
+    {
+        plants = [];
+        try
+        {
+            var file = world.File;
+            List<object?>? brushes = null;
+            string? maskPath = null;
+            for (int i = 0; i < file.Exports.Count; i++)
+            {
+                var o = file.Object(i);
+                if (file.Exports[i].ClassName == "CClipMap") brushes = o.Array("grassBrushes");
+                if (file.Exports[i].ClassName == "CFoliageScene" && o["grassMask"] is RedHandle mh) maskPath = file.PathOf(mh);
+            }
+            if (brushes is null || maskPath is null || Read(maskPath) is not { } maskData) return null;
+            var maskFile = Cr2wFile.Read(maskData);
+            var maskObject = maskFile.Object(0);
+            int res = (int)(maskObject["maskRes"] is uint r ? r : 0);
+            var tail = maskObject.Tail;
+            if (res <= 0 || tail.Length * 8 < res * res) return null;
+            var mask = new bool[res * res];
+            for (int b = 0; b < mask.Length; b++) mask[b] = (tail[b >> 3] & (1 << (b & 7))) != 0;
+            var entries = new List<GrassEntry>();
+            for (int slot = 0; slot < brushes.Count; slot++)
+            {
+                if (brushes[slot] is not RedHandle bh || file.PathOf(bh) is not { } brushPath || Read(brushPath) is not { } brushData) continue;
+                var brush = Cr2wFile.Read(brushData);
+                for (int i = 0; i < brush.Exports.Count; i++)
+                {
+                    if (brush.Exports[i].ClassName != "CVegetationBrushEntry") continue;
+                    var e = brush.Object(i);
+                    if (e["resource"] is not RedHandle th || brush.PathOf(th) is not { } tree || Read(tree) is not { } treeData) continue;
+                    var srt = SpeedTreeFile.Read(treeData);
+                    float footprint = MathF.Max(MathF.Max(-srt.Min.X, srt.Max.X), MathF.Max(-srt.Min.Y, srt.Max.Y));
+                    entries.Add(new GrassEntry(slot, tree, e.Float("size", 1), e.Float("sizeVar", 0), e.Float("radiusScale", 1), footprint));
+                    plants.Add(tree);
+                }
+            }
+            return entries.Count > 0 ? new GrassSetup(entries, mask, res) : null;
+        }
+        catch (Exception ex) when (ex is InvalidDataException or IOException) { return null; }
+    }
+
+    private List<PlantKind3D> LoadPlants3D(string folder, IReadOnlyList<string>? extraGrass = null)
     {
         var paths = _locator.AllPaths(".flyr").Where(p => p.StartsWith(folder + @"\", StringComparison.OrdinalIgnoreCase)).ToList();
         if (OnDisk && _diskRoot is { } root && Directory.Exists(Path.Combine(root, folder)))
@@ -752,6 +805,8 @@ public partial class WorldWindow : Window, IMessageHost
             }
             catch (InvalidDataException) { }
         });
+        // the terrain's grass plants too, placed by the view as it grows the grass
+        foreach (var tree in extraGrass ?? []) groups.Add(new FoliageGroup(tree, true, []));
         var pictures = new System.Collections.Concurrent.ConcurrentDictionary<string, System.Windows.Media.Imaging.BitmapSource?>(StringComparer.OrdinalIgnoreCase);
         var kinds = new System.Collections.Concurrent.ConcurrentBag<PlantKind3D>();
         Parallel.ForEach(groups.GroupBy(g => (g.Tree.ToLowerInvariant(), g.Grass)), kind =>

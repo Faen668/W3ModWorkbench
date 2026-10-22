@@ -133,6 +133,54 @@ public abstract class D3DHost : FrameworkElement, IDisposable
     /// <summary>A shader compiled from HLSL source.</summary>
     protected static ShaderBytecode Compile(string source, string entry, string profile) => ShaderBytecode.Compile(source, entry, profile);
 
+    /// <summary>
+    /// A cutout picture's texture (leaves, grass): its alpha kept straight, not multiplied into the colour, and the
+    /// opaque parts' colour carried into the clear ones, so neither the cutout's edge nor its smaller copies turn dark.
+    /// </summary>
+    protected ShaderResourceView CutoutTexture(BitmapSource picture)
+    {
+        var source = picture.Format == PixelFormats.Bgra32 ? picture : new FormatConvertedBitmap(picture, PixelFormats.Bgra32, null, 0);
+        int w = source.PixelWidth, h = source.PixelHeight;
+        var pixels = new byte[w * h * 4];
+        source.CopyPixels(pixels, w * 4, 0);
+        // the opaque texels' average colour into every clear texel, then each clear texel from its nearest opaque
+        // neighbours a few times, so the edges keep the leaves' own colours
+        long r = 0, g = 0, b = 0, n = 0;
+        for (int i = 0; i < pixels.Length; i += 4)
+            if (pixels[i + 3] >= 128) { b += pixels[i]; g += pixels[i + 1]; r += pixels[i + 2]; n++; }
+        if (n > 0)
+        {
+            var filled = new bool[w * h];
+            for (int i = 0; i < w * h; i++) filled[i] = pixels[i * 4 + 3] >= 128;
+            for (int pass = 0; pass < 8; pass++)
+            {
+                var next = (bool[])filled.Clone();
+                for (int y = 0; y < h; y++)
+                    for (int x = 0; x < w; x++)
+                    {
+                        int i = y * w + x;
+                        if (filled[i]) continue;
+                        int sb = 0, sg = 0, sr = 0, c = 0;
+                        for (int dy = -1; dy <= 1; dy++)
+                            for (int dx = -1; dx <= 1; dx++)
+                            {
+                                int xx = x + dx, yy = y + dy;
+                                if (xx < 0 || yy < 0 || xx >= w || yy >= h || !filled[yy * w + xx]) continue;
+                                int j = (yy * w + xx) * 4;
+                                sb += pixels[j]; sg += pixels[j + 1]; sr += pixels[j + 2]; c++;
+                            }
+                        if (c == 0) continue;
+                        pixels[i * 4] = (byte)(sb / c); pixels[i * 4 + 1] = (byte)(sg / c); pixels[i * 4 + 2] = (byte)(sr / c);
+                        next[i] = true;
+                    }
+                filled = next;
+            }
+            for (int i = 0; i < w * h; i++)
+                if (!filled[i]) { pixels[i * 4] = (byte)(b / n); pixels[i * 4 + 1] = (byte)(g / n); pixels[i * 4 + 2] = (byte)(r / n); }
+        }
+        return Texture(pixels, w, h, DxgiFormat.B8G8R8A8_UNorm, 4);
+    }
+
     /// <summary>A texture made from a picture, with its smaller copies.</summary>
     protected ShaderResourceView Texture(BitmapSource picture)
     {

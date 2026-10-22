@@ -75,6 +75,9 @@ public sealed partial class WorldView3D
     private SamplerState? _shadowCompare;
     private RasterizerState? _shadowRaster;
     private const int PlantShadowSize = 4096;
+    private Matrix4x4 _sunMatrix;
+    private Vector3 _sunCentre, _sunFor;
+    private bool _sunValid;
     private const float PlantShadowReach = 160;
 
     /// <summary>How far the SpeedTree files' LOD distances are stretched, as the game's foliage distance setting does.</summary>
@@ -154,7 +157,7 @@ public sealed partial class WorldView3D
                 if (name.Length == 0) return null;
                 string path = SpeedTreeFile.TexturePath(kind.Path, name);
                 if (_plantPictures.TryGetValue(path, out var known)) return known;
-                var view = kind.Pictures.GetValueOrDefault(path) is { } picture ? Texture(picture) : null;
+                var view = kind.Pictures.GetValueOrDefault(path) is { } picture ? CutoutTexture(picture) : null;
                 _plantPictures[path] = view;
                 return view;
             }
@@ -203,6 +206,7 @@ public sealed partial class WorldView3D
 
     private void DisposePlants()
     {
+        _sunValid = false;
         foreach (var kind in _plants)
             foreach (var lod in kind.Lods)
             {
@@ -213,55 +217,79 @@ public sealed partial class WorldView3D
         _plantPictures.Clear();
         _plants.Clear();
         _plantCells.Clear();
+        _cellGroups.Clear();
+        _grassGrown.Clear();
     }
 
     /// <summary>
     /// The plants to draw, sorted by kind and LOD (the last slot of each kind its billboards): those near enough, as
     /// fine as their distance asks, and in view when <paramref name="planes"/> is given.
     /// </summary>
-    private List<PlantPlace>[][] GatherPlants(Vector3 from, float reach, Vector4[]? planes)
+    private List<PlantPlace>[][] GatherPlants(Vector3 from, float reach, Vector4[]? planes, bool grass = true)
     {
         var lists = new List<PlantPlace>[_plants.Count][];
         int cells = (int)MathF.Ceiling(reach / PlantCell);
         int cx = (int)MathF.Floor(from.X / PlantCell), cy = (int)MathF.Floor(from.Y / PlantCell);
+        var here = new Vector2(from.X, from.Y);
         for (int y = cy - cells; y <= cy + cells; y++)
             for (int x = cx - cells; x <= cx + cells; x++)
             {
-                if (!_plantCells.TryGetValue((x, y), out var cell)) continue;
-                var near = Vector2.Clamp(new Vector2(from.X, from.Y), new Vector2(x, y) * PlantCell, new Vector2(x + 1, y + 1) * PlantCell);
-                if (Vector2.Distance(near, new Vector2(from.X, from.Y)) > reach) continue;
+                if (!_plantCells.ContainsKey((x, y))) continue;
+                var low = new Vector2(x, y) * PlantCell;
+                float nearest = Vector2.Distance(Vector2.Clamp(here, low, low + new Vector2(PlantCell)), here);
+                if (nearest > reach) continue;
+                float farthest = Vector2.Distance(here, new Vector2(here.X < low.X + PlantCell / 2 ? low.X + PlantCell : low.X, here.Y < low.Y + PlantCell / 2 ? low.Y + PlantCell : low.Y));
                 if (planes is not null)
                 {
-                    var min = new Vector3(x * PlantCell, y * PlantCell, -200);
+                    var min = new Vector3(low, -200);
                     if (!InView(planes, min, min + new Vector3(PlantCell, PlantCell, 600))) continue;
                 }
-                foreach (var (k, plant) in cell)
+                foreach (var group in CellGroups(x, y))
                 {
-                    var kind = _plants[k];
+                    var kind = _plants[group.Kind];
+                    if (!grass && kind.Kind.Grass) continue;
                     var tree = kind.Kind.Tree;
-                    float distance = Vector3.Distance(from, plant.Position);
-                    var d = tree.LodDistances * PlantDistanceScale;
+                    var d = tree.LodDistances * (kind.Kind.Grass ? 1 : PlantDistanceScale);
                     bool billboards = kind.Billboard is not null && kind.Views.Length > 0;
-                    if (distance > (billboards ? PlantFarthest : d.W) || distance > reach) continue;
-                    int slot;
-                    if (billboards && distance > d.Z) slot = kind.Lods.Length;
-                    else if (distance <= d.X || kind.Lods.Length == 1) slot = 0;
-                    else slot = Math.Clamp(1 + (int)((distance - d.X) / Math.Max(d.Y - d.X, 1) * (kind.Lods.Length - 1)), 1, kind.Lods.Length - 1);
-                    if (planes is not null)
+                    float limit = MathF.Min(billboards ? PlantFarthest : d.W, reach);
+                    if (nearest > limit) continue;
+                    int Slot(float distance) => billboards && distance > d.Z ? kind.Lods.Length
+                        : distance <= d.X || kind.Lods.Length == 1 ? 0
+                        : Math.Clamp(1 + (int)((distance - d.X) / Math.Max(d.Y - d.X, 1) * (kind.Lods.Length - 1)), 1, kind.Lods.Length - 1);
+                    var slots = lists[group.Kind] ??= new List<PlantPlace>[kind.Lods.Length + 1];
+                    // a whole cell in one band of detail goes in at once, its plants not looked at one by one
+                    int nearSlot = Slot(nearest);
+                    if (farthest <= limit && Slot(farthest) == nearSlot)
                     {
-                        float size = (tree.Max - tree.Min).Length() * plant.Scale;
-                        var at = plant.Position + new Vector3(0, 0, (tree.Min.Z + tree.Max.Z) * 0.5f * plant.Scale);
-                        if (!InView(planes, at - new Vector3(size * 0.5f), at + new Vector3(size * 0.5f))) continue;
+                        (slots[nearSlot] ??= []).AddRange(group.Places);
+                        continue;
                     }
-                    var slots = lists[k] ??= new List<PlantPlace>[kind.Lods.Length + 1];
-                    (slots[slot] ??= []).Add(new PlantPlace
+                    for (int i = 0; i < group.Places.Length; i++)
                     {
-                        Place = new Vector4(plant.Position, plant.Scale), Turn = new Vector2(MathF.Cos(plant.Yaw), MathF.Sin(plant.Yaw)),
-                    });
+                        var place = group.Places[i];
+                        float distance = Vector3.Distance(from, new Vector3(place.Place.X, place.Place.Y, place.Place.Z));
+                        if (distance > limit) continue;
+                        (slots[Slot(distance)] ??= []).Add(place);
+                    }
                 }
             }
         return lists;
     }
+
+    /// <summary>A cell's plants by kind, ready to draw, made once and again when the cell gets more (its grass grown).</summary>
+    private List<(int Kind, PlantPlace[] Places)> CellGroups(int x, int y)
+    {
+        var cell = _plantCells[(x, y)];
+        if (_cellGroups.TryGetValue((x, y), out var made) && made.Count == cell.Count) return made.Groups;
+        var groups = cell.GroupBy(p => p.Kind).Select(g => (g.Key, g.Select(p => new PlantPlace
+        {
+            Place = new Vector4(p.Plant.Position, p.Plant.Scale), Turn = new Vector2(MathF.Cos(p.Plant.Yaw), MathF.Sin(p.Plant.Yaw)),
+        }).ToArray())).ToList();
+        _cellGroups[(x, y)] = (cell.Count, groups);
+        return groups;
+    }
+
+    private readonly Dictionary<(int, int), (int Count, List<(int Kind, PlantPlace[] Places)> Groups)> _cellGroups = [];
 
     /// <summary>The gathered plants into the instance buffer, all lists one after another; each list's first place returned.</summary>
     private int[][] UploadPlaces(List<PlantPlace>[][] lists)
@@ -313,7 +341,17 @@ public sealed partial class WorldView3D
     {
         var c = Context!;
         bool shadows = _plants.Count > 0 && toLight.Z > 0.02f;
-        var sun = SunView(toLight);
+        // the shadow map is kept until the camera has moved far enough across it or the light has moved
+        var centre = _eye + Forward() * (PlantShadowReach * 0.5f);
+        bool redraw = !_sunValid || Vector3.Distance(centre, _sunCentre) > PlantShadowReach * 0.08f || Vector3.DistanceSquared(toLight, _sunFor) > 1e-7f;
+        if (redraw)
+        {
+            _sunMatrix = SunView(toLight);
+            _sunCentre = centre;
+            _sunFor = toLight;
+            _sunValid = shadows;
+        }
+        var sun = _sunMatrix;
         Matrix4x4.Invert(view, out var camera);
         var constants = new PlantConstants
         {
@@ -324,7 +362,7 @@ public sealed partial class WorldView3D
         };
         c.UpdateSubresource(StructureBytes(constants), _plantConstants);
         c.PixelShader.SetShaderResource(15, null);
-        if (shadows)
+        if (shadows && redraw)
         {
             c.ClearDepthStencilView(_plantShadowDepth, DepthStencilClearFlags.Depth, 1, 0);
             c.OutputMerger.SetRenderTargets(_plantShadowDepth, (RenderTargetView?)null);
@@ -341,7 +379,10 @@ public sealed partial class WorldView3D
             shadowConstants.CameraRight = new Vector4(sunCamera.M11, sunCamera.M12, sunCamera.M13, 0);
             shadowConstants.CameraUp = new Vector4(sunCamera.M21, sunCamera.M22, sunCamera.M23, 1);
             c.UpdateSubresource(StructureBytes(shadowConstants), _plantConstants);
-            var lists = GatherPlants(_eye + Forward() * (PlantShadowReach * 0.5f), PlantShadowReach * 1.5f, null);
+            var lists = GatherPlants(centre, PlantShadowReach * 1.5f, null);
+            // grass casts no shadows, as SpeedTree grass doesn't in the game
+            for (int k = 0; k < lists.Length; k++)
+                if (_plants[k].Kind.Grass) lists[k] = null!;
             DrawPlantLists(lists, _plantShadowVS!, _billboardShadowVS!, _plantShadowPS!, constants.BillboardViews);
             c.UpdateSubresource(StructureBytes(constants), _plantConstants);
             c.Rasterizer.SetViewport(0, 0, PixelWidth, PixelHeight);
@@ -359,7 +400,7 @@ public sealed partial class WorldView3D
     {
         if (_plants.Count == 0) return;
         Context!.Rasterizer.State = _shadowRaster;
-        DrawPlantLists(GatherPlants(_eye, PlantFarthest, planes), _plantVS!, _billboardVS!, _plantShadowPS!, new Vector4[32]);
+        DrawPlantLists(GatherPlants(_eye, 200, planes, grass: false), _plantVS!, _billboardVS!, _plantShadowPS!, new Vector4[32]);
         Context.Rasterizer.State = _raster;
     }
 

@@ -856,8 +856,10 @@ float4 PlantPS(PlantOut i, bool front : SV_IsFrontFace) : SV_Target
     float sun = SunSeen(i.World);
     // the engine's diffuse: Lambert over pi; for leaves and grass its translucency: towards a flat brightness, and the
     // light through the leaf from behind
-    float3 diffuse = saturate(dot(n, L)) / 3.14159265;
-    float translucent = i.Kind > 0.5 && i.Kind < 1.5 ? 0 : BillboardTint.w;
+    bool leafy = !(i.Kind > 0.5 && i.Kind < 1.5);
+    // bark is lit as anything else; leaves and grass (thin cards) by the engine's foliage model: the light on either side
+    float3 diffuse = (leafy ? abs(dot(n, L)) : saturate(dot(n, L))) / 3.14159265;
+    float translucent = leafy ? BillboardTint.w : 0;
     if (translucent > 0)
     {
         float scatter = (dot(L, n) + 1) * 0.5, back = (dot(L, -V) + 1) * 0.5, reduction = (dot(n, -V) + 1) * 0.5;
@@ -869,7 +871,9 @@ float4 PlantPS(PlantOut i, bool front : SV_IsFrontFace) : SV_Target
     float ao = AoAt(i.Position), directAo = lerp(1, ao, AoSettings.w);
     float f90 = i.Kind > 1.5 && i.Kind < 2.5 ? SpecularSettings.x : SpecularSettings.y;
     float3 sunLight = GlobalLightColour(i.World) * sun;
-    float3 lit = albedo * (sunLight * diffuse * directAo + AmbientAt(n, sun) * ao)
+    // the ambient round leaves and grass from the card's own facing upward, not the side seen from below
+    float3 an = leafy ? normalize(float3(i.Normal.xy, abs(i.Normal.z) + 0.3)) : n;
+    float3 lit = albedo * (sunLight * diffuse * directAo + AmbientAt(an, sun) * ao)
         + sunLight * SpecularAt(n, V, L, 0.04, 0.6, f90) * SpecularSettings.z * directAo;
     return Screen(Fogged(lit, i.World), 1);
 }
@@ -1060,6 +1064,7 @@ float AoPS(float4 position : SV_Position) : SV_Target
         EnsureDevice();
         _terrain = pictures.Terrain;
         _heights = pictures.Heights;
+        _control = pictures.Control;
         _side = pictures.Side;
         _heightMap?.Dispose();
         _colourMap?.Dispose();
@@ -1411,7 +1416,7 @@ float AoPS(float4 position : SV_Position) : SV_Target
     private static float Waviness(float wind) => 0.12f + 0.88f * Math.Clamp(wind / 0.3f, 0, 1);
 
     /// <summary>How much brighter the fog's colours are than the light on the ground (they're on the sky's scale).</summary>
-    public float FogScale { get; set; } = 4;
+    public float FogScale { get; set; } = 4 / MathF.PI;
 
     /// <summary>
     /// The scale from the light as this view adds it up (the environment's colours made linear, times their strengths)
@@ -1498,7 +1503,8 @@ float AoPS(float4 position : SV_Position) : SV_Target
             SunHorizon = V(skyAt.SunHorizon, skyAt.FogVerticalFront), SunBackHorizon = V(skyAt.SunBackHorizon, skyAt.FogVerticalBack),
             SunSky = V(skyAt.SunSky), MoonHorizon = V(skyAt.MoonHorizon), MoonBackHorizon = V(skyAt.MoonBackHorizon), MoonSky = V(skyAt.MoonSky, skyAt.ReflectedSky),
             SunAt = V(skyAt.SunDirection, skyAt.SunSize), MoonAt = V(skyAt.MoonDirection, skyAt.MoonSize),
-            SkyScale = new Vector4(skyAt.SunInfluence, skyAt.MoonInfluence, skyAt.Brightness * skyAt.VisibleScale, skyAt.HorizonAttenuation),
+            // the sky and the fog are on the scale of light before the engine's Lambert divides by pi, as the ground's is now
+            SkyScale = new Vector4(skyAt.SunInfluence, skyAt.MoonInfluence, skyAt.Brightness * skyAt.VisibleScale / MathF.PI, skyAt.HorizonAttenuation),
         };
         c.UpdateSubresource(ref sky, _sky);
         c.PixelShader.SetConstantBuffers(0, _frame, _textureSettings, _grading, _sky);
@@ -1569,6 +1575,7 @@ float AoPS(float4 position : SV_Position) : SV_Target
             c.OutputMerger.SetRenderTargets(DepthView, HdrView);
         }
         c.PixelShader.SetShaderResource(13, _shadow);
+        GrowGrass();
         PreparePlants(light.LightDirection, view);
         SetTrajectory();
         c.VertexShader.SetShaderResources(0, _heightMap, null, null, null, null, _waterLevel);
