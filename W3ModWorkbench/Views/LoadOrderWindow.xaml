@@ -5,7 +5,8 @@
         xmlns:local="clr-namespace:W3ModWorkbench"
         Title="{l:T LoadOrderWindow.LoadOrderAnalyser}" Icon="pack://application:,,,/W3ModWorkbench;component/Assets/app.ico"
         Width="1280" Height="820" MinWidth="900" MinHeight="560"
-        WindowStartupLocation="CenterOwner" PreviewKeyDown="Window_PreviewKeyDown" Closing="Window_Closing">
+        WindowStartupLocation="CenterOwner" PreviewKeyDown="Window_PreviewKeyDown" Closing="Window_Closing"
+        AllowDrop="True" DragOver="Window_DragOver" Drop="Window_Drop">
     <Window.Resources>
         <Style x:Key="Card" TargetType="Border">
             <Setter Property="CornerRadius" Value="8" />
@@ -99,6 +100,7 @@
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
@@ -116,6 +118,13 @@
                         <TextBlock x:Name="AnalyseLabel" Margin="8,0,0,0" Text="{l:T LoadOrderWindow.Analyse}" />
                     </StackPanel>
                 </Button>
+                <Button x:Name="CheckButton" DockPanel.Dock="Right" Padding="12,6" Margin="8,0,0,0" Click="Check_Click" ToolTip="{l:T LoadOrderWindow.CheckTip}">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Style="{StaticResource IconText}" Text="&#xE896;" />
+                        <TextBlock Margin="8,0,0,0" Text="{l:T LoadOrderWindow.CheckMod}" />
+                        <TextBlock Style="{StaticResource IconText}" Text="&#xE70D;" FontSize="10" Margin="8,1,0,0" />
+                    </StackPanel>
+                </Button>
                 <Button DockPanel.Dock="Right" Padding="12,6" Margin="8,0,0,0" Content="{l:T Common.Browse}" Click="Browse_Click" />
                 <CheckBox x:Name="DlcCheck" DockPanel.Dock="Right" Content="{l:T LoadOrderWindow.IncludeDLC}" MinWidth="0" Margin="12,0,0,0" IsChecked="True" VerticalAlignment="Center"
                           ToolTip="{l:T LoadOrderWindow.ModsInstalledDLCDlc}" />
@@ -126,7 +135,18 @@
                 </Grid>
             </DockPanel>
 
-            <Grid Grid.Row="2">
+            <!-- a mod being checked before it's installed -->
+            <Border x:Name="CandidateBar" Grid.Row="2" Visibility="Collapsed" Margin="0,0,0,10" Padding="12,8" CornerRadius="6" BorderThickness="1"
+                    BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" Background="{DynamicResource ControlFillColorSecondaryBrush}">
+                <DockPanel>
+                    <Button DockPanel.Dock="Right" Padding="10,4" Margin="12,0,0,0" VerticalAlignment="Center" Content="{l:T LoadOrderWindow.StopChecking}" Click="StopChecking_Click"
+                            ToolTip="{l:T LoadOrderWindow.StopCheckingTip}" />
+                    <TextBlock DockPanel.Dock="Left" Style="{StaticResource IconText}" Text="&#xE896;" Margin="0,0,10,0" Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}" />
+                    <TextBlock x:Name="CandidateText" TextWrapping="Wrap" VerticalAlignment="Center" />
+                </DockPanel>
+            </Border>
+
+            <Grid Grid.Row="3">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="340" MinWidth="240" />
                     <ColumnDefinition Width="Auto" />
@@ -139,6 +159,7 @@
                         <TextBlock DockPanel.Dock="Top" Style="{StaticResource Caption}" Margin="14,10,14,6"
                                    Text="{l:T LoadOrderWindow.LoadOrderFirstHighest}" />
                         <ListBox x:Name="ModList" BorderThickness="0" Background="Transparent" Padding="0,0,14,0" SelectionChanged="ModList_SelectionChanged"
+                                 SelectionMode="Extended" ToolTip="{l:T LoadOrderWindow.PickSeveralTip}" ToolTipService.InitialShowDelay="1500"
                                  VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling"
                                  ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                             <ListBox.ItemTemplate>
@@ -260,7 +281,7 @@
                                 <TextBlock x:Name="ItemsCaption" Style="{StaticResource Caption}" Margin="0,12,0,4" Text="{l:T LoadOrderWindow.Details}" />
                                 <TextBox x:Name="DetailItems" IsReadOnly="True" TextWrapping="NoWrap" FontFamily="Cascadia Mono, Consolas" FontSize="12.5"
                                          MaxHeight="190" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" AcceptsReturn="True"
-                                         Background="Transparent" BorderThickness="0" Padding="0" />
+                                         Background="Transparent" BorderThickness="0" Padding="0,0,0,14" />
                                 <TextBlock Style="{StaticResource Caption}" Margin="0,12,0,4" Text="{l:T LoadOrderWindow.WhatDO}" />
                                 <TextBlock x:Name="DetailAdvice" TextWrapping="Wrap" />
                             </StackPanel>
@@ -269,7 +290,7 @@
                 </Grid>
             </Grid>
 
-            <DockPanel Grid.Row="3" Margin="2,10,2,0">
+            <DockPanel Grid.Row="4" Margin="2,10,2,0">
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
                     <Button x:Name="MergerButton" Padding="12,6" Margin="0,0,8,0" Content="{l:T LoadOrderWindow.OpenScriptMerger}" Click="Merger_Click"
                             ToolTip="{l:T LoadOrderWindow.StartScriptMergerRemastered}" />

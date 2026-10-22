@@ -9,7 +9,7 @@ namespace W3ModWorkbench.Core.LoadOrder;
 /// Reads every installed mod (compiled scripts decompiled to their declarations, loose scripts parsed, bundle
 /// tables, strings), puts them in the order the game loads them and looks for what breaks or collides.
 /// </summary>
-public sealed class LoadOrderAnalyzer
+public sealed partial class LoadOrderAnalyzer
 {
     private const int MaxItems = 400;
 
@@ -64,6 +64,20 @@ public sealed class LoadOrderAnalyzer
         Discover(options.ModsFolder, false);
         foreach (var m in ModioLocator.InstalledMods())
             entries.Add(new ModEntry { Name = m.Name, Folder = m.Folder, IsDlc = false, IsModio = true, Enabled = m.Enabled ?? true, Priority = m.Priority });
+        // mods checked before they're installed take the place they'd have, and that of an older version of themselves
+        foreach (string folder in options.Candidates ?? [])
+        {
+            string name = Path.GetFileName(folder.TrimEnd('\\', '/'));
+            bool dlc = Path.GetFileName(Path.GetDirectoryName(folder.TrimEnd('\\', '/')) ?? "").Equals("dlc", StringComparison.OrdinalIgnoreCase);
+            entries.RemoveAll(e => !e.IsModio && e.IsDlc == dlc && e.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+            var entry = new ModEntry { Name = name, Folder = folder, IsDlc = dlc, IsCandidate = true };
+            if (settings.TryGetValue(name, out var s))
+            {
+                entry.Enabled = true;
+                entry.Priority = s.Priority;
+            }
+            entries.Add(entry);
+        }
 
         // mod.io mods first, then DLC, then mods; within each the lowest priority number first, then the mods mods.settings doesn't list, by name
         var ordered = entries
@@ -108,7 +122,13 @@ public sealed class LoadOrderAnalyzer
 
         progress?.Report(L.T("LoadOrderAnalyzer.CheckingConflicts"));
         foreach (var m in scanned) report.Mods.Add(m.Entry);
-        var analyzer = new LoadOrderAnalyzer(report, [.. scanned], game);
+        var analyzer = new LoadOrderAnalyzer(report, [.. scanned], game)
+        {
+            _gameFolder = gameFolder is not null && Directory.Exists(gameFolder) ? gameFolder : null,
+            _merges = ScriptMerger.ReadInventory(options.ScriptMergerPath, gameFolder),
+            _token = token,
+        };
+        analyzer._config = GameConfig.Read(analyzer._gameFolder, options.CandidateMenus ?? [], Input.InputSettings.DefaultPath);
         await Task.Run(() => analyzer.Analyze(settings, gameScripts is not null), token);
 
         report.Elapsed = DateTime.UtcNow - started;
@@ -167,6 +187,11 @@ public sealed class LoadOrderAnalyzer
         Dependencies();
         BundleFiles();
         StringIds();
+        TextureCaches();
+        DlcIds();
+        Menus();
+        Keys();
+        XmlDefinitions();
         Platforms();
         SettingsNotes(settings);
 
@@ -618,7 +643,8 @@ public sealed class LoadOrderAnalyzer
 
         // one finding per set of mods that clash, listing every file they clash over
         var sets = new Dictionary<string, (List<ScannedMod> Mods, List<string> Different, List<string> Same)>();
-        foreach (var (path, list) in byPath)
+        var combinable = new Dictionary<string, int>();
+        foreach (var (path, list) in byPath.OrderBy(p => p.Key, StringComparer.OrdinalIgnoreCase))
         {
             var mods = list.Select(x => x.Mod).Distinct().OrderBy(m => m.Entry.Order).ToList();
             if (mods.Count < 2) continue;
@@ -626,6 +652,14 @@ public sealed class LoadOrderAnalyzer
             if (!sets.TryGetValue(key, out var set)) sets[key] = set = (mods, [], []);
             bool same = list.Select(x => (x.File.Crc, x.File.Size)).Distinct().Count() == 1;
             string line = same ? path : $"{path}   ({string.Join(" / ", list.OrderBy(x => x.Mod.Entry.Order).Select((x, i) => $"{(i == 0 ? "\u2605 " : "")}{x.Mod.Entry.Name}: {Format.Bytes(x.File.Size)}"))})";
+            if (!same)
+            {
+                // under the file, what each mod's copy changes, an item of its own lines
+                var copies = list.OrderBy(x => x.Mod.Entry.Order).DistinctBy(x => x.Mod).ToList();
+                var changes = FileChanges(path, copies, out bool? apart);
+                if (changes.Count > 0) line += "\n" + string.Join("\n", changes);
+                if (apart == true) combinable[key] = combinable.GetValueOrDefault(key) + 1;
+            }
             (same ? set.Same : set.Different).Add(line);
         }
         foreach (var (mods, different, same) in sets.Values)
@@ -637,8 +671,9 @@ public sealed class LoadOrderAnalyzer
             else if (different.Count > 0)
             {
                 string first = mods[0].Entry.Name;
+                int apart = combinable.GetValueOrDefault(string.Join("|", mods.Select(m => m.Entry.Name)));
                 Add(Severity.Warning, L.T("LoadOrderAnalyzer.BundleFile"), L.T("LoadOrderAnalyzer.ModsBundlesDiffer", L.T("Count.File", different.Count), mods.Count),
-                    L.T("LoadOrderAnalyzer.EachContainTheseFiles2", Ranked(mods), first),
+                    L.T("LoadOrderAnalyzer.EachContainTheseFiles2", Ranked(mods), first) + (apart > 0 ? " " + L.T("LoadOrderAnalyzer.SomeCombinable", apart, different.Count) : ""),
                     mods, different.Order(StringComparer.OrdinalIgnoreCase), L.T("LoadOrderAnalyzer.DecideWhichModsVersion"), mods[0]);
             }
             if (same.Count > 0)
@@ -743,7 +778,12 @@ public sealed class LoadOrderAnalyzer
                 sb.Append($"\n### {f.Title}\n\n{f.Summary}\n\n");
                 if (f.Mods.Count > 0) sb.Append($"{L.T("LoadOrderAnalyzer.Report.Mods", string.Join(", ", f.Mods))}\n\n");
                 if (f.Winner is not null) sb.Append($"**{L.T("LoadOrderAnalyzer.Report.Winner", f.Winner)}**\n\n");
-                foreach (string item in f.Items.Take(60)) sb.Append($"- `{item}`\n");
+                foreach (string item in f.Items.Take(60))
+                {
+                    var lines = item.Split('\n');
+                    sb.Append($"- `{lines[0]}`\n");
+                    foreach (string more in lines.Skip(1)) sb.Append($"  - {more.Trim()}\n");
+                }
                 if (f.Items.Count > 60) sb.Append($"- {L.T("LoadOrderAnalyzer.Report.More", f.Items.Count - 60)}\n");
                 sb.Append($"\n**{L.T("LoadOrderAnalyzer.Report.WhatToDo")}** {f.Advice}\n");
             }

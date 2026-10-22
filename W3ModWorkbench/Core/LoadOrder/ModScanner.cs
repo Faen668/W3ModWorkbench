@@ -2,10 +2,13 @@ using System.Collections.Concurrent;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using W3ModWorkbench.Core.Scripts;
 using W3ModWorkbench.Core.Scripts.Navigation;
+using W3ModWorkbench.Core.Cr2w;
 using W3ModWorkbench.Core.Strings;
+using W3ModWorkbench.Core.Textures;
 using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core.LoadOrder;
@@ -58,7 +61,17 @@ public sealed class ScriptModel
 
 public sealed record LooseScript(string Relative, string FullPath, string Hash);
 
-public sealed record BundledFile(string Path, uint Crc, int Size);
+/// <param name="Bundle">The bundle on disk it's in, to read it again for a closer look.</param>
+public sealed record BundledFile(string Path, uint Crc, int Size, string Bundle = "");
+
+/// <summary>A texture in a mod's texture.cache: where its packed pixels are, to compare them with another mod's.</summary>
+public sealed record CachedTexture(string Path, string Cache, long Offset, int PackedSize, string Description);
+
+/// <summary>A menu setting a mod's scripts read: GetVarValue('Group', 'var').</summary>
+public sealed record MenuRead(string Group, string Var, string Source);
+
+/// <summary>An input action a mod's scripts listen for: RegisterListener(this, 'OnEvent', 'Action').</summary>
+public sealed record ListenedAction(string Action, string Source);
 
 /// <summary>A mod with everything read out of it that the analysis needs.</summary>
 public sealed class ScannedMod
@@ -72,6 +85,16 @@ public sealed class ScannedMod
     public List<(string Message, bool Fatal)> Problems { get; } = [];
     public string? Build { get; set; }
     public string? Platform { get; set; }
+
+    /// <summary>Every name its scripts use: a compiled blob's name table, and the quoted names ('Name') in loose scripts.</summary>
+    public HashSet<string> Names { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+    public List<MenuRead> MenuReads { get; } = [];
+    public List<ListenedAction> Listens { get; } = [];
+    public List<CachedTexture> Textures { get; } = [];
+
+    /// <summary>The DLC IDs its .reddlc files declare, with the file each is in.</summary>
+    public List<(string Id, string File)> Dlcs { get; } = [];
 
     /// <summary>info.json's useLooseScripts. A mod with a compiled blob and this false ships its sources loose, not to be loaded.</summary>
     public bool? UseLooseScripts { get; set; }
@@ -88,6 +111,9 @@ public sealed class GameIndex
     public HashSet<string> Globals { get; } = new(StringComparer.OrdinalIgnoreCase);
     public HashSet<string> Members { get; } = new(StringComparer.OrdinalIgnoreCase);
     public Dictionary<string, string> Bases { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>The quoted names ('Name') the game's scripts use: the input actions it listens for, among others.</summary>
+    public HashSet<string> Names { get; } = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>The scripts folder's files by path (lower case) → the types each declares.</summary>
     public Dictionary<string, List<string>> Files { get; } = new(StringComparer.OrdinalIgnoreCase);
@@ -112,6 +138,7 @@ public sealed class GameIndex
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return index; }
 
         var parsed = new ParsedScript?[paths.Length];
+        var names = new HashSet<string>?[paths.Length];
         Parallel.For(0, paths.Length, i =>
         {
             string path = paths[i];
@@ -122,7 +149,9 @@ public sealed class GameIndex
                     Key = path, Path = Path.GetRelativePath(folder, path), Source = L.T("Common.GameScripts"), SourceKey = folder,
                     Read = () => File.ReadAllBytes(path),
                 };
-                parsed[i] = ScriptParser.Parse(TextDecoding.Decode(File.ReadAllBytes(path)), file);
+                string text = TextDecoding.Decode(File.ReadAllBytes(path));
+                parsed[i] = ScriptParser.Parse(text, file);
+                names[i] = [.. ModScanner.QuotedNames(text)];
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
@@ -130,6 +159,8 @@ public sealed class GameIndex
             }
         });
 
+        foreach (var set in names)
+            if (set is not null) index.Names.UnionWith(set);
         foreach (var p in parsed)
         {
             if (p is null) continue;
@@ -166,6 +197,25 @@ public static partial class ModScanner
     [GeneratedRegex("[A-Za-z_][A-Za-z0-9_]*")]
     private static partial Regex Word();
 
+    [GeneratedRegex("'([A-Za-z_][A-Za-z0-9_ ]*)'")]
+    private static partial Regex Quoted();
+
+    [GeneratedRegex(@"GetVarValue\s*\(\s*'([^']+)'\s*,\s*'([^']+)'")]
+    private static partial Regex VarRead();
+
+    [GeneratedRegex(@"RegisterListener\s*\(\s*[^,()]+,\s*'[^']*'\s*,\s*'([^']+)'")]
+    private static partial Regex Listener();
+
+    /// <summary>The names quoted in script code: 'Name'.</summary>
+    public static IEnumerable<string> QuotedNames(string code) => Quoted().Matches(code).Select(m => m.Groups[1].Value);
+
+    /// <summary>The menu settings and input actions a script's code reads and listens for.</summary>
+    private static void ReadCalls(ScannedMod mod, string code, string source)
+    {
+        foreach (Match m in VarRead().Matches(code)) mod.MenuReads.Add(new MenuRead(m.Groups[1].Value, m.Groups[2].Value, source));
+        foreach (Match m in Listener().Matches(code)) mod.Listens.Add(new ListenedAction(m.Groups[1].Value, source));
+    }
+
     public static ScannedMod Scan(ModEntry entry, CancellationToken token)
     {
         var mod = new ScannedMod { Entry = entry };
@@ -191,6 +241,7 @@ public static partial class ModScanner
             {
                 if (ext.Equals(".rsblob", StringComparison.OrdinalIgnoreCase)) AddBlob(mod, file, rel);
                 else if (ext.Equals(".bundle", StringComparison.OrdinalIgnoreCase)) AddBundle(mod, file, rel);
+                else if (ext.Equals(".cache", StringComparison.OrdinalIgnoreCase) && TextureCacheArchive.LooksLikeCache(file)) AddTextures(mod, file);
             }
             catch (Exception ex) when (ex is InvalidDataException or IOException or UnauthorizedAccessException or NotSupportedException)
             {
@@ -295,6 +346,12 @@ public static partial class ModScanner
         }
         foreach (var (name, _, owner) in blob.ImportedProperties)
             if (TypeName(owner) is { Length: > 0 } t) m.NeedMembers.Add($"{t}.{name}");
+
+        mod.Names.UnionWith(blob.Names);
+        // the menu settings and input actions it uses are in its code, which is decompiled only when it calls for them
+        if (blob.FunctionRefs.Any(f => f.Name is "GetVarValue" or "RegisterListener"))
+            foreach (var doc in ScriptWriter.Write(blob, rel))
+                ReadCalls(mod, doc.Text, rel);
     }
 
     private static string SymbolStateKey(ScriptClass c) => ScriptSymbol.StateKey(c.StateOf, c.Name);
@@ -342,6 +399,9 @@ public static partial class ModScanner
             }
         }
         foreach (Match w in Word().Matches(parsed.Code)) m.NeedWords.Add(w.Value);
+        string text = TextDecoding.Decode(data);
+        mod.Names.UnionWith(QuotedNames(text));
+        ReadCalls(mod, text, rel);
     }
 
     // ---------------------------------------------------------------- bundles
@@ -351,8 +411,38 @@ public static partial class ModScanner
         var bundle = Bundle.Open(file);
         mod.Entry.Bundles++;
         foreach (var e in bundle.Entries)
-            mod.Files.Add(new BundledFile(e.Path.Replace('/', '\\'), ((BundleEntry)e).Crc, e.Size));
+            mod.Files.Add(new BundledFile(e.Path.Replace('/', '\\'), ((BundleEntry)e).Crc, e.Size, file));
         mod.Entry.BundleFiles += bundle.Entries.Count;
+
+        // a DLC's definition names its ID, which no two DLC may share
+        foreach (var e in bundle.Entries.Where(e => e.Path.EndsWith(".reddlc", StringComparison.OrdinalIgnoreCase)))
+        {
+            using var stream = File.OpenRead(file);
+            if (DlcId(e.Read(stream)) is { Length: > 0 } id) mod.Dlcs.Add((id, e.Path.Replace('/', '\\')));
+        }
+    }
+
+    /// <summary>The id a .reddlc (CDLCDefinition) gives its DLC. Null when it can't be read.</summary>
+    public static string? DlcId(byte[] data)
+    {
+        try
+        {
+            var json = Cr2wJson.ToJson(Cr2wFile.Read(data), out _);
+            return json["objects"] is JsonArray { Count: > 0 } objects && objects[0]?["id"] is { } id ? id.ToString() : null;
+        }
+        catch (Exception ex) when (ex is InvalidDataException or NotSupportedException or IndexOutOfRangeException or ArgumentException or InvalidOperationException)
+        {
+            return null;
+        }
+    }
+
+    // ---------------------------------------------------------------- texture caches
+
+    private static void AddTextures(ScannedMod mod, string file)
+    {
+        var cache = TextureCacheArchive.Open(file);
+        foreach (var e in cache.Entries.OfType<TextureEntry>())
+            mod.Textures.Add(new CachedTexture(e.Path.Replace('/', '\\'), file, e.Info.DataOffset, e.Info.PackedSize, e.Info.Description));
     }
 
     // ---------------------------------------------------------------- strings

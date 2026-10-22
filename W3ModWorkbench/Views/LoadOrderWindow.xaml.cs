@@ -28,8 +28,8 @@ public sealed class ModItem(ModEntry mod)
     {
         get
         {
-            string state = mod.Enabled ? "" : L.T("LoadOrderWindow.Disabled");
-            string kind = mod.IsDlc ? "DLC · " : mod.IsModio ? "mod.io · " : mod.Priority is { } p ? L.T("LoadOrderWindow.PriorityOf", p) : "";
+            string state = mod.IsCandidate ? L.T("LoadOrderWindow.NotInstalled") : mod.Enabled ? "" : L.T("LoadOrderWindow.Disabled");
+            string kind = mod.IsDlc ? "DLC · " : mod.IsModio ? "mod.io · " : mod.Priority is { } p ? L.T("LoadOrderWindow.PriorityLabel", p) : "";
             return state + kind + mod.Contents;
         }
     }
@@ -75,7 +75,10 @@ public partial class LoadOrderWindow : Window, IMessageHost
     private readonly DispatcherTimer _searchTimer = new() { Interval = TimeSpan.FromMilliseconds(200) };
     private CancellationTokenSource? _cancel;
     private LoadOrderReport? _report;
-    private ModEntry? _picked;
+    private List<ModEntry> _picked = [];
+
+    /// <summary>A mod being checked before it's installed: its folder or unpacked .zip.</summary>
+    private ModDownload? _download;
     private bool _ready, _busy;
 
     private LoadOrderWindow()
@@ -166,7 +169,8 @@ public partial class LoadOrderWindow : Window, IMessageHost
         var progress = new Progress<string>(text => StatusText.Text = text);
         try
         {
-            var options = new LoadOrderOptions(folder, DlcCheck.IsChecked == true, ModScanner.FindSettingsFile(), GameLocator.Resolve(folder));
+            var options = new LoadOrderOptions(folder, DlcCheck.IsChecked == true, ModScanner.FindSettingsFile(), GameLocator.Resolve(folder),
+                _download?.Mods, _download?.Menus, _settings.ScriptMergerPath);
             _report = await Task.Run(() => LoadOrderAnalyzer.RunAsync(options, progress, _cancel.Token));
             ShowReport();
         }
@@ -191,6 +195,7 @@ public partial class LoadOrderWindow : Window, IMessageHost
         AnalyseLabel.Text = busy ? L.T("Common.Cancel") : L.T("LoadOrderWindow.Analyse");
         FolderBox.IsEnabled = !busy;
         DlcCheck.IsEnabled = !busy;
+        CheckButton.IsEnabled = !busy;
         if (!busy) UpdateInputs();
         else AnalyseButton.IsEnabled = true;
     }
@@ -199,8 +204,9 @@ public partial class LoadOrderWindow : Window, IMessageHost
     {
         var report = _report;
         if (report is null) return;
-        _picked = null;
-        ModList.ItemsSource = report.Mods.Select(m => new ModItem(m)).ToList();
+        _picked = [];
+        var items = report.Mods.Select(m => new ModItem(m)).ToList();
+        ModList.ItemsSource = items;
         ProblemsText.Text = L.T("LoadOrderWindow.Problems", report.Count(Severity.Error));
         WarningsText.Text = L.T("LoadOrderWindow.Warnings2", report.Count(Severity.Warning));
         NotesText.Text = L.T("LoadOrderWindow.Notes2", report.Count(Severity.Info));
@@ -213,6 +219,20 @@ public partial class LoadOrderWindow : Window, IMessageHost
         string priorities = report.SettingsFile is null ? L.T("LoadOrderWindow.NoModsSettings") : L.T("LoadOrderWindow.PrioritiesModsSettings");
         StatusText.Text = L.T("LoadOrderWindow.Read", L.T("Count.Mod", report.Mods.Count), report.Elapsed.TotalSeconds, game, priorities, (report.Warnings.Count > 0 ? "  ·  " + report.Warnings[0] : ""));
         StatusText.ToolTip = string.Join("\n", report.Warnings);
+
+        // a mod checked before it's installed: show what it touches
+        CandidateBar.Visibility = _download is null ? Visibility.Collapsed : Visibility.Visible;
+        if (_download is not null)
+        {
+            var candidates = items.Where(i => i.Mod.IsCandidate).ToList();
+            var names = candidates.Select(i => i.Name).ToList();
+            int problems = report.Findings.Count(f => f.Severity == Severity.Error && f.Mods.Intersect(names, StringComparer.OrdinalIgnoreCase).Any());
+            int warnings = report.Findings.Count(f => f.Severity == Severity.Warning && f.Mods.Intersect(names, StringComparer.OrdinalIgnoreCase).Any());
+            CandidateText.Text = L.T("LoadOrderWindow.Checking", _download.Name, string.Join(", ", candidates.Select(i => $"{i.Name} (#{i.Order})")),
+                _download.Menus.Count, L.T("LoadOrderWindow.Problems", problems), L.T("LoadOrderWindow.Warnings2", warnings));
+            foreach (var c in candidates) ModList.SelectedItems.Add(c);
+            if (candidates.Count > 0) ModList.ScrollIntoView(candidates[0]);
+        }
     }
 
     // ---------------------------------------------------------------- lists
@@ -232,14 +252,35 @@ public partial class LoadOrderWindow : Window, IMessageHost
 
     private void ModList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        _picked = (ModList.SelectedItem as ModItem)?.Mod;
-        OpenFolderButton.IsEnabled = _picked is not null;
-        ClearModButton.Visibility = _picked is null ? Visibility.Collapsed : Visibility.Visible;
-        ClearModButton.Content = _picked is null ? L.T("LoadOrderWindow.AllMods") : L.T("LoadOrderWindow.OnlyShowAll", _picked.Name);
+        _picked = [.. ModList.SelectedItems.Cast<ModItem>().Select(i => i.Mod).OrderBy(m => m.Order)];
+        OpenFolderButton.IsEnabled = _picked.Count == 1;
+        ClearModButton.Visibility = _picked.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
+        ClearModButton.Content = _picked.Count switch
+        {
+            0 => L.T("LoadOrderWindow.AllMods"),
+            1 => L.T("LoadOrderWindow.OnlyShowAll", _picked[0].Name),
+            _ when PickedCandidates => L.T("LoadOrderWindow.OnlyCandidateShowAll", _download!.Name),
+            _ => L.T("LoadOrderWindow.BetweenShowAll", _picked.Count),
+        };
         ApplyFilter();
     }
 
-    private void ClearMod_Click(object sender, RoutedEventArgs e) => ModList.SelectedItem = null;
+    /// <summary>The mods picked are just the ones being checked before they're installed.</summary>
+    private bool PickedCandidates => _download is not null && _picked.Count > 0 && _picked.All(m => m.IsCandidate)
+        && _picked.Count == _report?.Mods.Count(m => m.IsCandidate);
+
+    /// <summary>
+    /// Whether a finding is about the mods picked: one mod's, anything a mod being checked touches, or for several
+    /// mods, what's between them (findings two or more of them share).
+    /// </summary>
+    private bool AboutPicked(Finding f)
+    {
+        if (_picked.Count == 0) return true;
+        int shared = _picked.Count(m => f.Mods.Contains(m.Name, StringComparer.OrdinalIgnoreCase));
+        return _picked.Count == 1 || PickedCandidates ? shared > 0 : shared >= 2;
+    }
+
+    private void ClearMod_Click(object sender, RoutedEventArgs e) => ModList.UnselectAll();
 
     private void ApplyFilter()
     {
@@ -249,7 +290,7 @@ public partial class LoadOrderWindow : Window, IMessageHost
         var shown = _report.Findings.Where(f =>
             (f.Severity switch { Severity.Error => ProblemsToggle.IsChecked == true, Severity.Warning => WarningsToggle.IsChecked == true, _ => NotesToggle.IsChecked == true })
             && (category == AllCategories || f.Category == category)
-            && (_picked is null || f.Mods.Contains(_picked.Name, StringComparer.OrdinalIgnoreCase))
+            && AboutPicked(f)
             && (query.Length == 0 || Matches(f, query))).Select(f => new FindingItem(f)).ToList();
         FindingList.ItemsSource = shown;
         if (shown.Count > 0) FindingList.SelectedIndex = 0;
@@ -311,8 +352,8 @@ public partial class LoadOrderWindow : Window, IMessageHost
 
     private void OpenFolder_Click(object sender, RoutedEventArgs e)
     {
-        if (_picked is null || !Directory.Exists(_picked.Folder)) return;
-        Process.Start(new ProcessStartInfo("explorer.exe", $"\"{_picked.Folder}\"") { UseShellExecute = true });
+        if (_picked is not [var mod] || !Directory.Exists(mod.Folder)) return;
+        Process.Start(new ProcessStartInfo("explorer.exe", $"\"{mod.Folder}\"") { UseShellExecute = true });
     }
 
     private async void Export_Click(object sender, RoutedEventArgs e)
@@ -352,5 +393,69 @@ public partial class LoadOrderWindow : Window, IMessageHost
         e.Handled = true;
     }
 
-    private void Window_Closing(object? sender, System.ComponentModel.CancelEventArgs e) => _cancel?.Cancel();
+    private void Window_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
+    {
+        _cancel?.Cancel();
+        _download?.Dispose();
+    }
+
+    // ---------------------------------------------------------------- checking a mod before it's installed
+
+    private void Check_Click(object sender, RoutedEventArgs e)
+    {
+        var menu = new ContextMenu { PlacementTarget = CheckButton, Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom };
+        var folder = new MenuItem { Header = L.T("LoadOrderWindow.CheckFolder") };
+        folder.Click += (_, _) =>
+        {
+            var dialog = new OpenFolderDialog { Title = L.T("LoadOrderWindow.CheckFolderTitle") };
+            if (dialog.ShowDialog(this) == true) _ = CheckAsync(dialog.FolderName);
+        };
+        var zip = new MenuItem { Header = L.T("LoadOrderWindow.CheckZip") };
+        zip.Click += (_, _) =>
+        {
+            var dialog = new OpenFileDialog { Title = L.T("LoadOrderWindow.CheckZipTitle"), Filter = L.T("LoadOrderWindow.ZipFilter") };
+            if (dialog.ShowDialog(this) == true) _ = CheckAsync(dialog.FileName);
+        };
+        menu.Items.Add(folder);
+        menu.Items.Add(zip);
+        menu.IsOpen = true;
+    }
+
+    /// <summary>Reads a downloaded mod (a folder or .zip) and analyses the installed mods with it in its place.</summary>
+    private async Task CheckAsync(string path)
+    {
+        if (_busy || !Directory.Exists(ModsFolder)) return;
+        StatusText.Text = L.T("LoadOrderWindow.Unpacking", Path.GetFileName(path.TrimEnd('\\', '/')));
+        ModDownload download;
+        try { download = await Task.Run(() => ModDownload.Open(path)); }
+        catch (InvalidDataException ex)
+        {
+            await ShowMessage(L.T("LoadOrderWindow.CantCheck"), ex.Message, MessageKind.Warning);
+            StatusText.Text = "";
+            return;
+        }
+        _download?.Dispose();
+        _download = download;
+        await AnalyseAsync();
+    }
+
+    private void StopChecking_Click(object sender, RoutedEventArgs e)
+    {
+        _download?.Dispose();
+        _download = null;
+        CandidateBar.Visibility = Visibility.Collapsed;
+        _ = AnalyseAsync();
+    }
+
+    private void Window_DragOver(object sender, DragEventArgs e)
+    {
+        e.Effects = !_busy && e.Data.GetData(DataFormats.FileDrop) is string[] { Length: 1 } paths
+            && (Directory.Exists(paths[0]) || paths[0].EndsWith(".zip", StringComparison.OrdinalIgnoreCase)) ? DragDropEffects.Copy : DragDropEffects.None;
+        e.Handled = true;
+    }
+
+    private void Window_Drop(object sender, DragEventArgs e)
+    {
+        if (e.Data.GetData(DataFormats.FileDrop) is string[] { Length: 1 } paths) _ = CheckAsync(paths[0]);
+    }
 }

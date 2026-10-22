@@ -26,6 +26,9 @@ public sealed class ModEntry
     /// <summary>Installed by the in-game mod.io hub, outside the game folder. The game loads these before everything else.</summary>
     public bool IsModio { get; init; }
 
+    /// <summary>Not installed: a mod being checked against the installed ones before it's installed.</summary>
+    public bool IsCandidate { get; init; }
+
     /// <summary>DLC and mod.io mods have a fixed place, so mods.settings priorities don't apply to them.</summary>
     public bool HasFixedPlace => IsDlc || IsModio;
 
@@ -83,4 +86,8 @@ public sealed class LoadOrderReport
     public int Count(Severity s) => Findings.Count(f => f.Severity == s);
 }
 
-public sealed record LoadOrderOptions(string ModsFolder, bool IncludeDlc, string? SettingsFile, string? GameFolder);
+/// <param name="Candidates">Mod folders to check before they're installed, each a mods\modName or dlc\dlcName folder.</param>
+/// <param name="CandidateMenus">The menu XML files those mods put in bin\config\r4game\user_config_matrix\pc.</param>
+/// <param name="ScriptMergerPath">Script Merger Remastered, whose list of merged files says which XML a merged mod covers.</param>
+public sealed record LoadOrderOptions(string ModsFolder, bool IncludeDlc, string? SettingsFile, string? GameFolder,
+    IReadOnlyList<string>? Candidates = null, IReadOnlyList<string>? CandidateMenus = null, string? ScriptMergerPath = null);
