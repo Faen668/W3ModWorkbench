@@ -13,6 +13,7 @@ using W3ModWorkbench.Core.World;
 using W3ModWorkbench.ViewModels;
 using W3ModWorkbench.Localisation;
 using Vector2 = System.Numerics.Vector2;
+using Vector3 = System.Numerics.Vector3;
 
 namespace W3ModWorkbench;
 
@@ -125,6 +126,7 @@ public partial class WorldWindow : Window, IMessageHost
         {
             _closing.Cancel();
             GpuMap.Dispose();
+            View3D.Dispose();
         };
     }
 
@@ -645,6 +647,13 @@ public partial class WorldWindow : Window, IMessageHost
                     Interlocked.Increment(ref found);
                 });
                 if (found == 0) return null;
+                // the game's map covers only the walkable middle: the rest painted from the terrain to match it
+                if (_terrain is { } painted)
+                {
+                    string cells = GamePath.Contains('\\') ? Path.GetDirectoryName(GamePath)! : _world!.Folder;
+                    var trees = (_foliage ?? LoadFoliage(terrain, cells)).Trees.Select(p => (p.At, p.Reach)).ToList();
+                    GameMapFill.Complete(pixels, side, painted, TerrainArray("diffuse"), trees);
+                }
                 var bitmap = System.Windows.Media.Imaging.BitmapSource.Create(side, side, 96, 96, PixelFormats.Bgra32, null, pixels, side * 4);
                 bitmap.Freeze();
                 return bitmap;
@@ -712,6 +721,57 @@ public partial class WorldWindow : Window, IMessageHost
         Map.SetOverlay("grass", look.GrassPicture, terrain.Corner, terrain.Size, WorldMap.GrassScale);
         Map.SetOverlay("trees", look.TreesPicture, terrain.Corner, terrain.Size, WorldMap.TreeScale);
         Map.SetPlants(look.Trees, look.Grass);
+    }
+
+    /// <summary>The trees, bushes and grass in 3D, read off the UI thread while the ground is already shown.</summary>
+    private async Task ShowPlants3DAsync()
+    {
+        string folder = GamePath.Contains('\\') ? Path.GetDirectoryName(GamePath)! : _world!.Folder;
+        MapProgress.Visibility = Visibility.Visible;
+        MapProgress.Text = L.T("WorldWindow.ReadingPlants3D");
+        var kinds = await Task.Run(() => LoadPlants3D(folder));
+        MapProgress.Visibility = Visibility.Collapsed;
+        View3D.SetPlants(kinds);
+    }
+
+    /// <summary>
+    /// Every kind of plant the world's foliage cells place, with its SpeedTree file, its pictures (each LOD's and its
+    /// billboard atlas, cutouts in their alpha) and where it grows; kinds whose file can't be read are left out.
+    /// </summary>
+    private List<PlantKind3D> LoadPlants3D(string folder)
+    {
+        var paths = _locator.AllPaths(".flyr").Where(p => p.StartsWith(folder + @"\", StringComparison.OrdinalIgnoreCase)).ToList();
+        if (OnDisk && _diskRoot is { } root && Directory.Exists(Path.Combine(root, folder)))
+            paths.AddRange(Directory.EnumerateFiles(Path.Combine(root, folder), "*.flyr", SearchOption.AllDirectories).Select(f => Path.GetRelativePath(root, f)));
+        var groups = new System.Collections.Concurrent.ConcurrentBag<FoliageGroup>();
+        Parallel.ForEach(paths.Distinct(StringComparer.OrdinalIgnoreCase), path =>
+        {
+            try
+            {
+                foreach (var group in FoliageFile.Read(Read(path) ?? []).Groups) groups.Add(group);
+            }
+            catch (InvalidDataException) { }
+        });
+        var pictures = new System.Collections.Concurrent.ConcurrentDictionary<string, System.Windows.Media.Imaging.BitmapSource?>(StringComparer.OrdinalIgnoreCase);
+        var kinds = new System.Collections.Concurrent.ConcurrentBag<PlantKind3D>();
+        Parallel.ForEach(groups.GroupBy(g => (g.Tree.ToLowerInvariant(), g.Grass)), kind =>
+        {
+            var first = kind.First();
+            try
+            {
+                if (Read(first.Tree) is not { } data) return;
+                var tree = SpeedTreeFile.Read(data);
+                var mine = new Dictionary<string, System.Windows.Media.Imaging.BitmapSource?>(StringComparer.OrdinalIgnoreCase);
+                foreach (var name in tree.Materials.Select(m => m.Diffuse).Append(tree.BillboardMaterial?.Diffuse ?? "").Where(n => n.Length > 0).Distinct())
+                {
+                    string path = SpeedTreeFile.TexturePath(first.Tree, name);
+                    mine[path] = pictures.GetOrAdd(path, t => MeshTextures.LoadWithAlpha(_locator, t, first.Grass ? 256 : 1024));
+                }
+                kinds.Add(new PlantKind3D(first.Tree, tree, first.Grass, mine, kind.SelectMany(g => g.Instances).ToList()));
+            }
+            catch (InvalidDataException) { }
+        });
+        return kinds.OrderBy(k => k.Path, StringComparer.OrdinalIgnoreCase).ToList();
     }
 
     /// <summary>The world's foliage as the map draws it: pictures for afar, the plants for close up, and how many there are.</summary>
@@ -846,6 +906,192 @@ public partial class WorldWindow : Window, IMessageHost
         PinsCheck.ToolTip = _pins is null ? L.T("WorldWindow.PinsTip") : L.T("WorldWindow.PinsRead", _pins.Count);
         WaypointsCheck.ToolTip = _waypoints is null ? L.T("WorldWindow.WaypointsTip") : L.T("WorldWindow.WaypointsRead", _waypoints.Count);
     }
+
+    /// <summary>
+    /// The world in 3D in the map's place: its terrain from what the map read, the camera over the middle of the map's
+    /// view, looking north; or back to the map.
+    /// </summary>
+    private async void View3DToggle_Click(object sender, RoutedEventArgs e)
+    {
+        bool on = View3DToggle.IsChecked == true;
+        if (on && _terrain is null)
+        {
+            View3DToggle.IsChecked = false;
+            await ShowMessage(null, L.T("WorldWindow.NoTerrain3D"), MessageKind.Info);
+            return;
+        }
+        if (on)
+        {
+            if (!View3D.HasTerrain)
+            {
+                MapProgress.Visibility = Visibility.Visible;
+                MapProgress.Text = L.T("WorldWindow.ReadingTerrainTextures");
+                var world = _world!;
+                var (diffuse, normals, lighting, foam) = await Task.Run(() => (TerrainArray("diffuse"), TerrainArray("normal"),
+                    WorldLighting.Of(world.File, world.World, Read), CachedTexture(@"environment\water\global_ocean\ocean_control.texarray")));
+                MapProgress.Visibility = Visibility.Collapsed;
+                View3D.ShowTerrain(_terrain!, diffuse, normals);
+                View3D.SetLighting(lighting);
+                ShowWeathers(lighting);
+                await ShowBalanceMaps(lighting);
+                View3D.LightingChanged -= View3D_LightingChanged;
+                View3D.LightingChanged += View3D_LightingChanged;
+                View3D.SetFoam(foam);
+                // the water shapes the layers read so far have: each sets the water's level inside it
+                View3D.SetWater(_dots.Values.SelectMany(d => d).SelectMany(d => d.Entity.Components)
+                    .Where(c => c is { ClassName: "CWaterComponent", Outline: { Count: >= 3 } }).Select(c => (c.Outline!, c.Height)));
+                View3DToggle.ToolTip = View3D.Painted ? L.T("WorldWindow.View3DTip") : L.T("WorldWindow.View3DNoTextures");
+                _ = ShowPlants3DAsync();
+            }
+            var content = Map.Content();
+            View3D.LookAt(new Vector2((float)((Map.ActualWidth / 2 - content.Offset.X) / content.Scale), (float)(-(Map.ActualHeight / 2 - content.Offset.Y) / content.Scale)));
+            View3D.Focus();
+        }
+        else HoverText.Text = L.T("WorldWindow.MouseHint");
+        // the map's own switches put away while the 3D view shows
+        DayPanel.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+        if (!on && View3D.PlayingDay) PlayDay(false);
+        foreach (UIElement control in new UIElement[] { LookBox, AreasBox, EntitiesCheck, FoliageCheck, OutlinesCheck, PinsCheck, WaypointsCheck,
+            NavigationCheck, TilesCheck, OcclusionCheck, GpuCheck, FitButton })
+            control.Visibility = on ? Visibility.Collapsed : Visibility.Visible;
+        View3D.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+        Map.Visibility = on || GpuCheck.IsChecked == true ? Visibility.Collapsed : Visibility.Visible;
+        GpuMap.Visibility = !on && GpuCheck.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    /// <summary>
+    /// One of the textures arrays the terrain is painted with, as the texture cache keeps it: the terrain material's
+    /// parameter of that name (a CMaterialParameterTextureArray naming a .texarray). Null when it can't be found.
+    /// </summary>
+    private (Core.Textures.TextureInfo Info, byte[] Pixels)? TerrainArray(string parameter)
+    {
+        try
+        {
+            if (_world?.Terrain?.Material is not { } material || Read(material) is not { } data) return null;
+            var file = Cr2wFile.Read(data);
+            for (int i = 0; i < file.Exports.Count; i++)
+            {
+                if (file.Exports[i].ClassName != "CMaterialParameterTextureArray") continue;
+                var p = file.Object(i);
+                if (!string.Equals(p["parameterName"] as string, parameter, StringComparison.OrdinalIgnoreCase)) continue;
+                return p["texture"] is RedHandle h && file.PathOf(h) is { } path ? CachedTexture(path) : null;
+            }
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException) { }
+        return null;
+    }
+
+    private bool _settingHour;
+
+    private WorldLighting? _lighting;
+    private bool _fillingWeathers;
+
+    /// <summary>The world's weather conditions in the weather box, the one blended in now picked (or none).</summary>
+    private void ShowWeathers(WorldLighting lighting)
+    {
+        _lighting = lighting;
+        _fillingWeathers = true;
+        WeatherBox.Items.Clear();
+        WeatherBox.Items.Add(new ComboBoxItem { Content = L.T("WorldWindow.NoWeather"), Tag = null });
+        foreach (var weather in lighting.Weathers) WeatherBox.Items.Add(new ComboBoxItem { Content = weather.Name, Tag = weather.Name });
+        WeatherBox.SelectedIndex = lighting.Weather is { } w ? 1 + lighting.Weathers.ToList().FindIndex(x => x.Name == w) : 0;
+        WeatherBox.Visibility = lighting.Weathers.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        _fillingWeathers = false;
+    }
+
+    /// <summary>The colour lookups the environment's grading blends in, read off the UI thread.</summary>
+    private async Task ShowBalanceMaps(WorldLighting lighting)
+    {
+        var (first, second) = lighting.BalanceMaps;
+        var maps = await Task.Run(() => (first is null ? null : CachedTexture(first), second is null ? null : CachedTexture(second)));
+        View3D.SetBalanceMaps(maps.Item1, maps.Item2);
+    }
+
+    private void WeatherBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_fillingWeathers || WeatherBox.SelectedItem is not ComboBoxItem item) return;
+        // as REDkit's Force weather preset: the condition blends in over its blend time
+        View3D.ChangeWeather(item.Tag as string, instantly: false);
+    }
+
+    private (string?, string?) _balanceMapsShown;
+
+    /// <summary>The weather box and the balance maps following the lighting as it changes (a weather blending in, a preset forced).</summary>
+    private async void View3D_LightingChanged(object? sender, EventArgs e)
+    {
+        if (View3D.Lighting is not { } lighting) return;
+        _lighting = lighting;
+        _fillingWeathers = true;
+        WeatherBox.SelectedItem = WeatherBox.Items.OfType<ComboBoxItem>().FirstOrDefault(i => (string?)i.Tag == lighting.Weather) ?? WeatherBox.Items[0];
+        _fillingWeathers = false;
+        if (lighting.BalanceMaps != _balanceMapsShown)
+        {
+            _balanceMapsShown = lighting.BalanceMaps;
+            await ShowBalanceMaps(lighting);
+        }
+    }
+
+    private WorldEnvironmentWindow? _environmentWindow;
+
+    /// <summary>REDkit's World Environment tool for the 3D view, one at a time.</summary>
+    private void EnvironmentButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_environmentWindow is { IsLoaded: true })
+        {
+            _environmentWindow.Activate();
+            return;
+        }
+        _environmentWindow = new WorldEnvironmentWindow(View3D, _locator, Read, this);
+        _environmentWindow.Closed += (_, _) => _environmentWindow = null;
+        _environmentWindow.Show();
+    }
+
+    private void HourSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        // it's first set while the window is still being made
+        if (HourText is null || View3D is null) return;
+        HourText.Text = HourName(HourSlider.Value);
+        if (!_settingHour) View3D.Hour = (float)HourSlider.Value;
+    }
+
+    private void PlayDayToggle_Click(object sender, RoutedEventArgs e) => PlayDay(PlayDayToggle.IsChecked == true);
+
+    /// <summary>The day going by on its own in 3D (an hour every two seconds), the slider following it, or stopped.</summary>
+    private void PlayDay(bool on)
+    {
+        View3D.PlayingDay = on;
+        PlayDayToggle.IsChecked = on;
+        PlayDayIcon.Text = on ? "\uE769" : "\uE768";
+    }
+
+    private void View3D_HourChanged(object? sender, float hour)
+    {
+        _settingHour = true;
+        HourSlider.Value = hour;
+        _settingHour = false;
+    }
+
+    /// <summary>An hour of the day as a clock shows it.</summary>
+    private static string HourName(double hour)
+    {
+        int minutes = (int)Math.Round(hour * 60) % (24 * 60);
+        return new DateTime(1, 1, 1, minutes / 60, minutes % 60, 0).ToString("t", System.Globalization.CultureInfo.CurrentCulture);
+    }
+
+    /// <summary>A texture as the game's texture caches keep it, its stored pixels; null when no cache has it.</summary>
+    private (Core.Textures.TextureInfo Info, byte[] Pixels)? CachedTexture(string path)
+    {
+        if (_locator.FindTexture(path) is not { } entry) return null;
+        try
+        {
+            using var stream = new FileStream(entry.Archive.FilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            return (entry.Info, Core.Textures.TextureCacheArchive.ReadPixels(stream, entry.Info));
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException) { return null; }
+    }
+
+    private void View3D_CameraMoved(object? sender, (Vector3 Eye, float Heading, float Speed) camera) =>
+        HoverText.Text = L.T("WorldWindow.Camera3D", camera.Eye.X, camera.Eye.Y, camera.Eye.Z, camera.Heading, camera.Speed);
 
     /// <summary>The test of drawing the map with the graphics card: shown in the 2D map's place with what it shows, or put away.</summary>
     private void GpuCheck_Click(object sender, RoutedEventArgs e)

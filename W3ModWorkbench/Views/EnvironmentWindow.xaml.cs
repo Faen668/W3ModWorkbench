@@ -36,7 +36,7 @@ public partial class EnvironmentWindow : Window, IMessageHost
     private readonly DispatcherTimer _clock = new() { Interval = TimeSpan.FromMilliseconds(40) };
 
     /// <summary>A group in the tree: its settings and groups, how many it sets, and whether it's turned on.</summary>
-    private sealed class GroupNode(EnvGroup group) : INotifyPropertyChanged
+    internal sealed class GroupNode(EnvGroup group) : INotifyPropertyChanged
     {
         private bool _expanded, _selected;
         public EnvGroup Group { get; } = group;
@@ -70,7 +70,7 @@ public partial class EnvironmentWindow : Window, IMessageHost
     }
 
     /// <summary>A setting in the grid, with its value at the time shown.</summary>
-    private sealed class SettingRow(EnvSetting setting, Cr2wFile file) : INotifyPropertyChanged
+    internal sealed class SettingRow(EnvSetting setting, Cr2wFile file) : INotifyPropertyChanged
     {
         public EnvSetting Setting { get; } = setting;
         public string Title => Setting.Title;

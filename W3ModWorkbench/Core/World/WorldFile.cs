@@ -97,6 +97,14 @@ public sealed record WorldTerrain(int TilesPerEdge, int TileResolution, float Si
 {
     public float TileSize => Size / TilesPerEdge;
 
+    /// <summary>
+    /// Each of the terrain's 31 textures' settings (the clip map's textureParams: val and val2), as the terrain's
+    /// shader reads them: val.X how far past its slope threshold a slope fades from background to overlay, val.Y how
+    /// much an overlay's normal is flattened before its slope is judged, val.Z the background normal's share, and the
+    /// rest the surface's specularity.
+    /// </summary>
+    public IReadOnlyList<(Vector4 Val, Vector4 Val2)> TextureParams { get; init; } = [];
+
     /// <summary>A height value (0 to 65535) in metres.</summary>
     public float Metres(ushort value) => Lowest + value / 65535f * (Highest - Lowest);
 }
@@ -104,8 +112,11 @@ public sealed record WorldTerrain(int TilesPerEdge, int TileResolution, float Si
 /// <summary>A world's occlusion grid: tiles so big a side, each its middle and its .w3occlusion file.</summary>
 public sealed record OcclusionGrid(int Side, float TileSize, IReadOnlyList<(Vector2 Middle, string? File)> Tiles);
 
-/// <summary>A component of a layer's entity: its class and name, the file it draws or uses, and an area's outline in the world.</summary>
-public sealed record LayerComponent(string ClassName, string Name, string? Resource, IReadOnlyList<Vector2>? Outline)
+/// <summary>
+/// A component of a layer's entity: its class and name, the file it draws or uses, and an area's outline in the world
+/// with its height (the mean of its points', which for a water shape is the water's level inside it).
+/// </summary>
+public sealed record LayerComponent(string ClassName, string Name, string? Resource, IReadOnlyList<Vector2>? Outline, float Height = 0)
 {
     /// <summary>Whether it uses a file of its own (a mesh, a template), for a link to it.</summary>
     public bool HasResource => Resource is { Length: > 0 };
@@ -226,8 +237,10 @@ public sealed class WorldFile
         }
         var corner = clip.Vector("terrainCorner", new Vector3(-size / 2, -size / 2, 0));
         var ranges = clip.Array("tileHeightRanges").OfType<RedObject>().Select(r => (r.Float("X"), r.Float("Y"))).ToList();
+        static Vector4 V4(RedObject? v) => v is null ? Vector4.Zero : new Vector4(v.Float("X"), v.Float("Y"), v.Float("Z"), v.Float("W"));
+        var parameters = clip.Array("textureParams").OfType<RedObject>().Select(p => (V4(p["val"] as RedObject), V4(p["val2"] as RedObject))).ToList();
         return new WorldTerrain(n, (int)clip.Integer("tileRes", 256), size, new Vector2(corner.X, corner.Y), clip.Float("lowestElevation"),
-            clip.Float("highestElevation", 1), tiles, clip["material"] is RedHandle mh ? file.PathOf(mh) : null, ranges);
+            clip.Float("highestElevation", 1), tiles, clip["material"] is RedHandle mh ? file.PathOf(mh) : null, ranges) { TextureParams = parameters };
     }
 
     /// <summary>The occlusion grid: its tail is how many a side, a tile's size, how many, then each tile's middle and import.</summary>
@@ -328,16 +341,19 @@ public sealed class WorldFile
                 break;
             }
         resource ??= c.Properties.Select(p => p.Value).OfType<RedHandle>().Select(file.PathOf).FirstOrDefault(p => p is { Length: > 0 });
-        var points = c.Array("worldPoints").OfType<RedObject>().Select(p => new Vector2(p.Float("X"), p.Float("Y"))).ToList();
+        var world = c.Array("worldPoints").OfType<RedObject>().ToList();
+        var points = world.Select(p => new Vector2(p.Float("X"), p.Float("Y"))).ToList();
+        float height = world.Count > 0 ? world.Average(p => p.Float("Z")) : at.Z;
         if (points.Count < 2 && c.Array("localPoints").Count >= 2)
         {
             // the game's cooked areas keep only their own points: placed by the component on the entity, then the entity in the world
             var (offset, turn) = SceneStaging.Transform(c["transform"]);
             var place = Matrix4x4.CreateRotationZ(turn.Z * MathF.PI / 180) * Matrix4x4.CreateTranslation(offset)
                 * Matrix4x4.CreateRotationZ(yaw) * Matrix4x4.CreateTranslation(at);
-            points = c.Array("localPoints").OfType<RedObject>()
-                .Select(p => Vector3.Transform(new Vector3(p.Float("X"), p.Float("Y"), 0), place)).Select(p => new Vector2(p.X, p.Y)).ToList();
+            var placed = c.Array("localPoints").OfType<RedObject>().Select(p => Vector3.Transform(new Vector3(p.Float("X"), p.Float("Y"), 0), place)).ToList();
+            points = placed.Select(p => new Vector2(p.X, p.Y)).ToList();
+            height = placed.Average(p => p.Z);
         }
-        return new LayerComponent(c.ClassName, c["name"] as string ?? "", resource, points.Count >= 2 ? points : null);
+        return new LayerComponent(c.ClassName, c["name"] as string ?? "", resource, points.Count >= 2 ? points : null, height);
     }
 }

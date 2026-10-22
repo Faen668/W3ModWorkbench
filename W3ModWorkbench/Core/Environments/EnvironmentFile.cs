@@ -61,12 +61,15 @@ public sealed class EnvironmentFile
     private static readonly Lazy<Dictionary<string, RttiClass>> Types = new(() =>
         Rtti.LoadBuiltIn().Classes.GroupBy(c => c.Name).ToDictionary(g => g.Key, g => g.First()));
 
-    public static EnvironmentFile Read(byte[] data)
+    public static EnvironmentFile Read(byte[] data) => Read(data, "envParams");
+
+    /// <summary>A definition with one of its parameter sets as the root: envParams, envParamsInteriors or envParamsCaves.</summary>
+    public static EnvironmentFile Read(byte[] data, string parameterSet)
     {
         var file = Cr2wFile.Read(data);
         var definition = file.First("CEnvironmentDefinition") ?? throw new InvalidDataException(L.T("EnvironmentFile.NotEnvironment"));
-        var parameters = definition.Struct("envParams") ?? new RedObject("CAreaEnvironmentParams");
-        return new EnvironmentFile { File = file, Resource = definition, Root = Group("envParams", parameters, "") };
+        var parameters = definition.Struct(parameterSet) ?? new RedObject("CAreaEnvironmentParams");
+        return new EnvironmentFile { File = file, Resource = definition, Root = Group(parameterSet, parameters, "") };
     }
 
     /// <summary>

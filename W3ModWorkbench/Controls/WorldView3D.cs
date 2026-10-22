@@ -1,0 +1,1856 @@
+using System.Numerics;
+using System.Runtime.InteropServices;
+using System.Windows;
+using System.Windows.Input;
+using SharpDX;
+using W3ModWorkbench.Core.World;
+using SharpDX.Direct3D;
+using SharpDX.Direct3D11;
+using Buffer = SharpDX.Direct3D11.Buffer;
+using DxgiFormat = SharpDX.DXGI.Format;
+using RawColor4 = SharpDX.Mathematics.Interop.RawColor4;
+using Vector2 = System.Numerics.Vector2;
+using Vector3 = System.Numerics.Vector3;
+using Vector4 = System.Numerics.Vector4;
+
+namespace W3ModWorkbench;
+
+/// <summary>
+/// A world in 3D, drawn with the graphics card (Direct3D 11, through <see cref="D3DHost"/>): for now its terrain. The
+/// heights and the colour map go to the card as two textures the size of the world's grid; the ground is drawn as
+/// patches 128 samples a side, each a flat grid lifted into shape on the card, finer near the camera and coarser far
+/// off, with skirts hanging from their edges so no gaps show where two sizes meet, and patches out of view skipped.
+/// The sky, the light and the fog are the world's environment's at the hour shown (<see cref="WorldLighting"/>), drawn
+/// bright and brought to the screen's range by a filmic curve. The water is a level over the whole world (0, the
+/// engine's own, but inside each water shape that shape's), drawn wherever it's above the ground: its colour, deeper
+/// water darker, the sky mirrored at a glance and the light glinting on ripples. A free camera moves through it as
+/// REDkit's does: drag to look, W A S D to move, Q and E down and up.
+/// </summary>
+public sealed partial class WorldView3D : D3DHost
+{
+    /// <summary>The shaders' constants for a frame, in the order of the HLSL's Frame (see its comments there).</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    private struct Frame
+    {
+        public Matrix4x4 ViewProjection, Unproject;
+        public Vector4 Eye, Ground, Heights, Paint, Light, LightColour, Ambient, SunDir, SkyZenith, SkyHorizon, SunGlow,
+            FogFront, FogMiddle, FogBack, FogHeight, Water, Camera, AerialFront, AerialMiddle, AerialBack, FogCustom, FogCustomShape, FogLimits;
+    }
+
+    /// <summary>The tone mapping and grading constants, in the order of the HLSL's Grading.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    private struct Grading
+    {
+        public Vector4 Exposure, Curve, Slope, Power, Balance, Balance2, Low, Mid, High, Midtones, SkyLuminance, Vignette, VignetteColour;
+    }
+
+    /// <summary>The sky's constants, in the order of the HLSL's Sky.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    private struct Sky
+    {
+        public Vector4 Top, Horizon, SunHorizon, SunBackHorizon, SunSky, MoonHorizon, MoonBackHorizon, MoonSky, SunAt, MoonAt, SkyScale;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct Patch
+    {
+        public float X, Y, Size, Skirt;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct GridPoint
+    {
+        public float U, V, Skirt;
+    }
+
+    // loc-ignore-start: the shaders' source
+    private const string Shaders = @"
+Texture2D HeightMap : register(t0);
+Texture2D ColourMap : register(t1);
+Texture2D<uint> ControlMap : register(t2);
+Texture2DArray Diffuse : register(t3);
+Texture2DArray Normals : register(t4);
+Texture2D WaterLevel : register(t5);
+SamplerState Smooth : register(s0);
+SamplerState Tiled : register(s1);
+
+cbuffer Frame : register(b0)
+{
+    row_major float4x4 ViewProjection;
+    row_major float4x4 Unproject;
+    float4 Eye;        // the camera; seconds, for the water's ripples
+    float4 Ground;     // the grid's south-west corner, its size in metres, samples a side
+    float4 Heights;    // the lowest height, the range, metres between samples
+    float4 Paint;      // x: whether the water reflects the scene; w: whether the painted textures are there
+    float4 Light;      // towards the light; exposure
+    float4 LightColour;
+    float4 Ambient;
+    float4 SunDir;     // towards the sun (or the moon); how big its glow is
+    float4 SkyZenith;  // and the sky's brightness
+    float4 SkyHorizon; // and how much brighter the sky is than the ground
+    float4 SunGlow;
+    float4 FogFront;   // and the fog's density
+    float4 FogMiddle;  // and how far before it appears
+    float4 FogBack;    // and its vertical density
+    float4 FogHeight;  // its vertical offset; how much day it is (the trajectory's skyDayAmount); vertical density towards and away from the light
+    float4 Water;      // the water's colour; how fast it dims what's under it, a metre
+    float4 Camera;     // the near and far planes; the view's width and height in pixels
+    float4 AerialFront;    // and the aerial perspective's final exponent
+    float4 AerialMiddle;   // and the fog's final exponent
+    float4 AerialBack;     // and the range the fog appears over
+    float4 FogCustom;      // the fog's custom colour; its custom amount scale
+    float4 FogCustomShape; // where the custom colour starts and its range; where the custom amount starts and its range
+    float4 FogLimits;      // the farthest the fog counts; how thick it is on the sky; how bright its colours are; how wavy the water is
+};
+
+cbuffer SkyParameters : register(b3)
+{
+    float4 SkyTop;            // the sky's colour at the top; the visible sky's brightness scale
+    float4 SkyAtHorizon;      // at the horizon
+    float4 SunHorizon;        // at the horizon towards the sun
+    float4 SunBackHorizon;    // and away from it
+    float4 SunSky;            // round the sun
+    float4 MoonHorizon;       // at the horizon towards the moon
+    float4 MoonBackHorizon;   // and away from it
+    float4 MoonSky;           // round the moon; how bright the sky is in reflections (the probes' sky brightness scale)
+    float4 SunAt;             // towards the sun; how tight its glow is
+    float4 MoonAt;            // towards the moon; how tight its glow is
+    float4 SkyScale;          // the sun's and the moon's influence, the brightness, the horizon's vertical attenuation
+};
+
+
+cbuffer Grading : register(b2)
+{
+    float4 Exposure;     // the exposure scale, the luminance limits' shape, their least and most
+    float4 Curve;        // AgX's global contrast, shoulder power, toe power, black point lift
+    float4 Slope;        // AgX's slope colour; its saturation
+    float4 Power;        // AgX's power colour; its mid grey
+    float4 Balance;      // the balance maps' amount (0 when off), their mix; the levels: shadows, midtones
+    float4 Balance2;     // the levels' highlights, whether the parametric balance is on, the post brightness, the smallest level of the scene
+    float4 Low;          // the shadows' tint; saturation
+    float4 Mid;          // the midtones'
+    float4 High;         // the highlights'
+    float4 Midtones;     // the midtone range's least and most, the margins below and above it
+    float4 SkyLuminance; // the sky's luminance for adaptation, and how much of it is that
+    float4 Vignette;     // the weights the vignette spares bright pixels by; its opacity
+    float4 VignetteColour;
+};
+
+// ---- light, sky and fog ----
+
+// The sky as the game's sky shader paints it (its compiled code, read from the shader cache): at the horizon its colour
+// runs towards the sun's horizon colour on the side facing the sun and its back horizon colour on the other (by how
+// level the view is, and the sun's influence), the same again for the moon; the top colour takes over going up, faster
+// the higher the camera (the horizon's vertical attenuation); the colours round the sun and the moon are laid over
+// that by their glows; and the whole is scaled by the sky's brightness.
+float3 SkyColour(float3 dir)
+{
+    float2 flat = normalize(dir.xy + float2(0, 1e-6));
+    float level = 1 - dir.z * dir.z;
+    float sunSide = dot(normalize(SunAt.xy + float2(0, 1e-6)), flat) * 0.5 + 0.5;
+    float moonSide = dot(normalize(MoonAt.xy + float2(0, 1e-6)), flat) * 0.5 + 0.5;
+    float3 sky = lerp(SkyAtHorizon.rgb, lerp(SunBackHorizon.rgb, SunHorizon.rgb, sunSide), level * saturate(SkyScale.x));
+    sky = lerp(sky, lerp(MoonBackHorizon.rgb, MoonHorizon.rgb, moonSide), level * saturate(SkyScale.y));
+    float up = 1 - pow(saturate(1 / max(0.0001, SkyScale.w * 0.001 * ((Eye.z + 710) + dir.z * 1000) + 0.1)), 2.8);
+    sky = lerp(sky, SkyTop.rgb, up);
+    sky = lerp(sky, SunSky.rgb, pow(saturate(dot(SunAt.xyz, dir)), SunAt.w) * saturate(SkyScale.x));
+    sky = lerp(sky, MoonSky.rgb, saturate(SkyScale.y) * pow(saturate(dot(MoonAt.xyz, dir)), MoonAt.w));
+    sky *= SkyScale.z;
+    // the sun's disc (half a degree across), or by night the moon's, smaller and paler
+    float day = max(FogHeight.y, 0.02);
+    float disc = smoothstep(0.99996, 0.99999, saturate(dot(dir, SunDir.xyz)));
+    sky += lerp(float3(0.6, 0.65, 0.7) * 2 * SkyScale.z * 0.02, LightColour.rgb * 40, day) * disc;
+    return sky;
+}
+
+// The game's global fog, as its shaders compute it (read from the water shader's compiled code, where it's done per
+// pixel): the ray from the camera is walked in 16 steps, each dimming by the density over its length, less the higher
+// it is (the vertical density, towards or away from the light, over the height above the vertical offset); the fog's
+// amount and the aerial perspective's are that raised to their final exponents, faded in over the appear range; the
+// colour runs from the middle one to the front (towards the light) or back one, and towards the custom colour as the
+// fog thickens.
+float2 FogAt(float3 world, float sky, out float3 fog, out float3 aerial)
+{
+    float3 ray = world - Eye.xyz;
+    float reach = length(ray);
+    float3 dir = ray / max(reach, 0.001);
+    float distance = min(FogLimits.x, reach);
+    float stepLength = distance / 16;
+    float facing = dot(dir, SunDir.xyz);
+    float towards = saturate((facing + 1) * 0.5);
+    float vertical = -FogBack.w * lerp(lerp(FogHeight.w, FogHeight.z, towards), lerp(SunBackHorizon.w, SunHorizon.w, towards), sky);
+    float start = Eye.z + FogHeight.x;
+    float density = FogFront.w * lerp(1, FogLimits.y, sky);
+    float through = 1;
+    [unroll] for (int k = 1; k <= 16; k++)
+        through *= 1 - saturate(stepLength * density / (max(0, vertical * (start + k * stepLength * dir.z)) + 1));
+    float amount = saturate(1 - through);
+    float appear = saturate((distance - FogMiddle.w) / max(AerialBack.w, 0.001));
+    float fogAmount = pow(amount, AerialMiddle.w) * appear;
+    float aerialAmount = pow(amount, AerialFront.w) * appear;
+    float side = facing * facing * saturate(distance * 0.002 - 0.3);
+    fog = lerp(FogMiddle.rgb, facing > 0 ? FogFront.rgb : FogBack.rgb, side);
+    aerial = lerp(AerialMiddle.rgb, facing > 0 ? AerialFront.rgb : AerialBack.rgb, side);
+    fog = lerp(fog, FogCustom.rgb, saturate((fogAmount - FogCustomShape.x) / max(FogCustomShape.y, 0.001)));
+    fogAmount = saturate(lerp(1, FogCustom.w, saturate((fogAmount - FogCustomShape.z) / max(FogCustomShape.w, 0.001))) * fogAmount);
+    return float2(fogAmount, aerialAmount);
+}
+
+float3 Fogged(float3 colour, float3 world)
+{
+    float3 fog, aerial;
+    float2 amount = FogAt(world, 0, fog, aerial);
+    // the aerial perspective: the colour's brightness in the aerial colour, then the fog over it
+    colour = lerp(colour, dot(float3(0.333, 0.555, 0.222), colour) * aerial, amount.y);
+    return lerp(colour, fog * FogLimits.z, amount.x);
+}
+
+// a filmic curve (ACES, fitted), then to the screen's gamma
+// The scene is drawn in high dynamic range, in the world's light (the scale to the engine's units in Light.w), with
+// each pixel's luminance in those units in alpha for the eye's adaptation; the last pass (PostPS) brings it to the
+// screen as the game's tone mapping and grading do.
+float4 Screen(float3 hdr, float alpha)
+{
+    return float4(hdr, dot(hdr, float3(0.2126, 0.7152, 0.0722)) * Light.w);
+}
+
+// ---- sky ----
+
+struct SkyOut { float4 Position : SV_Position; float2 Ndc : TEXCOORD0; };
+
+SkyOut SkyVS(uint id : SV_VertexID)
+{
+    // one triangle over the whole view
+    float2 p = float2((id << 1) & 2, id & 2) * 2 - 1;
+    SkyOut o;
+    o.Position = float4(p, 1, 1);
+    o.Ndc = p;
+    return o;
+}
+
+// the sky as it's seen: fogged as far off as the far plane, by the fog's sky density
+float3 SkySeen(float3 dir)
+{
+    float3 fog, aerial;
+    float2 amount = FogAt(Eye.xyz + dir * FogLimits.x, 1, fog, aerial);
+    return lerp(SkyColour(dir), fog * FogLimits.z, amount.x);
+}
+
+cbuffer TrajectoryDots : register(b5)
+{
+    float4 TrajectoryPoints[96]; // the sun's (w 1) and the moon's (w 2) directions every half hour; w 0 for none
+};
+
+float4 SkyPS(SkyOut i) : SV_Target
+{
+    float4 far = mul(float4(i.Ndc, 1, 1), Unproject);
+    float3 dir = normalize(far.xyz / far.w - Eye.xyz);
+    float4 sky = Screen(SkySeen(dir), 1);
+    // the sun's and the moon's paths, as REDkit's trajectory display shows them
+    [loop] for (int k = 0; k < 96; k++)
+        if (TrajectoryPoints[k].w > 0 && dot(dir, TrajectoryPoints[k].xyz) > 0.99996)
+            sky.rgb += (TrajectoryPoints[k].w < 1.5 ? float3(1, 0.8, 0.2) : float3(0.4, 0.6, 1)) * SkyScale.z * 0.3;
+    sky.a = lerp(sky.a, SkyLuminance.x, SkyLuminance.y);
+    return sky;
+}
+
+// ---- terrain ----
+// As the game's terrain material shader does it (its compiled code, read from the shader cache): each of the four
+// control samples round a point gives a background, drawn flat from above at 3 m a repeat, and an overlay, drawn from
+// three sides at its own scale; the overlay shows where the slope passes the sample's threshold, fading in over the
+// background texture's falloff; and the colour map is laid over the result as an overlay blend.
+
+cbuffer TextureSettings : register(b1)
+{
+    // for each of the 31 textures: val, then val2 (the clip map's textureParams)
+    float4 Slot[64];
+};
+
+static const float Scales[8] = { 0.333, 0.166, 0.05, 0.025, 0.0125, 0.0075, 0.00375, 0.00375 };
+static const float SlopeThresholds[8] = { 0, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875 };
+
+float2 GridUv(float2 world)
+{
+    // sample i is at the corner plus i spacings, rows counted from the north
+    return float2((world.x - Ground.x) / Ground.z + 0.5 / Ground.w, 1 - (world.y - Ground.y) / Ground.z - 0.5 / Ground.w);
+}
+
+float GroundHeight(float2 uv) { return HeightMap.SampleLevel(Smooth, uv, 0).r * Heights.y + Heights.x; }
+
+struct Out { float4 Position : SV_Position; float3 World : TEXCOORD0; float2 Uv : TEXCOORD1; };
+
+// ---- the terrain's shadows ----
+// For each point of the height map, how much of the sun (or moon) it sees past the terrain towards it: the height map
+// walked towards the light in growing steps as far as 14 km, the steepest rise seen from the point (its horizon that
+// way) against how high the light stands, softened over a couple of degrees as the edge of a shadow is. A way of our
+// own: the game's terrain shadows aren't decoded yet.
+
+Texture2D<float> ShadowMap : register(t13);
+
+float4 ShadowPS(float4 position : SV_Position) : SV_Target
+{
+    float2 uv = position.xy / Ground.w;
+    float2 world = float2(Ground.x + uv.x * Ground.z, Ground.y + (1 - uv.y) * Ground.z);
+    float flat = length(Light.xy);
+    if (Light.z <= -0.05) return 0;
+    float2 toward = Light.xy / max(flat, 1e-4);
+    float sun = Light.z / max(flat, 1e-4);
+    // from the water's surface where there's water over the ground, so the water isn't shaded by the bed's bumps
+    float start = max(GroundHeight(uv), WaterLevel.SampleLevel(Smooth, uv, 0).r) + 0.3;
+    float horizon = -1e3, reach = Heights.z;
+    [loop] for (int k = 0; k < 120; k++)
+    {
+        float2 at = world + toward * reach;
+        float2 atUv = GridUv(at);
+        if (any(atUv < 0) || any(atUv > 1)) break;
+        horizon = max(horizon, (GroundHeight(atUv) - start) / reach);
+        reach = reach * 1.05 + Heights.z * 0.25;
+    }
+    return saturate((sun - horizon) / 0.035 + 0.5);
+}
+
+cbuffer Plants : register(b4)
+{
+    row_major float4x4 SunViewProjection; // the sun's view of the plants round the camera
+    float4 CameraRight;                   // facing leaves turn to the camera (or, drawing the shadows, the sun)
+    float4 CameraUp;                      // w: whether the plants' shadows are there
+    float4 BillboardShape;                // a kind's billboard: width, top, bottom, number of views
+    float4 BillboardViews[32];            // each view's place in the atlas: left, top, width, height
+};
+
+Texture2D PlantPicture : register(t14);
+Texture2D<float> PlantShadowMap : register(t15);
+SamplerComparisonState ShadowCompare : register(s2);
+
+// how much of the sun the plants let through to a point: the sun's view of them, four taps for a soft edge
+float PlantShade(float3 world)
+{
+    if (CameraUp.w < 0.5) return 1;
+    float4 s = mul(float4(world, 1), SunViewProjection);
+    float2 uv = s.xy * float2(0.5, -0.5) + 0.5;
+    if (any(uv < 0) || any(uv > 1) || s.z > 1) return 1;
+    float texel = 1.0 / 4096, lit = 0;
+    [unroll] for (int k = 0; k < 4; k++)
+        lit += PlantShadowMap.SampleCmpLevelZero(ShadowCompare, uv + float2((k & 1) - 0.5, (k >> 1) - 0.5) * texel * 1.5, s.z);
+    return lit / 4;
+}
+
+cbuffer GlobalLightColour : register(b7)
+{
+    float4 LightSide;          // the light's colour far off, up high
+    float4 LightOppositeSide;  // and far off, down low
+    float4 LightColourParams;  // how it goes from near to far: a scale and bias by distance across, then by height
+};
+
+// as the engine's CalcGlobalLightColor: the sun's own colour near the camera, giving way far off to the light side's
+// colour high up and the opposite side's low down
+float3 GlobalLightColour(float3 world)
+{
+    float across = length(world.xy - Eye.xy);
+    float3 far = lerp(LightOppositeSide.rgb, LightSide.rgb, saturate(world.z * LightColourParams.z + LightColourParams.w));
+    return lerp(LightColour.rgb, far, saturate(across * LightColourParams.x + LightColourParams.y));
+}
+
+cbuffer Foliage : register(b8)
+{
+    float4 TreeRandom[3];      // the trees' (leaves') random colours, linear; their saturations in w
+    float4 BranchRandom[3];
+    float4 GrassRandom[3];
+    float4 RandomLuminance[3]; // the luminance weights the saturation works against: trees, branches, grass
+    float4 PlantTint;          // the plants' diffuse tint; how much of their ambient occlusion counts
+    float4 BillboardTint;      // the billboards' tint; how translucent leaves are
+    float4 Translucency;       // view dependency, base flatness, flat brightness, gain brightness
+    float4 AlphaScalars;       // 3D plants, grass, billboards: the alpha scale before the 0.1 cut
+    float4 AmbientScales;      // the ambient's scale in light and in shadow; the units; the sky's brightest
+    float4 AmbientColour;      // the probes' base ambient colour
+    float4 SkyIbl;             // the sky's brightness and saturation, the ground's brightness and saturation in the ambient
+    float4 ProbeSkyTop;        // the probes' sky at the top; the shape between it and the horizon
+    float4 ProbeSkyHorizon;    // and at the horizon; the reflections' scale in light
+    float4 SceneAdd;           // the light the scene adds to the probes; the reflections' scale in shadow
+    float4 AoSettings;         // the ambient occlusion's radius, bias, power, and how much it dims direct light
+    float4 SpecularSettings;   // grass's f90, the other foliage's f90, the trees' specular scale
+};
+
+Texture2D<float> AoMap : register(t18);
+
+// the ambient occlusion at a pixel, as the ambient pass made it
+float AoAt(float4 position) { return AoMap.Load(int3(int2(position.xy), 0)); }
+
+// the probes' sky, as the engine's probe sky colour: from the top's colour to the horizon's by how far round from the top
+// a direction is (0 straight up, 1 at the horizon), bent by the shape
+float3 ProbeSky(float3 dir)
+{
+    float towardsHorizon = 0.5 * length(dir.xy) / max(1 - dir.z, 1e-4);
+    return lerp(ProbeSkyTop.rgb, ProbeSkyHorizon.rgb, pow(saturate(towardsHorizon), max(ProbeSkyTop.w, 1e-3)));
+}
+
+// the engine's GGX specular for the sun: D (GGX), V (Smith, height-correlated) and Schlick's F towards f90
+float3 SpecularAt(float3 n, float3 v, float3 l, float specularity, float roughness, float f90)
+{
+    float nl = dot(n, l);
+    if (nl <= 0) return 0;
+    float3 h = normalize(v + l);
+    float a = roughness * roughness, a2 = a * a, nh = saturate(dot(n, h)), nv = abs(dot(n, v));
+    float d = a2 / (3.14152 * pow(nh * nh * (a2 - 1) + 1, 2));
+    float lv = nl * sqrt(nv * nv * (1 - a2) + a2), ll = nv * sqrt(nl * nl * (1 - a2) + a2);
+    float vis = 0.5 / (lv + ll + 0.0001);
+    float f = specularity + max(0, f90 - specularity) * pow(saturate(1 - abs(dot(h, v))), 5);
+    return f * d * vis * saturate(nl);
+}
+
+// the reflection of the probes' sky, by the engine's env-probe Fresnel (its grazing gain held back on rough surfaces),
+// its strength in light or in shadow; the environment's reflection colours are white at 1
+float3 ReflectionAt(float3 n, float3 v, float specularity, float roughness, float sun)
+{
+    float3 r = reflect(-v, n);
+    r.z = abs(r.z);
+    float smooth = 1 - roughness;
+    float f = specularity + (1 - specularity) * pow(saturate(1 - abs(dot(n, v))), 5) * smooth * smooth;
+    return ProbeSky(r) * f * lerp(SceneAdd.w, ProbeSkyHorizon.w, sun);
+}
+
+Texture2D AmbientCube : register(t17);
+
+// the ambient light round a normal from the ambient cube (six directions: +x -x +y -y +z -z), as the probes give it,
+// scaled by the environment's ambient scale in light or in shadow
+float3 AmbientAt(float3 n, float shadow)
+{
+    float3 n2 = n * n;
+    float3 cube = n2.x * AmbientCube.Load(int3(n.x >= 0 ? 0 : 1, 0, 0)).rgb + n2.y * AmbientCube.Load(int3(n.y >= 0 ? 2 : 3, 0, 0)).rgb
+        + n2.z * AmbientCube.Load(int3(n.z >= 0 ? 4 : 5, 0, 0)).rgb;
+    return cube * AmbientColour.rgb * lerp(AmbientScales.y, AmbientScales.x, shadow);
+}
+
+float SunSeen(float3 world) { return ShadowMap.SampleLevel(Smooth, GridUv(world.xy), 0) * PlantShade(world); }
+
+Out TerrainVS(float2 uv : TEXCOORD0, float skirt : TEXCOORD1, float4 patch : PATCH)
+{
+    float2 world = patch.xy + uv * patch.z;
+    float2 t = GridUv(world);
+    // the size of the heights' copy matching the patch's spacing, so far patches don't shimmer
+    float level = log2(max(1, patch.z / Heights.z / 128));
+    float h = HeightMap.SampleLevel(Smooth, t, level).r * Heights.y + Heights.x - skirt * patch.w;
+    Out o;
+    o.World = float3(world, h);
+    o.Position = mul(float4(o.World, 1), ViewProjection);
+    o.Uv = t;
+    return o;
+}
+
+// a texture seen from three sides, each weighted by how squarely the surface faces it
+float4 Triplanar(Texture2DArray tex, float3 world, float scale, float slice, float3 weights)
+{
+    float4 c = 0;
+    if (weights.z > 0) c += tex.Sample(Tiled, float3(world.xy * scale, slice)) * weights.z;
+    if (weights.y > 0) c += tex.Sample(Tiled, float3(float2(-world.x, -world.z) * scale, slice)) * weights.y;
+    if (weights.x > 0) c += tex.Sample(Tiled, float3(float2(-world.y, -world.z) * scale, slice)) * weights.x;
+    return c;
+}
+
+float4 TerrainPS(Out i) : SV_Target
+{
+    float roughness = 0.8;
+    float texel = 1 / Ground.w;
+    float hw = HeightMap.Sample(Smooth, i.Uv - float2(texel, 0)).r, he = HeightMap.Sample(Smooth, i.Uv + float2(texel, 0)).r;
+    float hn = HeightMap.Sample(Smooth, i.Uv - float2(0, texel)).r, hs = HeightMap.Sample(Smooth, i.Uv + float2(0, texel)).r;
+    float scale = Heights.y / (2 * Heights.z);
+    float3 normal = normalize(float3((hw - he) * scale, (hs - hn) * scale, 1));
+    float3 tint = ColourMap.Sample(Smooth, i.Uv).rgb;
+    float3 colour = tint;
+    if (Paint.w > 0)
+    {
+        float2 cell = i.Uv * Ground.w - 0.5;
+        int2 at = (int2)floor(cell);
+        float2 f = cell - at;
+        // a hole where the nearest sample has no texture at all (a cave's mouth, a cellar)
+        clip((float)ControlMap.Load(int3(clamp(at, 0, (int)Ground.w - 1), 0)) - 0.5);
+        float3 sides = max(abs(normal) - 0.576, 0);
+        sides /= max(sides.x + sides.y + sides.z, 0.0001);
+        float3 background = 0, overlay = 0, backBump = 0, overBump = 0;
+        float threshold = 0, falloff = 0, damp = 0, backRough = 0, overRough = 0;
+        [unroll] for (int k = 0; k < 4; k++)
+        {
+            int2 o = int2(k & 1, k >> 1);
+            float w = (o.x ? f.x : 1 - f.x) * (o.y ? f.y : 1 - f.y);
+            uint control = ControlMap.Load(int3(clamp(at + o, 0, (int)Ground.w - 1), 0));
+            uint back = max(control & 31, 1) - 1, over = max((control >> 5) & 31, 1) - 1;
+            float overScale = Scales[(control >> 13) & 7];
+            threshold += SlopeThresholds[(control >> 10) & 7] * w;
+            falloff += Slot[back * 2].x * w;
+            damp += Slot[over * 2].y * w;
+            float2 flat = i.World.xy * 0.333;
+            background += Diffuse.Sample(Tiled, float3(flat, back)).rgb * w;
+            float4 backN = Normals.Sample(Tiled, float3(flat, back));
+            backBump += (backN.rgb - 0.5) * w;
+            backRough += backN.a * w;
+            overlay += Triplanar(Diffuse, i.World, overScale, over, sides).rgb * w;
+            float4 overN = Triplanar(Normals, i.World, overScale, over, sides);
+            overBump += (overN.rgb - 0.5) * w;
+            overRough += overN.a * w;
+        }
+        float3 backNormal = normalize(normal + float3(backBump.x, -backBump.y, 0) * 1.2);
+        float3 overNormal = normalize(normal + float3(overBump.x, -overBump.y, 0) * 1.2);
+        // the overlay's slope, its normal first flattened by its damping, as the tangent of its angle
+        float flatten = damp * normal.z;
+        float3 judged = normalize(float3(overNormal.xy * (1 - flatten), lerp(overNormal.z, 1, flatten)));
+        float angle = acos(saturate(judged.z));
+        float slope = saturate(angle + angle * angle * angle * (0.3333333 + 0.1333333 * angle * angle));
+        float amount = saturate((slope - threshold) / max(saturate(falloff + threshold) - threshold, 0.0001));
+        float3 painted = lerp(background, overlay, amount);
+        // the colour map laid over it: darker below mid grey, lighter above
+        colour = tint < 0.5 ? 2 * painted * tint : 1 - 2 * (1 - painted) * (1 - tint);
+        normal = normalize(lerp(backNormal, overNormal, amount));
+        roughness = lerp(backRough, overRough, amount);
+    }
+    float3 albedo = pow(saturate(colour), 2.2);
+    float sun = SunSeen(i.World), ao = AoAt(i.Position);
+    float3 v = normalize(Eye.xyz - i.World), sunLight = GlobalLightColour(i.World) * sun;
+    // the engine's lighting: Lambert over pi and GGX specular from the sun, dimmed by the AO's share for direct light;
+    // the probes' ambient and reflection, dimmed by the AO
+    float direct = lerp(1, ao, AoSettings.w);
+    float3 lit = albedo * (sunLight * saturate(dot(normal, Light.xyz)) / 3.14159265 * direct + AmbientAt(normal, sun) * ao)
+        + sunLight * SpecularAt(normal, v, Light.xyz, 0.04, clamp(roughness, 0.05, 1), 1) * direct
+        + ReflectionAt(normal, v, 0.04, clamp(roughness, 0.05, 1), sun) * ao;
+    return Screen(Fogged(lit, i.World), 1);
+}
+
+// ---- water ----
+// As the game's water shaders do it (read from its static shader cache), where the data is there: the waves damped in
+// shallow water ((|depth| - 0.1) x 0.204 and x 0.526) and gone past 250 m from the camera; what's under the water is
+// the scene already drawn, seen through it bent by the surface and dimmed by how much water the eye looks through;
+// the sky mirrored at a glance; and the game's foam loop (32 frames, frac(time x 0.024) x 32, at 0.04 a metre) in the
+// shallows. The game's waves come from a wave simulation it runs each frame; these are a few crossing waves instead.
+
+Texture2D<float> DepthMap : register(t6);
+Texture2D SceneMap : register(t7);
+Texture2DArray FoamLoop : register(t8);
+Texture2D WaveMap : register(t9);
+
+float ViewDepth(float stored) { return Camera.x * Camera.y / (Camera.y - stored * (Camera.y - Camera.x)); }
+
+Out WaterVS(float2 uv : TEXCOORD0, float skirt : TEXCOORD1, float4 patch : PATCH)
+{
+    float2 world = patch.xy + uv * patch.z;
+    float2 t = GridUv(world);
+    Out o;
+    o.World = float3(world, WaterLevel.SampleLevel(Smooth, t, 0).r);
+    o.Position = mul(float4(o.World, 1), ViewProjection);
+    o.Uv = t;
+    return o;
+}
+
+// the waves' slope: the wave map (a tileable sea made once from a spectrum of waves, as the game's simulation makes
+// its own each frame) at three sizes, as the game's large, medium and small layers, each drifting its own way; the
+// long layers damped in shallower water than the short one, as the game damps them
+float2 Ripples(float2 p, float shallowLong, float shallowShort)
+{
+    float time = Eye.w;
+    float2 large = WaveMap.Sample(Tiled, p / 34 + time * float2(0.011, 0.006)).rg * 2 - 1;
+    float2 medium = WaveMap.Sample(Tiled, p / 11 + time * float2(-0.017, 0.021)).rg * 2 - 1;
+    float2 small = WaveMap.Sample(Tiled, p / 3.3 + time * float2(0.043, -0.031)).rg * 2 - 1;
+    return (large * 0.55 + medium * 0.35) * shallowLong + small * 0.22 * shallowShort;
+}
+
+// what the water mirrors: the reflected ray walked through the scene already drawn until it passes behind something
+// there (as the game's screen-space reflections do), or the sky when it leaves the view without meeting anything
+float3 Reflection(float3 start, float3 dir, float3 sky)
+{
+    float stepLength = 0.6;
+    float3 p = start;
+    [loop] for (int k = 0; k < 56; k++)
+    {
+        p += dir * stepLength;
+        stepLength *= 1.1;
+        float4 clip = mul(float4(p, 1), ViewProjection);
+        if (clip.w <= Camera.x) break;
+        float2 uv = float2(clip.x / clip.w * 0.5 + 0.5, 0.5 - clip.y / clip.w * 0.5);
+        if (uv.x < 0 || uv.y < 0 || uv.x > 1 || uv.y > 1) break;
+        float stored = DepthMap.SampleLevel(Smooth, uv, 0);
+        if (stored >= 1) continue;
+        float scene = ViewDepth(stored);
+        if (clip.w > scene + 0.05 && clip.w < scene + stepLength * 3 + 1)
+        {
+            float edge = saturate(min(min(uv.x, 1 - uv.x), min(uv.y, 1 - uv.y)) * 12);
+            return lerp(sky, SceneMap.SampleLevel(Smooth, uv, 0).rgb, edge);
+        }
+    }
+    return sky;
+}
+
+float4 WaterPS(Out i) : SV_Target
+{
+    float depth = i.World.z - GroundHeight(i.Uv);
+    clip(depth + 0.05);
+    float distance = length(i.World - Eye.xyz);
+    float near = saturate((250 - distance) * 0.004);
+    float shallowLong = saturate((abs(depth) - 0.1) * 0.2040816) * 0.7 + 0.3;
+    float shallowShort = saturate((abs(depth) - 0.1) * 0.5263158) * 0.4 + 0.6;
+    float3 n = normalize(float3(-Ripples(i.World.xy, shallowLong, shallowShort) * lerp(0.3, 1, near) * FogLimits.w, 1));
+
+    // how much water the eye looks through to what's behind
+    int2 pixel = int2(i.Position.xy);
+    float behind = ViewDepth(DepthMap.Load(int3(pixel, 0)));
+    float thickness = max(behind - i.Position.w, 0);
+    float2 screen = i.Position.xy / Camera.zw;
+    float2 bent = screen + n.xy * 0.03 * saturate(thickness * 2);
+    // keep it straight where the bent view would find something in front of the water
+    if (ViewDepth(DepthMap.SampleLevel(Smooth, bent, 0)) < i.Position.w) bent = screen;
+    float3 under = SceneMap.SampleLevel(Smooth, bent, 0).rgb;
+
+    float3 view = normalize(i.World - Eye.xyz);
+    float3 reflected = reflect(view, n);
+    reflected.z = abs(reflected.z);
+    float fresnel = 0.02 + 0.98 * pow(1 - saturate(dot(n, -view)), 5);
+    float seen = SunSeen(i.World);
+    float3 body = Screen(Water.rgb * (GlobalLightColour(i.World) * saturate(Light.z) * seen / 3.14159265 + AmbientAt(float3(0, 0, 1), seen)), 1).rgb;
+    float3 sky = Screen(SkySeen(reflected) * MoonSky.w, 1).rgb;
+    if (Paint.x > 0.5) sky = Reflection(i.World + float3(0, 0, 0.05), reflected, sky);
+    // the sun's (or moon's) highlight on a smooth surface, its spread a GGX lobe
+    float3 halfway = normalize(Light.xyz - view);
+    float rough = 0.012, nh = saturate(dot(n, halfway));
+    float lobe = rough / (3.14159 * pow(nh * nh * (rough - 1) + 1, 2));
+    float3 glint = Screen(seen * LightColour.rgb * lobe * fresnel * saturate(Light.z * 4) * 0.25 * lerp(0.04, 1, FogHeight.y), 1).rgb;
+    // the water's colour taking over from what's under it the more water there is to look through
+    // water takes the red out of what's under it first, then the green, so shallows over sand turn turquoise
+    float3 through = exp(-thickness * Water.w * float3(0.5, 0.15, 0.12));
+    float3 colour = lerp(body, under, through);
+    colour = lerp(colour, sky, fresnel) + glint;
+
+    // foam in the shallows, its loop played as the game plays it
+    float frame = frac(Eye.w * 0.024) * 32;
+    float2 foamUv = i.World.xy * 0.04;
+    float foam = lerp(FoamLoop.Sample(Tiled, float3(foamUv, floor(frame))).r, FoamLoop.Sample(Tiled, float3(foamUv, floor(frame + 1) % 32)).r, frac(frame));
+    // only a thin line of it where the water meets the shore
+    float shore = saturate(1 - depth * 14) * near * smoothstep(0.4, 0.75, foam);
+    colour = lerp(colour, Screen((LightColour.rgb * saturate(Light.z) / 3.14159265 + AmbientAt(float3(0, 0, 1), 1)) * 0.6, 1).rgb, shore * 0.45);
+    float3 fog, aerial;
+    float2 amount = FogAt(i.World, 0, fog, aerial);
+    colour = lerp(colour, Screen(fog * FogLimits.z, 1).rgb, amount.x);
+    return Screen(colour, 1);
+}
+
+// ---- tone mapping and grading ----
+// As the game's post-process shaders do it (its static shader cache): the exposure from the eye's adapted luminance,
+// kept between the environment's limits and bent by its shape; then AgX: the colour into AgX's working space, its log
+// between 10 stops under and 6.5 over the mid grey, through the curve (a toe and a shoulder of their own contrast
+// powers either side of the mid grey's point, the toe lifted by the black point lift), the slope, power and saturation,
+// and back out; then the balance maps (64 x 64 x 64 colour lookups as 8 x 8 tiles), mixed in by their amount; then the
+// final colour balance's levels and its saturation and tint in the shadows, midtones and highlights.
+
+Texture2D HdrScene : register(t10);
+Texture2D<float> AdaptedLuminance : register(t16);
+
+cbuffer Adaptation : register(b6)
+{
+    float4 AdaptRate; // x: how much of the way to the scene's luminance the eye goes this frame
+};
+
+// the eye's luminance moved towards the scene's average (the scene's smallest level, its alpha the luminance)
+float AdaptPS(SkyOut i) : SV_Target
+{
+    float scene = HdrScene.Load(int3(0, 0, Balance2.w)).a;
+    float before = AdaptedLuminance.Load(int3(0, 0, 0));
+    return lerp(before, scene, saturate(AdaptRate.x));
+}
+Texture2D BalanceA : register(t11);
+Texture2D BalanceB : register(t12);
+
+
+float SignedPow(float x, float p) { return x == 0 ? 0 : sign(x) * pow(abs(x), p); }
+
+float AgxCurve(float x)
+{
+    float pivot = 10 / 16.5, contrast = Curve.x;
+    if (x >= pivot)
+    {
+        float shoulder = Curve.y, reach = (1 - pivot) * contrast;
+        float scale = SignedPow(SignedPow(reach, -shoulder) * (SignedPow(2 * reach, shoulder) - 1), -1 / shoulder);
+        float u = (x - pivot) * contrast / scale;
+        return u / SignedPow(SignedPow(u, shoulder) + 1, 1 / shoulder) * scale + 0.5;
+    }
+    float toe = Curve.z, reach = contrast * pivot;
+    float scale = SignedPow(SignedPow(reach, -toe) * (SignedPow(2 * reach, toe) - 1), -1 / toe) * (1 - Curve.w);
+    float u = (x - pivot) * contrast / -scale;
+    return -scale * (u / SignedPow(SignedPow(u, toe) + 1, 1 / toe)) + 0.5;
+}
+
+float3 Lookup(Texture2D map, float3 g)
+{
+    // the blue picks two neighbouring tiles, red and green the place in each, as the game's balance pass reads them
+    float slices = g.b * 63.75, below = floor(slices), between = slices - below;
+    float upper = min(0.99999, saturate(g.b * 0.9960938 + 0.015625)), lower = min(0.99999, saturate(below * 0.015625));
+    float2 rg = clamp((saturate(g.rg) + 0.0078125) * 0.9960938, 0.015625, 0.984375);
+    float upperRow = floor(upper * 8), lowerRow = floor(lower * 8);
+    float2 a = float2(floor(upper * 64 - upperRow * 8) + rg.x, upperRow + rg.y) * 0.125;
+    float2 b = float2(floor(lower * 64 - lowerRow * 8) + rg.x, lowerRow + rg.y) * 0.125;
+    float3 high = map.SampleLevel(Smooth, a, 0).rgb, low = map.SampleLevel(Smooth, b, 0).rgb;
+    return pow(abs(lerp(low, high, between)), 2.2);
+}
+
+float4 PostPS(SkyOut i) : SV_Target
+{
+    // the exposure from the eye's adaptation: the scene's average luminance (the smallest level), held between the limits
+    float adapted = clamp(AdaptedLuminance.Load(int3(0, 0, 0)), Exposure.z, Exposure.w);
+    float k = Exposure.x * 11.2;
+    float exposure = Exposure.x / (pow(max(adapted, 0.0001) / k, Exposure.y) * k);
+    float3 c = HdrScene.Load(int3(int2(i.Position.xy), 0)).rgb * Light.w * exposure;
+
+    // AgX
+    float low = log2(Power.w * 0.0009765625), high = log2(Power.w * 90.50967);
+    float3 inset = float3(dot(c, float3(0.8424791, 0.0784336, 0.07922374)), dot(c, float3(0.04232824, 0.8784686, 0.07916613)),
+        dot(c, float3(0.04237565, 0.0784336, 0.879143)));
+    float3 x = (clamp(log2(max(inset, 1e-10)), low, high) - low) / (high - low);
+    float3 y = pow(max(float3(AgxCurve(x.r), AgxCurve(x.g), AgxCurve(x.b)) * Slope.rgb, 0), Power.rgb);
+    float grey = dot(y, float3(0.2126729, 0.7151522, 0.072175));
+    y = max(lerp(grey, y, Slope.w), 0);
+    float3 linear_ = pow(max(float3(dot(y, float3(1.196879, -0.09802088, -0.09902974)), dot(y, float3(-0.05289685, 1.151903, -0.09896117)),
+        dot(y, float3(-0.05297164, -0.09804345, 1.151074))), 0.0001), 2.2);
+
+    // the balance maps
+    if (Balance.x > 0)
+    {
+        float3 g = pow(saturate(linear_), 0.4545455);
+        float3 mapped = lerp(Lookup(BalanceA, g), Lookup(BalanceB, g), Balance.y);
+        linear_ += (mapped - linear_) * Balance.x;
+    }
+
+    // the final colour balance: levels, then saturation and tint by how dark each pixel is
+    float3 g = pow(saturate(linear_), 0.4545455);
+    if (Balance2.y > 0)
+    {
+        g = pow(saturate((g - Balance.z) / max(Balance2.x - Balance.z, 0.001)), 1 / max(Balance.w, 0.001));
+        float luma = dot(float3(0.299, 0.587, 0.114), g);
+        float toMid = saturate((luma - (Midtones.x - Midtones.z)) / max(Midtones.z, 0.001));
+        float toHigh = saturate((luma - Midtones.y) / max(Midtones.w, 0.001));
+        float4 part = lerp(lerp(Low, Mid, toMid), High, toHigh);
+        float3 lin = pow(g, 2.2);
+        float l = dot(float3(0.2126, 0.7152, 0.0722), lin);
+        g = pow(saturate((part.w * (lin - l) + l) * part.rgb), 0.4545455);
+    }
+    g = saturate(g * Balance2.z);
+    // the vignette, as the game's final pass: darker towards the corners, sparing what's bright by the weights
+    float2 fromMiddle = i.Position.xy / Camera.zw - 0.5;
+    float ring = saturate((length(fromMiddle) * 2 - 0.55) * 1.219512), ring2 = ring * ring;
+    float vignette = Vignette.w * min(dot(float4(-0.1, -0.105, 1.12, 0.09), float4(ring2 * ring2, ring2 * ring, ring2, ring)), 0.94)
+        * saturate(1 - dot(pow(g, 2.2), Vignette.rgb));
+    return float4(lerp(g, VignetteColour.rgb, saturate(vignette)), 1);
+}
+
+// ---- plants ----
+// The SpeedTree files' LODs, each plant turned by its yaw and scaled, the facing leaves' cards spread across the camera
+// (their first two corner values); far off, a side view from the billboard atlas, the one nearest the way the camera
+// looks at the plant. Lit by the sun through both sides of a leaf, its ambient light dimmed by the vertex's occlusion.
+
+struct PlantIn
+{
+    float3 Position : POSITION; float2 Uv : TEXCOORD0; float3 Normal : NORMAL; float4 Corner : TEXCOORD1; float Kind : TEXCOORD2;
+    float4 Place : PLACE; float2 Turn : TURN;
+};
+// the kind: 0 leaves, 1 branches, 2 grass, 3 a billboard
+struct PlantOut
+{
+    float4 Position : SV_Position; float3 World : TEXCOORD0; float2 Uv : TEXCOORD1; float3 Normal : TEXCOORD2; float Occlusion : TEXCOORD3;
+    float Kind : TEXCOORD4; float3 Weights : TEXCOORD5;
+};
+
+float3 Turned(float3 p, float2 turn) { return float3(turn.x * p.x - turn.y * p.y, turn.y * p.x + turn.x * p.y, p.z); }
+
+// which of the three random colours a plant takes, from the way it faces, as the engine's SpeedTreeCalcRandomColorData
+float3 RandomWeights(float2 turn)
+{
+    float f = turn.x * 0.5 + 0.5;
+    return float3(1 - saturate(f * 3) * saturate((1 - f) * 3), saturate(1 - abs(f - 0.33333) * 3), saturate(1 - abs(f - 0.66666) * 3));
+}
+
+PlantOut PlantAt(PlantIn v, row_major float4x4 projection)
+{
+    PlantOut o;
+    float3 local = Turned(v.Position, v.Turn) + CameraRight.xyz * v.Corner.x + CameraUp.xyz * v.Corner.y;
+    o.World = v.Place.xyz + local * v.Place.w;
+    o.Position = mul(float4(o.World, 1), projection);
+    o.Uv = v.Uv;
+    o.Normal = Turned(v.Normal, v.Turn);
+    o.Occlusion = v.Corner.w;
+    o.Kind = v.Kind;
+    o.Weights = RandomWeights(v.Turn);
+    return o;
+}
+
+PlantOut PlantVS(PlantIn v) { return PlantAt(v, ViewProjection); }
+PlantOut PlantShadowVS(PlantIn v) { return PlantAt(v, SunViewProjection); }
+
+struct BillboardIn { float2 Corner : POSITION; float4 Place : PLACE; float2 Turn : TURN; };
+
+PlantOut BillboardAt(BillboardIn v, float3 eye, row_major float4x4 projection)
+{
+    PlantOut o;
+    // the view nearest the way the camera looks at the plant, counted round from the plant's own facing
+    float2 toEye = eye.xy - v.Place.xy;
+    float around = atan2(toEye.y, toEye.x) - atan2(v.Turn.y, v.Turn.x);
+    float views = max(BillboardShape.w, 1);
+    int view = (int)round(frac(around / 6.2831853) * views) % (int)views;
+    float4 at = BillboardViews[view];
+    float2 side = normalize(float2(-toEye.y, toEye.x) + float2(1e-5, 0));
+    float height = lerp(BillboardShape.z, BillboardShape.y, v.Corner.y);
+    o.World = v.Place.xyz + (float3(side * v.Corner.x * BillboardShape.x, height)) * v.Place.w;
+    o.Position = mul(float4(o.World, 1), projection);
+    // each view's rectangle starts at the plant's foot, its height negative going up the atlas; a turned view (both
+    // sizes negative) runs the plant's height along the atlas's width
+    o.Uv = at.z < 0 ? at.xy + float2(v.Corner.y * at.z, (v.Corner.x + 0.5) * at.w) : at.xy + float2((v.Corner.x + 0.5) * at.z, v.Corner.y * at.w);
+    o.Normal = normalize(float3(normalize(toEye + float2(1e-5, 0)), 1));
+    o.Occlusion = 1;
+    o.Kind = 3;
+    o.Weights = RandomWeights(v.Turn);
+    return o;
+}
+
+PlantOut BillboardVS(BillboardIn v) { return BillboardAt(v, Eye.xyz, ViewProjection); }
+PlantOut BillboardShadowVS(BillboardIn v) { return BillboardAt(v, v.Place.xyz + Light.xyz * 100, SunViewProjection); }
+
+// the game's alpha cut: the picture's alpha times the kind's alpha scalar, kept from 0.1
+float PlantAlphaScalar(float kind) { return kind > 2.5 ? AlphaScalars.z : kind > 1.5 ? AlphaScalars.y : AlphaScalars.x; }
+
+// the engine's SpeedTreeApplyRandomColorAlbedo: towards the colour's luminance by the saturation, then times the colour
+float3 RandomColour(float3 gamma, float kind, float3 w)
+{
+    int k = kind > 1.5 && kind < 2.5 ? 2 : kind > 0.5 && kind < 1.5 ? 1 : 0;
+    float4 c0 = k == 2 ? GrassRandom[0] : k == 1 ? BranchRandom[0] : TreeRandom[0];
+    float4 c1 = k == 2 ? GrassRandom[1] : k == 1 ? BranchRandom[1] : TreeRandom[1];
+    float4 c2 = k == 2 ? GrassRandom[2] : k == 1 ? BranchRandom[2] : TreeRandom[2];
+    float4 merged = w.x * c0 + w.y * c1 + w.z * c2;
+    float lum = dot(RandomLuminance[k].rgb, gamma);
+    float3 lin = pow(max(0, gamma), 2.2);
+    return max(0, lum + (lin - lum) * merged.w) * merged.rgb;
+}
+
+float4 PlantPS(PlantOut i, bool front : SV_IsFrontFace) : SV_Target
+{
+    float4 c = PlantPicture.Sample(Tiled, i.Uv);
+    clip(c.a * PlantAlphaScalar(i.Kind) - 0.1);
+    float3 n = normalize(front ? i.Normal : -i.Normal);
+    float3 albedo = RandomColour(saturate(c.rgb), i.Kind, i.Weights) * PlantTint.rgb * (i.Kind > 2.5 ? BillboardTint.rgb : 1);
+    albedo *= saturate(PlantTint.w * (i.Occlusion - 1) + 1);
+    float3 V = normalize(Eye.xyz - i.World), L = Light.xyz;
+    float sun = SunSeen(i.World);
+    // the engine's diffuse: Lambert over pi; for leaves and grass its translucency: towards a flat brightness, and the
+    // light through the leaf from behind
+    float3 diffuse = saturate(dot(n, L)) / 3.14159265;
+    float translucent = i.Kind > 0.5 && i.Kind < 1.5 ? 0 : BillboardTint.w;
+    if (translucent > 0)
+    {
+        float scatter = (dot(L, n) + 1) * 0.5, back = (dot(L, -V) + 1) * 0.5, reduction = (dot(n, -V) + 1) * 0.5;
+        back *= back;
+        back *= back;
+        float gain = Translucency.w * reduction * lerp(scatter, back, Translucency.x);
+        diffuse = lerp(diffuse, Translucency.z * 0.96 * albedo, Translucency.y * translucent) + gain * translucent * albedo;
+    }
+    float ao = AoAt(i.Position), directAo = lerp(1, ao, AoSettings.w);
+    float f90 = i.Kind > 1.5 && i.Kind < 2.5 ? SpecularSettings.x : SpecularSettings.y;
+    float3 sunLight = GlobalLightColour(i.World) * sun;
+    float3 lit = albedo * (sunLight * diffuse * directAo + AmbientAt(n, sun) * ao)
+        + sunLight * SpecularAt(n, V, L, 0.04, 0.6, f90) * SpecularSettings.z * directAo;
+    return Screen(Fogged(lit, i.World), 1);
+}
+
+void PlantShadowPS(PlantOut i)
+{
+    clip(PlantPicture.Sample(Tiled, i.Uv).a * PlantAlphaScalar(i.Kind) - 0.1);
+}
+
+// ---- the ambient cube ----
+// The game lights with environment probes (cubemaps of the scene, made in the engine). Ours: the sky as it's seen
+// (its fog too) and the ground below the horizon, each direction's half of it averaged by the cosine, the sky scaled
+// and saturated by the remaster's IBL settings and kept under its brightest, the ground likewise.
+float4 AmbientPS(float4 position : SV_Position) : SV_Target
+{
+    int face = (int)position.x;
+    float3 axis = face == 0 ? float3(1, 0, 0) : face == 1 ? float3(-1, 0, 0) : face == 2 ? float3(0, 1, 0)
+        : face == 3 ? float3(0, -1, 0) : face == 4 ? float3(0, 0, 1) : float3(0, 0, -1);
+    float3 up = abs(axis.z) > 0.9 ? float3(1, 0, 0) : float3(0, 0, 1);
+    float3 across = normalize(cross(up, axis)), along = cross(axis, across);
+    // the ground's light: the sun on ground of an average colour, as seen from above
+    float3 ground = 0.18 * (LightColour.rgb * saturate(Light.z) / 3.14159265) * SkyIbl.z;
+    float3 sum = 0;
+    float weights = 0;
+    [loop] for (int a = 0; a < 8; a++)
+        [loop] for (int b = 0; b < 8; b++)
+        {
+            // a cosine-weighted spread of directions round the axis
+            float u = (a + 0.5) / 8, v = (b + 0.5) / 8;
+            float r = sqrt(u), phi = v * 6.2831853;
+            float3 dir = normalize(axis * sqrt(1 - u) + (across * cos(phi) + along * sin(phi)) * r);
+            float3 c;
+            if (dir.z >= 0)
+            {
+                // the probes see the sky at its own brightness, not the visible sky's extra scale
+                // the probes are made from the environment's own probe sky
+                c = ProbeSky(dir);
+            }
+            else
+            {
+                float l = dot(ground, float3(0.2126, 0.7152, 0.0722));
+                c = lerp(l, ground, SkyIbl.w) + SceneAdd.rgb;
+            }
+            sum += c;
+            weights += 1;
+        }
+    return float4(sum / weights, 1);
+}
+
+// ---- ambient occlusion ----
+// As the engine's HBAO+ (the environment's m_ssaoNV settings): round each pixel, from the depth already drawn, the
+// points within the radius in eight directions, how far each rises over the surface (less the bias), faded with
+// distance; the light left raised to the power.
+float3 WorldAtPixel(int2 pixel)
+{
+    float stored = DepthMap.Load(int3(pixel, 0));
+    float2 ndc = float2((pixel.x + 0.5) / Camera.z * 2 - 1, 1 - (pixel.y + 0.5) / Camera.w * 2);
+    float4 w = mul(float4(ndc, stored, 1), Unproject);
+    return w.xyz / w.w;
+}
+
+float AoPS(float4 position : SV_Position) : SV_Target
+{
+    int2 pixel = int2(position.xy);
+    float stored = DepthMap.Load(int3(pixel, 0));
+    if (stored >= 1) return 1;
+    float3 p = WorldAtPixel(pixel);
+    float3 dx1 = WorldAtPixel(pixel + int2(1, 0)) - p, dx2 = p - WorldAtPixel(pixel - int2(1, 0));
+    float3 dy1 = WorldAtPixel(pixel + int2(0, 1)) - p, dy2 = p - WorldAtPixel(pixel - int2(0, 1));
+    float3 dx = dot(dx1, dx1) < dot(dx2, dx2) ? dx1 : dx2, dy = dot(dy1, dy1) < dot(dy2, dy2) ? dy1 : dy2;
+    float3 n = normalize(cross(dy, dx));
+    if (dot(n, Eye.xyz - p) < 0) n = -n;
+    float depth = ViewDepth(stored);
+    // the radius in pixels at this depth (a 60 degree view)
+    float radius = AoSettings.x, pixels = radius * Camera.w * 0.5 / (0.57735 * depth);
+    if (pixels < 1) return 1;
+    float occlusion = 0;
+    [unroll] for (int d = 0; d < 8; d++)
+    {
+        float angle = d * 0.785398 + 0.39;
+        float2 step = float2(cos(angle), sin(angle)) * pixels / 4;
+        [unroll] for (int k = 1; k <= 4; k++)
+        {
+            int2 at = pixel + int2(step * k);
+            if (any(at < 0) || at.x >= (int)Camera.z || at.y >= (int)Camera.w) continue;
+            float3 v = WorldAtPixel(at) - p;
+            float dist2 = dot(v, v);
+            occlusion += saturate(dot(n, v) * rsqrt(max(dist2, 1e-6)) - AoSettings.y) * saturate(1 - dist2 / (radius * radius));
+        }
+    }
+    return pow(saturate(1 - occlusion / 32 * 2), AoSettings.z * 0.5);
+}
+";
+    // loc-ignore-end
+
+    /// <summary>Samples a patch spans, and the finest it's drawn with; coarser ones halve it, as far as 8.</summary>
+    private const int PatchSamples = 128;
+    private static readonly int[] Steps = [1, 2, 4, 8, 16];
+
+    private VertexShader? _vs, _skyVS, _waterVS;
+    private PixelShader? _ps, _skyPS, _waterPS;
+    private BlendState? _waterBlend;
+    private DepthStencilState? _noDepth, _depthTestOnly;
+    private ShaderResourceView? _waterLevel, _foam, _waves;
+    // REDkit's camera: 0.2 m to 7 km, a vertical field of view of 60 degrees
+    private const float NearPlane = 0.2f, FarPlane = 7000;
+    private bool _hasWater;
+    private float _waterTop;
+    private WorldLighting? _lighting;
+    private bool _reflections = true;
+    private float _hour = 12;
+    private readonly System.Diagnostics.Stopwatch _clock = System.Diagnostics.Stopwatch.StartNew();
+    private InputLayout? _layout;
+    private Buffer? _frame, _textureSettings, _grading, _sky, _lightColour, _foliage;
+    private Texture2D? _ambientCube;
+    private RenderTargetView? _ambientTarget;
+    private ShaderResourceView? _ambientView;
+    private PixelShader? _ambientPS, _aoPS;
+    private Texture2D? _ao;
+    private RenderTargetView? _aoTarget;
+    private ShaderResourceView? _aoView;
+
+    /// <summary>The ambient occlusion's texture, the size of the view.</summary>
+    private void EnsureAo()
+    {
+        if (_ao is { } ao && ao.Description.Width == PixelWidth && ao.Description.Height == PixelHeight) return;
+        _aoView?.Dispose();
+        _aoTarget?.Dispose();
+        _ao?.Dispose();
+        _ao = new Texture2D(Device, new Texture2DDescription
+        {
+            Width = Math.Max(1, PixelWidth), Height = Math.Max(1, PixelHeight), MipLevels = 1, ArraySize = 1, Format = DxgiFormat.R8_UNorm,
+            SampleDescription = new SharpDX.DXGI.SampleDescription(1, 0), Usage = ResourceUsage.Default,
+            BindFlags = BindFlags.RenderTarget | BindFlags.ShaderResource,
+        });
+        _aoTarget = new RenderTargetView(Device, _ao);
+        _aoView = new ShaderResourceView(Device, _ao);
+    }
+    private PixelShader? _postPS, _shadowPS;
+    private Texture2D? _shadowTexture;
+    private RenderTargetView? _shadowTarget;
+    private ShaderResourceView? _shadow;
+    private Vector3 _shadowFor;
+    private bool _shadowMade;
+    private ShaderResourceView? _balanceA, _balanceB;
+    private SamplerState? _sampler;
+    private RasterizerState? _raster;
+    private DepthStencilState? _depthState;
+    private readonly (Buffer Vertices, Buffer Indices, int Count)?[] _grids = new (Buffer, Buffer, int)?[Steps.Length];
+    private Buffer? _patches;
+    private ShaderResourceView? _heightMap, _colourMap, _controlMap, _diffuse, _normals;
+    private SamplerState? _tiled;
+
+    private WorldTerrain? _terrain;
+    private ushort[] _heights = [];
+    private int _side;
+    private float[,] _patchLow = new float[0, 0], _patchHigh = new float[0, 0];
+
+    private Vector3 _eye;
+    private float _yaw, _pitch = -0.35f;
+    private float _speed = 40;
+    private readonly HashSet<Key> _held = [];
+    private Point _lastMouse;
+    private bool _looking;
+
+    /// <summary>Raised as the camera moves: where it is and which way it looks (degrees from north, clockwise).</summary>
+    public event EventHandler<(Vector3 Eye, float Heading, float Speed)>? CameraMoved;
+
+    /// <summary>How many patches the last frame drew.</summary>
+    public int PatchesDrawn { get; private set; }
+
+    /// <summary>Whether it has terrain to show.</summary>
+    public bool HasTerrain => _terrain is not null;
+
+    public WorldView3D()
+    {
+        BackBrush = System.Windows.Media.Brushes.Black;
+        HighDynamicRange = true;
+    }
+
+    /// <summary>
+    /// The terrain to show: the whole world's heights, control map and colour map, rows from the north, as the 2D map
+    /// read them, and the textures painted with (the terrain material's diffuse and normal arrays) when they were found.
+    /// </summary>
+    public void ShowTerrain(WorldTerrainPictures pictures, (Core.Textures.TextureInfo Info, byte[] Pixels)? diffuse,
+        (Core.Textures.TextureInfo Info, byte[] Pixels)? normals)
+    {
+        EnsureDevice();
+        _terrain = pictures.Terrain;
+        _heights = pictures.Heights;
+        _side = pictures.Side;
+        _heightMap?.Dispose();
+        _colourMap?.Dispose();
+        _heightMap = Texture(_heights, _side, _side, DxgiFormat.R16_UNorm, 2);
+        // the shadows, a sample of the height map each, made when first drawn
+        _shadow?.Dispose();
+        _shadowTarget?.Dispose();
+        _shadowTexture?.Dispose();
+        _shadowTexture = new Texture2D(Device, new Texture2DDescription
+        {
+            Width = _side, Height = _side, MipLevels = 1, ArraySize = 1, Format = DxgiFormat.R8_UNorm,
+            SampleDescription = new SharpDX.DXGI.SampleDescription(1, 0), Usage = ResourceUsage.Default,
+            BindFlags = BindFlags.RenderTarget | BindFlags.ShaderResource,
+        });
+        _shadowTarget = new RenderTargetView(Device, _shadowTexture);
+        _shadow = new ShaderResourceView(Device, _shadowTexture);
+        _shadowMade = false;
+        _colourMap = Texture(pictures.Colour, _side, _side, DxgiFormat.B8G8R8A8_UNorm, 4);
+        _controlMap?.Dispose();
+        _diffuse?.Dispose();
+        _normals?.Dispose();
+        _controlMap = Integers(pictures.Control, _side);
+        // each texture's settings, val then val2, as the terrain shader's TextureSettings
+        var settings = new Vector4[64];
+        for (int i = 0; i < Math.Min(31, _terrain.TextureParams.Count); i++)
+            (settings[2 * i], settings[2 * i + 1]) = _terrain.TextureParams[i];
+        Context!.UpdateSubresource(settings, _textureSettings);
+        _diffuse = diffuse is { } d ? TextureArray(d.Info, d.Pixels) : null;
+        _normals = normals is { } n ? TextureArray(n.Info, n.Pixels) : null;
+        // each patch's lowest and highest point, to know when it's in view
+        int patches = Math.Max(1, _side / PatchSamples);
+        _patches?.Dispose();
+        _patches = new Buffer(Device, Utilities.SizeOf<Patch>() * patches * patches, ResourceUsage.Dynamic, BindFlags.VertexBuffer, CpuAccessFlags.Write,
+            ResourceOptionFlags.None, 0);
+        (_patchLow, _patchHigh) = (new float[patches, patches], new float[patches, patches]);
+        for (int py = 0; py < patches; py++)
+            for (int px = 0; px < patches; px++)
+            {
+                ushort low = ushort.MaxValue, high = 0;
+                for (int y = py * PatchSamples; y <= Math.Min(_side - 1, (py + 1) * PatchSamples); y++)
+                    for (int x = px * PatchSamples; x <= Math.Min(_side - 1, (px + 1) * PatchSamples); x++)
+                    {
+                        ushort h = _heights[y * _side + x];
+                        if (h < low) low = h;
+                        if (h > high) high = h;
+                    }
+                // patches counted from the south, as the world
+                _patchLow[patches - 1 - py, px] = _terrain.Metres(low);
+                _patchHigh[patches - 1 - py, px] = _terrain.Metres(high);
+            }
+        Invalidate();
+    }
+
+    /// <summary>The world's sky and light through the day.</summary>
+    public void SetLighting(WorldLighting? lighting)
+    {
+        _lighting = lighting;
+        Invalidate();
+    }
+
+    /// <summary>The hour shown, 0 to 24.</summary>
+    public float Hour
+    {
+        get => _hour;
+        set
+        {
+            _hour = ((value % 24) + 24) % 24;
+            Invalidate();
+        }
+    }
+
+    /// <summary>Whether the day goes by on its own, an hour every <see cref="SecondsAnHour"/> seconds.</summary>
+    public bool PlayingDay
+    {
+        get => _playing;
+        set
+        {
+            _playing = value;
+            Animating = value || _hasWater;
+        }
+    }
+    private bool _playing;
+
+    public float SecondsAnHour { get; set; } = 2;
+
+    /// <summary>Raised as the day goes by on its own, with the hour.</summary>
+    public event EventHandler<float>? HourChanged;
+
+    /// <summary>
+    /// The water: a level over the whole terrain, the engine's 0 except inside each water shape (a CWaterComponent's
+    /// outline, at its height), kept as a texture the water's grid reads its height from.
+    /// </summary>
+    public void SetWater(IEnumerable<(IReadOnlyList<Vector2> Outline, float Level)> shapes)
+    {
+        if (_terrain is not { } terrain) return;
+        EnsureDevice();
+        const int side = 1024;
+        float cell = terrain.Size / side;
+        var levels = new float[side * side];
+        foreach (var (outline, level) in shapes)
+        {
+            if (outline.Count < 3) continue;
+            float minX = outline.Min(p => p.X), maxX = outline.Max(p => p.X), minY = outline.Min(p => p.Y), maxY = outline.Max(p => p.Y);
+            int x0 = Math.Max(0, (int)((minX - terrain.Corner.X) / cell)), x1 = Math.Min(side - 1, (int)((maxX - terrain.Corner.X) / cell));
+            int y0 = Math.Max(0, (int)((minY - terrain.Corner.Y) / cell)), y1 = Math.Min(side - 1, (int)((maxY - terrain.Corner.Y) / cell));
+            for (int y = y0; y <= y1; y++)
+                for (int x = x0; x <= x1; x++)
+                    if (Inside(outline, new Vector2(terrain.Corner.X + (x + 0.5f) * cell, terrain.Corner.Y + (y + 0.5f) * cell)))
+                        // rows from the north, as the terrain's textures
+                        levels[(side - 1 - y) * side + x] = level;
+        }
+        _waterLevel?.Dispose();
+        var handle = GCHandle.Alloc(levels, GCHandleType.Pinned);
+        try
+        {
+            using var texture = new Texture2D(Device, new Texture2DDescription
+            {
+                Width = side, Height = side, MipLevels = 1, ArraySize = 1, Format = DxgiFormat.R32_Float,
+                SampleDescription = new SharpDX.DXGI.SampleDescription(1, 0), Usage = ResourceUsage.Immutable, BindFlags = BindFlags.ShaderResource,
+            }, new DataRectangle(handle.AddrOfPinnedObject(), side * 4));
+            _waterLevel = new ShaderResourceView(Device, texture);
+        }
+        finally { handle.Free(); }
+        _hasWater = true;
+        _waterTop = levels.Max();
+        // the shadows start from the water's surface, so they're made again
+        _shadowMade = false;
+        Animating = true;
+        Invalidate();
+    }
+
+    private static bool Inside(IReadOnlyList<Vector2> polygon, Vector2 point)
+    {
+        bool inside = false;
+        for (int i = 0, j = polygon.Count - 1; i < polygon.Count; j = i++)
+            if ((polygon[i].Y > point.Y) != (polygon[j].Y > point.Y)
+                && point.X < (polygon[j].X - polygon[i].X) * (point.Y - polygon[i].Y) / (polygon[j].Y - polygon[i].Y) + polygon[i].X)
+                inside = !inside;
+        return inside;
+    }
+
+    /// <summary>The game's foam loop (environment\water\global_ocean\ocean_control.texarray: 32 frames), as the texture cache keeps it.</summary>
+    public void SetFoam((Core.Textures.TextureInfo Info, byte[] Pixels)? foam)
+    {
+        EnsureDevice();
+        _foam?.Dispose();
+        _foam = foam is { } f ? TextureArray(f.Info, f.Pixels) : null;
+        Invalidate();
+    }
+
+    /// <summary>Whether the painted textures are shown (else the colour map alone).</summary>
+    public bool Painted => _diffuse is not null && _normals is not null;
+
+    /// <summary>The control map as whole numbers, read a sample at a time (no smoothing between two textures' numbers).</summary>
+    private ShaderResourceView Integers(ushort[] values, int side)
+    {
+        var handle = GCHandle.Alloc(values, GCHandleType.Pinned);
+        try
+        {
+            using var texture = new Texture2D(Device, new Texture2DDescription
+            {
+                Width = side, Height = side, MipLevels = 1, ArraySize = 1, Format = DxgiFormat.R16_UInt,
+                SampleDescription = new SharpDX.DXGI.SampleDescription(1, 0), Usage = ResourceUsage.Immutable, BindFlags = BindFlags.ShaderResource,
+            }, new DataRectangle(handle.AddrOfPinnedObject(), side * 2));
+            return new ShaderResourceView(Device, texture);
+        }
+        finally { handle.Free(); }
+    }
+
+    /// <summary>Puts the camera over a point of the world, looking north and down.</summary>
+    public void LookAt(Vector2 point)
+    {
+        float ground = GroundAt(point);
+        _eye = new Vector3(point.X, point.Y - 120, ground + 90);
+        (_yaw, _pitch) = (0, -0.5f);
+        Moved();
+    }
+
+    /// <summary>The ground's height at a point, from the heights read.</summary>
+    public float GroundAt(Vector2 point)
+    {
+        if (_terrain is not { } t || _side == 0) return 0;
+        float spacing = t.Size / _side;
+        int x = Math.Clamp((int)((point.X - t.Corner.X) / spacing), 0, _side - 1);
+        int y = Math.Clamp(_side - 1 - (int)((point.Y - t.Corner.Y) / spacing), 0, _side - 1);
+        return t.Metres(_heights[y * _side + x]);
+    }
+
+    private void Moved()
+    {
+        Invalidate();
+        CameraMoved?.Invoke(this, (_eye, (_yaw * 180 / MathF.PI % 360 + 360) % 360, _speed));
+    }
+
+    // ---- set up ----
+
+    protected override void Start()
+    {
+        using var vsCode = Compile(Shaders, "TerrainVS", "vs_4_0");
+        using var psCode = Compile(Shaders, "TerrainPS", "ps_4_0");
+        _vs = new VertexShader(Device, vsCode);
+        _ps = new PixelShader(Device, psCode);
+        using (var code = Compile(Shaders, "SkyVS", "vs_4_0")) _skyVS = new VertexShader(Device, code);
+        using (var code = Compile(Shaders, "SkyPS", "ps_4_0")) _skyPS = new PixelShader(Device, code);
+        using (var code = Compile(Shaders, "WaterVS", "vs_4_0")) _waterVS = new VertexShader(Device, code);
+        using (var code = Compile(Shaders, "WaterPS", "ps_4_0")) _waterPS = new PixelShader(Device, code);
+        using (var code = Compile(Shaders, "PostPS", "ps_4_0")) _postPS = new PixelShader(Device, code);
+        using (var code = Compile(Shaders, "ShadowPS", "ps_4_0")) _shadowPS = new PixelShader(Device, code);
+        StartPlants();
+        StartEnvironment();
+        _adaptBuffer = new Buffer(Device, 16, ResourceUsage.Default, BindFlags.ConstantBuffer, CpuAccessFlags.None, ResourceOptionFlags.None, 0);
+        var blend = new BlendStateDescription();
+        blend.RenderTarget[0] = new RenderTargetBlendDescription(true, BlendOption.SourceAlpha, BlendOption.InverseSourceAlpha, BlendOperation.Add,
+            BlendOption.Zero, BlendOption.One, BlendOperation.Add, ColorWriteMaskFlags.All);
+        _waterBlend = new BlendState(Device, blend);
+        _noDepth = new DepthStencilState(Device, new DepthStencilStateDescription { IsDepthEnabled = false, DepthWriteMask = DepthWriteMask.Zero });
+        _depthTestOnly = new DepthStencilState(Device, new DepthStencilStateDescription
+        {
+            IsDepthEnabled = true, DepthWriteMask = DepthWriteMask.Zero, DepthComparison = Comparison.Less,
+        });
+        _layout = new InputLayout(Device, vsCode, [
+            new InputElement("TEXCOORD", 0, DxgiFormat.R32G32_Float, 0, 0, InputClassification.PerVertexData, 0),
+            new InputElement("TEXCOORD", 1, DxgiFormat.R32_Float, 8, 0, InputClassification.PerVertexData, 0),
+            new InputElement("PATCH", 0, DxgiFormat.R32G32B32A32_Float, 0, 1, InputClassification.PerInstanceData, 1)]);
+        _textureSettings = new Buffer(Device, 64 * 16, ResourceUsage.Default, BindFlags.ConstantBuffer, CpuAccessFlags.None, ResourceOptionFlags.None, 0);
+        _frame = new Buffer(Device, Utilities.SizeOf<Frame>(), ResourceUsage.Default, BindFlags.ConstantBuffer, CpuAccessFlags.None, ResourceOptionFlags.None, 0);
+        _grading = new Buffer(Device, Utilities.SizeOf<Grading>(), ResourceUsage.Default, BindFlags.ConstantBuffer, CpuAccessFlags.None, ResourceOptionFlags.None, 0);
+        _sky = new Buffer(Device, Utilities.SizeOf<Sky>(), ResourceUsage.Default, BindFlags.ConstantBuffer, CpuAccessFlags.None, ResourceOptionFlags.None, 0);
+        _lightColour = new Buffer(Device, 48, ResourceUsage.Default, BindFlags.ConstantBuffer, CpuAccessFlags.None, ResourceOptionFlags.None, 0);
+        _foliage = new Buffer(Device, 16 * 24, ResourceUsage.Default, BindFlags.ConstantBuffer, CpuAccessFlags.None, ResourceOptionFlags.None, 0);
+        _ambientCube = new Texture2D(Device, new Texture2DDescription
+        {
+            Width = 6, Height = 1, MipLevels = 1, ArraySize = 1, Format = DxgiFormat.R16G16B16A16_Float,
+            SampleDescription = new SharpDX.DXGI.SampleDescription(1, 0), Usage = ResourceUsage.Default,
+            BindFlags = BindFlags.RenderTarget | BindFlags.ShaderResource,
+        });
+        _ambientTarget = new RenderTargetView(Device, _ambientCube);
+        _ambientView = new ShaderResourceView(Device, _ambientCube);
+        using (var code = Compile(Shaders, "AmbientPS", "ps_4_0")) _ambientPS = new PixelShader(Device, code);
+        using (var code = Compile(Shaders, "AoPS", "ps_4_0")) _aoPS = new PixelShader(Device, code);
+        _sampler = new SamplerState(Device, new SamplerStateDescription
+        {
+            Filter = Filter.MinMagMipLinear, AddressU = TextureAddressMode.Clamp, AddressV = TextureAddressMode.Clamp,
+            AddressW = TextureAddressMode.Clamp, MaximumLod = float.MaxValue,
+        });
+        _tiled = new SamplerState(Device, new SamplerStateDescription
+        {
+            Filter = Filter.Anisotropic, MaximumAnisotropy = 8, AddressU = TextureAddressMode.Wrap, AddressV = TextureAddressMode.Wrap,
+            AddressW = TextureAddressMode.Clamp, MaximumLod = float.MaxValue,
+        });
+        _raster = new RasterizerState(Device, new RasterizerStateDescription { CullMode = CullMode.None, FillMode = FillMode.Solid, IsDepthClipEnabled = true });
+        _depthState = new DepthStencilState(Device, new DepthStencilStateDescription
+        {
+            IsDepthEnabled = true, DepthWriteMask = DepthWriteMask.All, DepthComparison = Comparison.Less,
+        });
+        for (int i = 0; i < Steps.Length; i++) _grids[i] = Grid(PatchSamples / Steps[i]);
+        _waves = Texture(WaveMap(256), 256, 256, DxgiFormat.R8G8B8A8_UNorm, 4);
+    }
+
+    /// <summary>
+    /// A tileable sea's slopes (R, G: the slope across and up, 0.5 flat), made from a few hundred waves whose
+    /// wavelengths fit the tile, each as tall as a wind-driven sea's spectrum gives it (Phillips', as the game's own wave
+    /// simulation uses), with random phases.
+    /// </summary>
+    private static byte[] WaveMap(int size)
+    {
+        var random = new Random(1764);
+        var waves = new List<(float Kx, float Ky, float Amplitude, float Phase)>();
+        var wind = Vector2.Normalize(new Vector2(0.8f, 0.6f));
+        for (int i = -20; i <= 20; i++)
+            for (int j = -20; j <= 20; j++)
+            {
+                float k = MathF.Sqrt(i * i + j * j);
+                if (k < 1 || k > 20) continue;
+                float along = Vector2.Dot(new Vector2(i, j) / k, wind);
+                // long waves along the wind, few short ones, none against it
+                float energy = MathF.Exp(-1 / (k * k * 0.02f)) / (k * k * k * k) * (along * along * 0.8f + 0.2f);
+                waves.Add((i * MathF.Tau, j * MathF.Tau, MathF.Sqrt(energy), (float)random.NextDouble() * MathF.Tau));
+            }
+        var slopes = new float[size * size * 2];
+        Parallel.For(0, size, y =>
+        {
+            for (int x = 0; x < size; x++)
+            {
+                float u = (float)x / size, v = (float)y / size, sx = 0, sy = 0;
+                foreach (var (kx, ky, amplitude, phase) in waves)
+                {
+                    float c = MathF.Cos(kx * u + ky * v + phase) * amplitude;
+                    sx += kx * c;
+                    sy += ky * c;
+                }
+                slopes[(y * size + x) * 2] = sx;
+                slopes[(y * size + x) * 2 + 1] = sy;
+            }
+        });
+        float most = slopes.Max(Math.Abs);
+        var pixels = new byte[size * size * 4];
+        for (int i = 0; i < size * size; i++)
+        {
+            pixels[i * 4] = (byte)Math.Clamp(128 + slopes[i * 2] / most * 127, 0, 255);
+            pixels[i * 4 + 1] = (byte)Math.Clamp(128 + slopes[i * 2 + 1] / most * 127, 0, 255);
+            pixels[i * 4 + 3] = 255;
+        }
+        return pixels;
+    }
+
+    /// <summary>
+    /// A flat grid of <paramref name="cells"/> squares a side, from 0 to 1, with a skirt round it: a ring of points
+    /// the same as the edge's but hanging down, so a coarser neighbour's edge can't leave a gap to see through.
+    /// </summary>
+    private (Buffer, Buffer, int) Grid(int cells)
+    {
+        int n = cells + 1;
+        var points = new List<GridPoint>();
+        for (int y = 0; y < n; y++)
+            for (int x = 0; x < n; x++)
+                points.Add(new GridPoint { U = (float)x / cells, V = (float)y / cells });
+        var indices = new List<int>();
+        for (int y = 0; y < cells; y++)
+            for (int x = 0; x < cells; x++)
+            {
+                int a = y * n + x;
+                indices.AddRange([a, a + 1, a + n, a + 1, a + n + 1, a + n]);
+            }
+        // the skirt: each edge's points again, hanging, joined to the edge
+        void Edge(Func<int, int> at)
+        {
+            int first = points.Count;
+            for (int i = 0; i < n; i++)
+            {
+                var p = points[at(i)];
+                points.Add(p with { Skirt = 1 });
+            }
+            for (int i = 0; i < cells; i++)
+                indices.AddRange([at(i), at(i + 1), first + i, at(i + 1), first + i + 1, first + i]);
+        }
+        Edge(i => i);
+        Edge(i => (n - 1) * n + i);
+        Edge(i => i * n);
+        Edge(i => i * n + n - 1);
+        return (Buffer.Create(Device, BindFlags.VertexBuffer, points.ToArray()), Buffer.Create(Device, BindFlags.IndexBuffer, indices.ToArray()), indices.Count);
+    }
+
+    // ---- drawing ----
+
+    /// <summary>How bright the sky is drawn against the ground, at the same exposure: the environment's sky colours are kept far dimmer than its light.</summary>
+
+    /// <summary>How wavy the water is for a weather's wind (its windScale): nearly a mirror when it's still, full waves from 0.3 up.</summary>
+    private static float Waviness(float wind) => 0.12f + 0.88f * Math.Clamp(wind / 0.3f, 0, 1);
+
+    /// <summary>How much brighter the fog's colours are than the light on the ground (they're on the sky's scale).</summary>
+    public float FogScale { get; set; } = 4;
+
+    /// <summary>
+    /// The scale from the light as this view adds it up (the environment's colours made linear, times their strengths)
+    /// to the engine's units, which the tone mapping's exposure and luminance limits are in.
+    /// </summary>
+    public float Units { get; set; } = 0.5f;
+
+    protected override void Draw(double seconds)
+    {
+        Fly((float)seconds);
+        AdvanceEnvironment((float)seconds);
+        if (_playing)
+        {
+            Hour = _hour + (float)seconds / Math.Max(0.05f, SecondsAnHour);
+            HourChanged?.Invoke(this, _hour);
+        }
+        var c = Context!;
+        c.ClearRenderTargetView(TargetView, new RawColor4(0, 0, 0, 1));
+        if (HdrView is not null) c.ClearRenderTargetView(HdrView, new RawColor4(0, 0, 0, 1));
+        c.ClearDepthStencilView(DepthView, DepthStencilClearFlags.Depth, 1, 0);
+        if (_terrain is not { } terrain || _heightMap is null) return;
+
+        float aspect = PixelWidth / (float)Math.Max(1, PixelHeight);
+        var view = Matrix4x4.CreateLookAt(_eye, _eye + Forward(), Vector3.UnitZ);
+        var projection = Matrix4x4.CreatePerspectiveFieldOfView(60 * MathF.PI / 180, aspect, NearPlane, FarPlane);
+        var viewProjection = view * projection;
+        Matrix4x4.Invert(viewProjection, out var unproject);
+        float spacing = terrain.Size / _side;
+        var light = (_lighting ?? Fallback).At(_hour);
+        static Vector4 V(Vector3 v, float w = 0) => new(v, w);
+        var frame = new Frame
+        {
+            ViewProjection = viewProjection,
+            Unproject = unproject,
+            Eye = new Vector4(_eye, (float)_clock.Elapsed.TotalSeconds),
+            Ground = new Vector4(terrain.Corner.X, terrain.Corner.Y, terrain.Size, _side),
+            Heights = new Vector4(terrain.Lowest, terrain.Highest - terrain.Lowest, spacing, 0),
+            Paint = new Vector4(_reflections ? 1 : 0, 0, 0, Painted ? 1 : 0),
+            Light = V(light.LightDirection, Units),
+            LightColour = V(light.LightColour),
+            Ambient = V(light.Ambient),
+            SunDir = V(light.SunDirection, light.SunGlowSize),
+            SkyZenith = V(light.SkyZenith, light.SkyBrightness),
+            SkyHorizon = V(light.SkyHorizon),
+            SunGlow = V(light.SunGlow),
+            FogFront = V(light.FogFront, AllowGlobalFog ? light.FogDensity : 0),
+            FogMiddle = V(light.FogMiddle, light.FogAppear),
+            FogBack = V(light.FogBack, light.FogVerticalDensity),
+            FogHeight = new Vector4(light.FogVerticalOffset, light.DayAmount, light.FogVerticalFront, light.FogVerticalBack),
+            Water = V(light.WaterColour, light.WaterFog),
+            Camera = new Vector4(NearPlane, FarPlane, PixelWidth, PixelHeight),
+            AerialFront = V(light.AerialFront, light.AerialExponent),
+            AerialMiddle = V(light.AerialMiddle, light.FogExponent),
+            AerialBack = V(light.AerialBack, light.FogAppearRange),
+            FogCustom = V(light.FogCustom, light.FogCustomAmount),
+            FogCustomShape = new Vector4(light.FogCustomColourStart, light.FogCustomColourRange, light.FogCustomAmountStart, light.FogCustomAmountRange),
+            FogLimits = new Vector4(light.FogDistanceLimit, light.FogSkyDensity, FogScale, Waviness((_lighting ?? Fallback).Wind)),
+        };
+        c.UpdateSubresource(ref frame, _frame);
+        c.VertexShader.SetConstantBuffer(0, _frame);
+        var grade = (_lighting ?? Fallback).Grading(_hour);
+        bool maps = grade.BalanceMaps && _balanceA is not null && _balanceB is not null;
+        var grading = new Grading
+        {
+            Exposure = new Vector4(grade.ExposureScale, grade.LuminanceShape, grade.LuminanceMin, grade.LuminanceMax),
+            Curve = new Vector4(grade.GlobalContrast, grade.ShoulderPower, grade.ToePower, grade.BlackLift),
+            Slope = V(grade.Slope, grade.Saturation),
+            Power = V(grade.Power, grade.MidGray),
+            Balance = new Vector4(maps && AllowColorBalance ? grade.BalanceMapAmount : 0, Math.Clamp(grade.BalanceMapLerp, 0, 1), grade.LevelsShadows, grade.LevelsMidtones),
+            Balance2 = new Vector4(grade.LevelsHighlights, grade.ParametricBalance && AllowColorBalance ? 1 : 0, grade.PostBrightness,
+                MathF.Floor(MathF.Log2(Math.Max(PixelWidth, PixelHeight)))),
+            Low = grade.Low, Mid = grade.Mid, High = grade.High,
+            Midtones = new Vector4(grade.MidtoneRangeMin, grade.MidtoneRangeMax, grade.MidtoneMarginMin, grade.MidtoneMarginMax),
+            SkyLuminance = new Vector4(grade.SkyLuminance, grade.SkyLuminanceAmount, 0, 0),
+            Vignette = new Vector4(grade.VignetteWeights, AllowVignette ? grade.VignetteOpacity : 0),
+            VignetteColour = new Vector4(grade.VignetteColour, 0),
+        };
+        c.UpdateSubresource(ref grading, _grading);
+        var skyAt = (_lighting ?? Fallback).Sky(_hour);
+        var sky = new Sky
+        {
+            Top = V(skyAt.Top, skyAt.VisibleScale), Horizon = V(skyAt.Horizon),
+            // the sky's own vertical fog density towards and away from the light ride in the horizon colours' w
+            SunHorizon = V(skyAt.SunHorizon, skyAt.FogVerticalFront), SunBackHorizon = V(skyAt.SunBackHorizon, skyAt.FogVerticalBack),
+            SunSky = V(skyAt.SunSky), MoonHorizon = V(skyAt.MoonHorizon), MoonBackHorizon = V(skyAt.MoonBackHorizon), MoonSky = V(skyAt.MoonSky, skyAt.ReflectedSky),
+            SunAt = V(skyAt.SunDirection, skyAt.SunSize), MoonAt = V(skyAt.MoonDirection, skyAt.MoonSize),
+            SkyScale = new Vector4(skyAt.SunInfluence, skyAt.MoonInfluence, skyAt.Brightness * skyAt.VisibleScale, skyAt.HorizonAttenuation),
+        };
+        c.UpdateSubresource(ref sky, _sky);
+        c.PixelShader.SetConstantBuffers(0, _frame, _textureSettings, _grading, _sky);
+        var near = (_lighting ?? Fallback).GlobalLightColour(_hour);
+        c.UpdateSubresource(new[] { V(near.Side), V(near.OppositeSide), near.Parameters }, _lightColour);
+        c.PixelShader.SetConstantBuffer(7, _lightColour);
+        var foliage = (_lighting ?? Fallback).Foliage(_hour);
+        var alpha = (_lighting ?? Fallback).AlphaScalars;
+        var foliageData = new Vector4[24];
+        for (int k = 0; k < 3; k++)
+        {
+            foliageData[k] = foliage.Trees[k];
+            foliageData[3 + k] = foliage.Branches[k];
+            foliageData[6 + k] = foliage.Grass[k];
+        }
+        foliageData[9] = V(foliage.TreesLuminance);
+        foliageData[10] = V(foliage.BranchesLuminance);
+        foliageData[11] = V(foliage.GrassLuminance);
+        foliageData[12] = V(foliage.Diffuse, foliage.OcclusionScale);
+        foliageData[13] = V(foliage.BillboardColour, foliage.TranslucencyScale);
+        foliageData[14] = foliage.Translucency;
+        foliageData[15] = new Vector4(alpha, 0);
+        foliageData[16] = new Vector4(foliage.AmbientLight, foliage.AmbientShadow, Units, foliage.MaxSkyBrightness);
+        foliageData[17] = V(foliage.AmbientColour);
+        foliageData[18] = new Vector4(foliage.SkyBrightness, foliage.SkySaturation, foliage.GroundBrightness, foliage.GroundSaturation);
+        var probes = (_lighting ?? Fallback).Probes(_hour);
+        foliageData[19] = V(probes.SkyTop, probes.SkyShape);
+        foliageData[20] = V(probes.SkyHorizon, probes.ReflectionLight);
+        foliageData[21] = V(probes.SceneAdd, probes.ReflectionShadow);
+        foliageData[22] = new Vector4(probes.AoRadius, probes.AoBias, probes.AoPower, AllowSsao ? probes.AoNonAmbient : 0);
+        foliageData[23] = new Vector4(probes.F90Grass, probes.F90Trees, probes.TreeSpecular, 0);
+        c.UpdateSubresource(foliageData, _foliage);
+        c.PixelShader.SetConstantBuffer(8, _foliage);
+        // the ambient cube for this light, before anything reads it
+        c.PixelShader.SetShaderResource(17, null);
+        c.OutputMerger.SetRenderTargets((DepthStencilView?)null, _ambientTarget);
+        c.Rasterizer.SetViewport(0, 0, 6, 1);
+        c.Rasterizer.State = _raster;
+        c.OutputMerger.SetDepthStencilState(_noDepth);
+        c.OutputMerger.SetBlendState(null);
+        c.InputAssembler.InputLayout = null;
+        c.InputAssembler.PrimitiveTopology = PrimitiveTopology.TriangleList;
+        c.VertexShader.Set(_skyVS);
+        c.PixelShader.Set(_ambientPS);
+        c.Draw(3, 0);
+        c.Rasterizer.SetViewport(0, 0, PixelWidth, PixelHeight);
+        c.OutputMerger.SetRenderTargets(DepthView, HdrView);
+        c.PixelShader.SetShaderResource(17, _ambientView);
+        // the terrain's shadows for where the light is now, made again only when it has moved
+        if (_shadowTarget is not null && (!_shadowMade || Vector3.DistanceSquared(_shadowFor, light.LightDirection) > 1e-8f))
+        {
+            _shadowFor = light.LightDirection;
+            _shadowMade = true;
+            c.PixelShader.SetShaderResource(13, null);
+            c.OutputMerger.SetRenderTargets((DepthStencilView?)null, _shadowTarget);
+            c.Rasterizer.SetViewport(0, 0, _side, _side);
+            c.Rasterizer.State = _raster;
+            c.OutputMerger.SetDepthStencilState(_noDepth);
+            c.OutputMerger.SetBlendState(null);
+            c.InputAssembler.InputLayout = null;
+            c.InputAssembler.PrimitiveTopology = PrimitiveTopology.TriangleList;
+            c.PixelShader.SetShaderResources(0, _heightMap, null, null, null, null, _waterLevel);
+            c.PixelShader.SetSamplers(0, _sampler, _tiled);
+            c.VertexShader.Set(_skyVS);
+            c.PixelShader.Set(_shadowPS);
+            c.Draw(3, 0);
+            c.Rasterizer.SetViewport(0, 0, PixelWidth, PixelHeight);
+            c.OutputMerger.SetRenderTargets(DepthView, HdrView);
+        }
+        c.PixelShader.SetShaderResource(13, _shadow);
+        PreparePlants(light.LightDirection, view);
+        SetTrajectory();
+        c.VertexShader.SetShaderResources(0, _heightMap, null, null, null, null, _waterLevel);
+        c.VertexShader.SetSampler(0, _sampler);
+        c.PixelShader.SetShaderResources(0, _heightMap, _colourMap, _controlMap, _diffuse, _normals, _waterLevel);
+        c.PixelShader.SetSamplers(0, _sampler, _tiled);
+        c.Rasterizer.State = _raster;
+
+        // the sky behind everything
+        c.OutputMerger.SetDepthStencilState(_noDepth);
+        c.OutputMerger.SetBlendState(null);
+        c.InputAssembler.InputLayout = null;
+        c.InputAssembler.PrimitiveTopology = PrimitiveTopology.TriangleList;
+        c.VertexShader.Set(_skyVS);
+        c.PixelShader.Set(_skyPS);
+        c.Draw(3, 0);
+
+        // the patches in view, each as fine as its distance asks
+        var planes = Frustum(viewProjection);
+        int count = _patchLow.GetLength(0);
+        float size = PatchSamples * spacing;
+        var byStep = new List<Patch>[Steps.Length];
+        for (int i = 0; i < Steps.Length; i++) byStep[i] = [];
+        var watery = new List<Patch>();
+        for (int py = 0; py < count; py++)
+            for (int px = 0; px < count; px++)
+            {
+                var min = new Vector3(terrain.Corner.X + px * size, terrain.Corner.Y + py * size, _patchLow[py, px] - 8);
+                var max = new Vector3(min.X + size, min.Y + size, Math.Max(_patchHigh[py, px], _hasWater ? _waterTop : float.MinValue));
+                if (!InView(planes, min, max)) continue;
+                float distance = Vector3.Distance(_eye, Vector3.Clamp(_eye, min, max));
+                int step = distance < 120 ? 0 : distance < 260 ? 1 : distance < 600 ? 2 : distance < 1400 ? 3 : 4;
+                // skirts a little deeper for coarser patches, whose edges stray further from their neighbours'
+                byStep[step].Add(new Patch { X = min.X, Y = min.Y, Size = size, Skirt = 2 + 4 * step });
+                // water only where the ground dips below the highest water level
+                if (_hasWater && _patchLow[py, px] < _waterTop) watery.Add(new Patch { X = min.X, Y = min.Y, Size = size });
+            }
+
+        c.OutputMerger.SetDepthStencilState(_depthState);
+        // the depth of what's in view first (the ground and the plants), for the ambient occlusion, then cleared
+        c.PixelShader.SetShaderResource(18, null);
+        EnsureAo();
+        if (AllowSsao && _aoTarget is not null)
+        {
+            c.OutputMerger.SetRenderTargets(DepthView, (RenderTargetView?)null);
+            c.OutputMerger.SetDepthStencilState(null);
+            c.InputAssembler.InputLayout = _layout;
+            c.VertexShader.Set(_vs);
+            c.PixelShader.Set(null);
+            for (int i = 0; i < Steps.Length; i++)
+                if (byStep[i].Count > 0 && _grids[i] is { } depthGrid) DrawPatches(depthGrid, byStep[i]);
+            DrawPlantsDepth(planes);
+            c.OutputMerger.SetRenderTargets((DepthStencilView?)null, _aoTarget);
+            c.OutputMerger.SetDepthStencilState(_noDepth);
+            c.InputAssembler.InputLayout = null;
+            c.InputAssembler.PrimitiveTopology = PrimitiveTopology.TriangleList;
+            c.VertexShader.Set(_skyVS);
+            c.PixelShader.Set(_aoPS);
+            c.PixelShader.SetShaderResource(6, DepthTexture);
+            c.Draw(3, 0);
+            c.PixelShader.SetShaderResource(6, null);
+            c.ClearDepthStencilView(DepthView, DepthStencilClearFlags.Depth, 1, 0);
+            c.OutputMerger.SetRenderTargets(DepthView, HdrView);
+            c.OutputMerger.SetDepthStencilState(null);
+        }
+        else if (_aoTarget is not null) c.ClearRenderTargetView(_aoTarget, new RawColor4(1, 1, 1, 1));
+        c.PixelShader.SetShaderResource(18, _aoView);
+        c.InputAssembler.InputLayout = _layout;
+        c.InputAssembler.PrimitiveTopology = PrimitiveTopology.TriangleList;
+        c.VertexShader.Set(_vs);
+        c.PixelShader.Set(_ps);
+        PatchesDrawn = 0;
+        for (int i = 0; i < Steps.Length; i++)
+            if (byStep[i].Count > 0 && _grids[i] is { } grid)
+            {
+                DrawPatches(grid, byStep[i]);
+                PatchesDrawn += byStep[i].Count;
+            }
+
+        // the trees, bushes and grass
+        DrawPlants(planes);
+        c.InputAssembler.InputLayout = _layout;
+        c.Rasterizer.State = _raster;
+
+        // the water over the ground, seen through where it's shallow
+        if (AllowWaterShader && watery.Count > 0 && _grids[2] is { } waterGrid)
+        {
+            CopyScene();
+            c.OutputMerger.SetRenderTargets(ReadOnlyDepthView, HdrView);
+            c.OutputMerger.SetDepthStencilState(_depthTestOnly);
+            c.OutputMerger.SetBlendState(null);
+            c.PixelShader.SetShaderResources(6, DepthTexture, SceneTexture, _foam, _waves);
+            c.VertexShader.Set(_waterVS);
+            c.PixelShader.Set(_waterPS);
+            DrawPatches(waterGrid, watery);
+            // let go of the depth buffer as a texture, so the next frame can draw into it
+            c.PixelShader.SetShaderResources(6, null, null, null, null);
+        }
+
+        // the scene brought to the screen: its average for the eye, then the tone mapping and grading
+        c.OutputMerger.SetRenderTargets((DepthStencilView?)null, TargetView);
+        AverageHdr();
+        c.OutputMerger.SetDepthStencilState(_noDepth);
+        c.OutputMerger.SetBlendState(null);
+        c.InputAssembler.InputLayout = null;
+        c.InputAssembler.PrimitiveTopology = PrimitiveTopology.TriangleList;
+        var adapted = Adapt((float)seconds, !_adaptedOnce);
+        _adaptedOnce = true;
+        c.VertexShader.Set(_skyVS);
+        c.PixelShader.Set(_postPS);
+        c.PixelShader.SetShaderResources(10, HdrTexture, _balanceA, _balanceB);
+        c.PixelShader.SetShaderResource(16, adapted);
+        c.Draw(3, 0);
+        c.PixelShader.SetShaderResources(10, null, null, null);
+        c.PixelShader.SetShaderResource(16, null);
+        // keep drawing while the eye adapts, the day runs or the weather changes
+        Animating = _playing || _hasWater || !FakeDayCycle || !WeatherPaused || !InstantAdaptation || _lighting?.PreviousWeather is not null;
+    }
+
+    /// <summary>The environment's two balance maps (colour lookup pictures, 8 x 8 tiles of 64 x 64), or null for none.</summary>
+    public void SetBalanceMaps((Core.Textures.TextureInfo Info, byte[] Pixels)? first, (Core.Textures.TextureInfo Info, byte[] Pixels)? second)
+    {
+        EnsureDevice();
+        _balanceA?.Dispose();
+        _balanceB?.Dispose();
+        _balanceA = first is { } a ? TextureArray(a.Info, a.Pixels) : null;
+        // with one map named, it's both ends of the mix
+        _balanceB = (second ?? first) is { } b ? TextureArray(b.Info, b.Pixels) : null;
+        Invalidate();
+    }
+
+    private void DrawPatches((Buffer Vertices, Buffer Indices, int Count) grid, List<Patch> patches)
+    {
+        var c = Context!;
+        c.MapSubresource(_patches, MapMode.WriteDiscard, MapFlags.None, out var stream);
+        stream.WriteRange(patches.ToArray());
+        c.UnmapSubresource(_patches, 0);
+        c.InputAssembler.SetVertexBuffers(0, new VertexBufferBinding(grid.Vertices, Utilities.SizeOf<GridPoint>(), 0),
+            new VertexBufferBinding(_patches, Utilities.SizeOf<Patch>(), 0));
+        c.InputAssembler.SetIndexBuffer(grid.Indices, DxgiFormat.R32_UInt, 0);
+        c.DrawIndexedInstanced(grid.Count, patches.Count, 0, 0, 0);
+    }
+
+    /// <summary>The light when the world's lighting isn't known: the engine's defaults, a day like any other.</summary>
+    private static readonly WorldLighting Fallback = WorldLighting.Default;
+
+    private Vector3 Forward() => new(MathF.Sin(_yaw) * MathF.Cos(_pitch), MathF.Cos(_yaw) * MathF.Cos(_pitch), MathF.Sin(_pitch));
+
+    /// <summary>The six planes of what the camera sees, pointing in.</summary>
+    private static Vector4[] Frustum(Matrix4x4 m) =>
+    [
+        Vector4.Normalize(new Vector4(m.M14 + m.M11, m.M24 + m.M21, m.M34 + m.M31, m.M44 + m.M41)),
+        Vector4.Normalize(new Vector4(m.M14 - m.M11, m.M24 - m.M21, m.M34 - m.M31, m.M44 - m.M41)),
+        Vector4.Normalize(new Vector4(m.M14 + m.M12, m.M24 + m.M22, m.M34 + m.M32, m.M44 + m.M42)),
+        Vector4.Normalize(new Vector4(m.M14 - m.M12, m.M24 - m.M22, m.M34 - m.M32, m.M44 - m.M42)),
+        Vector4.Normalize(new Vector4(m.M13, m.M23, m.M33, m.M43)),
+        Vector4.Normalize(new Vector4(m.M14 - m.M13, m.M24 - m.M23, m.M34 - m.M33, m.M44 - m.M43)),
+    ];
+
+    private static bool InView(Vector4[] planes, Vector3 min, Vector3 max)
+    {
+        foreach (var p in planes)
+        {
+            // the box's corner furthest along the plane's normal
+            var far = new Vector3(p.X >= 0 ? max.X : min.X, p.Y >= 0 ? max.Y : min.Y, p.Z >= 0 ? max.Z : min.Z);
+            if (p.X * far.X + p.Y * far.Y + p.Z * far.Z + p.W < 0) return false;
+        }
+        return true;
+    }
+
+    // ---- moving ----
+
+    /// <summary>Moves the camera by the keys held, never below the ground.</summary>
+    private void Fly(float seconds)
+    {
+        if (_held.Count == 0) return;
+        float speed = _speed * (_held.Contains(Key.LeftShift) || _held.Contains(Key.RightShift) ? 4 : 1)
+            * (_held.Contains(Key.LeftCtrl) || _held.Contains(Key.RightCtrl) ? 0.25f : 1);
+        var forward = Forward();
+        var right = Vector3.Normalize(new Vector3(MathF.Cos(_yaw), -MathF.Sin(_yaw), 0));
+        var move = Vector3.Zero;
+        if (_held.Contains(Key.W) || _held.Contains(Key.Up)) move += forward;
+        if (_held.Contains(Key.S) || _held.Contains(Key.Down)) move -= forward;
+        if (_held.Contains(Key.D) || _held.Contains(Key.Right)) move += right;
+        if (_held.Contains(Key.A) || _held.Contains(Key.Left)) move -= right;
+        if (_held.Contains(Key.E) || _held.Contains(Key.Space)) move += Vector3.UnitZ;
+        if (_held.Contains(Key.Q) || _held.Contains(Key.C)) move -= Vector3.UnitZ;
+        if (move == Vector3.Zero) return;
+        _eye += Vector3.Normalize(move) * speed * seconds;
+        KeepAboveGround();
+        Moved();
+    }
+
+    private void KeepAboveGround()
+    {
+        float ground = GroundAt(new Vector2(_eye.X, _eye.Y)) + 1.7f;
+        if (_eye.Z < ground) _eye.Z = ground;
+    }
+
+    /// <summary>
+    /// The camera as REDkit's Copy Camera View writes it: [[x y z w|pitch yaw roll]], degrees, REDkit's yaw turning
+    /// anticlockwise from north where this view's turns clockwise.
+    /// </summary>
+    public string CameraText => string.Create(System.Globalization.CultureInfo.InvariantCulture,
+        $"[[{_eye.X:0.###} {_eye.Y:0.###} {_eye.Z:0.###} 1|{_pitch * 180 / MathF.PI:0.####} {-_yaw * 180 / MathF.PI:0.####} 0]]");
+
+    /// <summary>Puts the camera where a REDkit camera view says ([[x y z w|pitch yaw roll]]); false when the text isn't one.</summary>
+    public bool PasteCamera(string text)
+    {
+        var m = System.Text.RegularExpressions.Regex.Match(text, @"\[\[\s*([-\d.eE+]+)\s+([-\d.eE+]+)\s+([-\d.eE+]+)(?:\s+[-\d.eE+]+)?\s*\|\s*([-\d.eE+]+)\s+([-\d.eE+]+)");
+        if (!m.Success) return false;
+        float F(int i) => float.Parse(m.Groups[i].Value, System.Globalization.CultureInfo.InvariantCulture);
+        _eye = new Vector3(F(1), F(2), F(3));
+        _pitch = Math.Clamp(F(4) * MathF.PI / 180, -1.5f, 1.5f);
+        _yaw = -F(5) * MathF.PI / 180;
+        Moved();
+        return true;
+    }
+
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        var key = e.Key == Key.System ? e.SystemKey : e.Key;
+        // REDkit's own keys for copying a camera view and going to one
+        if (Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Alt) && key is Key.C or Key.V)
+        {
+            try
+            {
+                if (key == Key.C) Clipboard.SetText(CameraText);
+                else if (Clipboard.GetText() is { } text) PasteCamera(text);
+            }
+            catch (System.Runtime.InteropServices.COMException) { }
+            e.Handled = true;
+            return;
+        }
+        if (key is Key.W or Key.A or Key.S or Key.D or Key.Q or Key.E or Key.C or Key.Space or Key.Up or Key.Down or Key.Left or Key.Right
+            or Key.LeftShift or Key.RightShift or Key.LeftCtrl or Key.RightCtrl)
+        {
+            _held.Add(key);
+            Animating = true;
+            e.Handled = true;
+        }
+    }
+
+    protected override void OnKeyUp(KeyEventArgs e)
+    {
+        _held.Remove(e.Key == Key.System ? e.SystemKey : e.Key);
+        Animating = _held.Count > 0;
+    }
+
+    protected override void OnLostKeyboardFocus(KeyboardFocusChangedEventArgs e)
+    {
+        _held.Clear();
+        Animating = false;
+    }
+
+    protected override void OnMouseDown(MouseButtonEventArgs e)
+    {
+        Focus();
+        _lastMouse = e.GetPosition(this);
+        _looking = true;
+        CaptureMouse();
+        e.Handled = true;
+    }
+
+    protected override void OnMouseMove(MouseEventArgs e)
+    {
+        if (!_looking) return;
+        var at = e.GetPosition(this);
+        var moved = at - _lastMouse;
+        _lastMouse = at;
+        _yaw += (float)moved.X * 0.0045f;
+        _pitch = Math.Clamp(_pitch - (float)moved.Y * 0.0045f, -1.5f, 1.5f);
+        Moved();
+    }
+
+    protected override void OnMouseUp(MouseButtonEventArgs e)
+    {
+        if (e.LeftButton == MouseButtonState.Released && e.RightButton == MouseButtonState.Released && e.MiddleButton == MouseButtonState.Released)
+        {
+            _looking = false;
+            ReleaseMouseCapture();
+        }
+    }
+
+    /// <summary>The wheel sets how fast the camera flies.</summary>
+    protected override void OnMouseWheel(MouseWheelEventArgs e)
+    {
+        _speed = Math.Clamp(_speed * (e.Delta > 0 ? 1.25f : 0.8f), 2, 800);
+        Moved();
+        e.Handled = true;
+    }
+
+    public override void Dispose()
+    {
+        foreach (var grid in _grids)
+            if (grid is { } g)
+            {
+                g.Vertices.Dispose();
+                g.Indices.Dispose();
+            }
+        DisposePlantDevice();
+        DisposeEnvironment();
+        foreach (var d in new IDisposable?[] { _aoPS, _ao, _aoTarget, _aoView, _foliage, _ambientCube, _ambientTarget, _ambientView, _ambientPS, _lightColour, _shadowPS, _shadow, _shadowTarget, _shadowTexture, _sky, _grading, _postPS, _balanceA, _balanceB, _waves, _foam, _textureSettings, _skyVS, _skyPS, _waterVS, _waterPS, _waterBlend, _noDepth, _depthTestOnly, _waterLevel, _patches, _heightMap, _colourMap, _controlMap, _diffuse, _normals, _tiled, _depthState, _raster, _sampler, _frame, _layout, _ps, _vs })
+            d?.Dispose();
+        base.Dispose();
+    }
+}

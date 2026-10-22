@@ -178,6 +178,31 @@
             <Border Grid.Column="2" Style="{StaticResource Card}">
                 <DockPanel Margin="8">
                     <WrapPanel DockPanel.Dock="Top" Margin="0,0,0,6">
+                        <ToggleButton x:Name="View3DToggle" Padding="10,3" Margin="0,0,8,0" Click="View3DToggle_Click" ToolTip="{l:T WorldWindow.View3DTip}">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Style="{StaticResource IconText}" Text="&#xF158;" FontSize="12" Margin="0,0,6,0" />
+                                <TextBlock Text="{l:T WorldWindow.View3D}" />
+                            </StackPanel>
+                        </ToggleButton>
+                        <StackPanel x:Name="DayPanel" Orientation="Horizontal" Visibility="Collapsed" Margin="6,0,0,0" VerticalAlignment="Center"
+                                    ToolTip="{l:T WorldWindow.HourTip}">
+                            <TextBlock Style="{StaticResource IconText}" Text="&#xE706;" FontSize="13" VerticalAlignment="Center" Margin="0,0,8,0" />
+                            <Slider x:Name="HourSlider" Width="220" Minimum="0" Maximum="24" SmallChange="0.25" LargeChange="1" Value="12"
+                                    VerticalAlignment="Center" ValueChanged="HourSlider_ValueChanged" />
+                            <TextBlock x:Name="HourText" MinWidth="44" Margin="10,0,0,0" VerticalAlignment="Center" Text="12:00" />
+                            <ToggleButton x:Name="PlayDayToggle" Padding="8,3" Margin="6,0,0,0" Click="PlayDayToggle_Click" ToolTip="{l:T WorldWindow.PlayDayTip}">
+                                <TextBlock x:Name="PlayDayIcon" Style="{StaticResource IconText}" Text="&#xE768;" FontSize="12" />
+                            </ToggleButton>
+                            <ComboBox x:Name="WeatherBox" MinWidth="130" Margin="8,0,0,0" VerticalAlignment="Center" SelectionChanged="WeatherBox_SelectionChanged"
+                                      ToolTip="{l:T WorldWindow.WeatherTip}" />
+                            <Button x:Name="EnvironmentButton" Padding="10,3" Margin="8,0,0,0" VerticalAlignment="Center" Click="EnvironmentButton_Click"
+                                    ToolTip="{l:T WorldWindow.EnvironmentTip}">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Style="{StaticResource IconText}" Text="&#xE9CA;" FontSize="13" Margin="0,0,6,0" />
+                                    <TextBlock Text="{l:T WorldWindow.Environment}" />
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
                         <ComboBox x:Name="LookBox" MinWidth="130" SelectionChanged="LookBox_SelectionChanged" ToolTip="{l:T WorldWindow.LookTip}" />
                         <ComboBox x:Name="AreasBox" MinWidth="170" Margin="8,0,0,0" SelectionChanged="AreasBox_SelectionChanged" ToolTip="{l:T WorldWindow.AreasTip}" />
                         <CheckBox x:Name="EntitiesCheck" Content="{l:T WorldWindow.Entities}" IsChecked="True" MinWidth="0" Margin="14,0,0,0" VerticalAlignment="Center" Click="Overlay_Click" />
@@ -197,7 +222,7 @@
                                   ToolTip="{l:T WorldWindow.OcclusionTip}" />
                         <CheckBox x:Name="GpuCheck" Content="{l:T WorldWindow.Gpu}" MinWidth="0" Margin="14,0,0,0" VerticalAlignment="Center" Click="GpuCheck_Click"
                                   ToolTip="{l:T WorldWindow.GpuTip}" />
-                        <Button Margin="14,0,0,0" Padding="10,3" Click="FitButton_Click" ToolTip="{l:T WorldWindow.FitTip}">
+                        <Button x:Name="FitButton" Margin="14,0,0,0" Padding="10,3" Click="FitButton_Click" ToolTip="{l:T WorldWindow.FitTip}">
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Style="{StaticResource IconText}" Text="&#xE9A6;" FontSize="12" Margin="0,0,6,0" />
                                 <TextBlock Text="{l:T Common.Fit}" />
@@ -252,6 +277,7 @@
                         <Grid>
                             <local:WorldMap x:Name="Map" PointerMoved="Map_PointerMoved" DotPicked="Map_DotPicked" />
                             <local:GpuMapView x:Name="GpuMap" Visibility="Collapsed" />
+                            <local:WorldView3D x:Name="View3D" Visibility="Collapsed" CameraMoved="View3D_CameraMoved" HourChanged="View3D_HourChanged" />
                             <TextBlock x:Name="MapProgress" Margin="12" HorizontalAlignment="Left" VerticalAlignment="Top" Padding="8,4"
                                        Background="{DynamicResource SolidBackgroundFillColorBaseBrush}" />
                         </Grid>

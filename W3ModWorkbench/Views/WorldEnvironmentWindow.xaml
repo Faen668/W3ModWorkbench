@@ -1,0 +1,329 @@
+<Window x:Class="W3ModWorkbench.WorldEnvironmentWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:l="clr-namespace:W3ModWorkbench.Localisation"
+        xmlns:local="clr-namespace:W3ModWorkbench"
+        Title="{l:T WorldEnvironment.Title}" Icon="pack://application:,,,/W3ModWorkbench;component/Assets/app.ico"
+        Width="1280" Height="820" MinWidth="900" MinHeight="560" ShowInTaskbar="False"
+        WindowStartupLocation="CenterOwner">
+
+    <Window.Resources>
+        <Style x:Key="PanelTabs" TargetType="TabControl">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TabControl">
+                        <DockPanel>
+                            <WrapPanel DockPanel.Dock="Top" IsItemsHost="True" Margin="2,0,2,4" />
+                            <Border DockPanel.Dock="Top" Height="1" Background="{DynamicResource CardStrokeColorDefaultBrush}" Margin="0,0,0,2" />
+                            <ContentPresenter ContentSource="SelectedContent" TextElement.Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                        </DockPanel>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="PanelTab" TargetType="TabItem">
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TabItem">
+                        <Border x:Name="Back" Padding="9,4" Margin="0,0,2,4" CornerRadius="5" Background="Transparent" Cursor="Hand"
+                                TextElement.Foreground="{DynamicResource TextFillColorSecondaryBrush}">
+                            <ContentPresenter ContentSource="Header" TextElement.FontSize="12.5" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Back" Property="Background" Value="{DynamicResource SubtleFillColorTertiaryBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Back" Property="Background" Value="{DynamicResource AccentFillColorDefaultBrush}" />
+                                <Setter TargetName="Back" Property="TextElement.Foreground" Value="{DynamicResource TextOnAccentFillColorPrimaryBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="IconText" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="{StaticResource IconFont}" />
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style x:Key="Card" TargetType="Border">
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}" />
+            <Setter Property="Background" Value="{DynamicResource CardBackgroundFillColorDefaultBrush}" />
+        </Style>
+        <Style x:Key="Small" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="11.5" />
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorTertiaryBrush}" />
+        </Style>
+        <Style x:Key="Heading" TargetType="TextBlock">
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Margin" Value="0,0,16,0" />
+        </Style>
+        <Style x:Key="Switch" TargetType="CheckBox" BasedOn="{StaticResource {x:Type CheckBox}}">
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="Margin" Value="2,3,0,3" />
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="14,12,14,10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- the weather system: the condition forced, the one now and how far it's blended in -->
+        <Border Style="{StaticResource Card}" Padding="12,8" Margin="0,0,0,8">
+            <DockPanel LastChildFill="False">
+                <TextBlock Text="{l:T WorldEnvironment.WeatherSystem}" Style="{StaticResource Heading}" />
+                <TextBlock Text="{l:T WorldEnvironment.ForceWeather}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                <ComboBox x:Name="WeatherBox" MinWidth="160" SelectionChanged="WeatherBox_SelectionChanged" ToolTip="{l:T WorldEnvironment.ForceWeatherTip}" />
+                <TextBlock Text="{l:T WorldEnvironment.CurrentWeather}" VerticalAlignment="Center" Margin="18,0,8,0" />
+                <StackPanel VerticalAlignment="Center" Width="190">
+                    <TextBlock x:Name="CurrentWeatherText" TextTrimming="CharacterEllipsis" />
+                    <ProgressBar x:Name="WeatherProgress" Height="4" Minimum="0" Maximum="1" Margin="0,3,0,0" ToolTip="{l:T WorldEnvironment.WeatherProgressTip}" />
+                </StackPanel>
+                <Button x:Name="StabiliseButton" DockPanel.Dock="Right" Content="{l:T WorldEnvironment.Stabilise}" Padding="12,4" Margin="8,0,0,0"
+                        Click="StabiliseButton_Click" ToolTip="{l:T WorldEnvironment.StabiliseTip}" />
+                <Button x:Name="WeatherTableButton" DockPanel.Dock="Right" Content="{l:T WorldEnvironment.OpenWeatherTable}" Padding="12,4" Margin="8,0,0,0"
+                        Click="WeatherTableButton_Click" ToolTip="{l:T WorldEnvironment.OpenWeatherTableTip}" />
+                <CheckBox x:Name="PauseCheck" DockPanel.Dock="Right" Content="{l:T WorldEnvironment.Pause}" IsChecked="True" Style="{StaticResource Switch}"
+                          VerticalAlignment="Center" Click="PauseCheck_Click" ToolTip="{l:T WorldEnvironment.PauseTip}" />
+            </DockPanel>
+        </Border>
+
+        <!-- the environment system: an environment forced over everything, the curve tools, saving -->
+        <Border Grid.Row="1" Style="{StaticResource Card}" Padding="12,8" Margin="0,0,0,8">
+            <DockPanel LastChildFill="False">
+                <TextBlock Text="{l:T WorldEnvironment.EnvironmentSystem}" Style="{StaticResource Heading}" />
+                <TextBlock Text="{l:T WorldEnvironment.ForcePreset}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                <ComboBox x:Name="PresetBox" MinWidth="160" SelectionChanged="PresetBox_SelectionChanged" ToolTip="{l:T WorldEnvironment.ForcePresetTip}" />
+                <Button x:Name="SaveButton" DockPanel.Dock="Right" Content="{l:T WorldEnvironment.Save}" Padding="12,4" Margin="8,0,0,0" IsEnabled="False"
+                        ToolTipService.ShowOnDisabled="True" ToolTip="{l:T WorldEnvironment.SaveTip}" />
+                <ToggleButton x:Name="CurveToolsToggle" DockPanel.Dock="Right" Content="{l:T WorldEnvironment.CurveTools}" Padding="12,4"
+                              Click="CurveToolsToggle_Click" ToolTip="{l:T WorldEnvironment.CurveToolsTip}" />
+            </DockPanel>
+        </Border>
+
+        <!-- the fake day cycle: the time held, or the day running at the game's pace -->
+        <Border Grid.Row="2" Style="{StaticResource Card}" Padding="12,8" Margin="0,0,0,8">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="{l:T WorldEnvironment.FakeDayCycle}" Style="{StaticResource Heading}" />
+                <CheckBox x:Name="FakeDayCheck" Grid.Column="1" Content="{l:T WorldEnvironment.Enable}" IsChecked="True" Style="{StaticResource Switch}"
+                          VerticalAlignment="Center" Click="FakeDayCheck_Click" ToolTip="{l:T WorldEnvironment.FakeDayCycleTip}" />
+                <TextBox x:Name="TimeBox" Grid.Column="2" Width="86" Margin="12,0,12,0" VerticalAlignment="Center" FontFamily="Consolas"
+                         LostKeyboardFocus="TimeBox_LostKeyboardFocus" KeyDown="TimeBox_KeyDown" ToolTip="{l:T WorldEnvironment.TimeTip}" />
+                <Grid Grid.Column="3">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <Slider x:Name="DaySlider" Minimum="0" Maximum="24" SmallChange="0.25" LargeChange="1" IsMoveToPointEnabled="True"
+                            ValueChanged="DaySlider_ValueChanged" TickFrequency="1" TickPlacement="BottomRight" />
+                    <!-- REDkit's marks under its slider -->
+                    <Grid Grid.Row="1" x:Name="DayMarks" Margin="5,0,5,0" IsHitTestVisible="False" />
+                </Grid>
+            </Grid>
+        </Border>
+
+        <!-- REDkit's curve advanced options -->
+        <Border x:Name="CurveTools" Grid.Row="3" Style="{StaticResource Card}" Padding="12,8" Margin="0,0,0,8" Visibility="Collapsed">
+            <StackPanel>
+                <DockPanel LastChildFill="False">
+                    <TextBlock Text="{l:T WorldEnvironment.CurveTools}" Style="{StaticResource Heading}" />
+                    <TextBlock Text="{l:T WorldEnvironment.Tolerance}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                    <TextBox x:Name="ToleranceBox" Width="50" Text="20" VerticalAlignment="Center" ToolTip="{l:T WorldEnvironment.ToleranceTip}" />
+                    <Button Content="{l:T WorldEnvironment.NewKeys}" Padding="10,4" Margin="8,0,0,0" IsEnabled="False" ToolTipService.ShowOnDisabled="True" ToolTip="{l:T WorldEnvironment.EditingLaterTip}" />
+                    <Button x:Name="CopyKeysButton" Content="{l:T Common.Copy}" Padding="10,4" Margin="14,0,0,0" Click="CopyKeysButton_Click" ToolTip="{l:T WorldEnvironment.CopyKeysTip}" />
+                    <Button Content="{l:T WorldEnvironment.Paste}" Padding="10,4" Margin="8,0,0,0" IsEnabled="False" ToolTipService.ShowOnDisabled="True" ToolTip="{l:T WorldEnvironment.EditingLaterTip}" />
+                    <Button Content="{l:T WorldEnvironment.Remove}" Padding="10,4" Margin="8,0,0,0" IsEnabled="False" ToolTipService.ShowOnDisabled="True" ToolTip="{l:T WorldEnvironment.EditingLaterTip}" />
+                    <Button x:Name="ClearSelectionButton" Content="{l:T WorldEnvironment.ClearSelection}" Padding="10,4" Margin="8,0,0,0" Click="ClearSelectionButton_Click" />
+                    <ComboBox x:Name="AreaBox" DockPanel.Dock="Right" MinWidth="240" SelectionChanged="AreaBox_SelectionChanged" ToolTip="{l:T WorldEnvironment.AreaTip}" />
+                    <TextBlock DockPanel.Dock="Right" Text="{l:T WorldEnvironment.Area}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                </DockPanel>
+                <Grid Margin="0,8,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="{l:T WorldEnvironment.Min}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                    <Slider x:Name="MinSlider" Grid.Column="1" Minimum="0" Maximum="24" IsMoveToPointEnabled="True" ValueChanged="Range_ValueChanged" />
+                    <TextBlock x:Name="MinText" Grid.Column="2" FontFamily="Consolas" Margin="8,0,16,0" VerticalAlignment="Center" MinWidth="60" />
+                    <TextBlock Grid.Column="3" Text="{l:T WorldEnvironment.Max}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                    <Slider x:Name="MaxSlider" Grid.Column="4" Minimum="0" Maximum="24" IsMoveToPointEnabled="True" ValueChanged="Range_ValueChanged" />
+                    <TextBlock x:Name="MaxText" Grid.Column="5" FontFamily="Consolas" Margin="8,0,0,0" VerticalAlignment="Center" MinWidth="60" />
+                </Grid>
+            </StackPanel>
+        </Border>
+
+        <Grid Grid.Row="4">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="310" MinWidth="220" />
+                <ColumnDefinition Width="8" />
+                <ColumnDefinition Width="*" MinWidth="420" />
+            </Grid.ColumnDefinitions>
+
+            <Border Style="{StaticResource Card}">
+                <TabControl x:Name="LeftTabs" Margin="8,8,8,6" Style="{StaticResource PanelTabs}" ItemContainerStyle="{StaticResource PanelTab}">
+                    <!-- REDkit's editor parameters -->
+                    <TabItem Header="{l:T WorldEnvironment.Settings}">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <StackPanel Margin="4,8,4,4">
+                                <TextBlock Text="{l:T WorldEnvironment.EditorParameters}" Style="{StaticResource Small}" Margin="0,0,0,6" />
+                                <CheckBox x:Name="InstantAdaptationCheck" Content="{l:T WorldEnvironment.InstantAdaptation}" Style="{StaticResource Switch}" Click="Switch_Click" ToolTip="{l:T WorldEnvironment.InstantAdaptationTip}" />
+                                <CheckBox x:Name="TrajectoryCheck" Content="{l:T WorldEnvironment.TrajectoryDisplay}" Style="{StaticResource Switch}" Click="Switch_Click" ToolTip="{l:T WorldEnvironment.TrajectoryDisplayTip}" />
+                                <CheckBox x:Name="ProbeInstantCheck" Content="{l:T WorldEnvironment.EnvProbeInstantUpdate}" Style="{StaticResource Switch}" Click="Switch_Click" ToolTip="{l:T WorldEnvironment.EnvProbeInstantUpdateTip}" />
+                                <CheckBox x:Name="ProbeUpdateCheck" Content="{l:T WorldEnvironment.AllowEnvProbeUpdate}" Style="{StaticResource Switch}" Click="Switch_Click" ToolTip="{l:T WorldEnvironment.AllowEnvProbeUpdateTip}" />
+                                <CheckBox x:Name="BloomCheck" Content="{l:T WorldEnvironment.AllowBloom}" Style="{StaticResource Switch}" Click="Switch_Click" ToolTip="{l:T WorldEnvironment.NotDrawnTip}" />
+                                <CheckBox x:Name="ColorBalanceCheck" Content="{l:T WorldEnvironment.AllowColorBalance}" Style="{StaticResource Switch}" Click="Switch_Click" ToolTip="{l:T WorldEnvironment.AllowColorBalanceTip}" />
+                                <CheckBox x:Name="AntialiasingCheck" Content="{l:T WorldEnvironment.AllowAntialiasing}" Style="{StaticResource Switch}" Click="Switch_Click" ToolTip="{l:T WorldEnvironment.NotDrawnTip}" />
+                                <CheckBox x:Name="FogCheck" Content="{l:T WorldEnvironment.AllowGlobalFog}" Style="{StaticResource Switch}" Click="Switch_Click" ToolTip="{l:T WorldEnvironment.AllowGlobalFogTip}" />
+                                <CheckBox x:Name="DepthOfFieldCheck" Content="{l:T WorldEnvironment.AllowDepthOfField}" Style="{StaticResource Switch}" Click="Switch_Click" ToolTip="{l:T WorldEnvironment.NotDrawnTip}" />
+                                <CheckBox x:Name="SsaoCheck" Content="{l:T WorldEnvironment.AllowSsao}" Style="{StaticResource Switch}" Click="Switch_Click" ToolTip="{l:T WorldEnvironment.NotDrawnTip}" />
+                                <CheckBox x:Name="CloudsShadowCheck" Content="{l:T WorldEnvironment.AllowCloudsShadow}" Style="{StaticResource Switch}" Click="Switch_Click" ToolTip="{l:T WorldEnvironment.NotDrawnTip}" />
+                                <CheckBox x:Name="VignetteCheck" Content="{l:T WorldEnvironment.AllowVignette}" Style="{StaticResource Switch}" Click="Switch_Click" ToolTip="{l:T WorldEnvironment.AllowVignetteTip}" />
+                                <CheckBox x:Name="WaterCheck" Content="{l:T WorldEnvironment.AllowWaterShader}" Style="{StaticResource Switch}" Click="Switch_Click" ToolTip="{l:T WorldEnvironment.AllowWaterShaderTip}" />
+                                <Border Height="1" Background="{DynamicResource CardStrokeColorDefaultBrush}" Margin="0,8,0,8" />
+                                <CheckBox x:Name="CutsceneDofCheck" Content="{l:T WorldEnvironment.ForceCutsceneDof}" Style="{StaticResource Switch}" Click="Switch_Click" ToolTip="{l:T WorldEnvironment.NotDrawnTip}" />
+                                <CheckBox x:Name="InteriorCheck" Content="{l:T WorldEnvironment.ForceInterior}" Style="{StaticResource Switch}" Click="Parameters_Click" ToolTip="{l:T WorldEnvironment.ForceInteriorTip}" />
+                                <CheckBox x:Name="CaveCheck" Content="{l:T WorldEnvironment.ForceCave}" Style="{StaticResource Switch}" Click="Parameters_Click" ToolTip="{l:T WorldEnvironment.ForceCaveTip}" />
+                                <TextBlock Text="{l:T WorldEnvironment.NotDrawnNote}" Style="{StaticResource Small}" TextWrapping="Wrap" Margin="0,10,0,0" />
+                            </StackPanel>
+                        </ScrollViewer>
+                    </TabItem>
+                    <!-- the environments mixed in now -->
+                    <TabItem Header="{l:T WorldEnvironment.EnvList}">
+                        <DockPanel Margin="0,8,0,0">
+                            <TextBlock DockPanel.Dock="Top" Text="{l:T WorldEnvironment.ActiveEnvironments}" Style="{StaticResource Small}" Margin="2,0,0,6" />
+                            <ListBox x:Name="ActiveList" SelectionChanged="ActiveList_SelectionChanged" FontFamily="Consolas" />
+                        </DockPanel>
+                    </TabItem>
+                    <!-- every environment definition the game has -->
+                    <TabItem Header="{l:T WorldEnvironment.Definitions}">
+                        <Grid Margin="0,8,0,0">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+                            <Grid Margin="0,0,0,6">
+                                <TextBox x:Name="DefinitionFilter" Padding="30,5,8,5" VerticalContentAlignment="Center" TextChanged="DefinitionFilter_TextChanged" />
+                                <TextBlock Style="{StaticResource IconText}" Text="&#xE721;" FontSize="12" Margin="10,0,0,0" Opacity="0.6" HorizontalAlignment="Left" IsHitTestVisible="False" />
+                                <TextBlock x:Name="DefinitionPlaceholder" Margin="31,0,0,0" Opacity="0.55" VerticalAlignment="Center" IsHitTestVisible="False"
+                                           Text="{l:T WorldEnvironment.FindDefinition}" />
+                            </Grid>
+                            <TreeView x:Name="DefinitionTree" Grid.Row="1" SelectedItemChanged="DefinitionTree_SelectedItemChanged">
+                                <TreeView.ItemTemplate>
+                                    <HierarchicalDataTemplate ItemsSource="{Binding Children}">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Style="{StaticResource IconText}" Text="{Binding Icon}" FontSize="12" Margin="0,0,6,0" Opacity="0.7" />
+                                            <TextBlock Text="{Binding Name}" />
+                                        </StackPanel>
+                                    </HierarchicalDataTemplate>
+                                </TreeView.ItemTemplate>
+                                <TreeView.ContextMenu>
+                                    <ContextMenu>
+                                        <MenuItem x:Name="ForceDefinitionItem" Header="{l:T WorldEnvironment.ForceThis}" Click="ForceDefinitionItem_Click" />
+                                        <MenuItem x:Name="OpenDefinitionItem" Header="{l:T WorldEnvironment.OpenInViewer}" Click="OpenDefinitionItem_Click" />
+                                    </ContextMenu>
+                                </TreeView.ContextMenu>
+                            </TreeView>
+                        </Grid>
+                    </TabItem>
+                </TabControl>
+            </Border>
+
+            <GridSplitter Grid.Column="1" Width="8" HorizontalAlignment="Stretch" Background="Transparent" ResizeBehavior="PreviousAndNext" />
+
+            <!-- the properties of the environment picked: its groups, their settings at the time, the setting picked over the day -->
+            <Border Grid.Column="2" Style="{StaticResource Card}">
+                <Grid Margin="10,8,10,8">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="3*" MinHeight="150" />
+                        <RowDefinition Height="8" />
+                        <RowDefinition Height="2*" MinHeight="140" />
+                    </Grid.RowDefinitions>
+                    <StackPanel Margin="2,0,0,8">
+                        <TextBlock Text="{l:T WorldEnvironment.Properties}" FontWeight="SemiBold" FontSize="15" />
+                        <TextBlock x:Name="PropertiesSource" Style="{StaticResource Small}" TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                    <Grid Grid.Row="1">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="250" MinWidth="160" />
+                            <ColumnDefinition Width="8" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TreeView x:Name="GroupTree" SelectedItemChanged="GroupTree_SelectedItemChanged">
+                            <TreeView.ItemContainerStyle>
+                                <Style TargetType="TreeViewItem" BasedOn="{StaticResource {x:Type TreeViewItem}}">
+                                    <Setter Property="IsExpanded" Value="{Binding Expanded, Mode=TwoWay}" />
+                                    <Setter Property="IsSelected" Value="{Binding Selected, Mode=TwoWay}" />
+                                </Style>
+                            </TreeView.ItemContainerStyle>
+                            <TreeView.ItemTemplate>
+                                <HierarchicalDataTemplate ItemsSource="{Binding Children}">
+                                    <StackPanel Orientation="Horizontal" Opacity="{Binding Opacity}">
+                                        <Ellipse Width="7" Height="7" Fill="{Binding StateBrush}" Margin="0,0,7,0" VerticalAlignment="Center" ToolTip="{Binding StateText}" />
+                                        <TextBlock Text="{Binding Title}" />
+                                        <TextBlock Text="{Binding CountText}" Margin="8,0,0,0" Style="{StaticResource Small}" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </HierarchicalDataTemplate>
+                            </TreeView.ItemTemplate>
+                        </TreeView>
+                        <GridSplitter Grid.Column="1" Width="8" HorizontalAlignment="Stretch" Background="Transparent" ResizeBehavior="PreviousAndNext" />
+                        <DataGrid x:Name="SettingGrid" Grid.Column="2" Style="{StaticResource ViewerGrid}" AutoGenerateColumns="False" IsReadOnly="True"
+                                  SelectionMode="Single" SelectionChanged="SettingGrid_SelectionChanged">
+                            <DataGrid.CellStyle>
+                                <Style TargetType="DataGridCell" BasedOn="{StaticResource ViewerGridCell}">
+                                    <Setter Property="Opacity" Value="{Binding Opacity}" />
+                                </Style>
+                            </DataGrid.CellStyle>
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="{l:T Common.Name}" Binding="{Binding Title}" Width="220" />
+                                <DataGridTemplateColumn Header="{l:T WorldEnvironment.AtThisTime}" SortMemberPath="ValueText" Width="*">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <StackPanel Orientation="Horizontal">
+                                                <Border Width="14" Height="14" CornerRadius="3" Background="{Binding Swatch}" Margin="0,0,8,0" VerticalAlignment="Center"
+                                                        Visibility="{Binding SwatchVisibility}" BorderThickness="1" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" />
+                                                <TextBlock Text="{Binding ValueText}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                                <DataGridTextColumn Header="{l:T WorldEnvironment.Keys}" Binding="{Binding KeysText}" Width="60" />
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </Grid>
+                    <GridSplitter Grid.Row="2" Height="8" HorizontalAlignment="Stretch" Background="Transparent" ResizeBehavior="PreviousAndNext" ResizeDirection="Rows" />
+                    <DockPanel Grid.Row="3">
+                        <StackPanel DockPanel.Dock="Top" Margin="2,0,0,4">
+                            <TextBlock x:Name="CurveTitle" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                            <TextBlock x:Name="CurveDetail" Style="{StaticResource Small}" TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+                        <local:CurveChart x:Name="Chart" TimePicked="Chart_TimePicked" />
+                    </DockPanel>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <TextBlock x:Name="InfoText" Grid.Row="5" Margin="2,8,0,0" Opacity="0.8" TextTrimming="CharacterEllipsis" />
+    </Grid>
+</Window>
