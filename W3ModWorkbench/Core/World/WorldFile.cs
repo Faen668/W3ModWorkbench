@@ -104,8 +104,67 @@ public sealed record WorldTerrain(int TilesPerEdge, int TileResolution, float Si
 /// <summary>A world's occlusion grid: tiles so big a side, each its middle and its .w3occlusion file.</summary>
 public sealed record OcclusionGrid(int Side, float TileSize, IReadOnlyList<(Vector2 Middle, string? File)> Tiles);
 
-/// <summary>An entity of a layer, for a map: its class and name, where it stands, which way it faces, its template.</summary>
-public sealed record LayerEntity(string ClassName, string Name, Vector3 Position, float Yaw, string? Template, RedObject Object);
+/// <summary>A component of a layer's entity: its class and name, the file it draws or uses, and an area's outline in the world.</summary>
+public sealed record LayerComponent(string ClassName, string Name, string? Resource, IReadOnlyList<Vector2>? Outline)
+{
+    /// <summary>Whether it uses a file of its own (a mesh, a template), for a link to it.</summary>
+    public bool HasResource => Resource is { Length: > 0 };
+}
+
+/// <summary>An entity of a layer, for a map: its class and name, where it stands, which way it faces, its template, its components.</summary>
+public sealed record LayerEntity(string ClassName, string Name, Vector3 Position, float Yaw, string? Template, RedObject Object,
+    IReadOnlyList<LayerComponent> Components);
+
+/// <summary>A pin of a world's hub map: an entity's (a signpost, a place of power, a notice board) or a quest's, where, and how wide for a quest's area.</summary>
+public sealed record MapPin(string Name, string Kind, Vector3 Position, float Radius, bool Quest);
+
+/// <summary>
+/// A world's hub map pins: the entity pins (.w2em, a CEntityMapPinsResource) and quest pins (.w2qm, a
+/// CQuestMapPinsResource) the game shows on its map, kept beside the world under game\hub_pins.
+/// </summary>
+public static class MapPins
+{
+    public static List<MapPin> Read(byte[] data)
+    {
+        var file = Cr2wFile.Read(data);
+        var pins = new List<MapPin>();
+        if (file.First("CEntityMapPinsResource") is { } entities)
+            foreach (var p in entities.Array("mappinsInfo").OfType<RedObject>())
+                pins.Add(new MapPin(p["entityName"] as string ?? "", p["entityType"]?.ToString() ?? "", p.Vector("entityPosition"), p.Float("entityRadius"), false));
+        if (file.First("CQuestMapPinsResource") is { } quests)
+            foreach (var p in quests.Array("mappinsInfo").OfType<RedObject>())
+                foreach (var at in p.Array("positions").OfType<RedObject>())
+                    pins.Add(new MapPin(p["tag"] as string ?? "", p["type"]?.ToString() ?? "", new Vector3(at.Float("X"), at.Float("Y"), at.Float("Z")), p.Float("radius"), true));
+        return pins;
+    }
+}
+
+/// <summary>
+/// A world's waypoints (.redwpset, a CWayPointsCollectionsSet of CWayPointsCollection): the points NPCs walk to and
+/// stand at, cooked from the layers' waypoint components. Each collection keeps, after its properties, a size and its
+/// waypoints, 20 bytes each: where (three floats), which way it faces and the component it came from.
+/// </summary>
+public static class Waypoints
+{
+    public static List<(Vector3 Position, float Yaw)> Read(byte[] data)
+    {
+        var file = Cr2wFile.Read(data);
+        var points = new List<(Vector3, float)>();
+        foreach (var export in file.Exports.Where(x => x.ClassName == "CWayPointsCollection"))
+        {
+            var collection = file.Object(export.Index);
+            int count = (int)collection.Integer("waypointsCount");
+            var tail = collection.Tail;
+            for (int i = 0; i < count && 4 + 20 * i + 20 <= tail.Length; i++)
+            {
+                int at = 4 + 20 * i;
+                points.Add((new Vector3(BitConverter.ToSingle(tail, at), BitConverter.ToSingle(tail, at + 4), BitConverter.ToSingle(tail, at + 8)),
+                    BitConverter.ToSingle(tail, at + 12)));
+            }
+        }
+        return points;
+    }
+}
 
 /// <summary>
 /// A world (.w2w, a CGameWorld): its terrain (a clip map of tiles), its occlusion grid, its foliage, its environment, its
@@ -219,13 +278,66 @@ public sealed class WorldFile
         var file = Cr2wFile.Read(layerData);
         var result = new List<LayerEntity>();
         if (file.First("CLayer") is not { } layer) return result;
+        // the exports under each entity: cooked layers keep the areas only as the entity's children, not in its list
+        var children = file.Exports.Where(x => x.Parent >= 0).ToLookup(x => x.Parent, x => x.Index);
         foreach (var h in layer.Array("entities").OfType<RedHandle>())
         {
             if (file.Object(h) is not { } e) continue;
             var (position, rotation) = SceneStaging.Transform(e["transform"]);
             result.Add(new LayerEntity(e.ClassName, e["name"] as string ?? "", position, rotation.Z * MathF.PI / 180,
-                e["template"] is RedHandle t ? file.PathOf(t) : null, e));
+                e["template"] is RedHandle t ? file.PathOf(t) : null, e, Components(file, e, h.Export ?? -1, children, position, rotation.Z * MathF.PI / 180)));
         }
         return result;
+    }
+
+    /// <summary>
+    /// An entity's components: those the layer keeps (areas, waypoints, triggers: the entity's components list and its
+    /// child exports), and
+    /// those streamed in near the player, kept in a CR2W file of their own in its streamingDataBuffer (meshes, lights).
+    /// </summary>
+    private static List<LayerComponent> Components(Cr2wFile file, RedObject entity, int index, ILookup<int, int> children, Vector3 at, float yaw)
+    {
+        var components = new List<LayerComponent>();
+        var seen = new HashSet<int>();
+        foreach (int i in entity.Array("components").OfType<RedHandle>().Select(h => h.Export ?? -1).Concat(children[index]))
+            if (i >= 0 && i < file.Exports.Count && seen.Add(i) && file.Exports[i].ClassName.EndsWith("Component", StringComparison.Ordinal))
+                components.Add(Component(file, file.Object(i), at, yaw));
+        if (entity.Bytes("streamingDataBuffer") is { Length: > 8 } streamed)
+        {
+            // the CR2W file, straight away or after its size
+            int start = Cr2wFile.IsCr2w(streamed) ? 0 : Cr2wFile.IsCr2w(streamed.AsSpan(4)) ? 4 : -1;
+            if (start >= 0)
+                try
+                {
+                    var inner = Cr2wFile.Read(streamed[start..]);
+                    for (int i = 0; i < inner.Exports.Count; i++)
+                        if (inner.Exports[i].ClassName.EndsWith("Component", StringComparison.Ordinal)) components.Add(Component(inner, inner.Object(i), at, yaw));
+                }
+                catch (InvalidDataException) { }
+        }
+        return components;
+    }
+
+    private static LayerComponent Component(Cr2wFile file, RedObject c, Vector3 at, float yaw)
+    {
+        string? resource = null;
+        foreach (string name in new[] { "mesh", "resource", "template", "particleSystem", "spawnTree", "dialogset", "cloth", "furMesh" })
+            if (c[name] is RedHandle h && file.PathOf(h) is { Length: > 0 } path)
+            {
+                resource = path;
+                break;
+            }
+        resource ??= c.Properties.Select(p => p.Value).OfType<RedHandle>().Select(file.PathOf).FirstOrDefault(p => p is { Length: > 0 });
+        var points = c.Array("worldPoints").OfType<RedObject>().Select(p => new Vector2(p.Float("X"), p.Float("Y"))).ToList();
+        if (points.Count < 2 && c.Array("localPoints").Count >= 2)
+        {
+            // the game's cooked areas keep only their own points: placed by the component on the entity, then the entity in the world
+            var (offset, turn) = SceneStaging.Transform(c["transform"]);
+            var place = Matrix4x4.CreateRotationZ(turn.Z * MathF.PI / 180) * Matrix4x4.CreateTranslation(offset)
+                * Matrix4x4.CreateRotationZ(yaw) * Matrix4x4.CreateTranslation(at);
+            points = c.Array("localPoints").OfType<RedObject>()
+                .Select(p => Vector3.Transform(new Vector3(p.Float("X"), p.Float("Y"), 0), place)).Select(p => new Vector2(p.X, p.Y)).ToList();
+        }
+        return new LayerComponent(c.ClassName, c["name"] as string ?? "", resource, points.Count >= 2 ? points : null);
     }
 }

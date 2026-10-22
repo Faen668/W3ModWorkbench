@@ -5428,6 +5428,8 @@
 
   "TerrainTileFile.NotTerrainTile": "There's no terrain tile in this file.",
   "FoliageFile.NotFoliage": "There's no foliage in this file.",
+  "SpeedTreeFile.NotTree": "There's no SpeedTree tree in this file.",
+  "SpeedTreeFile.Damaged": "This SpeedTree file couldn't be read: its data stops making sense {offset:N0} bytes in.",
   "WorldFile.NotWorld": "There's no world in this file.",
 
   "WorldWindow.World": "World",
@@ -5490,5 +5492,24 @@
   "WorldWindow.Navigation": "Navigation",
   "WorldWindow.NavigationTip": "Draw where can't be walked (red), the ground navmeshes take over (blue) and each navmesh's border, from the world's navigation files",
   "WorldWindow.NavigationRead": "Navigation: the terrain tiles' cells, and {count:N0} navmesh border edges",
-  "WorldWindow.ReadingNavigation": "Reading the navigation…"
+  "WorldWindow.ReadingNavigation": "Reading the navigation…",
+  "WorldWindow.GameMap": "Game map",
+  "WorldWindow.ReadingGameMap": "Reading the game's map…",
+  "WorldWindow.NoGameMap": "The game has no minimap pictures for this world (its tiles, tileCOLUMNxROW.jpg, aren't in the texture caches or REDkit's depot).",
+  "WorldWindow.Foliage": "Foliage",
+  "WorldWindow.FoliageTip": "Draw the world's trees and grass from its foliage cells: from afar in their colours, zoomed in each plant as it looks from above",
+  "WorldWindow.FoliageRead": "Foliage: {count:N0} plants of {kinds:N0} kinds, {drawn:N0} of them drawn from their SpeedTree files",
+  "WorldWindow.ReadingFoliage": "Reading the foliage…",
+  "WorldWindow.Outlines": "Outlines",
+  "WorldWindow.OutlinesTip": "Draw the outline of every area component of the layers shown: triggers yellow, sounds cyan, navmeshes blue, environments purple, scenes pink, denied areas red, water blue",
+  "WorldWindow.Pins": "Pins",
+  "WorldWindow.PinsTip": "Draw the hub map's pins: signposts, places of power and the like (white), and quests' places (yellow, with their areas)",
+  "WorldWindow.PinsRead": "Pins: {count:N0} from the world's hub pins",
+  "WorldWindow.Waypoints": "Waypoints",
+  "WorldWindow.OnDisk": "a file on disk",
+  "WorldWindow.Gpu": "GPU (test)",
+  "WorldWindow.GpuTip": "A test: draw the map with the graphics card instead, everything every frame, every plant at every zoom (what's shown when it's ticked; tick it again to bring it up to date)",
+  "WorldWindow.GpuRead": "A test: the map drawn with the graphics card, {count:N0} plants every frame",
+  "WorldWindow.WaypointsTip": "Draw the cooked waypoints NPCs walk to and stand at",
+  "WorldWindow.WaypointsRead": "Waypoints: {count:N0}"
 }

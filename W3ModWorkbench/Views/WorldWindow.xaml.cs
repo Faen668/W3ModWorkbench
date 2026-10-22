@@ -43,7 +43,12 @@ public partial class WorldWindow : Window, IMessageHost
     private int _entities;
     private List<MapShape> _areaShapes = [], _navShapes = [];
     private System.Windows.Media.Imaging.BitmapSource? _navPicture;
-    private bool _navLoaded;
+    private bool _navLoaded, _navVisible;
+    private System.Windows.Media.Imaging.BitmapSource? _gameMap;
+    private FoliageLook? _foliage;
+    private bool _gameMapByDefault;
+    private bool _gameMapLoaded, _foliageLoaded;
+    private List<MapMarker>? _pins, _waypoints;
 
     /// <summary>A group or a layer in the tree, shown on the map or not.</summary>
     private sealed class LayerNode : INotifyPropertyChanged
@@ -106,6 +111,7 @@ public partial class WorldWindow : Window, IMessageHost
     private WorldWindow(string path, string source, Func<byte[]> readData, ResourceLocator locator, string? origin)
     {
         InitializeComponent();
+        MakeModBtn.Show(path, origin, readData);
         _path = path;
         _source = source;
         _readData = readData;
@@ -113,9 +119,13 @@ public partial class WorldWindow : Window, IMessageHost
         _origin = origin;
         Title = L.T("WorldWindow.World2", Path.GetFileName(path));
         InfoText.Text = $"{path}   ·   {source}";
-        LookBox.ItemsSource = new[] { L.T("WorldWindow.Relief"), L.T("WorldWindow.ColourMap"), L.T("WorldWindow.Textures") };
+        LookBox.ItemsSource = new[] { L.T("WorldWindow.Relief"), L.T("WorldWindow.ColourMap"), L.T("WorldWindow.Textures"), L.T("WorldWindow.GameMap") };
         Loaded += async (_, _) => await LoadAsync();
-        Closed += (_, _) => _closing.Cancel();
+        Closed += (_, _) =>
+        {
+            _closing.Cancel();
+            GpuMap.Dispose();
+        };
     }
 
     public static bool CanShow(string name) => WorldFile.IsWorld(name);
@@ -214,8 +224,11 @@ public partial class WorldWindow : Window, IMessageHost
         int total = terrain.Tiles.Cast<string?>().Count(p => p is not null);
         var progress = new Progress<int>(n => MapProgress.Text = L.T("WorldWindow.ReadingTerrain", n, total));
         _terrain = await Task.Run(() => WorldTerrainPictures.Load(terrain, Read, progress, token), token);
-        LookBox.SelectedIndex = 0;
+        // the game's own map first, the relief shown while it's read and kept when the game has none
+        Map.SetTerrain(_terrain.Picture(TerrainLook.Relief), terrain.Corner, terrain.Size);
         Map.FitWorld();
+        _gameMapByDefault = true;
+        LookBox.SelectedIndex = 3;
     }
 
     private async Task LoadLayerTreeAsync(CancellationToken token)
@@ -325,6 +338,7 @@ public partial class WorldWindow : Window, IMessageHost
         MapProgress.Visibility = Visibility.Collapsed;
         foreach (var node in _roots) Count(node);
         ShowEntities();
+        ShowShapes();
 
         void Take()
         {
@@ -404,7 +418,8 @@ public partial class WorldWindow : Window, IMessageHost
         }
         Links(world.World, "");
         FactsList.ItemsSource = facts;
-        InfoText.Text = L.T("WorldWindow.Info", _path, _source, world.File.Version, world.Terrain is { } tt ? L.T("WorldWindow.InfoTerrain", tt.Size, tt.TilesPerEdge) : L.T("WorldWindow.NoTerrain"),
+        // a world opened from disk is its own source: say so, not its path twice
+        InfoText.Text = L.T("WorldWindow.Info", _path, string.Equals(_path, _source, StringComparison.OrdinalIgnoreCase) ? L.T("WorldWindow.OnDisk") : _source, world.File.Version, world.Terrain is { } tt ? L.T("WorldWindow.InfoTerrain", tt.Size, tt.TilesPerEdge) : L.T("WorldWindow.NoTerrain"),
             L.T("Count.Layer", _layerNodes.Count), L.T("Count.Entity", _entities));
     }
 
@@ -442,7 +457,14 @@ public partial class WorldWindow : Window, IMessageHost
     private void LookBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_terrain is not { } p || LookBox.SelectedIndex < 0) return;
+        if (LookBox.SelectedIndex == 3)
+        {
+            _ = ShowGameMapAsync(p.Terrain);
+            return;
+        }
+        _gameMapByDefault = false;
         var look = (TerrainLook)LookBox.SelectedIndex;
+        Map.SetOverlay("gamemap", null, default, 0);
         Map.SetTerrain(p.Picture(look), p.Terrain.Corner, p.Terrain.Size);
     }
 
@@ -451,7 +473,7 @@ public partial class WorldWindow : Window, IMessageHost
         if (AreasBox.SelectedIndex <= 0 || AreasBox.SelectedIndex > _areaFiles.Count)
         {
             _areaShapes = [];
-            Map.SetShapes([.. _navShapes]);
+            ShowShapes();
             return;
         }
         string path = _areaFiles[AreasBox.SelectedIndex - 1];
@@ -465,7 +487,7 @@ public partial class WorldWindow : Window, IMessageHost
                 return cells.Where(c => c.Area >= 0).Select(c => new MapShape(c.Outline, SimplexMap.ColorOf(c.Area), true, true)).ToList();
             });
             _areaShapes = shapes;
-            Map.SetShapes([.. _areaShapes, .. _navShapes]);
+            ShowShapes();
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException)
         {
@@ -481,8 +503,9 @@ public partial class WorldWindow : Window, IMessageHost
     {
         if (NavigationCheck.IsChecked != true)
         {
-            Map.SetOverlay(null, default, 0);
-            Map.SetShapes([.. _areaShapes]);
+            Map.SetOverlay("navigation", null, default, 0);
+            _navVisible = false;
+            ShowShapes();
             return;
         }
         if (!_navLoaded && _world?.Terrain is { } terrain)
@@ -495,8 +518,9 @@ public partial class WorldWindow : Window, IMessageHost
             MapProgress.Visibility = Visibility.Collapsed;
             NavigationCheck.ToolTip = L.T("WorldWindow.NavigationRead", _navShapes.Count);
         }
-        if (_world?.Terrain is { } t) Map.SetOverlay(_navPicture, t.Corner, t.Size);
-        Map.SetShapes([.. _areaShapes, .. _navShapes]);
+        if (_world?.Terrain is { } t) Map.SetOverlay("navigation", _navPicture, t.Corner, t.Size);
+        _navVisible = true;
+        ShowShapes();
     }
 
     private (System.Windows.Media.Imaging.BitmapSource? Picture, List<MapShape> Shapes) LoadNavigation(WorldTerrain terrain, string folder)
@@ -562,11 +586,287 @@ public partial class WorldWindow : Window, IMessageHost
         return (picture, shapes);
     }
 
+    /// <summary>Every outline drawn over the map: a simplex tree's areas, the navmeshes' borders, the area components'.</summary>
+    private void ShowShapes()
+    {
+        var shapes = new List<MapShape>(_areaShapes);
+        if (_navVisible) shapes.AddRange(_navShapes);
+        if (OutlinesCheck.IsChecked == true)
+            foreach (var dot in _dots.Where(p => _layerNodes.TryGetValue(p.Key, out var node) && node.Shown).SelectMany(p => p.Value))
+                foreach (var c in dot.Entity.Components)
+                    if (c.Outline is { } outline) shapes.Add(new MapShape(outline, OutlineColor(c.ClassName), true, dot == Map.Picked, dot == Map.Picked));
+        Map.SetShapes(shapes);
+    }
+
+    /// <summary>An area component's colour, by what it's for.</summary>
+    private static Color OutlineColor(string className) => className switch
+    {
+        _ when className.Contains("Trigger", StringComparison.Ordinal) => Color.FromRgb(0xF2, 0xC9, 0x4C),
+        _ when className.Contains("Sound", StringComparison.Ordinal) => Color.FromRgb(0x4C, 0xC0, 0xE0),
+        _ when className.Contains("Navmesh", StringComparison.Ordinal) => Color.FromRgb(0x5A, 0xC8, 0xFA),
+        _ when className.Contains("Environment", StringComparison.Ordinal) => Color.FromRgb(0xB0, 0x7C, 0xF2),
+        _ when className.Contains("Scene", StringComparison.Ordinal) => Color.FromRgb(0xF2, 0x7A, 0xB0),
+        _ when className.Contains("Denied", StringComparison.Ordinal) => Color.FromRgb(0xE5, 0x48, 0x48),
+        _ when className.Contains("Water", StringComparison.Ordinal) => Color.FromRgb(0x3F, 0x8F, 0xE0),
+        _ => Color.FromRgb(0xC8, 0xC8, 0xC8),
+    };
+
+    /// <summary>
+    /// The game's own minimap under the entities, read the first time it's asked for: a picture for each terrain tile
+    /// (tileCOLUMNxROW, rows from the south, in the world's minimaps folder), from the game's texture cache, or REDkit's
+    /// pictures of them.
+    /// </summary>
+    private async Task ShowGameMapAsync(WorldTerrain terrain)
+    {
+        if (!_gameMapLoaded)
+        {
+            _gameMapLoaded = true;
+            string folder = (_world!.World["minimapsPath"] as string ?? @"gameplay\gui_new\minimaps\" + Path.GetFileName(_world.Folder)).TrimEnd('\\');
+            MapProgress.Visibility = Visibility.Visible;
+            MapProgress.Text = L.T("WorldWindow.ReadingGameMap");
+            _gameMap = await Task.Run(() =>
+            {
+                int n = terrain.TilesPerEdge, size = Math.Clamp(4096 / n, 32, 256), side = n * size;
+                var pixels = new byte[side * side * 4];
+                int found = 0;
+                Parallel.For(0, n * n, i =>
+                {
+                    int col = i % n, row = i / n;
+                    string path = $@"{folder}\tile{col}x{row}.jpg";
+                    var picture = MeshTextures.Load(_locator, path, size) ?? RedkitPicture(path);
+                    if (picture is null || picture.PixelWidth == 0) return;
+                    var scaled = new System.Windows.Media.Imaging.FormatConvertedBitmap(
+                        new System.Windows.Media.Imaging.TransformedBitmap(picture, new ScaleTransform((double)size / picture.PixelWidth, (double)size / picture.PixelHeight)),
+                        PixelFormats.Bgra32, null, 0);
+                    var tile = new byte[size * size * 4];
+                    scaled.CopyPixels(new Int32Rect(0, 0, Math.Min(size, scaled.PixelWidth), Math.Min(size, scaled.PixelHeight)), tile, size * 4, 0);
+                    for (int y = 0; y < size; y++)
+                        Array.Copy(tile, y * size * 4, pixels, (((n - 1 - row) * size + y) * side + col * size) * 4, size * 4);
+                    Interlocked.Increment(ref found);
+                });
+                if (found == 0) return null;
+                var bitmap = System.Windows.Media.Imaging.BitmapSource.Create(side, side, 96, 96, PixelFormats.Bgra32, null, pixels, side * 4);
+                bitmap.Freeze();
+                return bitmap;
+            });
+            MapProgress.Visibility = Visibility.Collapsed;
+        }
+        if (LookBox.SelectedIndex != 3) return;
+        if (_gameMap is null)
+        {
+            // only said when asked for: a world opened without one just stays on its relief
+            if (!_gameMapByDefault) await ShowMessage(null, L.T("WorldWindow.NoGameMap"), MessageKind.Info);
+            _gameMapByDefault = false;
+            LookBox.SelectedIndex = 0;
+            return;
+        }
+        _gameMapByDefault = false;
+        // over the relief, which shows where the game has no minimap (past the playable middle)
+        if (_terrain is { } pictures) Map.SetTerrain(pictures.Picture(TerrainLook.Relief), terrain.Corner, terrain.Size);
+        Map.SetOverlay("gamemap", _gameMap, terrain.Corner, terrain.Size, under: true);
+    }
+
+    /// <summary>REDkit's own picture of a game path (its depot keeps the hub map and minimap as .jpg files), or null.</summary>
+    private static System.Windows.Media.Imaging.BitmapSource? RedkitPicture(string path)
+    {
+        if (Core.Projects.FileSafety.RedkitFile(path) is not { } file) return null;
+        try
+        {
+            var image = new System.Windows.Media.Imaging.BitmapImage();
+            image.BeginInit();
+            image.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+            image.UriSource = new Uri(file);
+            image.EndInit();
+            image.Freeze();
+            return image;
+        }
+        catch (Exception ex) when (ex is IOException or NotSupportedException or UriFormatException) { return null; }
+    }
+
+    /// <summary>
+    /// The world's foliage, read the first time it's asked for: from afar, every tree a disc and the grass a wash, each in
+    /// its own colour; zoomed in, every plant drawn from above from its SpeedTree file, turned and sized as placed.
+    /// </summary>
+    private async void FoliageCheck_Click(object sender, RoutedEventArgs e)
+    {
+        var terrain = _world?.Terrain;
+        if (FoliageCheck.IsChecked != true || terrain is null)
+        {
+            Map.SetOverlay("grass", null, default, 0);
+            Map.SetOverlay("trees", null, default, 0);
+            Map.SetPlants(null, null);
+            return;
+        }
+        if (!_foliageLoaded)
+        {
+            _foliageLoaded = true;
+            string folder = GamePath.Contains('\\') ? Path.GetDirectoryName(GamePath)! : _world!.Folder;
+            MapProgress.Visibility = Visibility.Visible;
+            MapProgress.Text = L.T("WorldWindow.ReadingFoliage");
+            _foliage = await Task.Run(() => LoadFoliage(terrain, folder));
+            MapProgress.Visibility = Visibility.Collapsed;
+            FoliageCheck.ToolTip = L.T("WorldWindow.FoliageRead", _foliage.Plants, _foliage.Kinds, _foliage.Drawn);
+        }
+        if (_foliage is not { } look) return;
+        // each picture from afar gives way to the plants' own as the map zooms in past them
+        Map.SetOverlay("grass", look.GrassPicture, terrain.Corner, terrain.Size, WorldMap.GrassScale);
+        Map.SetOverlay("trees", look.TreesPicture, terrain.Corner, terrain.Size, WorldMap.TreeScale);
+        Map.SetPlants(look.Trees, look.Grass);
+    }
+
+    /// <summary>The world's foliage as the map draws it: pictures for afar, the plants for close up, and how many there are.</summary>
+    private sealed record FoliageLook(System.Windows.Media.Imaging.BitmapSource? GrassPicture, System.Windows.Media.Imaging.BitmapSource? TreesPicture,
+        List<MapPlant> Trees, List<MapPlant> Grass, int Plants, int Kinds, int Drawn);
+
+    private FoliageLook LoadFoliage(WorldTerrain terrain, string folder)
+    {
+        var paths = _locator.AllPaths(".flyr").Where(p => p.StartsWith(folder + @"\", StringComparison.OrdinalIgnoreCase)).ToList();
+        if (OnDisk && _diskRoot is { } root && Directory.Exists(Path.Combine(root, folder)))
+            paths.AddRange(Directory.EnumerateFiles(Path.Combine(root, folder), "*.flyr", SearchOption.AllDirectories).Select(f => Path.GetRelativePath(root, f)));
+        var cells = new System.Collections.Concurrent.ConcurrentBag<FoliageFile>();
+        Parallel.ForEach(paths.Distinct(StringComparer.OrdinalIgnoreCase), path =>
+        {
+            try { cells.Add(FoliageFile.Read(Read(path) ?? [])); }
+            catch (InvalidDataException) { }
+        });
+
+        // each kind of plant drawn from above once, its pictures read once for every kind that shares them
+        var kinds = cells.SelectMany(c => c.Groups).Select(g => (g.Tree, g.Grass)).Distinct().ToList();
+        var textures = new System.Collections.Concurrent.ConcurrentDictionary<string, SpritePixels?>(StringComparer.OrdinalIgnoreCase);
+        var sprites = new System.Collections.Concurrent.ConcurrentDictionary<(string, bool), TreeSprite?>();
+        Parallel.ForEach(kinds, kind =>
+        {
+            TreeSprite? sprite = null;
+            try
+            {
+                if (Read(kind.Tree) is { } data)
+                    sprite = TreeSprites.Render(SpeedTreeFile.Read(data), m => m.Diffuse.Length == 0 ? null
+                        : textures.GetOrAdd(SpeedTreeFile.TexturePath(kind.Tree, m.Diffuse), t => SpritePixels.Of(MeshTextures.LoadWithAlpha(_locator, t, 512))),
+                        kind.Grass ? 48 : 128, kind.Grass);
+            }
+            catch (InvalidDataException) { }
+            sprites[kind] = sprite;
+        });
+
+        const int side = 2048;
+        float perMetre = side / terrain.Size;
+        var grass = new byte[side * side * 4];
+        var trees = new byte[side * side * 4];
+        var treeList = new List<MapPlant>();
+        var grassList = new List<MapPlant>();
+        int plants = 0;
+        foreach (var cell in cells)
+            foreach (var group in cell.Groups)
+            {
+                var sprite = sprites.GetValueOrDefault((group.Tree, group.Grass));
+                var colour = sprite?.Colour ?? (group.Grass ? Color.FromRgb(60, 120, 40) : Color.FromRgb(25, 60, 22));
+                foreach (var plant in group.Instances)
+                {
+                    float fx = (plant.Position.X - terrain.Corner.X) * perMetre, fy = side - 1 - (plant.Position.Y - terrain.Corner.Y) * perMetre;
+                    int x = (int)fx, y = (int)fy;
+                    if (x < 0 || y < 0 || x >= side || y >= side) continue;
+                    plants++;
+                    if (sprite is not null)
+                        (group.Grass ? grassList : treeList).Add(new MapPlant(new Vector2(plant.Position.X, plant.Position.Y), plant.Yaw,
+                            sprite.Radius * plant.Scale, sprite.Picture));
+                    int o = (y * side + x) * 4;
+                    if (group.Grass)
+                    {
+                        // grass adds up to a wash of its colour where it's thick
+                        (grass[o], grass[o + 1], grass[o + 2]) = (colour.B, colour.G, colour.R);
+                        grass[o + 3] = (byte)Math.Min(170, grass[o + 3] + 14);
+                        continue;
+                    }
+                    // a tree: a disc of its colour most of the way across its crown, its edge softened
+                    float r = Math.Max(0.7f, (sprite?.Radius ?? 3) * 0.7f * plant.Scale * perMetre);
+                    int reach = (int)Math.Ceiling(r);
+                    for (int dy = -reach; dy <= reach; dy++)
+                        for (int dx = -reach; dx <= reach; dx++)
+                        {
+                            int px = x + dx, py = y + dy;
+                            if (px < 0 || py < 0 || px >= side || py >= side) continue;
+                            float d = MathF.Sqrt((px + 0.5f - fx) * (px + 0.5f - fx) + (py + 0.5f - fy) * (py + 0.5f - fy));
+                            byte alpha = (byte)(Math.Clamp(r + 0.5f - d, 0, 1) * 220);
+                            int q = (py * side + px) * 4;
+                            if (alpha <= trees[q + 3]) continue;
+                            (trees[q], trees[q + 1], trees[q + 2], trees[q + 3]) = (colour.B, colour.G, colour.R, alpha);
+                        }
+                }
+            }
+
+        // premultiplied, as WPF draws Pbgra32 pictures smoothly
+        static System.Windows.Media.Imaging.BitmapSource? Picture(byte[] pixels, bool any)
+        {
+            if (!any) return null;
+            for (int i = 0; i < pixels.Length; i += 4)
+                for (int c = 0; c < 3; c++) pixels[i + c] = (byte)(pixels[i + c] * pixels[i + 3] / 255);
+            var bitmap = System.Windows.Media.Imaging.BitmapSource.Create(side, side, 96, 96, PixelFormats.Pbgra32, null, pixels, side * 4);
+            bitmap.Freeze();
+            return bitmap;
+        }
+        bool anyGrass = cells.Any(c => c.Groups.Any(g => g.Grass)), anyTrees = cells.Any(c => c.Groups.Any(g => !g.Grass));
+        return new FoliageLook(Picture(grass, anyGrass), Picture(trees, anyTrees), treeList, grassList, plants, kinds.Count,
+            sprites.Count(p => p.Value is not null));
+    }
+
+    /// <summary>The hub map's pins (game\hub_pins\WORLD.w2em and .w2qm) and the cooked waypoints, as markers.</summary>
+    private async void Markers_Click(object sender, RoutedEventArgs e)
+    {
+        string name = Path.GetFileNameWithoutExtension(GamePath);
+        string folder = GamePath.Contains('\\') ? Path.GetDirectoryName(GamePath)! : _world!.Folder;
+        if (PinsCheck.IsChecked == true && _pins is null)
+            _pins = await Task.Run(() =>
+            {
+                var markers = new List<MapMarker>();
+                foreach (string ext in new[] { ".w2em", ".w2qm" })
+                    try
+                    {
+                        if (Read($@"game\hub_pins\{name}{ext}") is { } data)
+                            markers.AddRange(MapPins.Read(data).Select(p => new MapMarker(new Vector2(p.Position.X, p.Position.Y),
+                                p.Quest ? Color.FromRgb(0xF2, 0xC9, 0x4C) : Color.FromRgb(0xF2, 0xF2, 0xF2), p.Quest ? p.Name : $"{p.Name} ({p.Kind})", p.Radius, true)));
+                    }
+                    catch (InvalidDataException) { }
+                return markers;
+            });
+        if (WaypointsCheck.IsChecked == true && _waypoints is null)
+            _waypoints = await Task.Run(() =>
+            {
+                try
+                {
+                    return Read($@"{folder}\navi_cooked\{name}.redwpset") is { } data
+                        ? Waypoints.Read(data).Select(w => new MapMarker(new Vector2(w.Position.X, w.Position.Y), Color.FromRgb(0x7C, 0xE0, 0x9A), null, 0, false)).ToList()
+                        : [];
+                }
+                catch (InvalidDataException) { return new List<MapMarker>(); }
+            });
+        var all = new List<MapMarker>();
+        if (WaypointsCheck.IsChecked == true && _waypoints is not null) all.AddRange(_waypoints);
+        if (PinsCheck.IsChecked == true && _pins is not null) all.AddRange(_pins);
+        Map.SetMarkers(all);
+        PinsCheck.ToolTip = _pins is null ? L.T("WorldWindow.PinsTip") : L.T("WorldWindow.PinsRead", _pins.Count);
+        WaypointsCheck.ToolTip = _waypoints is null ? L.T("WorldWindow.WaypointsTip") : L.T("WorldWindow.WaypointsRead", _waypoints.Count);
+    }
+
+    /// <summary>The test of drawing the map with the graphics card: shown in the 2D map's place with what it shows, or put away.</summary>
+    private void GpuCheck_Click(object sender, RoutedEventArgs e)
+    {
+        bool gpu = GpuCheck.IsChecked == true;
+        if (gpu)
+        {
+            GpuMap.BackBrush = Map.BackBrush;
+            GpuMap.ShowFrom(Map);
+            GpuCheck.ToolTip = L.T("WorldWindow.GpuRead", GpuMap.PlantCount);
+        }
+        GpuMap.Visibility = gpu ? Visibility.Visible : Visibility.Collapsed;
+        Map.Visibility = gpu ? Visibility.Collapsed : Visibility.Visible;
+    }
+
     private void Overlay_Click(object sender, RoutedEventArgs e)
     {
         Map.ShowTiles = TilesCheck.IsChecked == true;
         Map.ShowOcclusion = OcclusionCheck.IsChecked == true;
         ShowDots();
+        ShowShapes();
     }
 
     private void FitButton_Click(object sender, RoutedEventArgs e) => Map.FitWorld();
@@ -601,7 +901,11 @@ public partial class WorldWindow : Window, IMessageHost
         PickedDetail.Text = L.T("WorldWindow.PickedDetail", dot.Layer.Path, $"{e.Position.X:0.00}, {e.Position.Y:0.00}, {e.Position.Z:0.00}", e.Yaw * 180 / MathF.PI,
             e.Template ?? L.T("WorldWindow.NoTemplate"));
         OpenTemplateButton.IsEnabled = e.Template is not null;
+        PickedComponents.ItemsSource = e.Components;
+        PickedComponents.Visibility = e.Components.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
         PickedPanel.Visibility = Visibility.Visible;
+        // the picked entity's areas filled in, so it's clear which outlines are its own
+        if (OutlinesCheck.IsChecked == true) ShowShapes();
     }
 
     private void OpenTemplate_Click(object sender, RoutedEventArgs e)
