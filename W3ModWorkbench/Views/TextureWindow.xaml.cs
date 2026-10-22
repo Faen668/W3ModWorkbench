@@ -51,6 +51,8 @@ public partial class TextureWindow : Window, IMessageHost
         _resource = resource;
         _origin = origin;
         Title = L.T("TextureWindow.Texture2", title);
+        // a texture of the game's (or a mod's), opened from its cache, can be replaced in the project by a picture
+        ReplaceButton.Visibility = origin is not null && Path.GetExtension(path).ToLowerInvariant() is ".xbm" or ".w2cube" ? Visibility.Visible : Visibility.Collapsed;
         int width = info?.Width ?? picture!.Width, height = info?.Height ?? picture!.Height;
         for (int level = 0; level < mips; level++)
             MipBox.Items.Add($"{Math.Max(1, width >> level)} x {Math.Max(1, height >> level)}" + (level == 0 ? L.T("TextureWindow.Full") : ""));
@@ -362,6 +364,16 @@ public partial class TextureWindow : Window, IMessageHost
         if (FitToggle.IsChecked == true) ApplyZoom();
     }
 
+    // the buttons on the right keep only their icons (their tooltips say what they do) when both sides won't fit
+    private void Toolbar_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        TextBlock[] labels = [ReplaceLabel, SavePngLabel, SaveDdsLabel];
+        foreach (var label in labels) label.Visibility = Visibility.Visible;
+        RightTools.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        bool narrow = LeftTools.DesiredSize.Width + RightTools.DesiredSize.Width + 12 > Toolbar.ActualWidth;
+        foreach (var label in labels) label.Visibility = narrow ? Visibility.Collapsed : Visibility.Visible;
+    }
+
     private void Scroller_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
     {
         if (Keyboard.Modifiers != ModifierKeys.Control || _image is null) return;
@@ -398,6 +410,19 @@ public partial class TextureWindow : Window, IMessageHost
         {
             _ = ShowMessage(L.T("TextureWindow.PictureCouldNotSaved"), ex.Message, MessageKind.Warning);
         }
+    }
+
+    private async void Replace_Click(object sender, RoutedEventArgs e)
+    {
+        if (TextureReplacer.Pick(this, _path) is { } picture) await ReplaceWith(picture);
+    }
+
+    /// <summary>Replaces the texture in the project with a picture, and shows what Build will make of it.</summary>
+    private async Task ReplaceWith(string picture)
+    {
+        ReplaceButton.IsEnabled = false;
+        try { await TextureReplacer.ReplaceAsync(this, Message, _path, _resource, picture); }
+        finally { ReplaceButton.IsEnabled = true; }
     }
 
     private void SaveDds_Click(object sender, RoutedEventArgs e)

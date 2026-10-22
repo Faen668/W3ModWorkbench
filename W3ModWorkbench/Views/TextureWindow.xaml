@@ -49,8 +49,8 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <DockPanel Grid.Row="0" Margin="14,12,14,10" LastChildFill="False">
-            <StackPanel Orientation="Horizontal" DockPanel.Dock="Left">
+        <DockPanel x:Name="Toolbar" Grid.Row="0" Margin="14,12,14,10" LastChildFill="False" SizeChanged="Toolbar_SizeChanged">
+            <StackPanel x:Name="LeftTools" Orientation="Horizontal" DockPanel.Dock="Left" SizeChanged="Toolbar_SizeChanged">
                 <RadioButton x:Name="ChannelRgba" Style="{StaticResource Segment}" GroupName="Channel" Content="{l:T TextureWindow.Rgba}" IsChecked="True" Checked="Channel_Checked" ToolTip="{l:T TextureWindow.AllChannelsOverChequerboard}" />
                 <RadioButton x:Name="ChannelRgb" Style="{StaticResource Segment}" GroupName="Channel" Content="{l:T TextureWindow.RGB}" Checked="Channel_Checked" ToolTip="{l:T TextureWindow.ColourWithoutTransparency}" />
                 <RadioButton x:Name="ChannelR" Style="{StaticResource Segment}" GroupName="Channel" Content="R" Checked="Channel_Checked" />
@@ -76,17 +76,23 @@
                             ValueChanged="Light_ValueChanged" ToolTip="{l:T TextureWindow.WhereLightComesRound}" />
                 </StackPanel>
             </StackPanel>
-            <StackPanel Orientation="Horizontal" DockPanel.Dock="Right">
+            <StackPanel x:Name="RightTools" Orientation="Horizontal" DockPanel.Dock="Right">
+                <Button x:Name="ReplaceButton" Margin="0,0,6,0" Padding="12,5" Click="Replace_Click" Visibility="Collapsed" ToolTip="{l:T TextureReplacer.Tip}">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Style="{StaticResource IconText}" Text="&#xEB9F;" Margin="0,1,0,0" />
+                        <TextBlock x:Name="ReplaceLabel" Margin="8,0,0,0" Text="{l:T TextureReplacer.Button}" />
+                    </StackPanel>
+                </Button>
                 <Button x:Name="SavePngButton" Padding="12,5" Click="SavePng_Click" IsEnabled="False" ToolTip="{l:T TextureWindow.SaveMipLevelShown}">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Style="{StaticResource IconText}" Text="&#xE74E;" Margin="0,1,0,0" />
-                        <TextBlock Margin="8,0,0,0" Text="{l:T TextureWindow.SavePNG}" />
+                        <TextBlock x:Name="SavePngLabel" Margin="8,0,0,0" Text="{l:T TextureWindow.SavePNG}" />
                     </StackPanel>
                 </Button>
                 <Button x:Name="SaveDdsButton" Margin="6,0,0,0" Padding="12,5" Click="SaveDds_Click" IsEnabled="False" ToolTip="{l:T TextureWindow.SaveWholeTextureEvery}">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Style="{StaticResource IconText}" Text="&#xE74E;" Margin="0,1,0,0" />
-                        <TextBlock Margin="8,0,0,0" Text="{l:T TextureWindow.SaveDDS}" />
+                        <TextBlock x:Name="SaveDdsLabel" Margin="8,0,0,0" Text="{l:T TextureWindow.SaveDDS}" />
                     </StackPanel>
                 </Button>
             </StackPanel>

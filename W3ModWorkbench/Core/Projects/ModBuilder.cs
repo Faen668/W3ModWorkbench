@@ -34,10 +34,13 @@ public static class ModBuilder
     /// Reads a game file by its path (the texture a picture in the workspace takes the place of, whose settings it
     /// keeps), or null when the game isn't at hand.
     /// </param>
-    public static Task<BuildResult> BuildAsync(WorkbenchProject project, CompilerChoice? compiler, Func<string, byte[]?>? gameFile, IProgress<string>? progress, CancellationToken cancel) =>
-        Task.Run(() => Build(project, compiler, gameFile, progress, cancel), cancel);
+    /// <param name="gameTexture">A game bitmap's whole level chain, for a texture array's slices the workspace hasn't got; or null.</param>
+    public static Task<BuildResult> BuildAsync(WorkbenchProject project, CompilerChoice? compiler, Func<string, byte[]?>? gameFile, IProgress<string>? progress, CancellationToken cancel,
+        Func<string, Packing.TextureLevels?>? gameTexture = null) =>
+        Task.Run(() => Build(project, compiler, gameFile, gameTexture, progress, cancel), cancel);
 
-    private static BuildResult Build(WorkbenchProject project, CompilerChoice? compiler, Func<string, byte[]?>? gameFile, IProgress<string>? progress, CancellationToken cancel)
+    private static BuildResult Build(WorkbenchProject project, CompilerChoice? compiler, Func<string, byte[]?>? gameFile, Func<string, Packing.TextureLevels?>? gameTexture,
+        IProgress<string>? progress, CancellationToken cancel)
     {
         var log = new StringBuilder();
         var made = new List<string>();
@@ -134,7 +137,7 @@ public static class ModBuilder
             if (Directory.Exists(project.WorkspacePath))
             {
                 progress?.Report(L.T("ModBuilder.PackingWorkspace"));
-                if (Packing.ModPacker.Pack(project.WorkspacePath, content, gameFile, progress, cancel) is { } packed)
+                if (Packing.ModPacker.Pack(project.WorkspacePath, content, gameFile, progress, cancel, gameTexture) is { } packed)
                 {
                     made.AddRange(packed.Made);
                     foreach (string note in packed.Notes) log.AppendLine(note);
@@ -174,8 +177,9 @@ public static class ModBuilder
         return issues;
     }
 
-    /// <summary>Whether Build cooks a file of this kind when it isn't cooked: textures (<c>.xbm</c>).</summary>
-    public static bool BuildCooks(string file) => file.EndsWith(".xbm", StringComparison.OrdinalIgnoreCase);
+    /// <summary>Whether Build cooks a file of this kind when it isn't cooked: textures (<c>.xbm</c>), cube maps and texture arrays.</summary>
+    public static bool BuildCooks(string file) => file.EndsWith(".xbm", StringComparison.OrdinalIgnoreCase)
+        || file.EndsWith(".w2cube", StringComparison.OrdinalIgnoreCase) || file.EndsWith(".texarray", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Whether a file is a CR2W resource that hasn't been cooked: none of its objects carry the cook's flag.</summary>
     public static bool IsUncooked(string file)

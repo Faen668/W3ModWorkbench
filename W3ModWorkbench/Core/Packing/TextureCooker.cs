@@ -26,7 +26,7 @@ public sealed record TextureLevel(int Width, int Height, int Pitch, byte[] Data)
 /// chain and is block-compressed here, as the texture group (or the texture it replaces) asks.
 /// </para>
 /// </summary>
-public static class TextureCooker
+public static partial class TextureCooker
 {
     /// <summary>The levels a streamed texture keeps in its resource: those after its first count minus this.</summary>
     public const int ResidentLevels = 6;
@@ -203,7 +203,9 @@ public static class TextureCooker
         w.Write((byte)0);
         foreach (var p in properties)
         {
-            if (p.Name is "importFile" or "importFileTimeStamp" or "sourceData" or "residentMipIndex" or "textureCacheKey" or "encodedTextureFormat") continue;
+            // the editor's (where it was imported from, its source pixels) and the downscale biases, which the cook applies, aren't kept
+            if (p.Name is "importFile" or "importFileTimeStamp" or "sourceData" or "residentMipIndex" or "textureCacheKey" or "encodedTextureFormat"
+                or "pcDownscaleBias" or "xboneDownscaleBias" or "ps4DownscaleBias") continue;
             Property(builder, w, p);
         }
         if (resident > 0) Property(builder, w, new SourceProperty("residentMipIndex", "Uint8", [(byte)resident]));
@@ -320,7 +322,8 @@ public static class TextureCooker
             levels = Chain(rgba, width, height, format, NoMips.Contains(group) ? 1 : MipCount(width, height));
         }
 
-        // the properties in the class's order: size, raw format (for a plain one), compression, group, downscale biases
+        // the properties in the class's order: size, raw format (for a plain one), compression and group (a cooked texture keeps
+        // no downscale biases)
         var props = new List<SourceProperty>
         {
             new("width", "Uint32", BitConverter.GetBytes(levels[0].Width)),
@@ -329,8 +332,6 @@ public static class TextureCooker
         if (template?.Properties.FirstOrDefault(p => p.Name == "format") is { } rawFormat && CacheFormat(compression) == 253) props.Add(rawFormat);
         if (compression != "TCM_None") props.Add(new SourceProperty("compression", "ETextureCompression", [0, 0], compression));
         props.Add(new SourceProperty("textureGroup", "CName", [0, 0], group));
-        foreach (var bias in new[] { "pcDownscaleBias", "xboneDownscaleBias", "ps4DownscaleBias" })
-            if (template?.Properties.FirstOrDefault(p => p.Name == bias) is { } b) props.Add(b);
         return Cook(gamePath, props, levels, compression, group, notes.Count > 0 ? string.Join("; ", notes) : null);
     }
 

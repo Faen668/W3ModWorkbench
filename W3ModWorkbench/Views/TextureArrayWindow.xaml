@@ -56,6 +56,12 @@
                         <TextBlock Margin="8,0,0,0" Text="{l:T TextureArrayWindow.OpenTexture}" />
                     </StackPanel>
                 </Button>
+                <Button x:Name="ReplaceButton" Margin="6,0,0,0" Padding="12,5" Click="Replace_Click" Visibility="Collapsed" ToolTip="{l:T TextureReplacer.Tip}">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Style="{StaticResource IconText}" Text="&#xEB9F;" Margin="0,1,0,0" />
+                        <TextBlock Margin="8,0,0,0" Text="{l:T TextureReplacer.Button}" />
+                    </StackPanel>
+                </Button>
                 <Button x:Name="SavePngsButton" Margin="6,0,0,0" Padding="12,5" Click="SavePngs_Click" IsEnabled="False" ToolTip="{l:T TextureArrayWindow.SaveEveryTextureArray}">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Style="{StaticResource IconText}" Text="&#xE74E;" Margin="0,1,0,0" />

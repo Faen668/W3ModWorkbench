@@ -2185,7 +2185,8 @@ public partial class MainWindow : Window, IMessageHost
             var progress = new Progress<string>(text => SetStatus(L.T("MainWindow.Building", project.ModFolderName, text)));
             // the game's files, for the textures pictures in the workspace take the place of
             var game = new ResourceLocator(OpenArchives(), null, GameLocator.Resolve(null));
-            var result = await ModBuilder.BuildAsync(project, compiler, game.ReadFile, progress, CancellationToken.None);
+            var result = await ModBuilder.BuildAsync(project, compiler, game.ReadFile, progress, CancellationToken.None,
+                path => Core.Packing.TextureCooker.GameLevels(game, path));
             if (!result.Success)
             {
                 SetStatus(L.T("MainWindow.WasntBuilt", project.ModFolderName));

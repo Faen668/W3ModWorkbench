@@ -29,7 +29,9 @@ public static class ModPacker
     /// Packs <paramref name="workspace"/> into <paramref name="content"/>. <paramref name="gameFile"/> reads a game file
     /// by its path (for the texture a picture replaces), or is null. Null when the workspace has nothing to pack.
     /// </summary>
-    public static PackResult? Pack(string workspace, string content, Func<string, byte[]?>? gameFile, IProgress<string>? progress, CancellationToken cancel)
+    /// <param name="gameTexture">A game bitmap's whole level chain by its path, for a texture array's slices the workspace hasn't got; or null.</param>
+    public static PackResult? Pack(string workspace, string content, Func<string, byte[]?>? gameFile, IProgress<string>? progress, CancellationToken cancel,
+        Func<string, TextureLevels?>? gameTexture = null)
     {
         string root = Path.GetFullPath(workspace);
         var all = new DirectoryInfo(root).EnumerateFiles("*", SearchOption.AllDirectories)
@@ -53,9 +55,11 @@ public static class ModPacker
             if (SoundCacheWriter.IsSound(file.GamePath)) { sounds.Add(file); continue; }
             if (ext.Equals(".dds", StringComparison.OrdinalIgnoreCase) || Pictures.Extensions.Contains(ext))
             {
-                string texture = Path.ChangeExtension(file.GamePath, ".xbm");
-                bool isTexture = TextureOnly.Contains(ext) || byPath.ContainsKey(texture) || gameFile?.Invoke(texture) is not null;
-                if (isTexture)
+                // the texture of the same name it takes the place of: a bitmap, a cube map or a texture array; a new one is a bitmap
+                string? texture = new[] { ".xbm", ".w2cube", ".texarray" }.Select(e => Path.ChangeExtension(file.GamePath, e))
+                    .FirstOrDefault(t => byPath.ContainsKey(t) || gameFile?.Invoke(t) is not null);
+                if (texture is null && TextureOnly.Contains(ext)) texture = Path.ChangeExtension(file.GamePath, ".xbm");
+                if (texture is not null)
                 {
                     if (!pictures.TryAdd(texture, file)) notes.Add(L.T("ModPacker.LeftOutMakesAlready", file.GamePath, pictures[texture].GamePath, texture));
                     continue;
@@ -87,8 +91,10 @@ public static class ModPacker
                 try
                 {
                     var templateBytes = byPath.TryGetValue(texture, out var own) ? File.ReadAllBytes(own.FilePath) : gameFile?.Invoke(texture);
-                    var template = templateBytes is null ? null : TextureCooker.ReadTexture(templateBytes);
-                    var result = TextureCooker.Import(texture, picture.FilePath, File.ReadAllBytes(picture.FilePath), template);
+                    bool cube = texture.EndsWith(".w2cube", StringComparison.OrdinalIgnoreCase);
+                    var result = cube || texture.EndsWith(".texarray", StringComparison.OrdinalIgnoreCase)
+                        ? TextureCooker.ImportLayered(texture, cube, picture.FilePath, File.ReadAllBytes(picture.FilePath), templateBytes is null ? null : TextureCooker.ReadLayered(templateBytes))
+                        : TextureCooker.Import(texture, picture.FilePath, File.ReadAllBytes(picture.FilePath), templateBytes is null ? null : TextureCooker.ReadTexture(templateBytes));
                     string gamePath = texture.ToLowerInvariant();
                     bundled.Add(Stage(gamePath, result.Resource));
                     if (result.Cache is not null) cache.Add(result.Cache);
@@ -123,9 +129,30 @@ public static class ModPacker
                         notes.Add(L.T("ModPacker.CouldntCookedGoes", file.GamePath, ex.Message));
                     }
                 }
-                else if ((file.GamePath.EndsWith(".w2cube", StringComparison.OrdinalIgnoreCase) || file.GamePath.EndsWith(".texarray", StringComparison.OrdinalIgnoreCase))
-                    && IsSourceTexture(file.FilePath))
-                    notes.Add(L.T("ModPacker.REDkitSourceFileCube", file.GamePath));
+                else if (file.GamePath.EndsWith(".w2cube", StringComparison.OrdinalIgnoreCase) || file.GamePath.EndsWith(".texarray", StringComparison.OrdinalIgnoreCase))
+                {
+                    // a REDkit source cube or array is cooked; one cooked already goes in as it is
+                    try
+                    {
+                        var bytes = File.ReadAllBytes(file.FilePath);
+                        var result = file.GamePath.EndsWith(".w2cube", StringComparison.OrdinalIgnoreCase)
+                            ? TextureCooker.CookCube(file.GamePath, bytes)
+                            : TextureCooker.CookArray(file.GamePath, bytes, slice => byPath.TryGetValue(slice, out var own)
+                                ? TextureCooker.BitmapLevels(File.ReadAllBytes(own.FilePath)) : gameTexture?.Invoke(slice));
+                        if (result is not null)
+                        {
+                            bundled.Add(Stage(file.GamePath.ToLowerInvariant(), result.Resource));
+                            if (result.Cache is not null) cache.Add(result.Cache);
+                            if (result.Note is { } note) notes.Add($"{file.GamePath}: {note}");
+                            cooked++;
+                            continue;
+                        }
+                    }
+                    catch (InvalidDataException ex)
+                    {
+                        notes.Add(L.T("ModPacker.CouldntCookedGoes", file.GamePath, ex.Message));
+                    }
+                }
                 bundled.Add(file);
             }
 
@@ -178,20 +205,6 @@ public static class ModPacker
         {
             try { Directory.Delete(staging, recursive: true); }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
-        }
-    }
-
-    /// <summary>Whether a file is a CR2W resource REDkit hasn't cooked: none of its objects carry the cook's flag.</summary>
-    private static bool IsSourceTexture(string path)
-    {
-        try
-        {
-            var data = File.ReadAllBytes(path);
-            return Cr2w.Cr2wFile.IsCr2w(data) && !TextureCooker.IsCooked(Cr2w.Cr2wFile.Read(data));
-        }
-        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
-        {
-            return false;
         }
     }
 

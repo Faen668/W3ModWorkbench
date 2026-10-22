@@ -89,6 +89,7 @@ public partial class TextureArrayWindow : Window, IMessageHost
         Slices.ItemsSource = items;
         bool known = info.Format != TextureFormat.Unknown;
         SavePngsButton.IsEnabled = SaveDdsButton.IsEnabled = known;
+        ReplaceButton.Visibility = Visibility.Visible;
         if (!known) BusyText.Text = L.T("TextureArrayWindow.TextureFormatCantShown", info.RawFormat);
         Slices.SelectedIndex = 0;
         Slices.Focus();
@@ -185,6 +186,19 @@ public partial class TextureArrayWindow : Window, IMessageHost
         {
             _ = ShowMessage(L.T("TextureArrayWindow.TexturesCouldNotSaved"), ex.Message, MessageKind.Warning);
         }
+    }
+
+    private async void Replace_Click(object sender, RoutedEventArgs e)
+    {
+        if (TextureReplacer.Pick(this, _entry.Path) is { } picture) await ReplaceWith(picture);
+    }
+
+    /// <summary>Replaces the texture in the project with a picture, and shows what Build will make of it.</summary>
+    private async Task ReplaceWith(string picture)
+    {
+        ReplaceButton.IsEnabled = false;
+        try { await TextureReplacer.ReplaceAsync(this, Message, _entry.Path, _resource, picture); }
+        finally { ReplaceButton.IsEnabled = true; }
     }
 
     private void SaveDds_Click(object sender, RoutedEventArgs e)
