@@ -21,6 +21,9 @@ public sealed class GltfPrimitive
     public JsonObject? MaterialExtras { get; init; }
     public JsonObject? Extras { get; init; }
 
+    /// <summary>The material's pictures and settings, or null without a material.</summary>
+    public GltfMaterialInfo? MaterialInfo { get; init; }
+
     public required Vector3[] Positions { get; init; }
     public Vector3[] Normals { get; init; } = [];
     public Vector4[] Tangents { get; init; } = [];
@@ -48,6 +51,16 @@ public sealed class GltfPrimitive
 }
 
 public sealed record GltfSkin(string[] JointNames, Matrix4x4[] InverseBinds);
+
+/// <summary>A picture inside or beside a glTF: its bytes and what they are (image/png, image/jpeg).</summary>
+public sealed record GltfImage(string Name, byte[] Data, string MimeType);
+
+/// <summary>
+/// A glTF material as a new mesh makes its own of: its colour, normal map and metal-roughness pictures (null when it
+/// has none), the factors they're multiplied by, and how it's drawn.
+/// </summary>
+public sealed record GltfMaterialInfo(string Name, GltfImage? Colour, GltfImage? Normal, GltfImage? MetalRoughness,
+    Vector4 ColourFactor, float RoughnessFactor, bool DoubleSided, string AlphaMode);
 
 /// <summary>
 /// Reads the meshes of a glTF 2.0 file, binary (.glb) or text (.gltf with its .bin beside it or inside as base64): every
@@ -90,6 +103,7 @@ public static class GltfReader
             else buffers.Add(File.ReadAllBytes(Path.Combine(Path.GetDirectoryName(path) ?? ".", Uri.UnescapeDataString(uri))));
         }
         var reader = new Accessors(root, buffers);
+        var materialInfos = Materials(root, buffers, path);
 
         var nodes = root["nodes"] as JsonArray ?? [];
         var meshes = root["meshes"] as JsonArray ?? [];
@@ -161,6 +175,7 @@ public static class GltfReader
                     MaterialName = (string?)materialNode?["name"],
                     NodeExtras = node["extras"] as JsonObject,
                     MaterialExtras = materialNode?["extras"] as JsonObject,
+                    MaterialInfo = material is int mi && mi < materialInfos.Count ? materialInfos[mi] : null,
                     Extras = primitive["extras"] as JsonObject,
                     Positions = positions,
                     Normals = normals,
@@ -176,6 +191,53 @@ public static class GltfReader
                     Indices = primitive["indices"] is JsonNode ix ? reader.Ints((int)ix) : [.. Enumerable.Range(0, positions.Length)],
                 });
             }
+        }
+        return result;
+    }
+
+    /// <summary>Each material's pictures and settings, in the file's order.</summary>
+    private static List<GltfMaterialInfo> Materials(JsonObject root, List<byte[]> buffers, string path)
+    {
+        var images = root["images"] as JsonArray ?? [];
+        var textures = root["textures"] as JsonArray ?? [];
+        var views = root["bufferViews"] as JsonArray ?? [];
+        GltfImage? Image(JsonNode? textureInfo)
+        {
+            if (textureInfo?["index"] is not JsonNode t || (int)t >= textures.Count || textures[(int)t]?["source"] is not JsonNode source
+                || (int)source >= images.Count || images[(int)source] is not JsonObject image) return null;
+            string name = (string?)image["name"] ?? $"image_{(int)source}";
+            string mime = (string?)image["mimeType"] ?? "";
+            byte[]? data = null;
+            if (image["bufferView"] is JsonNode v && views[(int)v] is JsonObject view)
+            {
+                var buffer = buffers[(int?)view["buffer"] ?? 0];
+                int offset = (int?)view["byteOffset"] ?? 0, length = (int)view["byteLength"]!;
+                if (offset + length <= buffer.Length) data = buffer.AsSpan(offset, length).ToArray();
+            }
+            else if ((string?)image["uri"] is { } uri)
+            {
+                if (uri.StartsWith("data:", StringComparison.Ordinal))
+                {
+                    mime = uri[5..uri.IndexOf(';')];
+                    data = Convert.FromBase64String(uri[(uri.IndexOf(',') + 1)..]);
+                }
+                else
+                {
+                    string file = Path.Combine(Path.GetDirectoryName(path) ?? ".", Uri.UnescapeDataString(uri));
+                    if (File.Exists(file)) data = File.ReadAllBytes(file);
+                    if (mime.Length == 0) mime = Path.GetExtension(file).ToLowerInvariant() is ".jpg" or ".jpeg" ? "image/jpeg" : "image/png";
+                }
+            }
+            return data is null ? null : new GltfImage(name, data, mime);
+        }
+        var result = new List<GltfMaterialInfo>();
+        foreach (var m in root["materials"] as JsonArray ?? [])
+        {
+            var pbr = m?["pbrMetallicRoughness"];
+            var factor = pbr?["baseColorFactor"] is JsonArray f && f.Count == 4 ? new Vector4(F(f[0]), F(f[1]), F(f[2]), F(f[3])) : Vector4.One;
+            result.Add(new GltfMaterialInfo((string?)m?["name"] ?? $"material_{result.Count}", Image(pbr?["baseColorTexture"]), Image(m?["normalTexture"]),
+                Image(pbr?["metallicRoughnessTexture"]), factor, pbr?["roughnessFactor"] is JsonNode r ? F(r) : 1,
+                (bool?)m?["doubleSided"] ?? false, (string?)m?["alphaMode"] ?? "OPAQUE"));
         }
         return result;
     }

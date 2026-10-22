@@ -44,6 +44,6 @@ Everything in `scripts` is compiled with the mod. Everything in `workspace` is p
 
 ## The project in the tree
 
-The project is the first entry in the main window's tree, with a **PROJECT** badge. Right-click it for **Project properties**, **Add files to the project**, **Refresh the project** (after files change outside the app), **Open the project folder** and **Close project**. Right-click files for **Add to project** or **Remove from project** (which only takes the name off the list; the file stays).
+The project is the first entry in the main window's tree, with a **PROJECT** badge. Right-click it for **Project properties**, **Add files to the project**, **New mesh from glTF** (see [[Meshes]]), **Refresh the project** (after files change outside the app), **Open the project folder** and **Close project**. Right-click files for **Add to project** or **Remove from project** (which only takes the name off the list; the file stays).
 
 > note: Only your project's files can be changed. The game's files, other people's mods (and your own mod once it's installed) are read-only everywhere in the app. To change one, copy it into your project first: see [[Changing game files]].

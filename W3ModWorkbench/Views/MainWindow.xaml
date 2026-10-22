@@ -208,6 +208,9 @@
                                     <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE713;" /></MenuItem.Icon>
                                 </MenuItem>
                                 <MenuItem x:Name="TreeAddFilesItem" Header="{l:T MainWindow.AddFilesProject}" Click="ProjectAddFiles_Click" Visibility="Collapsed" />
+                                <MenuItem x:Name="TreeNewMeshItem" Header="{l:T MainWindow.NewMeshFromGltf}" Click="TreeNewMesh_Click" Visibility="Collapsed" ToolTip="{l:T MainWindow.NewMeshFromGltfTip}">
+                                    <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE8B5;" /></MenuItem.Icon>
+                                </MenuItem>
                                 <MenuItem x:Name="TreeRefreshItem" Header="{l:T MainWindow.RefreshProject}" Click="ProjectRefresh_Click" Visibility="Collapsed" />
                                 <MenuItem x:Name="TreeRevealItem" Header="{l:T MainWindow.OpenProjectFolder}" Click="ProjectReveal_Click" Visibility="Collapsed" />
                                 <Separator x:Name="TreeProjectSeparator" Visibility="Collapsed" />

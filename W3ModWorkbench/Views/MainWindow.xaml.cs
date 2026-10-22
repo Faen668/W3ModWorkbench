@@ -740,7 +740,7 @@ public partial class MainWindow : Window, IMessageHost
                 ? L.T("MainWindow.CompileTheseScriptsTip", Path.Combine(Path.GetDirectoryName(root!.Archive.FilePath.TrimEnd('\\')) ?? "", "precompiled.rsblob"))
                 : CompilerChoice.NothingToCompileWith;
         }
-        foreach (var item in new[] { TreeProjectPropertiesItem, TreeAddFilesItem, TreeRefreshItem, TreeRevealItem })
+        foreach (var item in new[] { TreeProjectPropertiesItem, TreeAddFilesItem, TreeNewMeshItem, TreeRefreshItem, TreeRevealItem })
             item.Visibility = project ? Visibility.Visible : Visibility.Collapsed;
         TreeProjectSeparator.Visibility = project || loose ? Visibility.Visible : Visibility.Collapsed;
         TreeCloseItem.Header = project ? L.T("MainWindow.CloseProject") : loose ? L.T("MainWindow.CloseScripts") : root is { IsGroup: true } ? L.T("MainWindow.CloseMod") : L.T("MainWindow.CloseBundle");

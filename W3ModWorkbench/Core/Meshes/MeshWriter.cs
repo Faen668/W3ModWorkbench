@@ -259,7 +259,7 @@ public static class MeshWriter
             var inLod = visible.Select((c, i) => (c, i)).Where(x => x.c.InLod(l)).Select(x => x.i).ToList();
             WriteCount(ms, inLod.Count);
             foreach (int i in inLod) ms.Write(BitConverter.GetBytes((ushort)i));
-            ms.Write(BitConverter.GetBytes(l < distances.Count ? distances[l] : distances.LastOrDefault() + 10 * (l - distances.Count + 1)));
+            ms.Write(BitConverter.GetBytes(l < distances.Count ? distances[l] : l == 0 ? 0f : distances.LastOrDefault() + 10 * (l - distances.Count + 1)));
         }
 
         // the bones, by name: a name the file hasn't got goes on the end of its list

@@ -155,7 +155,7 @@ public static class MeshImport
         return anySeen ? (chunk.RenderMask & 1) != 0 : chunk.RenderMask != 0;
     }
 
-    private static int? LodOf(GltfPrimitive p)
+    internal static int? LodOf(GltfPrimitive p)
     {
         if (p.NodeExtras?["lod"] is { } extra && int.TryParse(extra.ToJsonString(), out int fromExtra)) return fromExtra;
         var m = Regex.Match(p.NodeName, @"_lod(\d+)", RegexOptions.IgnoreCase);
@@ -179,7 +179,7 @@ public static class MeshImport
     }
 
     /// <summary>Parts joined into chunks of no more than 65,535 vertices, a part bigger than that split by its triangles.</summary>
-    private static IEnumerable<List<(GltfPrimitive Part, int[] Triangles)>> Split(List<GltfPrimitive> parts)
+    internal static IEnumerable<List<(GltfPrimitive Part, int[] Triangles)>> Split(List<GltfPrimitive> parts)
     {
         var piece = new List<(GltfPrimitive, int[])>();
         int count = 0;
@@ -221,7 +221,7 @@ public static class MeshImport
     }
 
     /// <summary>One chunk from parts: their vertices turned to the game's space, with whatever the file lacks filled in.</summary>
-    private static MeshChunk Build(List<(GltfPrimitive Part, int[] Triangles)> parts, MeshChunk like, List<MeshChunk> near, int slot, int lodMask,
+    internal static MeshChunk Build(List<(GltfPrimitive Part, int[] Triangles)> parts, MeshChunk like, List<MeshChunk> near, int slot, int lodMask,
         List<string> boneNames, string[] templateBones, List<string> warnings)
     {
         var positions = new List<Vector3>();
@@ -403,7 +403,7 @@ public static class MeshImport
     private static readonly Matrix4x4 FromYUp = Matrix4x4.Transpose(ToYUp);
 
     /// <summary>A matrix in glTF's space as the game has it: the turn the export made, undone.</summary>
-    private static Matrix4x4 ToGame(Matrix4x4 m) => ToYUp * m * FromYUp;
+    internal static Matrix4x4 ToGame(Matrix4x4 m) => ToYUp * m * FromYUp;
 
     private static Vector3[] Normalised(List<Vector3> normals) =>
         [.. normals.Select(v => v.LengthSquared() > 1e-12f ? Vector3.Normalize(v) : Vector3.UnitZ)];

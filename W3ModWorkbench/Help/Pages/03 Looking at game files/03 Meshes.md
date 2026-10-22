@@ -2,8 +2,8 @@
 title: Meshes
 icon: E7B8
 order: 3
-summary: See a model in 3D with its textures, look at its parts and materials, change them, export it as glTF or OBJ, and import a glTF made in Blender back onto it.
-keywords: mesh w2mesh 3d model lod chunk material texture export import gltf glb blender obj collision wireframe bones skeleton rig weights buffer replace edit model
+summary: See a model in 3D with its textures, look at its parts and materials, change them, export it as glTF or OBJ, import a glTF made in Blender back onto it, or make a new mesh from one.
+keywords: mesh w2mesh 3d model lod chunk material texture export import new mesh create gltf glb blender obj collision wireframe bones skeleton rig weights buffer replace edit model
 windows: MeshWindow
 ---
 A **mesh** (`.w2mesh`) is a 3D model: a sword, a wall, a piece of armour, a monster's body. Cloth (`.redcloth`) opens in the same viewer, with its simulation on an extra tab: see [[Cloth]]. Double-click one, or highlight it and press {{Enter}}, to see it in 3D with its textures. The preview pane shows it too, smaller.
@@ -111,5 +111,17 @@ What the file hasn't got is made or taken from the mesh as it was: normals from 
 - The chunks only for shadows are made again from the new ones, as the game cooks them.
 
 ![The Viewers settings for exporting and importing meshes as glTF](mesh-export-settings.jpg)
+
+## A new mesh from a glTF
+
+To add a model of your own rather than change one of the game's, right-click your project in the main window's tree (or a folder in its workspace) > **New mesh from glTF…**, pick the `.glb` or `.gltf`, then where the mesh goes. Its place in the workspace is its path in the game. The mesh, its `.buffer` and the pictures its materials use go in your project, and it opens in the mesh viewer.
+
+![A monkey made in Blender, as a mesh of the game's own, its texture shown from the picture beside it](mesh-new.jpg)
+
+- **Parts and LODs** are made as an import's are: each part's LOD from its name (`name_lod1`), else LOD 0, and a chunk for each material in each LOD. The LODs are drawn from 0, 10, 20, 40… metres away, and the mesh hides from 100 metres (or twice its last LOD's distance).
+- **A skinned mesh**: when the file's parts have a skin, the mesh is skinned, with its bones as the file binds them, four bones a vertex (eight when the file gives more). To be seen moving in the game it needs an entity with a rig that has bones of the same names.
+- **Materials**: one exported from the game (the export's `w3Source`, which Blender keeps with **Custom Properties** ticked) uses that material again. Any other becomes a material of the mesh's own on the game's standard shader (`pbr_std`): the file's colour picture its **Diffuse**, and its normal map, with the roughness put in its alpha as the game keeps it, its **Normal**. Those pictures go beside the mesh as `.tga` (`name_material_d01.tga`, `_n01.tga`), shown in the viewer at once, and **Build** makes them into textures. Change any of it afterwards in the viewer: **Other material…**, **Other texture…** or the parameters.
+
+> note: A new mesh has no collision, so nothing bumps into it, and see-through parts are drawn solid on the standard shader: give their chunks a cut-out material (one on `pbr_hair`, say) in the viewer. The mesh's `generalizedMeshRadius` is its bounding sphere's; the game's own meshes were given theirs when they were made.
 
 > note: Materials are drawn with the game's own shader settings: normal maps, roughness, skin, hair, eyes, glass and what glows, lit with one of the game's daylight probes. Dyes are only shown in the entity, scene and cutscene viewers, so dyeable armour shows its raw tint-mask colours here.

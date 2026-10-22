@@ -29,7 +29,7 @@ public static class MeshTextures
 
     private static BitmapSource? Read(ResourceLocator locator, string xbmPath, int max, PixelFormat format)
     {
-        if (locator.FindTexture(xbmPath) is not { } texture) return null;
+        if (locator.FindTexture(xbmPath) is not { } texture) return ProjectPicture(locator, xbmPath, format);
         try
         {
             var info = texture.Info;
@@ -65,7 +65,8 @@ public static class MeshTextures
     /// <summary>A texture's full-size picture as a PNG, with its transparency, for exporting. Null when it can't be read.</summary>
     public static byte[]? Png(ResourceLocator locator, string xbmPath)
     {
-        if (locator.FindTexture(xbmPath) is not { } texture) return null;
+        if (locator.FindTexture(xbmPath) is not { } texture)
+            return ProjectPicture(locator, xbmPath, PixelFormats.Bgra32) is { } picture ? EncodePng(picture) : null;
         try
         {
             if (EntryImages.FromTexture(texture, int.MaxValue)?.Image is not { } image) return null;
@@ -149,5 +150,58 @@ public static class MeshTextures
 
     /// <summary>Where a texture's pixels were found, or that they weren't, for a material's status line.</summary>
     public static string Describe(ResourceLocator locator, string xbmPath) =>
-        locator.FindTexture(xbmPath) is { } texture ? L.T("MeshTextures.From", texture.FormatText, texture.Archive.Owner, texture.Archive.Name) : L.T("MeshTextures.NotFoundAnyTexture");
+        locator.FindTexture(xbmPath) is { } texture ? L.T("MeshTextures.From", texture.FormatText, texture.Archive.Owner, texture.Archive.Name)
+        : PictureFile(locator, xbmPath) is { } file ? L.T("MeshTextures.FromProjectPicture", Path.GetFileName(file))
+        : L.T("MeshTextures.NotFoundAnyTexture");
+
+    /// <summary>
+    /// The picture in the project that Build makes a texture from (<c>name.tga</c> beside <c>name.xbm</c>, or .dds, .png…),
+    /// before the mod is built: its disk path, or null.
+    /// </summary>
+    private static string? PictureFile(ResourceLocator locator, string xbmPath)
+    {
+        foreach (string ext in new[] { ".dds", ".tga", ".png", ".bmp", ".jpg", ".jpeg" })
+            if (locator.ProjectFile(Path.ChangeExtension(xbmPath, ext)) is { } file && File.Exists(file)) return file;
+        return null;
+    }
+
+    /// <summary>A project picture standing for a texture not built yet, as the format asked for; null when there's none or it can't be read.</summary>
+    private static BitmapSource? ProjectPicture(ResourceLocator locator, string xbmPath, PixelFormat format)
+    {
+        if (PictureFile(locator, xbmPath) is not { } file) return null;
+        try
+        {
+            var data = File.ReadAllBytes(file);
+            byte[] rgba;
+            int width, height;
+            if (Path.GetExtension(file).Equals(".dds", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!Dds.TryRead(data, out var info, out var pixels) || TextureDecoder.Decode(info, pixels, 0) is not { } image) return null;
+                (rgba, width, height) = (image.Bgra, image.Width, image.Height);
+            }
+            else
+            {
+                (rgba, width, height) = Core.Packing.Pictures.Read(file, data);
+                // red and blue the other way round, as a picture on screen keeps them
+                for (int i = 0; i < rgba.Length; i += 4) (rgba[i], rgba[i + 2]) = (rgba[i + 2], rgba[i]);
+            }
+            var picture = BitmapSource.Create(width, height, 96, 96, PixelFormats.Bgra32, null, rgba, width * 4);
+            BitmapSource result = format == PixelFormats.Bgra32 ? picture : new FormatConvertedBitmap(picture, format, null, 0);
+            result.Freeze();
+            return result;
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or NotSupportedException)
+        {
+            return null;
+        }
+    }
+
+    private static byte[] EncodePng(BitmapSource picture)
+    {
+        var encoder = new PngBitmapEncoder();
+        encoder.Frames.Add(BitmapFrame.Create(picture));
+        using var stream = new MemoryStream();
+        encoder.Save(stream);
+        return stream.ToArray();
+    }
 }
