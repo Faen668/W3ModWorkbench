@@ -84,11 +84,14 @@ public static class MeshTextures
     /// <summary>
     /// A material's pictures for a glTF, at full size: its colour, and its normal map as glTF reads one, with blue made
     /// from red and green as the game's shaders make it (it's often left empty) and the roughness the game keeps in its
-    /// alpha given as a picture of its own, in green. Pictures that aren't found are left out. Reads from disk.
+    /// alpha given as a picture of its own, in green. Pictures that aren't found are left out, and all of them without
+    /// <paramref name="pictures"/>. Reads from disk.
     /// </summary>
-    public static GltfMaterial ForGltf(ResourceLocator locator, MeshMaterial material, string name)
+    public static GltfMaterial ForGltf(ResourceLocator locator, MeshMaterial material, string name, bool pictures)
     {
         GltfPicture? colour = null, normal = null, roughness = null;
+        var plain = new GltfMaterial(name, material, VertexTint: LookTextures.TintsWithVertexColour(material), Overlay: LookTextures.IsOverlay(material));
+        if (!pictures || plain.Overlay) return plain;
         if (material.Diffuse?.Path is { } diffuse && Png(locator, diffuse) is { } png)
             colour = new GltfPicture(Path.GetFileNameWithoutExtension(diffuse), png);
         if (material.Normal?.Path is { } normalPath && normalPath.EndsWith(".xbm", StringComparison.OrdinalIgnoreCase)
@@ -116,7 +119,7 @@ public static class MeshTextures
             // a normal map without alpha keeps no roughness
             if (hasAlpha) roughness = new GltfPicture(baseName + "_roughness", EncodePng(rough, image.Width, image.Height)); // loc-ignore
         }
-        return new GltfMaterial(name, material, colour, normal, roughness);
+        return plain with { Colour = colour, Normal = normal, Roughness = roughness };
     }
 
     private static DecodedImage? Decoded(ResourceLocator locator, string xbmPath)

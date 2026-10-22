@@ -896,7 +896,7 @@ public partial class MeshWindow : Window, IMessageHost
             var found = MeshRigs.Find(mesh, _path, _locator);
             var info = new Dictionary<int, GltfMaterial>();
             foreach (var (slot, material) in materials)
-                info[slot] = textures ? MeshTextures.ForGltf(_locator, material, names[slot]) : new GltfMaterial(names[slot], material);
+                info[slot] = MeshTextures.ForGltf(_locator, material, names[slot], textures);
             using (var stream = File.Create(file))
                 GltfExport.Write(stream, _path, mesh, lods, found, info);
             int count = info.Values.SelectMany(m => new[] { m.Colour, m.Normal, m.Roughness }).OfType<GltfPicture>().Select(p => p.Name).Distinct().Count();

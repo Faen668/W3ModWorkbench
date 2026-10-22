@@ -65,6 +65,9 @@ public static class LookTextures
 
     private static bool IsHair(MeshMaterial material) => material.Shader.StartsWith("pbr_hair", StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>Whether the material's colour is multiplied by the vertex colour: the engine's hair graphs', not Geralt's pbr_hair_new.</summary>
+    public static bool TintsWithVertexColour(MeshMaterial material) => IsHair(material) && HairGraphs.Contains(material.Shader);
+
     /// <summary>Skin (pbr_skin, pbr_skin_decal and the like), but not the teeth and eyes' own skin-shaded parts.</summary>
     private static bool IsSkin(MeshMaterial material) => material.Shader.StartsWith("pbr_skin", StringComparison.OrdinalIgnoreCase)
         && material.Diffuse?.Path is { } path && !path.Contains("teeth", StringComparison.OrdinalIgnoreCase) && !path.Contains("eye", StringComparison.OrdinalIgnoreCase);

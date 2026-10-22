@@ -15,8 +15,15 @@ public sealed record GltfPicture(string Name, byte[] Png);
 /// A mesh material as it goes into a glTF: its name, the material it is (for where it came from and its textures'
 /// paths), and its pictures: the colour, the normal map with its blue made from red and green, and the roughness the
 /// normal map's alpha keeps, in green as glTF reads it. A picture that wasn't found is null.
+/// <para>
+/// <paramref name="VertexTint"/>: the game multiplies the colour by the vertex colours (the engine's hair graphs), which
+/// is what glTF's COLOR_0 means; other materials keep something else there (Geralt's hair keeps masks), which goes in
+/// as <c>_W3_COLOR</c> so tools don't paint with it. <paramref name="Overlay"/>: drawn over what's under it to darken it
+/// (an eye's shadow), which goes in as a light see-through black.
+/// </para>
 /// </summary>
-public sealed record GltfMaterial(string Name, MeshMaterial? Material, GltfPicture? Colour = null, GltfPicture? Normal = null, GltfPicture? Roughness = null);
+public sealed record GltfMaterial(string Name, MeshMaterial? Material, GltfPicture? Colour = null, GltfPicture? Normal = null, GltfPicture? Roughness = null,
+    bool VertexTint = false, bool Overlay = false);
 
 /// <summary>
 /// Writes a mesh as a binary glTF (.glb), which Blender, 3ds Max, Maya and most other tools read: its chunks as
@@ -95,7 +102,8 @@ public static class GltfExport
             foreach (var group in groups)
             {
                 var primitives = new JsonArray();
-                foreach (var chunk in group) primitives.Add(AddPrimitive(gltf, chunk, MaterialOf(chunk.Material), group.Key));
+                foreach (var chunk in group)
+                    primitives.Add(AddPrimitive(gltf, chunk, MaterialOf(chunk.Material), group.Key, materials.GetValueOrDefault(chunk.Material)?.VertexTint == true));
                 int meshIndex = gltf.Meshes.Count;
                 gltf.Meshes.Add(new JsonObject { ["name"] = lodName, ["primitives"] = primitives });
                 var node = new JsonObject
@@ -239,7 +247,7 @@ public static class GltfExport
         return m;
     }
 
-    private static JsonObject AddPrimitive(Builder gltf, MeshChunk chunk, int material, bool skinned)
+    private static JsonObject AddPrimitive(Builder gltf, MeshChunk chunk, int material, bool skinned, bool tint)
     {
         int n = chunk.Positions.Length;
         var attributes = new JsonObject();
@@ -300,7 +308,7 @@ public static class GltfExport
                 chunk.Colors.AsSpan(v * 3, 3).CopyTo(colours.AsSpan(v * 4));
                 colours[v * 4 + 3] = 255;
             }
-            attributes["COLOR_0"] = gltf.AddAccessor(colours, UnsignedByte, n, "VEC4", ArrayBuffer, normalized: true);
+            attributes[tint ? "COLOR_0" : "_W3_COLOR"] = gltf.AddAccessor(colours, UnsignedByte, n, "VEC4", ArrayBuffer, normalized: true); // loc-ignore
         }
 
         if (skinned && chunk.BonesPerVertex > 0)
@@ -390,6 +398,13 @@ public static class GltfExport
                 material["alphaCutoff"] = 0.5;
                 material["doubleSided"] = true;
             }
+        }
+        if (info?.Overlay == true)
+        {
+            pbr.Remove("baseColorTexture");
+            pbr["baseColorFactor"] = Numbers(0, 0, 0, 0.25f);
+            material["alphaMode"] = "BLEND";
+            extras["w3Overlay"] = true;
         }
         material["extras"] = extras;
         int index = gltf.Materials.Count;

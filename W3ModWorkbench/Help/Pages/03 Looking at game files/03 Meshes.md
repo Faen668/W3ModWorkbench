@@ -66,6 +66,7 @@ The viewer remembers which you picked last.
 
 - **The LOD shown**, or **every LOD**, each a node of its own (`name_lod0`, `name_lod1`…). Choose which in [[Settings]] > **Viewers**.
 - **Materials** named after their `.w2mi` or the material they're based on, with the colour texture, the normal map and the roughness the game keeps in the normal map's alpha. Hair is cut out by its colour's alpha and seen from both sides, as in the game. Turning the textures off in Settings makes the file much smaller.
+- **Vertex colours**: hair the game tints with them (beards, eyebrows, most NPCs' hair) has them as its colour, so Blender shows it the colour it is. Other meshes keep something else there, such as Geralt's hair's masks, so theirs come as a plain attribute named `_W3_COLOR` that nothing paints with. An eye's shadow, which the game draws over the eye to darken it, is a faint see-through black.
 - **Bones**, for a skinned mesh: each one where the mesh was bound to it, under an **Armature**, with every vertex's weights (up to 8 bones a vertex). Which bone is whose child comes from the rigs beside the mesh and in the folders above it: the body's `.w2rig`, a head's face (`.w3fac`), a dangle's `dyng_` rig, or the base character's. The message after saving says which were used. A bone none of them has hangs straight from the armature.
 - **The mesh is turned to stand up** as glTF expects (the game is Z-up, glTF Y-up), and it sits exactly where the game has it, to a fraction of a millimetre.
 
