@@ -155,6 +155,12 @@ public sealed class Settings
     /// <summary>Whether a mesh exported as glTF has its textures inside: colour, normal map and roughness.</summary>
     public bool MeshExportTextures { get; set; } = true;
 
+    /// <summary>
+    /// When a glTF imported onto a mesh has no parts for one of the mesh's LODs: true to give that LOD the file's nearest
+    /// LOD below it, false to keep the mesh's own.
+    /// </summary>
+    public bool MeshImportFillLods { get; set; } = true;
+
     /// <summary>Whether the entity viewer shows what it's drawing (triangles, frame rate…) over the view.</summary>
     public bool ShowEntityInfo { get; set; } = true;
 

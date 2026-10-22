@@ -35,6 +35,18 @@ public partial class MeshWindow : Window, IMessageHost
 
     /// <summary>The mesh as it is saved now: as opened, until changes are saved into the project. Changes are made to it.</summary>
     private MeshFile? _meshFile;
+
+    /// <summary>
+    /// A glTF imported onto the mesh: what the window shows and saves from then on, in place of the mesh as opened. The
+    /// mesh as opened stays the template every import goes onto, so importing again starts afresh.
+    /// </summary>
+    private CookedMesh? _imported;
+    private MeshFile? _template;
+    private bool _importUnsaved;
+
+    /// <summary>The mesh's file and buffers: the import's, once there is one, else as opened.</summary>
+    private byte[] ReadData() => _imported?.File ?? _readData();
+    private byte[]? ReadBuffer(int n) => n == 1 && _imported is not null ? _imported.Buffer : _readBuffer(n);
     private readonly List<MeshChunkItem> _chunks = [];
     private readonly List<MeshMaterialItem> _materials = [];
     private readonly Dictionary<string, Task<BitmapSource?>> _textures = new(StringComparer.OrdinalIgnoreCase);
@@ -107,7 +119,7 @@ public partial class MeshWindow : Window, IMessageHost
             (_mesh, materials) = await Task.Run(() =>
             {
                 // a cloth resource's shape is its APEX asset: its own, or the one the game's collision cache keeps for it
-                var mesh = ClothFile.IsCloth(_path) ? ClothFile.Read(_readData(), () => _locator.ReadCollision(_path)) : MeshFile.Read(_readData(), _readBuffer);
+                var mesh = ClothFile.IsCloth(_path) ? ClothFile.Read(ReadData(), () => _locator.ReadCollision(_path)) : MeshFile.Read(ReadData(), ReadBuffer);
                 return (mesh, mesh.Materials.Select(h => MeshMaterial.Resolve(mesh.File, h, _locator.ReadFile)).ToList());
             });
         }
@@ -144,6 +156,8 @@ public partial class MeshWindow : Window, IMessageHost
         ShowChunks();
         InfoText.Text = L.T("MeshWindow.Info", _path, _source, _mesh.File.Version, _mesh.Chunks.Count, L.T("Count.Lod", _mesh.LodCount), L.T("MeshWindow.MaterialCount", materials.Count));
         ExportButton.IsEnabled = true;
+        // a glTF goes onto a cooked mesh, whose every chunk says how the game cooked it
+        ImportButton.IsEnabled = !ClothFile.IsCloth(_path) && _mesh.Chunks.All(c => c.CookedInfo.Length > 0);
         Properties.Show(PropertyRow.Of(_mesh.Mesh, _mesh.File, leaveOut: ["cookedData"]));
         _ = ShowRedkitPropertiesAsync();
         ShowLods();
@@ -589,7 +603,7 @@ public partial class MeshWindow : Window, IMessageHost
 
     private void UpdateSave()
     {
-        SaveButton.IsEnabled = _materials.Any(m => m.NeedsSave) || ClothNeedsSave;
+        SaveButton.IsEnabled = _materials.Any(m => m.NeedsSave) || ClothNeedsSave || _importUnsaved;
         Title = ClothFile.IsCloth(_path) ? L.T("MeshWindow.ClothTitle", (SaveButton.IsEnabled ? "• " : "") + Path.GetFileName(_path))
             : L.T("MeshWindow.Mesh4", (SaveButton.IsEnabled ? "• " : ""), Path.GetFileName(_path));
     }
@@ -693,7 +707,7 @@ public partial class MeshWindow : Window, IMessageHost
     /// </summary>
     private async Task<bool> SaveAsync()
     {
-        if (_meshFile is null || !_materials.Any(m => m.NeedsSave) && !ClothNeedsSave) return false;
+        if (_meshFile is null || !_materials.Any(m => m.NeedsSave) && !ClothNeedsSave && !_importUnsaved) return false;
         if (await ProjectAsync() is not { } project) return false;
         var writes = new List<(string GamePath, byte[] Data)>();
         var inline = new Dictionary<int, List<MaterialParameter>>();
@@ -747,11 +761,12 @@ public partial class MeshWindow : Window, IMessageHost
             }
             byte[]? mesh = null;
             if (inline.Count > 0 || slots.Count > 0) mesh = MaterialWriter.EditMesh(_meshFile, inline, slots);
+            else if (_importUnsaved) mesh = _imported!.File;
             // a cloth's simulation settings are the resource's own properties
             if (ClothNeedsSave)
             {
                 var (material, thickness) = (_clothMaterial!, _clothThickness);
-                var from = mesh ?? _readData();
+                var from = mesh ?? ReadData();
                 mesh = await Task.Run(() => ClothSettings.Write(from, ClothSettings.Of(material, thickness)));
             }
             if (mesh is not null) writes.Add((_path, mesh));
@@ -770,11 +785,15 @@ public partial class MeshWindow : Window, IMessageHost
                 foreach (var buffer in _meshFile.File.Buffers.Where(b => b.Offset == 0))
                 {
                     string target = $"{file}.{buffer.Index}.buffer";
-                    if (File.Exists(target)) continue;
+                    // an imported mesh's shape is new: its buffer replaces the one there
+                    bool replace = _importUnsaved && buffer.Index == 1;
+                    if (File.Exists(target) && !replace) continue;
                     FileSafety.CheckWrite(target);
-                    if (await Task.Run(() => _readBuffer(buffer.Index)) is { } bytes) await File.WriteAllBytesAsync(target, bytes);
+                    if (await Task.Run(() => ReadBuffer(buffer.Index)) is { } bytes) await File.WriteAllBytesAsync(target, bytes);
                 }
-                _meshFile = ClothFile.IsCloth(_path) ? ClothFile.Read(mesh, () => _locator.ReadCollision(_path)) : MeshFile.Read(mesh, _readBuffer);
+                if (_imported is not null) _imported = _imported with { File = mesh };
+                _meshFile = ClothFile.IsCloth(_path) ? ClothFile.Read(mesh, () => _locator.ReadCollision(_path)) : MeshFile.Read(mesh, ReadBuffer);
+                _importUnsaved = false;
                 ClothSaved();
             }
         }
@@ -806,9 +825,9 @@ public partial class MeshWindow : Window, IMessageHost
     protected override async void OnClosing(System.ComponentModel.CancelEventArgs e)
     {
         base.OnClosing(e);
-        if (_closeAsked || !_materials.Any(m => m.NeedsSave) && !ClothNeedsSave) return;
+        if (_closeAsked || !_materials.Any(m => m.NeedsSave) && !ClothNeedsSave && !_importUnsaved) return;
         e.Cancel = true;
-        var choice = await Message.Ask(ClothNeedsSave ? L.T("MeshWindow.ClothSaveChanges") : L.T("MeshWindow.SaveChangesMaterials"), L.T("MeshWindow.TheyreLostIfWindow"),
+        var choice = await Message.Ask(_importUnsaved ? L.T("MeshWindow.SaveImported") : ClothNeedsSave ? L.T("MeshWindow.ClothSaveChanges") : L.T("MeshWindow.SaveChangesMaterials"), L.T("MeshWindow.TheyreLostIfWindow"),
             MessageKind.Question, L.T("Common.SaveProject"), L.T("Common.DontSave"));
         if (choice == MessageChoice.Cancel || choice == MessageChoice.Primary && !await SaveAsync()) return;
         _closeAsked = true;
@@ -889,7 +908,7 @@ public partial class MeshWindow : Window, IMessageHost
             .Where(l => l.Item2.Count > 0).ToList();
         var slots = lods.SelectMany(l => l.Item2).Select(c => c.Material).Distinct().ToList();
         var materials = _materials.Where(m => slots.Contains(m.Index)).ToDictionary(m => m.Index, m => m.Current);
-        var names = GltfExport.MaterialNames(materials.ToDictionary(m => m.Key, m => (MeshMaterial?)m.Value));
+        var names = MaterialNames();
         bool textures = App.Settings.MeshExportTextures;
         var (rigs, pictures) = await Task.Run(() =>
         {
@@ -906,5 +925,67 @@ public partial class MeshWindow : Window, IMessageHost
         if (mesh.BoneNames.Length > 0)
             lines.Add(rigs.Count > 0 ? L.T("MeshWindow.GltfBonesFromRig", mesh.BoneNames.Length, string.Join(", ", rigs)) : L.T("MeshWindow.GltfBonesNoRig", mesh.BoneNames.Length));
         return string.Join("\n\n", lines);
+    }
+
+    /// <summary>
+    /// The names materials go by in a glTF, from all of the mesh's, so the same material has the same name in every
+    /// export and an import finds it again.
+    /// </summary>
+    private Dictionary<int, string> MaterialNames() => GltfExport.MaterialNames(_materials.ToDictionary(m => m.Index, m => (MeshMaterial?)m.Current));
+
+    // ---------------------------------------------------------------- importing
+
+    private async void Import_Click(object sender, RoutedEventArgs e)
+    {
+        if (_meshFile is null) return;
+        if (_materials.Any(m => m.NeedsSave) || ClothNeedsSave)
+        {
+            var choice = await Message.Ask(L.T("MeshWindow.ImportOverChanges"), L.T("MeshWindow.ImportOverChangesText"), MessageKind.Question,
+                L.T("MeshWindow.Import"), L.T("Common.Cancel"));
+            if (choice != MessageChoice.Primary) return;
+        }
+        var dialog = new OpenFileDialog { Title = L.T("MeshWindow.ImportTitle"), Filter = L.T("MeshWindow.GltfOpenFilter") };
+        if (dialog.ShowDialog(this) == true) await ImportFileAsync(dialog.FileName);
+    }
+
+    /// <summary>Imports a glTF onto the mesh as it was opened, shows the result, and says how it went.</summary>
+    private async Task ImportFileAsync(string file)
+    {
+        if (_meshFile is null) return;
+        _template ??= _meshFile;
+        var template = _template;
+        var names = MaterialNames();
+        bool fill = App.Settings.MeshImportFillLods;
+        ImportButton.IsEnabled = false;
+        try
+        {
+            var result = await Task.Run(() => MeshImport.Import(template, names, file, fill));
+            _imported = result.Mesh;
+            _importUnsaved = true;
+            await ReloadAsync();
+            UpdateSave();
+            var text = new List<string> { L.T("MeshWindow.ImportedFrom", Path.GetFileName(file)), string.Join("\n", result.Lines) };
+            if (result.Warnings.Count > 0) text.Add(string.Join("\n", result.Warnings.Distinct()));
+            text.Add(L.T("MeshWindow.ImportSaveHint"));
+            await ShowMessage(L.T("MeshWindow.MeshImported"), string.Join("\n\n", text), result.Warnings.Count > 0 ? MessageKind.Warning : MessageKind.Info);
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or NotSupportedException
+            or System.Text.Json.JsonException or ArgumentException or IndexOutOfRangeException or InvalidOperationException or FormatException)
+        {
+            await ShowMessage(L.T("MeshWindow.ImportFailed"), ex.Message, MessageKind.Warning);
+        }
+        finally
+        {
+            ImportButton.IsEnabled = _mesh is not null;
+        }
+    }
+
+    /// <summary>Shows the mesh again from its data (an import's, once there is one): its LODs, chunks, materials and the rest.</summary>
+    private async Task ReloadAsync()
+    {
+        LodBox.Items.Clear();
+        _materials.Clear();
+        MaterialList.ItemsSource = null;
+        await LoadAsync();
     }
 }

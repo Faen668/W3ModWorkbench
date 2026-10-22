@@ -102,6 +102,12 @@
                         <TextBlock Margin="8,0,0,0" Text="{l:T Common.SaveProject}" />
                     </StackPanel>
                 </Button>
+                <Button x:Name="ImportButton" Padding="12,5" Margin="0,0,6,0" Click="Import_Click" IsEnabled="False" ToolTip="{l:T MeshWindow.ImportTip}">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Style="{StaticResource IconText}" Text="&#xE8B5;" Margin="0,1,0,0" />
+                        <TextBlock Margin="8,0,0,0" Text="{l:T MeshWindow.Import}" />
+                    </StackPanel>
+                </Button>
                 <Button x:Name="ExportButton" Padding="12,5" Click="Export_Click" IsEnabled="False" ToolTip="{l:T MeshWindow.SaveLODShownChunks}">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Style="{StaticResource IconText}" Text="&#xE74E;" Margin="0,1,0,0" />

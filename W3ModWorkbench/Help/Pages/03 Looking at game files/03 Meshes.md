@@ -2,8 +2,8 @@
 title: Meshes
 icon: E7B8
 order: 3
-summary: See a model in 3D with its textures, look at its parts and materials, change them, and export it as glTF or OBJ.
-keywords: mesh w2mesh 3d model lod chunk material texture export gltf glb blender obj collision wireframe bones skeleton rig weights buffer
+summary: See a model in 3D with its textures, look at its parts and materials, change them, export it as glTF or OBJ, and import a glTF made in Blender back onto it.
+keywords: mesh w2mesh 3d model lod chunk material texture export import gltf glb blender obj collision wireframe bones skeleton rig weights buffer replace edit model
 windows: MeshWindow
 ---
 A **mesh** (`.w2mesh`) is a 3D model: a sword, a wall, a piece of armour, a monster's body. Cloth (`.redcloth`) opens in the same viewer, with its simulation on an extra tab: see [[Cloth]]. Double-click one, or highlight it and press {{Enter}}, to see it in 3D with its textures. The preview pane shows it too, smaller.
@@ -66,7 +66,8 @@ The viewer remembers which you picked last.
 
 - **The LOD shown**, or **every LOD**, each a node of its own (`name_lod0`, `name_lod1`…). Choose which in [[Settings]] > **Viewers**.
 - **Materials** named after their `.w2mi` or the material they're based on, with the colour texture, the normal map and the roughness the game keeps in the normal map's alpha. Hair is cut out by its colour's alpha and seen from both sides, as in the game. Turning the textures off in Settings makes the file much smaller.
-- **Vertex colours**: hair the game tints with them (beards, eyebrows, most NPCs' hair) has them as its colour, so Blender shows it the colour it is. Other meshes keep something else there, such as Geralt's hair's masks, so theirs come as a plain attribute named `_W3_COLOR` that nothing paints with. An eye's shadow, which the game draws over the eye to darken it, is a faint see-through black.
+- **Vertex colours**: hair the game tints with them (beards, eyebrows, most NPCs' hair) has them as its colour, so Blender shows it the colour it is. Every mesh with vertex colours also has them as a plain attribute named `_W3_COLOR`, with the byte the game keeps beside them, which nothing paints with; Geralt's hair keeps masks there. An eye's shadow, which the game draws over the eye to darken it, is a faint see-through black.
+- **A second UV set** (`UVMap.001` in Blender), for meshes the game gives one.
 - **Bones**, for a skinned mesh: each one where the mesh was bound to it, under an **Armature**, with every vertex's weights (up to 8 bones a vertex). Which bone is whose child comes from the rigs beside the mesh and in the folders above it: the body's `.w2rig`, a head's face (`.w3fac`), a dangle's `dyng_` rig, or the base character's. The message after saving says which were used. A bone none of them has hangs straight from the armature.
 - **The mesh is turned to stand up** as glTF expects (the game is Z-up, glTF Y-up), and it sits exactly where the game has it, to a fraction of a millimetre.
 
@@ -78,8 +79,37 @@ What the game knows that glTF has no place for is kept in each part's **extras**
 
 The file itself keeps the mesh's path, its LOD distances and the rigs used; each material keeps its source, shader, bases and every texture's game path.
 
-![The Viewers settings for exporting meshes as glTF](mesh-export-settings.jpg)
-
 > tip: Untick chunks before exporting to leave them out, say a monster's eyes or an armour's shadow-only parts.
+
+## Importing a glTF
+
+**Import** puts a `.glb` or `.gltf` onto the mesh open: its parts take the place of the mesh's chunks, and everything else the mesh has stays as it is (its materials, how far away each LOD is drawn, its collision, how far away it hides). The new mesh shows in the viewer straight away; nothing is saved until **Save to project**, which puts the `.w2mesh` and its `.buffer` in your mod, in place of the game's.
+
+![A barrel made taller in Blender, imported back onto the game's barrel](mesh-import.jpg)
+
+The usual way round:
+
+1. Open the mesh and **Export** it as glTF.
+2. In Blender, **File > Import > glTF 2.0**, change it, then **File > Export > glTF 2.0** (Blender's own settings do).
+3. Back in the viewer, **Import** the file Blender saved, look it over, and **Save to project**.
+
+### How the parts are matched
+
+- **LOD**: from the part's name, `name_lod0`, `name_lod1`…, as the export names them. Keep those names in Blender. A LOD the file has no parts for gets the file's LOD below it (or keeps the mesh's own; choose in [[Settings]] > **Viewers**).
+- **Material**: from the material's name, as the export names them (Blender's `.001` is left off), so keep those too. Parts with the same LOD and material become one chunk.
+- **Bones**: by name. A skinned mesh keeps its bones and how they're bound; a bone the file adds is added to the mesh. Each vertex keeps its four strongest bones (eight in meshes made for eight).
+
+What the file hasn't got is made or taken from the mesh as it was: normals from the triangles, tangents from the UVs, and vertex colours, or a skinned mesh's weights when the file has no armature, from the nearest vertex of the same material. The message after importing says what was done.
+
+> tip: To keep vertex colours exactly as they are, tick **Data > Mesh > Attributes** in Blender's glTF export, which keeps `_W3_COLOR`; **Include > Custom Properties** keeps the extras too. Without them, the nearest vertex's are used, which is right unless the shape moved a long way.
+
+### What can't change
+
+- A chunk has 65,535 vertices at most; a bigger part is split into several chunks, and a mesh has 255 bones at most.
+- Only a mesh of the game as it's cooked can be imported onto, not a cloth (`.redcloth`).
+- **Collision isn't remade.** The game keeps a static mesh's collision in its `collision.cache`, made from the old shape, so walls and floors still collide where they were.
+- The chunks only for shadows are made again from the new ones, as the game cooks them.
+
+![The Viewers settings for exporting and importing meshes as glTF](mesh-export-settings.jpg)
 
 > note: Materials are drawn with the game's own shader settings: normal maps, roughness, skin, hair, eyes, glass and what glows, lit with one of the game's daylight probes. Dyes are only shown in the entity, scene and cutscene viewers, so dyeable armour shows its raw tint-mask colours here.

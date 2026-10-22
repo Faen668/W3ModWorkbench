@@ -47,6 +47,23 @@ public sealed class MeshChunk
     /// </summary>
     public byte[] Colors { get; init; } = [];
 
+    /// <summary>
+    /// The chunk's extra stream as the game keeps it, eight bytes a vertex: the colour's red, green and blue, a fourth
+    /// byte that's data of its own (hair keeps 0 to 255 there), and four more bytes, zero in every mesh looked at. Empty
+    /// when the chunk has none.
+    /// </summary>
+    public byte[] ExtraStream { get; init; } = [];
+
+    /// <summary>
+    /// The cooked chunk's 37-byte description as it was read, for writing the chunk again: the bytes that say what it
+    /// is (its vertex type, which streams it has, its masks) are kept from it, and those that say where it is are made anew.
+    /// Empty for a chunk that wasn't read from a cooked mesh.
+    /// </summary>
+    public byte[] CookedInfo { get; init; } = [];
+
+    /// <summary>A chunk only for shadows: the positions of every chunk its LOD draws, merged, with nothing else.</summary>
+    public bool IsShadowOnly => RenderMask == 0 && CookedInfo.Length > 21 && CookedInfo[21] == 1;
+
     public int Triangles => Indices.Length / 3;
 
     public bool InLod(int lod) => (LodMask & (1 << lod)) != 0;
@@ -273,6 +290,7 @@ public sealed class MeshFile
 
             // after the normals, a vertex's colour (red, green, blue and a byte the engine uses otherwise) and 4 more bytes
             var colors = colorsAt > 0 && colorsAt + vertices * 8L <= buffer.Length ? new byte[vertices * 3] : [];
+            var extra = colors.Length > 0 ? buffer.AsSpan((int)colorsAt, vertices * 8).ToArray() : [];
             for (int v = 0; v < colors.Length / 3; v++)
                 buffer.AsSpan((int)(colorsAt + v * 8), 3).CopyTo(colors.AsSpan(v * 3));
 
@@ -303,6 +321,8 @@ public sealed class MeshFile
                 BoneIndices = boneIndices,
                 BoneWeights = boneWeights,
                 Colors = colors,
+                ExtraStream = extra,
+                CookedInfo = s.ToArray(),
             });
         }
         return chunks;

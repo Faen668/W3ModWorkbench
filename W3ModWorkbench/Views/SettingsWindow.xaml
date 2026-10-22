@@ -685,6 +685,20 @@
                                        Text="{l:T Settings.Viewers.ExportTexturesHint}" />
                         </StackPanel>
                     </Border>
+
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource SectionTitle}" Text="{l:T Settings.Viewers.MeshImport}" />
+                            <Border Style="{StaticResource SegmentRow}" Margin="0,4,0,0">
+                                <StackPanel Orientation="Horizontal">
+                                    <RadioButton x:Name="ImportFillLods" GroupName="ImportLods" Style="{StaticResource Segment}" Content="{l:T Settings.Viewers.ImportFillLods}" />
+                                    <RadioButton x:Name="ImportKeepLods" GroupName="ImportLods" Style="{StaticResource Segment}" Content="{l:T Settings.Viewers.ImportKeepLods}" />
+                                </StackPanel>
+                            </Border>
+                            <TextBlock Style="{StaticResource Hint}"
+                                       Text="{l:T Settings.Viewers.ImportLodsHint}" />
+                        </StackPanel>
+                    </Border>
                 </StackPanel>
 
                 <!-- Privacy -->

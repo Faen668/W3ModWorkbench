@@ -96,7 +96,8 @@ public static class GltfExport
 
         foreach (var (lod, chunks) in lods)
         {
-            string lodName = lods.Count > 1 ? $"{name}_lod{lod}" : name;
+            // the LOD in the name too, which tools keep where they drop extras, for reading the file back
+            string lodName = $"{name}_lod{lod}";
             // a skinned mesh's primitives all need bones, so chunks that aren't skinned go in a mesh of their own
             var groups = chunks.Where(c => c.Indices.Length > 0).GroupBy(c => skin is not null && c.Skinned).OrderByDescending(g => g.Key).ToList();
             foreach (var group in groups)
@@ -301,14 +302,31 @@ public static class GltfExport
 
         if (chunk.Colors.Length == n * 3)
         {
-            // three bytes a vertex is one short of four, which glTF wants each vertex's bytes to start on
+            // the game's colour and the byte beside it, as they are, for reading back; and for hair the game tints with
+            // them, the colour again as glTF's own, which tools paint with (its alpha left whole: the byte isn't one)
+            var raw = new byte[n * 4];
             var colours = new byte[n * 4];
             for (int v = 0; v < n; v++)
             {
+                chunk.Colors.AsSpan(v * 3, 3).CopyTo(raw.AsSpan(v * 4));
                 chunk.Colors.AsSpan(v * 3, 3).CopyTo(colours.AsSpan(v * 4));
+                raw[v * 4 + 3] = chunk.ExtraStream.Length == n * 8 ? chunk.ExtraStream[v * 8 + 3] : (byte)255;
                 colours[v * 4 + 3] = 255;
             }
-            attributes[tint ? "COLOR_0" : "_W3_COLOR"] = gltf.AddAccessor(colours, UnsignedByte, n, "VEC4", ArrayBuffer, normalized: true); // loc-ignore
+            attributes["_W3_COLOR"] = gltf.AddAccessor(raw, UnsignedByte, n, "VEC4", ArrayBuffer, normalized: true); // loc-ignore
+            if (tint) attributes["COLOR_0"] = gltf.AddAccessor(colours, UnsignedByte, n, "VEC4", ArrayBuffer, normalized: true);
+        }
+
+        if (chunk.ExtraStream.Length == n * 8 && chunk.Uvs.Length == n)
+        {
+            // the extra stream's last four bytes: a second UV set, as two half floats
+            var second = new byte[n * 8];
+            for (int v = 0; v < n; v++)
+            {
+                BitConverter.TryWriteBytes(second.AsSpan(v * 8), (float)BitConverter.ToHalf(chunk.ExtraStream, v * 8 + 4));
+                BitConverter.TryWriteBytes(second.AsSpan(v * 8 + 4), (float)BitConverter.ToHalf(chunk.ExtraStream, v * 8 + 6));
+            }
+            attributes["TEXCOORD_1"] = gltf.AddAccessor(second, Float, n, "VEC2", ArrayBuffer);
         }
 
         if (skinned && chunk.BonesPerVertex > 0)

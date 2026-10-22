@@ -84,6 +84,7 @@ Under the list, it says whether your game has that language's text and voices in
 - **Smoothing edges in the 3D views**: how smooth meshes' edges are drawn. **4×** is smoothest but slowest; a mesh filling a big window can draw at half the frame rate with it. **2×** suits most.
 - **Simulate cloth as the game does**: capes, skirts and coat tails swing and hang in the entity, scene, cutscene and animation views. Turn it off for a quicker view with a big cast; cloth then moves stiffly with the bones. See [[Cloth]].
 - **Exporting meshes as glTF**: whether the mesh viewer's **Export** puts only **the LOD shown** in a `.glb` or **every LOD**, and whether the textures go inside it. See [[Meshes]].
+- **Importing meshes from glTF**: when a `.glb` imported onto a mesh has no parts for one of its LODs, whether that LOD gets **the file's LOD below** it or **keeps the mesh's own**. See [[Meshes]].
 
 ## Privacy and online
 
