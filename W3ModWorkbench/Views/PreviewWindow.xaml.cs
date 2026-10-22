@@ -1472,6 +1472,30 @@ public partial class PreviewWindow : Window, IMessageHost
     private void ShowCompileResult(string title, ScriptFolder project, CompileResult result, string output, TimeSpan took, CompilerChoice compiler, bool live = false)
     {
         if (Results.Visibility != Visibility.Visible) OpenResultsPanel();
+        var (rows, summary, empty) = CompileRows(project, result, output, took, compiler, live);
+        Results.ShowRows(title, summary, rows, empty);
+        if (live)
+        {
+            Results.SetActions(L.T("ScriptBench.Check.ListNote"), (L.T("ScriptBench.Check.CompileNow"), () => _ = BenchCompileAsync()));
+            return;
+        }
+
+        var actions = new List<(string, Action)>();
+        if (result.Success)
+            actions.Add((L.T("PreviewWindow.ShowFolder"), () => Process.Start("explorer.exe", $"/select,\"{output}\"")));
+        string logName = compiler.Kind == CompilerKind.WccLite ? "wcc_lite.log" : "compiler.log";
+        actions.Add((L.T("PreviewWindow.ShowLog"), () => ShowAlone(new PreviewItem(logName, title, System.Text.Encoding.UTF8.GetBytes(result.Log)), this)));
+        Results.SetActions(result.Success ? L.T("PreviewWindow.Saved", output) + (compiler.Kind == CompilerKind.BuiltIn ? L.T("PreviewWindow.CompiledBuiltCompiler") : "")
+            : compiler.Kind == CompilerKind.WccLite ? L.T("PreviewWindow.NothingSavedWccLites") : L.T("PreviewWindow.NothingSavedCompilersLog"), [.. actions]);
+    }
+
+    /// <summary>
+    /// What a compile found, as the results list shows it: a heading per file, then each warning and error, opening its line.
+    /// Also the one-line summary, and what to say when nothing's listed. Script Bench and the Compile scripts dialog both use it.
+    /// </summary>
+    internal static (List<ResultRow> Rows, string Summary, string Empty) CompileRows(ScriptFolder project, CompileResult result, string output,
+        TimeSpan took, CompilerChoice compiler, bool live = false)
+    {
         int errors = result.Messages.Count(m => m.IsError), warnings = result.Messages.Count - errors;
         var rows = new List<ResultRow>();
         foreach (var group in result.Messages.GroupBy(m => m.File ?? "").OrderBy(g => g.Key.Length == 0))
@@ -1520,20 +1544,7 @@ public partial class PreviewWindow : Window, IMessageHost
         string empty = live ? L.T("ScriptBench.Check.NoProblems")
             : result.Success ? L.T("PreviewWindow.CompiledNoWarningsSaved", output)
             : result.Failure ?? L.T("PreviewWindow.DidntCompileScripts", compiler.Name);
-        Results.ShowRows(title, summary, rows, empty);
-        if (live)
-        {
-            Results.SetActions(L.T("ScriptBench.Check.ListNote"), (L.T("ScriptBench.Check.CompileNow"), () => _ = BenchCompileAsync()));
-            return;
-        }
-
-        var actions = new List<(string, Action)>();
-        if (result.Success)
-            actions.Add((L.T("PreviewWindow.ShowFolder"), () => Process.Start("explorer.exe", $"/select,\"{output}\"")));
-        string logName = compiler.Kind == CompilerKind.WccLite ? "wcc_lite.log" : "compiler.log";
-        actions.Add((L.T("PreviewWindow.ShowLog"), () => ShowAlone(new PreviewItem(logName, title, System.Text.Encoding.UTF8.GetBytes(result.Log)), this)));
-        Results.SetActions(result.Success ? L.T("PreviewWindow.Saved", output) + (compiler.Kind == CompilerKind.BuiltIn ? L.T("PreviewWindow.CompiledBuiltCompiler") : "")
-            : compiler.Kind == CompilerKind.WccLite ? L.T("PreviewWindow.NothingSavedWccLites") : L.T("PreviewWindow.NothingSavedCompilersLog"), [.. actions]);
+        return (rows, summary, empty);
     }
 
 

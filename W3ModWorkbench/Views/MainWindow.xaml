@@ -201,6 +201,9 @@
                                 <MenuItem x:Name="TreeCreateProjectItem" Header="{l:T MainWindow.CreateProjectTheseScripts}" Click="TreeCreateProject_Click" Visibility="Collapsed">
                                     <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE821;" /></MenuItem.Icon>
                                 </MenuItem>
+                                <MenuItem x:Name="TreeCompileItem" Header="{l:T MainWindow.CompileTheseScripts}" Click="TreeCompile_Click" Visibility="Collapsed" ToolTipService.ShowOnDisabled="True">
+                                    <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE9F5;" /></MenuItem.Icon>
+                                </MenuItem>
                                 <MenuItem x:Name="TreeProjectPropertiesItem" Header="{l:T MainWindow.ProjectProperties}" Click="ProjectProperties_Click" Visibility="Collapsed">
                                     <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE713;" /></MenuItem.Icon>
                                 </MenuItem>

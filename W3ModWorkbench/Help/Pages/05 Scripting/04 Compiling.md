@@ -3,7 +3,8 @@ title: Compiling
 icon: E9F5
 order: 4
 summary: Check your scripts for mistakes, with REDkit's compiler or the app's own, and read the errors.
-keywords: compile compiler wcc_lite built-in errors warnings rsblob f7 check redkit
+keywords: compile compiler wcc_lite built-in errors warnings rsblob f7 check redkit loose scripts folder without project
+windows: CompileWindow
 ---
 **Compiling** turns your scripts into the form the game runs, and finds your mistakes on the way.
 
@@ -16,6 +17,14 @@ Press **Compile** in [[Script Bench]]'s bottom bar ({{F7}}, or **Project > Compi
 You don't have to wait for **Compile** to find most mistakes: Script Bench checks your scripts the same way as you type, and underlines what's wrong (see [[Writing scripts]]).
 
 When they compile, the scripts go in your built mod as `content\precompiled.rsblob` (in the project's `mod…` folder), the same place **Build** puts them (see [[Building and installing]]). When they don't, the one that's there is left as it was.
+
+## Scripts without a project
+
+A folder of loose scripts doesn't need a project to be compiled. Open it in the main window (**Open folder**, or drop it on the window), right-click it in the tree and choose **Compile these scripts**. A small **Compile scripts** window lists the warnings and errors the same way Script Bench does: click one to open its line. **Compile again** ({{F7}}) runs it again once you've fixed them, and **Show log** opens everything the compiler wrote.
+
+![Compiling a folder of loose scripts: three errors and a warning](compile-folder.jpg)
+
+The compiled scripts are saved beside the folder: `scripts` on your Desktop makes `precompiled.rsblob` on your Desktop, and a mod's `content\scripts` makes `content\precompiled.rsblob`, where the game reads it. A `precompiled.rsblob` that's there already is replaced, but only when the scripts compile. Scripts in the game's own folders, or in an installed mod, can't be compiled in place: [[Projects|make a project from them]] instead.
 
 ## Two compilers
 

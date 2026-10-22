@@ -716,6 +716,13 @@ public partial class MainWindow : Window, IMessageHost
         if (node.Archive is ScriptFolder { Project: null } folder) _ = CreateProjectFromScriptsAsync(folder.FilePath);
     }
 
+    private void TreeCompile_Click(object sender, RoutedEventArgs e)
+    {
+        if (FolderTree.SelectedItem is not FolderNode node) return;
+        while (node.Parent is not null) node = node.Parent;
+        if (node is { IsLooseScripts: true, Archive: ScriptFolder folder }) CompileWindow.Show(this, folder);
+    }
+
     /// <summary>The right-click menu on the tree shows what applies to the folder under it: the project's, loose scripts', or a bundle's.</summary>
     private void TreeMenu_Opened(object sender, RoutedEventArgs e)
     {
@@ -724,6 +731,15 @@ public partial class MainWindow : Window, IMessageHost
         bool project = root is { IsProject: true };
         bool loose = root is { IsLooseScripts: true };
         TreeCreateProjectItem.Visibility = loose ? Visibility.Visible : Visibility.Collapsed;
+        TreeCompileItem.Visibility = loose ? Visibility.Visible : Visibility.Collapsed;
+        if (loose)
+        {
+            bool canCompile = PreviewWindow.CurrentCompiler() is not null;
+            TreeCompileItem.IsEnabled = canCompile;
+            TreeCompileItem.ToolTip = canCompile
+                ? L.T("MainWindow.CompileTheseScriptsTip", Path.Combine(Path.GetDirectoryName(root!.Archive.FilePath.TrimEnd('\\')) ?? "", "precompiled.rsblob"))
+                : CompilerChoice.NothingToCompileWith;
+        }
         foreach (var item in new[] { TreeProjectPropertiesItem, TreeAddFilesItem, TreeRefreshItem, TreeRevealItem })
             item.Visibility = project ? Visibility.Visible : Visibility.Collapsed;
         TreeProjectSeparator.Visibility = project || loose ? Visibility.Visible : Visibility.Collapsed;

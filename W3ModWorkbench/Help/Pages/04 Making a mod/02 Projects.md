@@ -25,7 +25,7 @@ Everything in `scripts` is compiled with the mod. Everything in `workspace` is p
 - **Project > Open project…** ({{Ctrl+Shift+O}}), or drop a `.w3bench` file on the window.
 - **Recent projects** lists the last ten. One project is open at a time.
 - When the app starts it opens the project you had last, with the scripts that were open (see [[Settings]]).
-- Right-click a folder of loose scripts in the tree > **Create a project from these scripts** makes one around it.
+- Right-click a folder of loose scripts in the tree > **Create a project from these scripts** makes one around it. To only compile them, choose **Compile these scripts** there instead (see [[Compiling]]).
 
 ## Project properties
 

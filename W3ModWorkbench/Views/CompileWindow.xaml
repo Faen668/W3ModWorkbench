@@ -1,0 +1,59 @@
+<Window x:Class="W3ModWorkbench.CompileWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:l="clr-namespace:W3ModWorkbench.Localisation"
+        xmlns:local="clr-namespace:W3ModWorkbench"
+        Title="{l:T CompileWindow.CompileScripts}" Icon="pack://application:,,,/W3ModWorkbench;component/Assets/app.ico"
+        Width="900" Height="560" MinWidth="560" MinHeight="340"
+        WindowStartupLocation="CenterOwner" PreviewKeyDown="Window_PreviewKeyDown">
+    <Window.Resources>
+        <Style x:Key="Card" TargetType="Border">
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}" />
+            <Setter Property="Background" Value="{DynamicResource CardBackgroundFillColorDefaultBrush}" />
+        </Style>
+        <Style x:Key="IconText" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="{StaticResource IconFont}" />
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+    </Window.Resources>
+
+    <Grid>
+        <Grid Margin="14,12,14,10">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <!-- what's compiled, where it goes and with what -->
+            <StackPanel Margin="0,0,0,10">
+                <TextBlock x:Name="HeadingText" FontSize="16" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                <TextBlock x:Name="FolderText" Opacity="0.65" Margin="0,2,0,0" TextTrimming="CharacterEllipsis" />
+                <TextBlock x:Name="OutputText" Opacity="0.65" Margin="0,2,0,0" TextTrimming="CharacterEllipsis" />
+            </StackPanel>
+
+            <Border Grid.Row="1" Style="{StaticResource Card}" ClipToBounds="True">
+                <local:ResultsPanel x:Name="Results" />
+            </Border>
+
+            <DockPanel Grid.Row="2" Margin="2,10,2,0">
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                    <Button x:Name="AgainButton" Padding="14,6" Click="Again_Click" IsEnabled="False" Style="{DynamicResource AccentButtonStyle}"
+                            ToolTip="{l:T CompileWindow.CompileAgainTip}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Style="{StaticResource IconText}" Text="&#xE9F5;" />
+                            <TextBlock Margin="8,0,0,0" Text="{l:T CompileWindow.CompileAgain}" />
+                        </StackPanel>
+                    </Button>
+                    <Button Padding="14,6" Margin="8,0,0,0" Click="Close_Click" Content="{l:T Common.Close}" />
+                </StackPanel>
+                <TextBlock x:Name="StatusText" Opacity="0.75" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+            </DockPanel>
+        </Grid>
+
+        <local:MessageCard x:Name="Message" IsModal="True" />
+    </Grid>
+</Window>
