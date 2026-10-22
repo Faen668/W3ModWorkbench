@@ -83,6 +83,7 @@ Under the list, it says whether your game has that language's text and voices in
 - **Texture detail in the 3D views**: the largest a texture is read for entities, scenes, cutscenes, rigs and animations. **Low** loads quickest and uses least memory, **Full** is as sharp as the game. **Medium** suits most; a scene with many actors at **Full** uses a lot of memory.
 - **Smoothing edges in the 3D views**: how smooth meshes' edges are drawn. **4×** is smoothest but slowest; a mesh filling a big window can draw at half the frame rate with it. **2×** suits most.
 - **Simulate cloth as the game does**: capes, skirts and coat tails swing and hang in the entity, scene, cutscene and animation views. Turn it off for a quicker view with a big cast; cloth then moves stiffly with the bones. See [[Cloth]].
+- **Exporting meshes as glTF**: whether the mesh viewer's **Export** puts only **the LOD shown** in a `.glb` or **every LOD**, and whether the textures go inside it. See [[Meshes]].
 
 ## Privacy and online
 

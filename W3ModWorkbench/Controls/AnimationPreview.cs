@@ -319,11 +319,7 @@ public sealed class AnimationPreview : Grid
     }
 
     /// <summary>The base characters' rigs, for meshes whose entity names none: the one most of their bones are in is used.</summary>
-    private static readonly string[] BaseRigs =
-    [
-        @"characters\base_entities\man_base\man_base.w2rig", @"characters\base_entities\woman_base\woman_base.w2rig",
-        @"characters\base_entities\child_base\child_base.w2rig", @"characters\base_entities\dwarf_base\dwarf_base.w2rig",
-    ];
+    private static string[] BaseRigs => MeshRigs.BaseRigs;
 
     private Task<BitmapSource?> Texture(string path)
     {

@@ -820,31 +820,34 @@ public partial class MeshWindow : Window, IMessageHost
     private async void Export_Click(object sender, RoutedEventArgs e)
     {
         if (_mesh is null) return;
+        if (!_chunks.Any(c => c.IsVisible))
+        {
+            await ShowMessage(L.T("MeshWindow.ExportMesh"), L.T("MeshWindow.NothingTicked"), MessageKind.Info);
+            return;
+        }
         string name = Path.GetFileNameWithoutExtension(_path);
+        bool allLods = App.Settings.MeshExportAllLods && _mesh.LodCount > 1;
         var dialog = new SaveFileDialog
         {
             Title = L.T("MeshWindow.ExportMesh"),
-            FileName = name + (View.Lod > 0 ? $"_lod{View.Lod}" : "") + ".obj",
-            Filter = L.T("MeshWindow.WavefrontOBJObjObj"),
+            FileName = name + (View.Lod > 0 && !allLods ? $"_lod{View.Lod}" : ""),
+            Filter = L.T("MeshWindow.GltfFilter") + "|" + L.T("MeshWindow.WavefrontOBJObjObj"),
+            FilterIndex = App.Settings.MeshExportFormat == "obj" ? 2 : 1,
         };
         if (dialog.ShowDialog(this) != true) return;
-        var chunks = _chunks.Where(c => c.IsVisible).Select(c => c.Chunk).ToList();
-        var wanted = _materials.Where(m => m.Selected?.Path is not null && chunks.Any(c => c.Material == m.Index))
-            .ToDictionary(m => m.Index, m => m.Selected!.Path!);
+        bool obj = Path.GetExtension(dialog.FileName).Equals(".obj", StringComparison.OrdinalIgnoreCase)
+            || dialog.FilterIndex == 2 && !Path.GetExtension(dialog.FileName).Equals(".glb", StringComparison.OrdinalIgnoreCase);
+        string file = Path.ChangeExtension(dialog.FileName, obj ? ".obj" : ".glb");
+        App.Settings.MeshExportFormat = obj ? "obj" : "glb";
+        App.Settings.Save();
+
+        var hidden = _chunks.Where(c => !c.IsVisible).Select(c => c.Chunk.Index).ToHashSet();
         ExportButton.IsEnabled = false;
         try
         {
-            FileSafety.CheckFolder(Path.GetDirectoryName(Path.GetFullPath(dialog.FileName))!);
-            var written = await Task.Run(() =>
-            {
-                var textures = new Dictionary<int, (string, byte[])>();
-                foreach (var (material, path) in wanted)
-                    if (MeshTextures.Png(_locator, path) is { } png)
-                        textures[material] = (Path.GetFileNameWithoutExtension(path) + ".png", png);
-                return ObjExport.Write(dialog.FileName, _path, chunks, textures);
-            });
-            int pictures = written.Count(w => w.EndsWith(".png", StringComparison.OrdinalIgnoreCase));
-            await ShowMessage(L.T("MeshWindow.MeshExported"), L.T("MeshWindow.ExportSaved", Path.GetFileName(dialog.FileName)) + (pictures > 0 ? L.T("MeshWindow.WithTextures", pictures) : "."), MessageKind.Info);
+            FileSafety.CheckFolder(Path.GetDirectoryName(Path.GetFullPath(file))!);
+            string message = obj ? await ExportObj(file, hidden) : await ExportGltf(file, hidden, allLods);
+            await ShowMessage(L.T("MeshWindow.MeshExported"), message, MessageKind.Info);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -854,5 +857,54 @@ public partial class MeshWindow : Window, IMessageHost
         {
             ExportButton.IsEnabled = true;
         }
+    }
+
+    /// <summary>The LOD shown, with the chunks ticked, as an .obj and .mtl with the colour textures as PNGs beside them.</summary>
+    private async Task<string> ExportObj(string file, HashSet<int> hidden)
+    {
+        var chunks = MeshView.Drawn(_mesh!, View.Lod).Where(c => !hidden.Contains(c.Index)).ToList();
+        var wanted = _materials.Where(m => m.Selected?.Path is not null && chunks.Any(c => c.Material == m.Index))
+            .ToDictionary(m => m.Index, m => m.Selected!.Path!);
+        var written = await Task.Run(() =>
+        {
+            var textures = new Dictionary<int, (string, byte[])>();
+            foreach (var (material, path) in wanted)
+                if (MeshTextures.Png(_locator, path) is { } png)
+                    textures[material] = (Path.GetFileNameWithoutExtension(path) + ".png", png);
+            return ObjExport.Write(file, _path, chunks, textures);
+        });
+        int pictures = written.Count(w => w.EndsWith(".png", StringComparison.OrdinalIgnoreCase));
+        return L.T("MeshWindow.ExportSaved", Path.GetFileName(file)) + (pictures > 0 ? L.T("MeshWindow.WithTextures", pictures) : ".");
+    }
+
+    /// <summary>
+    /// The LOD shown (or every LOD, as Settings say), with the chunks ticked, as one .glb: its materials and their
+    /// textures inside, and for a skinned mesh its bones, in the rig's order of parents when one is found.
+    /// </summary>
+    private async Task<string> ExportGltf(string file, HashSet<int> hidden, bool allLods)
+    {
+        var mesh = _mesh!;
+        var lods = (allLods ? Enumerable.Range(0, mesh.LodCount) : [View.Lod])
+            .Select(lod => (lod, (IReadOnlyList<MeshChunk>)MeshView.Drawn(mesh, lod).Where(c => !hidden.Contains(c.Index)).ToList()))
+            .Where(l => l.Item2.Count > 0).ToList();
+        var slots = lods.SelectMany(l => l.Item2).Select(c => c.Material).Distinct().ToList();
+        var materials = _materials.Where(m => slots.Contains(m.Index)).ToDictionary(m => m.Index, m => m.Current);
+        var names = GltfExport.MaterialNames(materials.ToDictionary(m => m.Key, m => (MeshMaterial?)m.Value));
+        bool textures = App.Settings.MeshExportTextures;
+        var (rigs, pictures) = await Task.Run(() =>
+        {
+            var found = MeshRigs.Find(mesh, _path, _locator);
+            var info = new Dictionary<int, GltfMaterial>();
+            foreach (var (slot, material) in materials)
+                info[slot] = textures ? MeshTextures.ForGltf(_locator, material, names[slot]) : new GltfMaterial(names[slot], material);
+            using (var stream = File.Create(file))
+                GltfExport.Write(stream, _path, mesh, lods, found, info);
+            int count = info.Values.SelectMany(m => new[] { m.Colour, m.Normal, m.Roughness }).OfType<GltfPicture>().Select(p => p.Name).Distinct().Count();
+            return (found.Select(r => r.Path).ToList(), count);
+        });
+        var lines = new List<string> { L.T("MeshWindow.GltfSaved", Path.GetFileName(file), L.T("Count.Lod", lods.Count), L.T("Count.Texture", pictures)) };
+        if (mesh.BoneNames.Length > 0)
+            lines.Add(rigs.Count > 0 ? L.T("MeshWindow.GltfBonesFromRig", mesh.BoneNames.Length, string.Join(", ", rigs)) : L.T("MeshWindow.GltfBonesNoRig", mesh.BoneNames.Length));
+        return string.Join("\n\n", lines);
     }
 }

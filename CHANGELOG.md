@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **Export meshes as glTF**: the mesh viewer's **Export** (it was **Export OBJ**) saves a `.glb` that Blender, 3ds Max, Maya and most other 3D tools open, or an `.obj` as before, picked in the save box. A `.glb` is one file holding the LOD shown (or every LOD, a node each, as **Settings > Viewers** says), each material with its colour, normal map and the roughness the game keeps in the normal map's alpha, and a skinned mesh's bones and weights (up to 8 bones a vertex). The bones are placed where the mesh was bound to them, with which bone is whose child taken from the rigs beside the mesh and above it: its `.w2rig`, a head's face (`.w3fac`), a `dyng_` dangle rig or the base character's. The mesh sits exactly where the game has it: checked on 3,000 of the game's meshes at every LOD, every vertex comes back within 0.2 mm of the game's. What glTF has no place for (each part's chunk, material slot, LODs and render mask, each material's source, shader and texture paths, the mesh's path and LOD distances) is kept in the file's `extras`, for reading it back.
+
 ## 1.7.0
 
 - **Compile a folder of scripts without a project**: right-click a folder of loose scripts in the main window's tree > **Compile these scripts**. A small **Compile scripts** window lists the warnings and errors, each opening its line, with **Compile again** (F7) and **Show log**. The compiled scripts are saved beside the folder, so a mod's `content\scripts` makes `content\precompiled.rsblob`, and only when they compile. Scripts in the game's folders or an installed mod are left as they are.

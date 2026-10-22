@@ -146,6 +146,15 @@ public sealed class Settings
     public bool ShowMeshFloor { get; set; } = true;
     public bool ShowMeshInfo { get; set; } = true;
 
+    /// <summary>The format the mesh viewer's Export saves in last chosen: "glb" (glTF) or "obj".</summary>
+    public string MeshExportFormat { get; set; } = "glb";
+
+    /// <summary>Whether a mesh exported as glTF has every LOD in it, rather than only the one shown.</summary>
+    public bool MeshExportAllLods { get; set; }
+
+    /// <summary>Whether a mesh exported as glTF has its textures inside: colour, normal map and roughness.</summary>
+    public bool MeshExportTextures { get; set; } = true;
+
     /// <summary>Whether the entity viewer shows what it's drawing (triangles, frame rate…) over the view.</summary>
     public bool ShowEntityInfo { get; set; } = true;
 

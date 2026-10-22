@@ -668,6 +668,23 @@
                                        Text="{l:T Settings.Viewers.SimulateClothHint}" />
                         </StackPanel>
                     </Border>
+
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource SectionTitle}" Text="{l:T Settings.Viewers.MeshExport}" />
+                            <Border Style="{StaticResource SegmentRow}" Margin="0,4,0,0">
+                                <StackPanel Orientation="Horizontal">
+                                    <RadioButton x:Name="ExportLodShown" GroupName="ExportLods" Style="{StaticResource Segment}" Content="{l:T Settings.Viewers.ExportLodShown}" />
+                                    <RadioButton x:Name="ExportLodAll" GroupName="ExportLods" Style="{StaticResource Segment}" Content="{l:T Settings.Viewers.ExportLodAll}" />
+                                </StackPanel>
+                            </Border>
+                            <TextBlock Style="{StaticResource Hint}"
+                                       Text="{l:T Settings.Viewers.ExportLodsHint}" />
+                            <CheckBox x:Name="ExportTexturesCheck" Content="{l:T Settings.Viewers.ExportTextures}" Margin="0,10,0,0" />
+                            <TextBlock Style="{StaticResource Hint}"
+                                       Text="{l:T Settings.Viewers.ExportTexturesHint}" />
+                        </StackPanel>
+                    </Border>
                 </StackPanel>
 
                 <!-- Privacy -->
