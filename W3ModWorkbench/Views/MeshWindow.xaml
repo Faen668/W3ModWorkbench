@@ -272,7 +272,10 @@
             </Border>
         </Grid>
 
-        <TextBlock x:Name="InfoText" Grid.Row="2" Margin="18,10,18,12" Opacity="0.8" TextTrimming="CharacterEllipsis" />
+        <DockPanel Grid.Row="2" Margin="18,6,14,8">
+            <local:MakeModButton x:Name="MakeModBtn" DockPanel.Dock="Right" Margin="12,0,0,0" />
+            <TextBlock x:Name="InfoText" VerticalAlignment="Center" Opacity="0.8" TextTrimming="CharacterEllipsis" />
+        </DockPanel>
 
         <local:QuickPick x:Name="Picker" Grid.RowSpan="3" Margin="0,46,0,0" />
         <local:MessageCard x:Name="Message" Grid.RowSpan="3" IsModal="True" />

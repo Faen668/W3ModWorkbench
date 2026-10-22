@@ -77,6 +77,7 @@ public partial class PropertiesWindow : Window, IMessageHost
     private PropertiesWindow(string path, string source, Func<byte[]> readData, ResourceLocator locator, string? origin, string? diskPath)
     {
         InitializeComponent();
+        MakeModBtn.Show(path, diskPath ?? origin, readData);
         _path = path;
         _source = source;
         _readData = readData;

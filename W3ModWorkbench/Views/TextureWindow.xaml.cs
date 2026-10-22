@@ -42,6 +42,7 @@ public partial class TextureWindow : Window, IMessageHost
         List<(string Name, string Value)> facts, Func<byte[]?>? resource, ResourceLocator? locator, int slice = 0, string? origin = null)
     {
         InitializeComponent();
+        MakeModBtn.Show(origin is not null ? path : null, origin);
         _locator = locator ?? GameLocatorOnly();
         _path = path;
         _info = info;

@@ -48,6 +48,7 @@ public partial class AnimEventsWindow : Window, IMessageHost
     private AnimEventsWindow(string path, string source, Func<byte[]> readData, ResourceLocator locator, string? origin)
     {
         InitializeComponent();
+        MakeModBtn.Show(path, origin, readData);
         _path = path;
         _source = source;
         _readData = readData;

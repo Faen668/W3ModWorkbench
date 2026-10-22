@@ -54,6 +54,7 @@ public partial class SoundWindow : Window, IMessageHost
     private SoundWindow(string path, string source, Func<byte[]> readData, ResourceLocator locator)
     {
         InitializeComponent();
+        MakeModBtn.Show(path, Path.IsPathRooted(source) ? source : null, readData);
         _path = path;
         _source = source;
         _readData = readData;

@@ -699,6 +699,25 @@
                                        Text="{l:T Settings.Viewers.ImportLodsHint}" />
                         </StackPanel>
                     </Border>
+
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource SectionTitle}" Text="{l:T Settings.Viewers.MakeMod}" />
+                            <Border Style="{StaticResource SegmentRow}" Margin="0,4,0,0">
+                                <StackPanel Orientation="Horizontal">
+                                    <!-- loc-ignore -->
+                                    <RadioButton x:Name="MakeModPng" GroupName="MakeModPictures" Style="{StaticResource Segment}" Content=".png" />
+                                    <!-- loc-ignore -->
+                                    <RadioButton x:Name="MakeModTga" GroupName="MakeModPictures" Style="{StaticResource Segment}" Content=".tga" />
+                                    <!-- loc-ignore -->
+                                    <RadioButton x:Name="MakeModDds" GroupName="MakeModPictures" Style="{StaticResource Segment}" Content=".dds" />
+                                </StackPanel>
+                            </Border>
+                            <TextBlock Style="{StaticResource Hint}"
+                                       Text="{l:T Settings.Viewers.MakeModPicturesHint}" />
+                            <CheckBox x:Name="MakeModOpenCheck" Content="{l:T Settings.Viewers.MakeModOpen}" Margin="0,10,0,0" />
+                        </StackPanel>
+                    </Border>
                 </StackPanel>
 
                 <!-- Privacy -->

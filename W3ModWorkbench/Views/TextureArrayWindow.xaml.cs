@@ -36,6 +36,7 @@ public partial class TextureArrayWindow : Window, IMessageHost
     private TextureArrayWindow(TextureEntry entry, Func<byte[]?>? resource, ResourceLocator? locator)
     {
         InitializeComponent();
+        MakeModBtn.Show(entry.Path, entry.Archive.FilePath);
         _locator = locator ?? TextureWindow.GameLocatorOnly();
         _entry = entry;
         _resource = resource;

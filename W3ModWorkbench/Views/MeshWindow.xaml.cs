@@ -55,6 +55,7 @@ public partial class MeshWindow : Window, IMessageHost
     private MeshWindow(string path, string source, Func<byte[]> readData, Func<int, byte[]?> readBuffer, ResourceLocator locator, string? origin)
     {
         InitializeComponent();
+        MakeModBtn.Show(path, origin, readData);
         _origin = origin;
         _path = path;
         _source = source;

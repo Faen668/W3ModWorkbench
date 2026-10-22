@@ -41,6 +41,7 @@ public partial class TreeFileWindow : Window, IMessageHost
     {
         _extra = extra;
         InitializeComponent();
+        MakeModBtn.Show(path, origin, readData);
         _path = path;
         _source = source;
         _readData = readData;

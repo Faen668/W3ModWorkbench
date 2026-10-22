@@ -161,6 +161,12 @@ public sealed class Settings
     /// </summary>
     public bool MeshImportFillLods { get; set; } = true;
 
+    /// <summary>What "Make a mod" copies a texture as, for editing: ".png", ".tga" or ".dds". Build makes it into the texture again.</summary>
+    public string MakeModPictureFormat { get; set; } = ".png";
+
+    /// <summary>Whether "Make a mod" opens the copy of the file it was made from once it's copied.</summary>
+    public bool MakeModOpenCopy { get; set; } = true;
+
     /// <summary>Whether the entity viewer shows what it's drawing (triangles, frame rate…) over the view.</summary>
     public bool ShowEntityInfo { get; set; } = true;
 

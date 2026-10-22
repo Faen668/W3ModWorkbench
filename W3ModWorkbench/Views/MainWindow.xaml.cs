@@ -786,6 +786,29 @@ public partial class MainWindow : Window, IMessageHost
     }
 
     /// <summary>
+    /// What "Make a mod of this" starts from: one game file's path, and how to read it (a texture listed from its cache
+    /// is found by its path). Null for scripts and strings, which are copied as they are, and for files already yours.
+    /// </summary>
+    private static (string GamePath, Func<byte[]>? Read)? MakeModSource(EntryItem item)
+    {
+        if (item.Entry is TextureEntry texture) return (texture.Path, null);
+        if (CopySource(item) is not { } source || Path.GetExtension(source.GamePath).ToLowerInvariant() is ".ws" or ".w3strings" or "") return null;
+        return source;
+    }
+
+    private void GridMakeMod_Click(object sender, RoutedEventArgs e)
+    {
+        if (Highlighted().FirstOrDefault() is not { } item || MakeModSource(item) is not { } source) return;
+        byte[]? data = null;
+        try { data = source.Read?.Invoke(); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
+        {
+            // the game's own copy is read instead
+        }
+        ModMakerWindow.Open(this, source.GamePath, data);
+    }
+
+    /// <summary>
     /// The open project, to put files in. With none open, asks to make one or open one: the game's files are changed only
     /// as copies in a project. Null when there's still none, or the project is somewhere files can't be written.
     /// </summary>
@@ -1443,6 +1466,7 @@ public partial class MainWindow : Window, IMessageHost
         // the game's files and installed mods' are copied into a project, not added to it: added, they'd still be read-only
         GridAddToProjectItem.Visibility = project is not null && loose.Any(l => !project.Contains(l.FullPath) && FileSafety.CanEdit(l.FullPath)) ? Visibility.Visible : Visibility.Collapsed;
         GridCopyToProjectItem.Visibility = Highlighted().Any(i => CopySource(i) is not null) ? Visibility.Visible : Visibility.Collapsed;
+        GridMakeModItem.Visibility = Highlighted() is [var one] && MakeModSource(one) is not null ? Visibility.Visible : Visibility.Collapsed;
         GridRemoveFromProjectItem.Visibility = project is not null && loose.Any(l => project.Include.Any(s => project.Resolve(s).Equals(l.FullPath, StringComparison.OrdinalIgnoreCase)))
             ? Visibility.Visible : Visibility.Collapsed;
     }
@@ -1749,6 +1773,7 @@ public partial class MainWindow : Window, IMessageHost
                 case FileAction.Xml: GridXmlEditor_Click(this, none); break;
                 case FileAction.External: GridExternal_Click(this, none); break;
                 case FileAction.CopyToProject: GridCopyToProject_Click(this, none); break;
+                case FileAction.MakeMod: GridMakeMod_Click(this, none); break;
                 case FileAction.Extract: GridExtract_Click(this, none); break;
                 case FileAction.CopyPath: CopyHighlightedPaths(); break;
                 case FileAction.CopyName: GridCopyName_Click(this, none); break;

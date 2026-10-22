@@ -56,6 +56,7 @@ public partial class EntityWindow : Window, IMessageHost
     {
         _origin = origin;
         InitializeComponent();
+        MakeModBtn.Show(path, origin, readData);
         // characters face +Y, so the view starts on that side, facing them, a little from above
         View.StartFrom(180, 10);
         Resources["PropertyMenu"] = Menu((L.T("EntityWindow.CopyValue"), CopyValue_Click), (L.T("Common.CopyName"), CopyName_Click), (L.T("EntityWindow.CopyNameValue"), CopyBoth_Click));

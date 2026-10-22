@@ -33,6 +33,7 @@ public partial class BehTreeWindow : Window, IMessageHost
     private BehTreeWindow(string path, string source, Func<byte[]> readData, ResourceLocator locator, string? origin)
     {
         InitializeComponent();
+        MakeModBtn.Show(path, origin, readData);
         _origin = origin;
         _path = path;
         _source = source;

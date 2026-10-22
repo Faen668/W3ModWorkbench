@@ -327,6 +327,10 @@
                                           ToolTip="{l:T MainWindow.CopyIntoOpenProject}">
                                     <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE8C8;" /></MenuItem.Icon>
                                 </MenuItem>
+                                <MenuItem x:Name="GridMakeModItem" Header="{l:T ModMaker.MenuItem}" Click="GridMakeMod_Click" Visibility="Collapsed"
+                                          ToolTip="{l:T ModMaker.ButtonTip}">
+                                    <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE896;" /></MenuItem.Icon>
+                                </MenuItem>
                                 <MenuItem x:Name="GridAddToProjectItem" Header="{l:T Common.AddProject}" Click="GridAddToProject_Click" Visibility="Collapsed">
                                     <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE710;" /></MenuItem.Icon>
                                 </MenuItem>

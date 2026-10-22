@@ -93,6 +93,7 @@ public partial class MaterialWindow : Window, IMessageHost
     private MaterialWindow(string path, string source, Func<byte[]> readData, ResourceLocator locator, string? origin, IArchive? archive, string? diskFile)
     {
         InitializeComponent();
+        MakeModBtn.Show(path, diskFile ?? origin, readData);
         _path = path;
         _source = source;
         _readData = readData;

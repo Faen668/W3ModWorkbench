@@ -59,6 +59,7 @@ public partial class AnimSetWindow : Window, IMessageHost
     private AnimSetWindow(string path, string source, Func<byte[]> readData, ResourceLocator locator, string? origin, IArchive? archive = null, string? diskFile = null)
     {
         InitializeComponent();
+        MakeModBtn.Show(path, diskFile ?? origin, readData);
         _path = path;
         _source = source;
         _readData = readData;

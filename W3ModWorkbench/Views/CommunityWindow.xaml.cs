@@ -31,6 +31,7 @@ public partial class CommunityWindow : Window, IMessageHost
     private CommunityWindow(string path, string source, Func<byte[]> readData, ResourceLocator locator, string? origin)
     {
         InitializeComponent();
+        MakeModBtn.Show(path, origin, readData);
         _path = path;
         _source = source;
         _readData = readData;

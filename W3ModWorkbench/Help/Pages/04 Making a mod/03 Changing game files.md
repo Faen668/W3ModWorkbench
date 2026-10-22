@@ -3,7 +3,8 @@ title: Changing game files
 icon: E70F
 order: 3
 summary: Copy a game file into your project, change it, and let the build put it in your mod.
-keywords: copy to project workspace change texture mesh material xml override replace cook dds png
+keywords: copy to project workspace change texture mesh material xml override replace cook dds png make a mod dependencies entity armour retexture
+windows: ModMakerWindow
 ---
 Your mod changes the game by shipping its own copy of a file, at the same game path. The game then uses your copy instead of its own. The app never changes the game's files; you change copies in your project.
 
@@ -18,6 +19,20 @@ Right-click any game file (in the main window, the [[The Asset Browser|Asset Bro
 | a mesh | the mesh and its `.buffer` files |
 
 The copy opens, ready to change. A file your project has already is left alone, so nothing of yours is overwritten. Typing in one of the game's files offers the same, and saving one asks where in your project it goes.
+
+## Make a mod of a game file
+
+To change how something looks, you usually need more than the one file: an armour piece's entity, the mesh it shows and the textures on it. **Make a mod…**, at the end of the info line along the bottom of every viewer of a game file (or **Make a mod of this…** when you right-click a file in the main window or the Asset Browser), finds what the file is made of and copies it into your project in one go.
+
+![Making a mod of an armour piece: its entities, mesh and textures, ticked](make-a-mod.jpg)
+
+- **The file**, and the **entities and meshes**, **materials** and **textures** it uses, are ticked. A mesh brings its `.buffer` files, which hold its vertices.
+- **Textures** go in as pictures, `.png` unless you pick `.tga` or `.dds` (**Settings > Viewers** keeps your choice). Edit them in any picture editor; **Build** makes each into the texture again, with the game's format, size and mip levels. Cube maps and texture arrays go in as `.dds`, which keeps their faces or slices.
+- **Other files it uses** (animations, behaviour, rigs…) are listed but not ticked.
+- **Shared by many** lists files much of the game uses: the engine's material graphs, detail maps common to many models, base entities. Changing one changes everything that uses it, so they're left out unless you tick them.
+- A file your project has already is marked **in project** and left as it is.
+
+The files come from the game itself, never from another installed mod. Once copied, the file you started from opens (turn off **Open it when copied** for it not to), ready to change.
 
 ## Changing meshes and materials
 

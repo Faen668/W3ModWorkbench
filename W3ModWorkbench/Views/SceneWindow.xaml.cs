@@ -46,6 +46,7 @@ public partial class SceneWindow : Window, IMessageHost
     private SceneWindow(string path, string source, Func<byte[]> readData, ResourceLocator locator, string? origin)
     {
         InitializeComponent();
+        MakeModBtn.Show(path, origin, readData);
         StageLoading.Prompt(L.T("Common.Preview2"), PreviewPrompt);
         _path = path;
         _source = source;
