@@ -27,7 +27,8 @@ public sealed record CookedMesh(byte[] File, byte[] Buffer);
 /// </para>
 /// <para>
 /// After the mesh's properties come its LODs (each one's chunks and distance), its bones' names and the matrices that
-/// take the mesh into each bone's space as it was bound, how far each bone's vertices reach from it, and as many zeros.
+/// take the mesh into each bone's space as it was bound, how far each bone's vertices reach from it, and the bones the
+/// vertices use in the order they're first used.
 /// The engine writes a count there as six bits and more bytes while bit 6 says so, and an empty list as 80.
 /// </para>
 /// </summary>
@@ -307,9 +308,41 @@ public static class MeshWriter
         }
         WriteCount(ms, reach.Length);
         foreach (float r in reach) ms.Write(BitConverter.GetBytes(r));
-        WriteCount(ms, reach.Length);
-        ms.Write(new byte[reach.Length * 4]);
+
+        // the bones the vertices use (with some weight), in the order they're first used, as numbers into the bone list
+        // (WolvenKit names it BoneIndecesMappingBoneIndex). The cooker made it from the mesh before it reordered its
+        // vertices, so the template's is kept, bone by bone, while the mesh still uses the same bones; else it's made anew
+        var used = UsedBones(visible, boneNames.Length);
+        var (oldMapCount, mapAt) = ReadCount(old, reachAt + oldReaches * 4);
+        var oldMap = Enumerable.Range(0, oldMapCount).Where(i => mapAt + i * 4 + 4 <= old.Length)
+            .Select(i => (int)BinaryPrimitives.ReadUInt32LittleEndian(old.AsSpan(mapAt + i * 4))).ToList();
+        var templateUsed = UsedBones(template.Chunks.Where(c => !c.IsShadowOnly).ToList(), template.BoneNames.Length)
+            .Select(b => template.BoneNames[b]).ToHashSet(StringComparer.Ordinal);
+        var nowUsed = used.Select(b => boneNames[b]).ToHashSet(StringComparer.Ordinal);
+        var map = used;
+        if (templateUsed.SetEquals(nowUsed) && oldMap.All(b => b < template.BoneNames.Length))
+            map = [.. oldMap.Select(b => Array.IndexOf(boneNames, template.BoneNames[b])).Select(b => Math.Max(b, 0))];
+        WriteCount(ms, map.Count);
+        foreach (int b in map) ms.Write(BitConverter.GetBytes((uint)b));
         return ms.ToArray();
+    }
+
+    /// <summary>The bones the chunks' vertices use with some weight, in the order they're first used.</summary>
+    private static List<int> UsedBones(List<MeshChunk> chunks, int bones)
+    {
+        var used = new List<int>();
+        var seen = new HashSet<int>();
+        foreach (var chunk in chunks)
+        {
+            int per = chunk.BonesPerVertex;
+            for (int v = 0; v < chunk.Positions.Length && per > 0; v++)
+                for (int b = 0; b < per; b++)
+                {
+                    int bone = chunk.BoneIndices[v * per + b];
+                    if (bone < bones && chunk.BoneWeights[v * per + b] > 0 && seen.Add(bone)) used.Add(bone);
+                }
+        }
+        return used;
     }
 
     // ---------------------------------------------------------------- streams
