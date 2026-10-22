@@ -182,14 +182,14 @@ public partial class AssetBrowserWindow : Window
             order.AddRange(members.Select(m => m.Archive).Where(a => a is Bundle or Core.Textures.TextureCacheArchive));
         }
         order.AddRange(files.Parts);
-        FolderNode? Group(string title, List<FolderNode> members)
+        FolderNode? Group(Func<string> title, List<FolderNode> members)
         {
             if (members.Count == 0) return null;
             var group = FolderNode.Group(title, [.. members.OrderBy(m => m.Name, StringComparer.OrdinalIgnoreCase)], membersInGroup: false, heading: true);
             group.IsExpanded = false;
             return group;
         }
-        return (Group(L.T("AssetBrowserWindow.ModDLC"), dlc), Group(L.T("AssetBrowserWindow.Mods"), mods), order);
+        return (Group(() => L.T("AssetBrowserWindow.ModDLC"), dlc), Group(() => L.T("AssetBrowserWindow.Mods"), mods), order);
     }
 
     /// <summary>Whether a file is from Game files (the game and its official DLC), rather than a mod's under Mod DLC or Mods.</summary>

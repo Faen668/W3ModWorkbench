@@ -88,7 +88,7 @@ public partial class AssetBrowserWindow
     private static List<string>? PathTo(FolderNode target)
     {
         foreach (var heading in Headings)
-            if (Search(heading, [heading.Name]) is { } found) return found;
+            if (Search(heading, [HeadingKey(heading)]) is { } found) return found;
         return null;
 
         List<string>? Search(FolderNode node, List<string> names)
@@ -102,12 +102,17 @@ public partial class AssetBrowserWindow
 
     private static FolderNode? Find(List<string> names)
     {
-        if (names.Count == 0 || Headings.FirstOrDefault(h => h.Name == names[0]) is not { } node) return null;
+        // by key, or by the heading's name for a state saved before keys (in the language it was then)
+        if (names.Count == 0 || Headings.FirstOrDefault(h => HeadingKey(h) == names[0] || h.Name == names[0]) is not { } node) return null;
         foreach (string name in names.Skip(1))
             if (node.Children.FirstOrDefault(c => c.Name.Equals(name, StringComparison.OrdinalIgnoreCase)) is { } child) node = child;
             else return null;
         return node;
     }
+
+    /// <summary>A heading's name in the saved state, the same in every language (its title is translated).</summary>
+    private static string HeadingKey(FolderNode heading) =>
+        heading == _root ? "game" : heading == _modDlc ? "moddlc" : heading == _mods ? "mods" : heading == _redkit ? "redkit" : heading.Name; // loc-ignore
 
     /// <summary>A folder's parent in the tree, a mod's archive's being its mod's entry.</summary>
     private static FolderNode? Parent(FolderNode node) =>

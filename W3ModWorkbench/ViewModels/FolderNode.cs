@@ -15,14 +15,17 @@ public sealed class FolderNode : INotifyPropertyChanged
 
     private FolderNode(string name, IArchive archive, FolderNode? parent)
     {
-        Name = name;
+        _name = name;
         Archive = archive;
         Parent = parent;
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
-    public string Name { get; }
+    private readonly string _name;
+
+    /// <summary>A folder's name; a tree root's is its archive's owner, asked each time (Game files is translated).</summary>
+    public string Name => Parent is null ? Archive.Owner : _name;
     public IArchive Archive { get; }
     public FolderNode? Parent { get; }
     public bool IsBundle => Parent is null;
@@ -31,7 +34,27 @@ public sealed class FolderNode : INotifyPropertyChanged
     public bool IsGroup => Archive is GroupArchive;
 
     /// <summary>A heading at the top of a tree (the asset browser's Game files and Mods), shown in the accent colour.</summary>
-    public bool IsHeading { get; set; }
+    public bool IsHeading
+    {
+        get => _isHeading;
+        set
+        {
+            if (_isHeading == value) return;
+            _isHeading = value;
+            // headings live as long as the app (the asset browser keeps its tree), so they follow the language
+            if (value) Loc.LanguageChanged += Retitle;
+            else Loc.LanguageChanged -= Retitle;
+        }
+    }
+
+    private bool _isHeading;
+
+    private void Retitle()
+    {
+        Raise(nameof(Name));
+        Raise(nameof(DisplayName));
+        Raise(nameof(ToolTip));
+    }
 
     /// <summary>Whether this archive is listed under its mod's entry, which already says the mod's name.</summary>
     public bool InGroup { get; private set; }
@@ -52,9 +75,13 @@ public sealed class FolderNode : INotifyPropertyChanged
     /// A mod's entry in the tree, made of the archives that belong to it. <paramref name="membersInGroup"/> false keeps
     /// the members' own names, for a group of groups (the asset browser's Mods, each mod's entry under it).
     /// </summary>
-    public static FolderNode Group(string owner, IReadOnlyList<FolderNode> members, bool membersInGroup = true, bool heading = false)
+    public static FolderNode Group(string owner, IReadOnlyList<FolderNode> members, bool membersInGroup = true, bool heading = false) =>
+        Group(() => owner, members, membersInGroup, heading);
+
+    /// <summary>A group whose title is looked up each time it's shown, for a heading the tables translate (Mod DLC, Mods).</summary>
+    public static FolderNode Group(Func<string> owner, IReadOnlyList<FolderNode> members, bool membersInGroup = true, bool heading = false)
     {
-        var group = new FolderNode(owner, new GroupArchive(owner), null) { Children = [.. members], IsHeading = heading };
+        var group = new FolderNode("", new GroupArchive(owner), null) { Children = [.. members], IsHeading = heading };
         group.TotalFiles = members.Sum(m => m.TotalFiles);
         if (membersInGroup) foreach (var member in members) member.SetInGroup(true);
         return group;
@@ -160,11 +187,14 @@ public sealed class FolderNode : INotifyPropertyChanged
 }
 
 /// <summary>Stands behind a mod's entry in the tree, which has no file of its own.</summary>
-internal sealed class GroupArchive(string owner) : IArchive
+internal sealed class GroupArchive(Func<string> owner) : IArchive
 {
-    public string FilePath => "mod:" + owner;
+    public GroupArchive(string owner) : this(() => owner) { }
+
+    public string FilePath => "mod:" + owner();
     public string Name => "";
-    public string Owner => owner;
+    /// <summary>Asked each time, so a heading's title follows a language change.</summary>
+    public string Owner => owner();
     public IReadOnlyList<ArchiveEntry> Entries => [];
     public bool ReadsFromDisk => false;
 }
