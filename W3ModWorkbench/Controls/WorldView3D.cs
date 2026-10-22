@@ -267,7 +267,15 @@ cbuffer TextureSettings : register(b1)
 };
 
 static const float Scales[8] = { 0.333, 0.166, 0.05, 0.025, 0.0125, 0.0075, 0.00375, 0.00375 };
-static const float SlopeThresholds[8] = { 0, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875 };
+static const float SlopeThresholds[8] = { 0, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.98 };
+
+// the engine's slope tangent: the angle from straight up as its tangent (a series), stepped between two thresholds
+float SlopeTangent(float3 n, float low, float high)
+{
+    float x = acos(saturate(n.z)), x3 = x * x * x;
+    float t = x + x3 / 3 + 2 * x3 * x * x / 15;
+    return saturate((saturate(t) - low) / max(high - low, 1e-4));
+}
 
 float2 GridUv(float2 world)
 {
@@ -447,6 +455,17 @@ float4 Triplanar(Texture2DArray tex, float3 world, float scale, float slice, flo
     return c;
 }
 
+float4 TriplanarNormal(float3 world, float scale, float slice, float3 weights, float3 vertexNormal)
+{
+    float4 xy = 0, xz = 0, yz = 0;
+    if (weights.z > 0) xy = Normals.Sample(Tiled, float3(world.xy * scale, slice));
+    if (weights.y > 0) xz = Normals.Sample(Tiled, float3(float2(-world.x, -world.z) * scale, slice));
+    if (weights.x > 0) yz = Normals.Sample(Tiled, float3(float2(-world.y, -world.z) * scale, slice));
+    if (vertexNormal.y < 0) xz.y = 1 - xz.y;
+    yz.y = 1 - yz.y;
+    return weights.z * xy + weights.y * xz + weights.x * yz;
+}
+
 float4 TerrainPS(Out i) : SV_Target
 {
     float roughness = 0.8;
@@ -464,43 +483,46 @@ float4 TerrainPS(Out i) : SV_Target
         float2 f = cell - at;
         // a hole where the nearest sample has no texture at all (a cave's mouth, a cellar)
         clip((float)ControlMap.Load(int3(clamp(at, 0, (int)Ground.w - 1), 0)) - 0.5);
+        // as the engine's terrain material (REDkit's terrainMaterialDX11.fx, EvaluateMaterial): the four control
+        // samples' horizontal textures flat at 0.333 a metre and vertical ones from three sides at their own scales,
+        // blended by the samples' weights; one slope tangent from the blended normals decides between them
         float3 sides = max(abs(normal) - 0.576, 0);
         sides /= max(sides.x + sides.y + sides.z, 0.0001);
-        float3 background = 0, overlay = 0, backBump = 0, overBump = 0;
-        float threshold = 0, falloff = 0, damp = 0, backRough = 0, overRough = 0;
+        float3 tangent = normalize(float3(1, 0, 0) - normal * normal.x), binormal = cross(normal, tangent);
+        float4 horizontal = 0, vertical = 0, horizontalN = 0, verticalN = 0;
+        float threshold = 0, sharpness = 0, damp = 0, normalDamp = 0;
         [unroll] for (int k = 0; k < 4; k++)
         {
             int2 o = int2(k & 1, k >> 1);
             float w = (o.x ? f.x : 1 - f.x) * (o.y ? f.y : 1 - f.y);
             uint control = ControlMap.Load(int3(clamp(at + o, 0, (int)Ground.w - 1), 0));
-            uint back = max(control & 31, 1) - 1, over = max((control >> 5) & 31, 1) - 1;
+            uint back = (control & 31) - 1, over = ((control >> 5) & 31) - 1;
             float overScale = Scales[(control >> 13) & 7];
             threshold += SlopeThresholds[(control >> 10) & 7] * w;
-            falloff += Slot[back * 2].x * w;
-            damp += Slot[over * 2].y * w;
+            sharpness += Slot[min(back, 31) * 2].x * w;
+            damp += Slot[min(over, 31) * 2].y * w;
+            normalDamp += Slot[min(over, 31) * 2].z * w;
             float2 flat = i.World.xy * 0.333;
-            background += Diffuse.Sample(Tiled, float3(flat, back)).rgb * w;
-            float4 backN = Normals.Sample(Tiled, float3(flat, back));
-            backBump += (backN.rgb - 0.5) * w;
-            backRough += backN.a * w;
-            overlay += Triplanar(Diffuse, i.World, overScale, over, sides).rgb * w;
-            float4 overN = Triplanar(Normals, i.World, overScale, over, sides);
-            overBump += (overN.rgb - 0.5) * w;
-            overRough += overN.a * w;
+            horizontal += Diffuse.Sample(Tiled, float3(flat, back)) * w;
+            horizontalN += Normals.Sample(Tiled, float3(flat, back)) * w;
+            vertical += Triplanar(Diffuse, i.World, overScale, over, sides) * w;
+            verticalN += TriplanarNormal(i.World, overScale, over, sides, normal) * w;
         }
-        float3 backNormal = normalize(normal + float3(backBump.x, -backBump.y, 0) * 1.2);
-        float3 overNormal = normalize(normal + float3(overBump.x, -overBump.y, 0) * 1.2);
-        // the overlay's slope, its normal first flattened by its damping, as the tangent of its angle
-        float flatten = damp * normal.z;
-        float3 judged = normalize(float3(overNormal.xy * (1 - flatten), lerp(overNormal.z, 1, flatten)));
-        float angle = acos(saturate(judged.z));
-        float slope = saturate(angle + angle * angle * angle * (0.3333333 + 0.1333333 * angle * angle));
-        float amount = saturate((slope - threshold) / max(saturate(falloff + threshold) - threshold, 0.0001));
-        float3 painted = lerp(background, overlay, amount);
-        // the colour map laid over it: darker below mid grey, lighter above
+        // the normal maps at full strength, in the surface's tangent space
+        float3 h = normalize(horizontalN.xyz - 0.5), v = normalize(verticalN.xyz - 0.5);
+        float3 combinedVertical = v.x * tangent + v.y * binormal + v.z * normal;
+        float3 combinedHorizontal = h.x * tangent + h.y * binormal + h.z * normal;
+        float3 flattened = lerp(combinedVertical, float3(0, 0, 1), normal.z);
+        float3 judged = normalize(lerp(combinedVertical, flattened, damp));
+        float amount = SlopeTangent(judged, threshold, saturate(threshold + sharpness));
+        // the engine's CombineNormalsDerivatives: the two normals' slopes added, the horizontal one's by the damping
+        float2 dv = -combinedVertical.xy / combinedVertical.z, dh = -combinedHorizontal.xy / combinedHorizontal.z;
+        float3 both = normalize(float3(-(1 - normalDamp) * dv - normalDamp * dh, 1));
+        float3 painted = lerp(horizontal.rgb, vertical.rgb, amount);
+        // the colour map laid over it: darker below mid grey, lighter above (the engine's ApplyColorMap)
         colour = tint < 0.5 ? 2 * painted * tint : 1 - 2 * (1 - painted) * (1 - tint);
-        normal = normalize(lerp(backNormal, overNormal, amount));
-        roughness = lerp(backRough, overRough, amount);
+        normal = normalize(lerp(both, combinedVertical, amount));
+        roughness = lerp(horizontalN.a, verticalN.a, amount);
     }
     float3 albedo = pow(saturate(colour), 2.2);
     float sun = SunSeen(i.World), ao = AoAt(i.Position);

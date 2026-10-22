@@ -339,8 +339,10 @@ public sealed class WorldLighting
         float t = ((hour % 24) + 24) % 24 / 24;
         const string Tree = "m_speedTree › ", Light = "m_globalLight › ", Ibl = "m_ibl › ";
         Vector4[] Random(string kind) => [.. Enumerable.Range(0, 3).Select(i =>
-            // multipliers: 0 to 255 as they're stored, times their strength (not made linear)
-            new Vector4(Raw(Tree + kind + " › randomColor" + i, t, new Vector3(255)) / 255 * (Setting(Tree + kind + " › randomColor" + i, t)?.W ?? 1),
+            // a tint: the colour as stored (0 to 255), its strength how far from white towards it (an assumption: the
+            // engine's C++ that hands these to the shader isn't in REDkit; as plain multipliers trees came out near black)
+            new Vector4(Vector3.Max(Vector3.Zero, Vector3.Lerp(Vector3.One, Raw(Tree + kind + " › randomColor" + i, t, new Vector3(255)) / 255,
+                Setting(Tree + kind + " › randomColor" + i, t)?.W ?? 0)),
                 Value(Tree + kind + " › saturation" + i, t, 1)))];
         Vector3 Weights(string kind) => Raw(Tree + kind + " › luminanceWeights", t, new Vector3(128)) / 255;
         return new FoliageAt(
