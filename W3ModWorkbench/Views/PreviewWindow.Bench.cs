@@ -73,9 +73,11 @@ public partial class PreviewWindow
         SetBenchTreeShown(App.Settings.BenchTreeShown, animate: false);
         BenchTree.ItemsSource = _benchRoots;
         ProjectWorkspace.Changed += BenchProjectChanged;
+        Loc.LanguageChanged += BenchLanguageChanged;
         Closed += (_, _) =>
         {
             ProjectWorkspace.Changed -= BenchProjectChanged;
+            Loc.LanguageChanged -= BenchLanguageChanged;
             if (App.Settings.BenchTreeShown && BenchPanel.Visibility == Visibility.Visible) App.Settings.BenchTreeWidth = BenchColumn.ActualWidth;
             if (_bench == this) _bench = null;
         };
@@ -147,6 +149,14 @@ public partial class PreviewWindow
     {
         UpdateBenchTitle();
         _ = BuildBenchAsync();
+    }
+
+    /// <summary>The tree's headings, notes and details are text made when it's read, so it's read again in the new language.</summary>
+    private void BenchLanguageChanged()
+    {
+        UpdateBenchTitle();
+        _ = BuildBenchAsync();
+        if (_benchFindReady) RefreshBenchScopes();
     }
 
     private static string BenchTitle => ProjectWorkspace.Current is { } project ? L.T("PreviewWindow.ScriptBench", project.Name) : L.T("PreviewWindow.ScriptBench2");
@@ -227,7 +237,8 @@ public partial class PreviewWindow
         if ((node.DiskPath ?? (node.Entry as LooseScriptEntry)?.FullPath) is { } path) _benchPaths.TryAdd(Path.GetFullPath(path), node);
     }
 
-    private static string PathOf(BenchNode node) => $"{node.Group}|{node.RelativePath}|{node.Name}";
+    // a heading by its group alone, as its name is translated
+    private static string PathOf(BenchNode node) => node.IsHeading ? $"{node.Group}|" : $"{node.Group}|{node.RelativePath}|{node.Name}";
 
     private static void CollectExpanded(BenchNode node, HashSet<string> into)
     {
@@ -355,7 +366,7 @@ public partial class PreviewWindow
             bool mine = own is not null && name.Equals(own, StringComparison.OrdinalIgnoreCase);
             var node = new BenchNode
             {
-                Name = name, Group = BenchGroup.Mods, DiskPath = mod, RelativePath = name,
+                Name = name, Group = BenchGroup.Mods, DiskPath = mod, RelativePath = name, IsMyInstalledBuild = mine,
                 Detail = (blob is not null ? L.T("PreviewWindow.CompiledLabel") : L.T("PreviewWindow.LooseScripts")) + (mine ? L.T("PreviewWindow.YourModsInstalledBuild") : ""),
                 ToolTip = blob is not null ? L.T("PreviewWindow.CompiledScriptsDecompiledRead", blob)
                     : L.T("PreviewWindow.LooseReadOnly", loose)
@@ -965,7 +976,7 @@ public partial class PreviewWindow
             return;
         }
         int scripts = _mine?.Files().Count() ?? 0, overrides = _mine?.Files().Count(f => f.Badge is not null) ?? 0;
-        int mods = _mods?.Children.Count(c => !c.IsNote && !(c.Detail?.Contains("your mod") ?? false)) ?? 0;
+        int mods = _mods?.Children.Count(c => !c.IsNote && !c.IsMyInstalledBuild) ?? 0;
         string against = compiler?.Kind == CompilerKind.WccLite
             ? L.T("PreviewWindow.REDkitsCopyGamesScripts")
             : L.T("PreviewWindow.GamesScripts", L.T("Count.InstalledMod", mods));

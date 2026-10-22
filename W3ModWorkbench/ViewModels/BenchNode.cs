@@ -50,6 +50,9 @@ public sealed class BenchNode : INotifyPropertyChanged
     /// <summary>A line that isn't a file or a folder, such as "No project open" or "Reading…".</summary>
     public bool IsNote { get; init; }
 
+    /// <summary>The open project's own mod as installed in the game's mods folder, left out of the count of other mods.</summary>
+    public bool IsMyInstalledBuild { get; init; }
+
     public ObservableCollection<BenchNode> Children { get; } = [];
 
     public string Glyph => IsNote ? ""

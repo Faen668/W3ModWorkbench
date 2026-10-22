@@ -23,10 +23,22 @@ public partial class PreviewWindow
     private static string RedkitScope => L.T("PreviewWindow.ScopeRedkit");
     private static string ChooseFolder => L.T("PreviewWindow.ScopeFolder");
 
+    // what's kept for each, the same in every language (a folder is kept as its path)
+    private static readonly string[] ScopeKeys = ["everywhere", "mine", "game", "mods", "redkit"]; // loc-ignore
+
+    private static string ScopeName(string key) => key switch
+    {
+        "everywhere" => Everywhere, "mine" => MineScope, "game" => GameScope, "mods" => ModsScope, "redkit" => RedkitScope, // loc-ignore
+        _ => key,
+    };
+
+    /// <summary>The key of a place as the list shows it; a setting kept before keys is its name in the language then.</summary>
+    private static string? ScopeKey(string? name) => name is null ? null : ScopeKeys.FirstOrDefault(k => ScopeName(k) == name) ?? name;
+
     /// <summary>The folder picked with A folder…, offered in the list from then on.</summary>
     private string? _findFolder;
 
-    /// <summary>The place last picked, to go back to when A folder… is cancelled.</summary>
+    /// <summary>The place last picked, by its key, to go back to when A folder… is cancelled.</summary>
     private string? _findScope;
 
     private bool _benchFindReady;
@@ -43,7 +55,7 @@ public partial class PreviewWindow
         // the old window's default; here every file is a script already
         Results.FileFilter = settings.FindFilters.Trim() is "*.ws" or "*.*" ? "" : settings.FindFilters;
         _findFolder = Directory.Exists(settings.FindFolder) ? settings.FindFolder : null;
-        _findScope = settings.FindScope;
+        _findScope = ScopeKey(settings.FindScope);
         Results.ScopePicked += BenchScopePicked;
         Closed += (_, _) =>
         {
@@ -65,15 +77,15 @@ public partial class PreviewWindow
         if (RedkitScripts() is not null) scopes.Add(RedkitScope);
         if (_findFolder is not null) scopes.Add(_findFolder);
         scopes.Add(ChooseFolder);
-        Results.SetScopes(scopes, _findScope);
-        _findScope = Results.Scope;
+        Results.SetScopes(scopes, _findScope is null ? null : ScopeName(_findScope));
+        _findScope = ScopeKey(Results.Scope);
     }
 
     private void BenchScopePicked(string scope)
     {
         if (scope != ChooseFolder)
         {
-            _findScope = scope;
+            _findScope = ScopeKey(scope);
             return;
         }
         var dialog = new OpenFolderDialog
