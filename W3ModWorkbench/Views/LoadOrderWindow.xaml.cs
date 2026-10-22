@@ -332,6 +332,44 @@ public partial class LoadOrderWindow : Window, IMessageHost
         DetailItems.Text = string.Join(Environment.NewLine, f.Items);
         DetailItems.Visibility = ItemsCaption.Visibility = f.Items.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
         DetailAdvice.Text = f.Advice;
+        CompareCopiesButton.Visibility = f.Files is { Count: > 0 } ? Visibility.Visible : Visibility.Collapsed;
+        CompareCopiesButton.Tag = f;
+    }
+
+    /// <summary>A file two mods both ship, picked from the finding's: the two highest-priority copies side by side.</summary>
+    private void CompareCopies_Click(object sender, RoutedEventArgs e)
+    {
+        if (CompareCopiesButton.Tag is not Finding { Files: { Count: > 0 } files }) return;
+        var menu = new ContextMenu { PlacementTarget = CompareCopiesButton, Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom };
+        foreach (var file in files.Take(40))
+        {
+            var item = new MenuItem { Header = file.Path, ToolTip = string.Join(" / ", file.Copies.Select(c => c.Mod)) };
+            item.Click += async (_, _) =>
+            {
+                try
+                {
+                    var (left, right) = await Task.Run(() => (Read(file.Copies[1], file.Path), Read(file.Copies[0], file.Path)));
+                    await FileCompare.ShowAnyAsync(this, left, right);
+                }
+                catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
+                {
+                    await ShowMessage(L.T("CompareWindow.CouldntRead"), ex.Message, MessageKind.Warning);
+                }
+            };
+            menu.Items.Add(item);
+        }
+        menu.IsOpen = true;
+    }
+
+    /// <summary>One mod's copy of a file, from its bundle, its pixels from the cache beside it for a texture.</summary>
+    private static ComparedFile Read((string Mod, string Bundle) copy, string path)
+    {
+        var bundle = Bundle.Open(copy.Bundle);
+        var entry = bundle.Entries.First(e => e.Path.Replace('/', '\\').Equals(path, StringComparison.OrdinalIgnoreCase));
+        using var stream = File.OpenRead(copy.Bundle);
+        string cache = Path.Combine(Path.GetDirectoryName(copy.Bundle) ?? "", "texture.cache");
+        return new ComparedFile(copy.Mod, path, entry.Read(stream),
+            FileCompare.IsTexture(path) ? () => Core.Cr2w.ResourceLocator.Cache(cache) is { } c ? Core.Cr2w.ResourceLocator.FindInCache(c, path) : null : null);
     }
 
     // ---------------------------------------------------------------- actions

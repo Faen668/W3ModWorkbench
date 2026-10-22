@@ -19,7 +19,7 @@ public sealed record ClassChoice(string? Class, int Count)
 }
 
 /// <summary>What the main window's file list does to files, asked for from another window: <see cref="MainWindow.Act"/>.</summary>
-public enum FileAction { Open, Preview, Properties, Json, Xml, External, CopyToProject, MakeMod, Extract, CopyPath, CopyName, CopyFolder, CopyLocation, Reveal }
+public enum FileAction { Open, Preview, Properties, Json, Xml, External, CopyToProject, MakeMod, Compare, Extract, CopyPath, CopyName, CopyFolder, CopyLocation, Reveal }
 
 /// <summary>
 /// The asset browser, a tool window of its own as REDkit's is: every file the game has (content0, its DLC and the
@@ -452,6 +452,7 @@ public partial class AssetBrowserWindow : Window
             return;
         }
         OpenCopyItem.Visibility = items.Count == 1 && CopiesOf(items[0]).Count > 1 ? Visibility.Visible : Visibility.Collapsed;
+        CompareItem.Visibility = items.Count == 2 ? Visibility.Visible : Visibility.Collapsed;
         EabDetailsItem.Visibility = _settings.EasyAssetBrowserOn && Eab is not null ? Visibility.Visible : Visibility.Collapsed;
         bool marked = items.All(i => IsBookmarked(i.Path));
         BookmarkItem.Header = marked ? L.T("AssetBrowserWindow.RemoveBookmark") : L.T("AssetBrowserWindow.Bookmark");
@@ -479,6 +480,8 @@ public partial class AssetBrowserWindow : Window
     private void CopyToProject_Click(object sender, RoutedEventArgs e) => _main.Act(FileAction.CopyToProject, Highlighted());
 
     private void MakeMod_Click(object sender, RoutedEventArgs e) => _main.Act(FileAction.MakeMod, Highlighted());
+
+    private void Compare_Click(object sender, RoutedEventArgs e) => _main.Act(FileAction.Compare, Highlighted());
     private void Extract_Click(object sender, RoutedEventArgs e) => _main.Act(FileAction.Extract, Highlighted());
     private void CopyPath_Click(object sender, RoutedEventArgs e) => _main.Act(FileAction.CopyPath, Highlighted());
     private void CopyName_Click(object sender, RoutedEventArgs e) => _main.Act(FileAction.CopyName, Highlighted());

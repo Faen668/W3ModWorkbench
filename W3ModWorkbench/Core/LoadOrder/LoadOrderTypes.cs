@@ -9,12 +9,16 @@ public enum Severity { Error, Warning, Info }
 /// <param name="Items">The evidence: files, functions, IDs. Can be long.</param>
 /// <param name="Advice">What to do about it.</param>
 /// <param name="Winner">The mod whose version the game ends up using, when the clash has a winner.</param>
+/// <param name="Files">For files two mods both ship, where each mod's copy is, to compare them.</param>
 public sealed record Finding(
     Severity Severity, string Category, string Title, string Summary,
-    IReadOnlyList<string> Mods, IReadOnlyList<string> Items, string Advice, string? Winner = null)
+    IReadOnlyList<string> Mods, IReadOnlyList<string> Items, string Advice, string? Winner = null, IReadOnlyList<FileCopies>? Files = null)
 {
     public string SeverityText => L.T(Severity switch { Severity.Error => "LoadOrderTypes.Problem", Severity.Warning => "LoadOrderTypes.Warning", _ => "LoadOrderTypes.Note" });
 }
+
+/// <summary>A file several mods ship, and each mod's copy: the mod and the bundle it's in, highest priority first.</summary>
+public sealed record FileCopies(string Path, IReadOnlyList<(string Mod, string Bundle)> Copies);
 
 /// <summary>An installed mod or DLC folder, in the order the game loads it.</summary>
 public sealed class ModEntry

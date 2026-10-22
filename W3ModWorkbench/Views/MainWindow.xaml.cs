@@ -1666,6 +1666,7 @@ public partial class MainWindow : Window, IMessageHost
         Add(L.T("MainWindow.LoadOrderAnalyser"), "Ctrl+Shift+L", () => LoadOrderWindow.Open(this));
         Add(L.T("MainWindow.ViewXMLOverrides"), "", () => XmlOverridesWindow.Open(this));
         Add(L.T("ItemEditor.MenuItem"), "", () => ItemEditorWindow.Open(this));
+        Add(L.T("ComparePick.MenuItem"), "", () => ComparePickWindow.Open(this));
         menu.Items.Add(new Separator());
         Add(L.T("MainWindow.ConsoleCommands"), "", () => ConsoleCommandsWindow.Open(this));
         Add(L.T("MainWindow.QuestFacts"), "", () => FactsWindow.Open(this));
@@ -1775,6 +1776,7 @@ public partial class MainWindow : Window, IMessageHost
                 case FileAction.External: GridExternal_Click(this, none); break;
                 case FileAction.CopyToProject: GridCopyToProject_Click(this, none); break;
                 case FileAction.MakeMod: GridMakeMod_Click(this, none); break;
+                case FileAction.Compare: _ = CompareHighlightedAsync(); break;
                 case FileAction.Extract: GridExtract_Click(this, none); break;
                 case FileAction.CopyPath: CopyHighlightedPaths(); break;
                 case FileAction.CopyName: GridCopyName_Click(this, none); break;

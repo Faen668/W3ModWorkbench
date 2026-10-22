@@ -137,7 +137,8 @@ public sealed partial class LoadOrderAnalyzer
 
     // ---------------------------------------------------------------- helpers
 
-    private void Add(Severity severity, string category, string title, string summary, IEnumerable<ScannedMod> mods, IEnumerable<string> items, string advice, ScannedMod? winner = null)
+    private void Add(Severity severity, string category, string title, string summary, IEnumerable<ScannedMod> mods, IEnumerable<string> items, string advice, ScannedMod? winner = null,
+        IReadOnlyList<FileCopies>? files = null)
     {
         var ordered = mods.DistinctBy(m => m.Entry.Name).OrderBy(m => m.Entry.Order).Select(m => m.Entry.Name).ToList();
         var list = items.ToList();
@@ -146,7 +147,7 @@ public sealed partial class LoadOrderAnalyzer
             int more = list.Count - MaxItems;
             list = [.. list.Take(MaxItems), L.T("LoadOrderAnalyzer.More", more)];
         }
-        _report.Findings.Add(new Finding(severity, category, title, summary, ordered, list, advice, winner?.Entry.Name));
+        _report.Findings.Add(new Finding(severity, category, title, summary, ordered, list, advice, winner?.Entry.Name, files));
     }
 
     private static string Who(ScannedMod m) => m.Entry.Name;
@@ -644,6 +645,7 @@ public sealed partial class LoadOrderAnalyzer
         // one finding per set of mods that clash, listing every file they clash over
         var sets = new Dictionary<string, (List<ScannedMod> Mods, List<string> Different, List<string> Same)>();
         var combinable = new Dictionary<string, int>();
+        var copiesOf = new Dictionary<string, List<FileCopies>>();
         foreach (var (path, list) in byPath.OrderBy(p => p.Key, StringComparer.OrdinalIgnoreCase))
         {
             var mods = list.Select(x => x.Mod).Distinct().OrderBy(m => m.Entry.Order).ToList();
@@ -656,6 +658,8 @@ public sealed partial class LoadOrderAnalyzer
             {
                 // under the file, what each mod's copy changes, an item of its own lines
                 var copies = list.OrderBy(x => x.Mod.Entry.Order).DistinctBy(x => x.Mod).ToList();
+                if (!copiesOf.TryGetValue(key, out var known)) copiesOf[key] = known = [];
+                known.Add(new FileCopies(path, [.. copies.Select(c => (c.Mod.Entry.Name, c.File.Bundle))]));
                 var changes = FileChanges(path, copies, out bool? apart);
                 if (changes.Count > 0) line += "\n" + string.Join("\n", changes);
                 if (apart == true) combinable[key] = combinable.GetValueOrDefault(key) + 1;
@@ -667,14 +671,16 @@ public sealed partial class LoadOrderAnalyzer
             if (different.Count > 0 && IsMerged(mods[0]))
                 Add(Severity.Info, L.T("LoadOrderAnalyzer.BundleFile"), L.T("LoadOrderAnalyzer.AlsoBundlesCovered", L.T("Count.File", different.Count), L.T("Count.OtherMod", mods.Count - 1), mods[0].Entry.Name),
                     L.T("LoadOrderAnalyzer.EachContainTheseFiles", Ranked(mods), mods[0].Entry.Name),
-                    mods, different.Order(StringComparer.OrdinalIgnoreCase), L.T("LoadOrderAnalyzer.ReRunMergerWhenever"), mods[0]);
+                    mods, different.Order(StringComparer.OrdinalIgnoreCase), L.T("LoadOrderAnalyzer.ReRunMergerWhenever"), mods[0],
+                    copiesOf.GetValueOrDefault(string.Join("|", mods.Select(m => m.Entry.Name))));
             else if (different.Count > 0)
             {
                 string first = mods[0].Entry.Name;
                 int apart = combinable.GetValueOrDefault(string.Join("|", mods.Select(m => m.Entry.Name)));
                 Add(Severity.Warning, L.T("LoadOrderAnalyzer.BundleFile"), L.T("LoadOrderAnalyzer.ModsBundlesDiffer", L.T("Count.File", different.Count), mods.Count),
                     L.T("LoadOrderAnalyzer.EachContainTheseFiles2", Ranked(mods), first) + (apart > 0 ? " " + L.T("LoadOrderAnalyzer.SomeCombinable", apart, different.Count) : ""),
-                    mods, different.Order(StringComparer.OrdinalIgnoreCase), L.T("LoadOrderAnalyzer.DecideWhichModsVersion"), mods[0]);
+                    mods, different.Order(StringComparer.OrdinalIgnoreCase), L.T("LoadOrderAnalyzer.DecideWhichModsVersion"), mods[0],
+                    copiesOf.GetValueOrDefault(string.Join("|", mods.Select(m => m.Entry.Name))));
             }
             if (same.Count > 0)
                 Add(Severity.Info, L.T("LoadOrderAnalyzer.BundleFile"), L.T("LoadOrderAnalyzer.SharedModsBundles", L.T("Count.IdenticalFile", same.Count), mods.Count),

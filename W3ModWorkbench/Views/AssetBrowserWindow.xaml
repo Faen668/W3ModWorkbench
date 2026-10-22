@@ -285,6 +285,9 @@
                                 <MenuItem Header="{l:T Common.CopyProject}" Click="CopyToProject_Click">
                                     <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE8C8;" /></MenuItem.Icon>
                                 </MenuItem>
+                                <MenuItem x:Name="CompareItem" Header="{l:T MainWindow.CompareTwo}" Click="Compare_Click" ToolTip="{l:T CompareWindow.TwoTip}">
+                                    <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE8F1;" /></MenuItem.Icon>
+                                </MenuItem>
                                 <MenuItem Header="{l:T ModMaker.MenuItem}" Click="MakeMod_Click" ToolTip="{l:T ModMaker.ButtonTip}">
                                     <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE896;" /></MenuItem.Icon>
                                 </MenuItem>

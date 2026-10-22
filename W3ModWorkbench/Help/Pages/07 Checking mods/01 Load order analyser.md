@@ -47,6 +47,8 @@ When two mods ship the same file and it's one of the game's own (an entity, a qu
 
 Objects are matched by the guids quest blocks carry, or else by their class and place, so a mod that adds an object doesn't make every later one look changed.
 
+**Compare copies**, under the finding's summary, lists the files; pick one to see the two mods' copies against each other, every property side by side (see [[Comparing files]]).
+
 ## Check a mod before installing it
 
 **Check a mod** reads a mod you've downloaded, from its folder or `.zip` (or drop either on the window), and analyses your mods with it in the place it would load, as if it were installed. A newer version of a mod you have takes the place of the old one, and the menu files in its `bin` folder are checked too. A bar says what it touches, and the list shows only its findings: **Only …: show all** shows everything, and **Stop checking** analyses your installed mods alone again. Nothing is installed or changed.

@@ -278,6 +278,14 @@
                                     </TextBlock>
                                 </Border>
                                 <TextBlock x:Name="DetailSummary" Margin="0,10,0,0" TextWrapping="Wrap" />
+                                <Button x:Name="CompareCopiesButton" HorizontalAlignment="Left" Padding="10,4" Margin="0,8,0,0" Click="CompareCopies_Click" Visibility="Collapsed"
+                                        ToolTip="{l:T CompareWindow.CopiesTip}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Style="{StaticResource IconText}" Text="&#xE8F1;" FontSize="13" />
+                                        <TextBlock Margin="7,0,0,0" Text="{l:T CompareWindow.Copies}" />
+                                        <TextBlock Style="{StaticResource IconText}" Text="&#xE70D;" FontSize="10" Margin="7,1,0,0" />
+                                    </StackPanel>
+                                </Button>
                                 <TextBlock x:Name="ItemsCaption" Style="{StaticResource Caption}" Margin="0,12,0,4" Text="{l:T LoadOrderWindow.Details}" />
                                 <TextBox x:Name="DetailItems" IsReadOnly="True" TextWrapping="NoWrap" FontFamily="Cascadia Mono, Consolas" FontSize="12.5"
                                          MaxHeight="190" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" AcceptsReturn="True"

@@ -1,0 +1,163 @@
+<Window x:Class="W3ModWorkbench.CompareWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:l="clr-namespace:W3ModWorkbench.Localisation"
+        xmlns:local="clr-namespace:W3ModWorkbench"
+        Title="{l:T CompareWindow.Title}" Icon="pack://application:,,,/W3ModWorkbench;component/Assets/app.ico"
+        Width="1280" Height="820" MinWidth="760" MinHeight="420"
+        WindowStartupLocation="CenterOwner" PreviewKeyDown="Window_PreviewKeyDown">
+    <Window.Resources>
+        <Style x:Key="Card" TargetType="Border">
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}" />
+            <Setter Property="Background" Value="{DynamicResource CardBackgroundFillColorDefaultBrush}" />
+        </Style>
+        <Style x:Key="IconText" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="{StaticResource IconFont}" />
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style x:Key="Caption" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="11.5" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Opacity" Value="0.7" />
+        </Style>
+        <Style TargetType="ListBoxItem" BasedOn="{StaticResource WashItem}">
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Padding" Value="4,0" />
+        </Style>
+        <Style x:Key="Segment" TargetType="RadioButton" BasedOn="{StaticResource {x:Type ToggleButton}}">
+            <Setter Property="Padding" Value="10,5" />
+            <Setter Property="Margin" Value="0,0,2,0" />
+            <Setter Property="MinWidth" Value="0" />
+        </Style>
+    </Window.Resources>
+
+    <Grid>
+        <Grid Margin="14,12,14,10">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <StackPanel Margin="0,0,0,10">
+                <TextBlock x:Name="TitleText" FontSize="16" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                <TextBlock x:Name="KindText" Opacity="0.65" Margin="0,2,0,0" TextWrapping="Wrap" />
+            </StackPanel>
+
+            <!-- the toolbar: what's shown, and moving between differences -->
+            <DockPanel Grid.Row="1" Margin="0,0,0,8">
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                    <Button x:Name="PreviousButton" Padding="10,4" Click="Previous_Click" ToolTip="{l:T CompareWindow.PreviousTip}">
+                        <TextBlock Style="{StaticResource IconText}" Text="&#xE70E;" FontSize="12" />
+                    </Button>
+                    <Button x:Name="NextButton" Padding="10,4" Margin="6,0,0,0" Click="Next_Click" ToolTip="{l:T CompareWindow.NextTip}">
+                        <TextBlock Style="{StaticResource IconText}" Text="&#xE70D;" FontSize="12" />
+                    </Button>
+                    <Button Padding="10,4" Margin="12,0,0,0" Click="Swap_Click" ToolTip="{l:T CompareWindow.SwapTip}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Style="{StaticResource IconText}" Text="&#xE8AB;" FontSize="13" />
+                            <TextBlock Margin="6,0,0,0" Text="{l:T CompareWindow.Swap}" />
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+                <StackPanel x:Name="TreeTools" Orientation="Horizontal">
+                    <ToggleButton x:Name="OnlyDifferences" Padding="10,4" IsChecked="True" Content="{l:T CompareWindow.OnlyDifferences}" Click="Only_Click"
+                                  ToolTip="{l:T CompareWindow.OnlyDifferencesTip}" />
+                    <Button Padding="10,4" Margin="6,0,0,0" Content="{l:T CompareWindow.ExpandAll}" Click="ExpandAll_Click" />
+                    <Button Padding="10,4" Margin="6,0,0,0" Content="{l:T CompareWindow.CollapseAll}" Click="CollapseAll_Click" />
+                    <Grid Margin="10,0,0,0" Width="260">
+                        <TextBox x:Name="SearchBox" Padding="30,4,8,4" VerticalContentAlignment="Center" TextChanged="Search_TextChanged" />
+                        <TextBlock Style="{StaticResource IconText}" Text="&#xE721;" FontSize="13" Margin="10,0,0,0" Opacity="0.6" HorizontalAlignment="Left" IsHitTestVisible="False" />
+                        <TextBlock x:Name="SearchHint" Margin="31,0,0,0" Opacity="0.55" VerticalAlignment="Center" IsHitTestVisible="False" Text="{l:T CompareWindow.Search}" />
+                    </Grid>
+                </StackPanel>
+                <StackPanel x:Name="PictureTools" Orientation="Horizontal" Visibility="Collapsed">
+                    <RadioButton x:Name="SideBySide" Style="{StaticResource Segment}" GroupName="PictureView" IsChecked="True" Content="{l:T CompareWindow.SideBySide}" Checked="PictureView_Checked" />
+                    <RadioButton x:Name="DifferenceView" Style="{StaticResource Segment}" GroupName="PictureView" Content="{l:T CompareWindow.Difference}" Checked="PictureView_Checked"
+                                 ToolTip="{l:T CompareWindow.DifferenceTip}" />
+                </StackPanel>
+            </DockPanel>
+
+            <!-- the tree: name, left, right -->
+            <Border x:Name="TreeCard" Grid.Row="2" Style="{StaticResource Card}" ClipToBounds="True">
+                <DockPanel>
+                    <Grid DockPanel.Dock="Top" Margin="14,8,28,6">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="2*" />
+                            <ColumnDefinition Width="3*" />
+                            <ColumnDefinition Width="3*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Style="{StaticResource Caption}" Text="{l:T CompareWindow.Name}" />
+                        <TextBlock x:Name="LeftHeader" Grid.Column="1" Style="{StaticResource Caption}" TextTrimming="CharacterEllipsis" Margin="8,0,8,0" />
+                        <TextBlock x:Name="RightHeader" Grid.Column="2" Style="{StaticResource Caption}" TextTrimming="CharacterEllipsis" Margin="8,0,0,0" />
+                    </Grid>
+                    <Grid>
+                        <ListBox x:Name="Rows" BorderThickness="0" Background="Transparent" Padding="6,0,6,6"
+                                 VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled" MouseDoubleClick="Rows_DoubleClick" KeyDown="Rows_KeyDown">
+                            <ListBox.ContextMenu>
+                                <ContextMenu>
+                                    <MenuItem Header="{l:T CompareWindow.CopyLeft}" Click="CopyLeft_Click" />
+                                    <MenuItem Header="{l:T CompareWindow.CopyRight}" Click="CopyRight_Click" />
+                                    <MenuItem Header="{l:T CompareWindow.CopyPath}" Click="CopyPath_Click" />
+                                </ContextMenu>
+                            </ListBox.ContextMenu>
+                            <ListBox.ItemTemplate>
+                                <DataTemplate DataType="{x:Type local:CompareRow}">
+                                    <Grid Background="{Binding Tint}" ToolTip="{Binding Tooltip}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="2*" />
+                                            <ColumnDefinition Width="3*" />
+                                            <ColumnDefinition Width="3*" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Orientation="Horizontal" Margin="{Binding Indent}">
+                                            <TextBlock Style="{StaticResource IconText}" FontSize="9" Width="14" Text="{Binding Chevron}" Opacity="0.7" />
+                                            <TextBlock Text="{Binding Name}" FontWeight="{Binding Weight}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                        <TextBlock Grid.Column="1" Text="{Binding Left}" Margin="8,1,8,1" TextTrimming="CharacterEllipsis" FontFamily="Cascadia Mono, Consolas" FontSize="12.5"
+                                                   Foreground="{Binding LeftBrush}" VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="2" Text="{Binding Right}" Margin="8,1,0,1" TextTrimming="CharacterEllipsis" FontFamily="Cascadia Mono, Consolas" FontSize="12.5"
+                                                   Foreground="{Binding RightBrush}" VerticalAlignment="Center" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                        <StackPanel x:Name="EmptyState" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed" MaxWidth="440">
+                            <TextBlock x:Name="EmptyTitle" FontSize="15" FontWeight="SemiBold" HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap" />
+                            <TextBlock x:Name="EmptyText" Opacity="0.65" Margin="0,4,0,0" HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Grid>
+                </DockPanel>
+            </Border>
+
+            <!-- the pictures: left and right, or where they differ -->
+            <Grid x:Name="PictureCard" Grid.Row="2" Visibility="Collapsed">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="10" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Border x:Name="LeftPictureCard" Style="{StaticResource Card}" ClipToBounds="True">
+                    <DockPanel>
+                        <TextBlock x:Name="LeftPictureInfo" DockPanel.Dock="Top" Margin="12,8,12,6" Style="{StaticResource Caption}" TextTrimming="CharacterEllipsis" />
+                        <Image x:Name="LeftPicture" Margin="10" Stretch="Uniform" RenderOptions.BitmapScalingMode="NearestNeighbor" />
+                    </DockPanel>
+                </Border>
+                <Border x:Name="RightPictureCard" Grid.Column="2" Style="{StaticResource Card}" ClipToBounds="True">
+                    <DockPanel>
+                        <TextBlock x:Name="RightPictureInfo" DockPanel.Dock="Top" Margin="12,8,12,6" Style="{StaticResource Caption}" TextTrimming="CharacterEllipsis" />
+                        <Image x:Name="RightPicture" Margin="10" Stretch="Uniform" RenderOptions.BitmapScalingMode="NearestNeighbor" />
+                    </DockPanel>
+                </Border>
+            </Grid>
+
+            <TextBlock x:Name="StatusText" Grid.Row="3" Margin="2,10,2,0" Opacity="0.75" TextTrimming="CharacterEllipsis" />
+        </Grid>
+
+        <local:MessageCard x:Name="Message" IsModal="True" />
+    </Grid>
+</Window>

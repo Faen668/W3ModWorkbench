@@ -34,6 +34,8 @@ To change how something looks, you usually need more than the one file: an armou
 
 The files come from the game itself, never from another installed mod. Once copied, the file you started from opens (turn off **Open it when copied** for it not to), ready to change.
 
+Once you've changed a copy, its viewer's button reads **Compare with game's copy** instead: it shows what your copy changes from the game's, property by property or picture by picture (see [[Comparing files]]). The same button is on a viewer of an installed mod's file.
+
 ## Changing meshes and materials
 
 The [[Meshes|mesh viewer]] and [[Materials|material viewer]] save straight into your project with **Save to project** ({{Ctrl+S}}):

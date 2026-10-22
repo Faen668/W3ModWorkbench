@@ -1,0 +1,41 @@
+<Window x:Class="W3ModWorkbench.ComparePickWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:l="clr-namespace:W3ModWorkbench.Localisation"
+        xmlns:local="clr-namespace:W3ModWorkbench"
+        Title="{l:T ComparePick.Title}" Icon="pack://application:,,,/W3ModWorkbench;component/Assets/app.ico"
+        Width="760" SizeToContent="Height" MinWidth="560" ResizeMode="CanResizeWithGrip"
+        WindowStartupLocation="CenterOwner" PreviewKeyDown="Window_PreviewKeyDown" AllowDrop="True">
+    <Grid>
+        <StackPanel Margin="16,14,16,14">
+            <TextBlock Text="{l:T ComparePick.Title}" FontSize="16" FontWeight="SemiBold" />
+            <TextBlock Opacity="0.65" Margin="0,2,0,14" TextWrapping="Wrap" Text="{l:T ComparePick.Explain}" />
+
+            <TextBlock Text="{l:T ComparePick.Left}" FontSize="11.5" FontWeight="SemiBold" Opacity="0.7" Margin="0,0,0,4" />
+            <DockPanel Margin="0,0,0,12">
+                <Button DockPanel.Dock="Right" Padding="12,5" Margin="8,0,0,0" Content="{l:T Common.Browse}" Click="BrowseLeft_Click" />
+                <TextBox x:Name="LeftBox" Padding="8,5" VerticalContentAlignment="Center" TextChanged="Box_TextChanged" AllowDrop="True"
+                         PreviewDragOver="Box_DragOver" Drop="Box_Drop" ToolTip="{l:T ComparePick.BoxTip}" />
+            </DockPanel>
+
+            <TextBlock Text="{l:T ComparePick.Right}" FontSize="11.5" FontWeight="SemiBold" Opacity="0.7" Margin="0,0,0,4" />
+            <DockPanel Margin="0,0,0,14">
+                <Button DockPanel.Dock="Right" Padding="12,5" Margin="8,0,0,0" Content="{l:T Common.Browse}" Click="BrowseRight_Click" />
+                <TextBox x:Name="RightBox" Padding="8,5" VerticalContentAlignment="Center" TextChanged="Box_TextChanged" AllowDrop="True"
+                         PreviewDragOver="Box_DragOver" Drop="Box_Drop" ToolTip="{l:T ComparePick.BoxTip}" />
+            </DockPanel>
+
+            <DockPanel>
+                <Button x:Name="CompareButton" DockPanel.Dock="Right" Padding="14,6" Click="Compare_Click" IsEnabled="False" IsDefault="True" Style="{DynamicResource AccentButtonStyle}">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock FontFamily="{StaticResource IconFont}" FontSize="14" VerticalAlignment="Center" Text="&#xE8F1;" />
+                        <TextBlock Margin="8,0,0,0" Text="{l:T ComparePick.Compare}" />
+                    </StackPanel>
+                </Button>
+                <TextBlock x:Name="StatusText" Opacity="0.7" VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,0,12,0" />
+            </DockPanel>
+        </StackPanel>
+
+        <local:MessageCard x:Name="Message" IsModal="True" />
+    </Grid>
+</Window>

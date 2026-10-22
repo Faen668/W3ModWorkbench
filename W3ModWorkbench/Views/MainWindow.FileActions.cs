@@ -117,6 +117,9 @@ public partial class MainWindow
             return;
         }
 
+        // CR2W files, strings, compiled scripts and textures in the compare window; text below, in the preview
+        if (await FileCompare.TryShowAsync(this, Compared(older, a), Compared(newer, b))) return;
+
         if (older.IsPreviewable && newer.IsPreviewable)
         {
             await PreviewWindow.ShowComparedAsync(PreviewItemFor(newer.Entry, b), PreviewItemFor(older.Entry, a), this);
@@ -131,6 +134,16 @@ public partial class MainWindow
             await ShowMessage(L.T("MainWindow.Different", older.Name, newer.Name),
                 L.T("MainWindow.TheyFirstDifferByte", sizes, first),
                 MessageKind.Info);
+    }
+
+    /// <summary>A file of the list as one side of a comparison: a texture's pixels from its cache, or the cache beside its .xbm.</summary>
+    private ComparedFile Compared(EntryItem item, byte[] data)
+    {
+        Func<TextureEntry?>? texture = null;
+        if (item.Entry is TextureEntry own) texture = () => own;
+        else if (FileCompare.IsTexture(item.Path))
+            texture = () => new Core.Cr2w.ResourceLocator(OpenArchives(), item.Entry.Archive, GameLocator.Resolve(null)).FindTexture(item.Path);
+        return new ComparedFile(item.BundleName, item.Path, data, texture);
     }
 
     // ---------------------------------------------------------------- other copies
