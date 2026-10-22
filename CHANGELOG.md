@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Fixed: **a scene or cutscene could run the computer out of memory**, with an out-of-memory error from the 3D view (or a white window), most of all at **Full** texture detail with 4× smoothing: the tavern in the prologue took 18.5 GB. Textures are now kept decoded only small (512 pixels) beside the full texture the graphics card gets, repainted textures (dyes, hair, stubble) are painted at full size and then block-compressed as the game's own are, and a picture is no longer decoded twice. The same scene now takes about 6 GB, and the textures look the same.
+- **The 3D views recover when the graphics device fails** (out of memory, a driver reset, waking from sleep): the device is made again and drawing carries on, instead of an error box. Dragging a splitter beside a 3D view stretches its picture until the drag pauses, rather than making new graphics surfaces for every size.
+
 - Fixed: **cloth showed the wrong part of its texture**, so Yennefer's gown had a white strip down its slit and other cloth wore pieces of its hem in odd places. APEX counts a cloth's UVs from the bottom left (every cloth the game has says so), which is now read; and its triangles were wound the other way to the game's meshes, which lit cloth from the inside once it moved.
 - Fixed: **cloth was flung away when an animation looped**: an animation that runs forward (a run cycle) jumps back to its start, and the cloth was dragged after it. A jump like that now carries the cloth with it, as APEX does.
 - **Smoothing edges in the 3D views** is a setting (**Settings > Viewers**: Off, 2× or 4×), and 2× is the new default: 4× halved the frame rate of a mesh filling a big mesh viewer (24 to 32 frames a second at 2000 pixels wide, 60 with 2×), and the edges look much the same.

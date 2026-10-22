@@ -37,6 +37,44 @@ public static class GpuTextures
     }
 
     /// <summary>
+    /// The largest a picture kept in memory is across, when its full texture is stored for the graphics card beside
+    /// it: a scene's hundreds of textures, each kept decoded at full size as well, ran a computer out of memory.
+    /// </summary>
+    public const int KeptSize = 512;
+
+    /// <summary>
+    /// A picture at the full size of the texture stored for it (decoded from the stored blocks), to paint over; the
+    /// picture itself when nothing larger is stored. Made each time it's asked for, and not kept.
+    /// </summary>
+    public static BitmapSource Full(BitmapSource picture)
+    {
+        if (!Stored.TryGetValue(picture, out var dds) || !Core.Textures.Dds.TryRead(dds, out var info, out var pixels)
+            || info.Width <= picture.PixelWidth && info.Height <= picture.PixelHeight
+            || TextureDecoder.Decode(info, pixels, 0) is not { } image) return picture;
+        var format = picture.Format == PixelFormats.Bgra32 ? PixelFormats.Bgra32 : PixelFormats.Bgr32;
+        var full = BitmapSource.Create(image.Width, image.Height, 96, 96, format, null, image.Bgra, image.Width * 4);
+        full.Freeze();
+        return full;
+    }
+
+    /// <summary>
+    /// A painted picture as the graphics card is to have it, block-compressed with its mip levels, and a small copy of it
+    /// (no larger than <see cref="KeptSize"/>) to keep in its place, which the view finds the texture by.
+    /// </summary>
+    public static BitmapSource Compact(BitmapSource picture)
+    {
+        if (picture.PixelWidth <= KeptSize && picture.PixelHeight <= KeptSize) return picture;
+        var levels = Levels(picture);
+        var dds = Compressed(levels);
+        var (pixels, width, height) = levels.First(l => l.Width <= KeptSize && l.Height <= KeptSize);
+        var format = picture.Format == PixelFormats.Bgra32 ? PixelFormats.Bgra32 : PixelFormats.Bgr32;
+        var kept = BitmapSource.Create(width, height, 96, 96, format, null, pixels, width * 4);
+        kept.Freeze();
+        Store(kept, dds);
+        return kept;
+    }
+
+    /// <summary>
     /// A texture's stored pixels from <paramref name="level"/> down, as a .dds file the graphics card takes as it is;
     /// null for a format it can't (or a cube map or array, which go whole through <see cref="Cube"/>).
     /// </summary>
@@ -89,6 +127,58 @@ public static class GpuTextures
 
     private static TextureModel Make(BitmapSource picture)
     {
+        var levels = Levels(picture);
+        // block-compressed as the game's own textures are: a quarter (with alpha) or an eighth (without) of the memory,
+        // which a scene's dozens of repainted textures need at full detail, or it ran out of memory
+        var file = levels[0].Width >= 64 && levels[0].Height >= 64 ? Compressed(levels) : Dds(levels);
+        return TextureModel.Create(new MemoryStream(file)) ?? throw new InvalidOperationException(L.T("GpuTextures.TextureCouldntMade"));
+    }
+
+    /// <summary>
+    /// The levels block-compressed as a .dds file: BC1 (DXT1) when every pixel is opaque, else BC3 (DXT5), whose
+    /// alpha is kept as smooth as an alpha test (hair) needs.
+    /// </summary>
+    private static byte[] Compressed(List<(byte[] Pixels, int Width, int Height)> levels)
+    {
+        bool opaque = true;
+        var top = levels[0].Pixels;
+        for (int i = 3; i < top.Length && opaque; i += 4) opaque = top[i] == 255;
+        byte format = opaque ? (byte)7 : (byte)8;
+        var blocks = new List<byte[]>();
+        foreach (var (pixels, width, height) in levels)
+        {
+            // the encoder takes red, green, blue and alpha; these are blue, green, red and alpha
+            var rgba = new byte[pixels.Length];
+            for (int i = 0; i + 3 < pixels.Length; i += 4)
+                (rgba[i], rgba[i + 1], rgba[i + 2], rgba[i + 3]) = (pixels[i + 2], pixels[i + 1], pixels[i], pixels[i + 3]);
+            blocks.Add(Core.Packing.BcEncoder.Encode(rgba, width, height, format));
+        }
+        var file = new byte[128 + blocks.Sum(b => b.Length)];
+        void Put(int at, uint value) => BinaryPrimitives.WriteUInt32LittleEndian(file.AsSpan(at), value);
+        var (_, w, h) = levels[0];
+        Put(0, 0x20534444); // "DDS "
+        Put(4, 124);
+        Put(8, 0x1 | 0x2 | 0x4 | 0x1000 | 0x20000 | 0x80000); // caps, height, width, pixel format, mip count, linear size
+        Put(12, (uint)h);
+        Put(16, (uint)w);
+        Put(20, (uint)blocks[0].Length);
+        Put(28, (uint)levels.Count);
+        Put(76, 32);
+        Put(80, 0x4); // a four-character code
+        Put(84, opaque ? 0x31545844u : 0x35545844u); // "DXT1" or "DXT5"
+        Put(108, 0x1000 | 0x8 | 0x400000); // texture, complex, mipmap
+        int at = 128;
+        foreach (var b in blocks)
+        {
+            b.CopyTo(file, at);
+            at += b.Length;
+        }
+        return file;
+    }
+
+    /// <summary>A picture and its mip levels, down to one pixel, each 32-bit blue, green, red and alpha.</summary>
+    private static List<(byte[] Pixels, int Width, int Height)> Levels(BitmapSource picture)
+    {
         // straight (not premultiplied) colour and alpha, as the shaders blend it; a picture without alpha gets 255
         BitmapSource bgra = picture.Format == PixelFormats.Bgra32 ? picture : new FormatConvertedBitmap(picture, PixelFormats.Bgra32, null, 0);
         int width = bgra.PixelWidth, height = bgra.PixelHeight;
@@ -100,7 +190,7 @@ public static class GpuTextures
             (level, width, height) = Half(level, width, height);
             levels.Add((level, width, height));
         }
-        return TextureModel.Create(new MemoryStream(Dds(levels))) ?? throw new InvalidOperationException(L.T("GpuTextures.TextureCouldntMade"));
+        return levels;
     }
 
     /// <summary>

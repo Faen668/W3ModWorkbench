@@ -42,6 +42,44 @@ public sealed class MeshView : Border
         return effects;
     }
 
+    private static bool _recovering;
+
+    /// <summary>Raised once the shared graphics device has been made again, for every view to draw again.</summary>
+    private static event EventHandler? DeviceRecovered;
+
+    /// <summary>
+    /// Makes the views' graphics device again after it failed, as Helix's maintainer advises for a lost device: what's
+    /// no longer needed is let go first, then the device and its shaders are made anew, with the view's own passes.
+    /// </summary>
+    private static void RecoverDevice()
+    {
+        if (_recovering || Application.Current?.Dispatcher is not { } dispatcher) return;
+        _recovering = true;
+        dispatcher.BeginInvoke(async () =>
+        {
+            try
+            {
+                await Task.Delay(300);
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                if (Effects is EffectsManager manager)
+                {
+                    manager.Reinitialize();
+                    W3Shading.Install(manager);
+                }
+                DeviceRecovered?.Invoke(null, EventArgs.Empty);
+            }
+            catch (Exception ex) when (ex is SharpDX.SharpDXException or InvalidOperationException or OutOfMemoryException)
+            {
+                // left as it is; the next failure tries again
+            }
+            finally
+            {
+                _recovering = false;
+            }
+        }, System.Windows.Threading.DispatcherPriority.Background);
+    }
+
     /// <summary>Whether hair is drawn by the view's own pass, alpha tested, rather than blended in Helix's transparent pass.</summary>
     private static bool AlphaTested => Effects is not null && W3Shading.Problem is null;
 
@@ -123,12 +161,27 @@ public sealed class MeshView : Border
         _viewport.Items.Add(_debug);
         _viewport.Items.Add(_skeleton);
         Child = _viewport;
+        // the view is drawn at a size set here, not the control's, so a drag that resizes it every frame (a splitter)
+        // doesn't make Direct3D new surfaces for each size: those go only now and then, and dozens a second ran a
+        // scene's graphics memory out (an out-of-memory error, or a white window). Meanwhile its picture is stretched
+        _viewport.HorizontalAlignment = HorizontalAlignment.Left;
+        _viewport.VerticalAlignment = VerticalAlignment.Top;
+        _resizeSettled = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(150) };
+        _resizeSettled.Tick += (_, _) => SettleSize();
         // the window's see-through backdrop doesn't show through Direct3D's picture, so it's cleared to the theme's
         // own background, following the theme as it changes
         SetResourceReference(ThemeBackgroundProperty, "SolidBackgroundFillColorBaseBrush");
         // the environment's cube map, read once for every view; drawn again when it's there
         W3Environment.EnsureLoaded();
         W3Environment.Changed += (_, _) => _viewport.InvalidateRender();
+        // the graphics device can fail under the view (out of memory, a driver reset, the computer waking from sleep):
+        // the view says so here rather than the app stopping, and the device is made again for every view
+        _viewport.RenderExceptionOccurred += (_, e) =>
+        {
+            e.Handled = true;
+            RecoverDevice();
+        };
+        DeviceRecovered += (_, _) => _viewport.InvalidateRender();
     }
 
     private static readonly DependencyProperty ThemeBackgroundProperty = DependencyProperty.Register(nameof(ThemeBackgroundProperty), typeof(Brush), typeof(MeshView),
@@ -1318,10 +1371,31 @@ public sealed class MeshView : Border
         _headlight.Direction = LightFrom(direction);
     }
 
+    private readonly System.Windows.Threading.DispatcherTimer _resizeSettled;
+
     protected override void OnRenderSizeChanged(SizeChangedInfo sizeInfo)
     {
         base.OnRenderSizeChanged(sizeInfo);
         UpdateCamera();
+        // a view that was hidden (no size yet) takes its size at once
+        if (double.IsNaN(_viewport.Width) || _viewport.Width <= 1 || _viewport.Height <= 1)
+        {
+            SettleSize();
+            return;
+        }
+        // stretched to the new size until the resizing stops for a moment
+        _viewport.RenderTransform = new ScaleTransform(sizeInfo.NewSize.Width / _viewport.Width, sizeInfo.NewSize.Height / _viewport.Height);
+        _resizeSettled.Stop();
+        _resizeSettled.Start();
+    }
+
+    /// <summary>Draws the view at the control's size again, once resizing has stopped.</summary>
+    private void SettleSize()
+    {
+        _resizeSettled.Stop();
+        _viewport.Width = Math.Max(1, ActualWidth);
+        _viewport.Height = Math.Max(1, ActualHeight);
+        _viewport.RenderTransform = Transform.Identity;
     }
 
     protected override void OnMouseDown(MouseButtonEventArgs e)

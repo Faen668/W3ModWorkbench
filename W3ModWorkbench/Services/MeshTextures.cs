@@ -40,12 +40,20 @@ public static class MeshTextures
             // the largest mip level no larger than asked for, as the texture viewer picks one
             int level = 0;
             while (level + 1 < info.Mips && Math.Max(info.Width >> (level + 1), info.Height >> (level + 1)) >= max) level++;
-            if (TextureDecoder.Decode(info, pixels, level) is not { } image) return null;
-            var decoded = BitmapSource.Create(image.Width, image.Height, 96, 96, PixelFormats.Bgra32, null, image.Bgra, image.Width * 4);
-            decoded.Freeze();
-            BitmapSource picture = format == PixelFormats.Bgra32 ? decoded : new FormatConvertedBitmap(decoded, format, null, 0);
+            // the graphics card takes the stored blocks from that level; what's kept decoded in memory is a smaller level
+            // when there are blocks to give it (GpuTextures.Full decodes the whole one to paint over)
+            var dds = GpuTextures.DdsOf(info, pixels, level);
+            int kept = level;
+            if (dds is not null)
+                while (kept + 1 < info.Mips && Math.Max(info.Width >> kept, info.Height >> kept) > GpuTextures.KeptSize) kept++;
+            if (TextureDecoder.Decode(info, pixels, kept) is not { } image) return null;
+            // made straight in the format asked for: 32-bit colour without alpha is the same bytes, its alpha left out, so
+            // there's no converter over a second copy (a scene at full texture detail ran out of memory on them)
+            var picture = format == PixelFormats.Bgra32 || format == PixelFormats.Bgr32
+                ? BitmapSource.Create(image.Width, image.Height, 96, 96, format, null, image.Bgra, image.Width * 4)
+                : new FormatConvertedBitmap(BitmapSource.Create(image.Width, image.Height, 96, 96, PixelFormats.Bgra32, null, image.Bgra, image.Width * 4), format, null, 0);
             picture.Freeze();
-            GpuTextures.Store(picture, GpuTextures.DdsOf(info, pixels, level));
+            GpuTextures.Store(picture, dds);
             return picture;
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or NotSupportedException)

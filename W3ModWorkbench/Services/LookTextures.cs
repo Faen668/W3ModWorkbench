@@ -133,7 +133,7 @@ public static class LookTextures
             && await texture(tintMask.Path) is { } mask)
         {
             paint.Shifting = true;
-            paint.Mask = mask;
+            paint.Mask = GpuTextures.Full(mask);
             // the first shift goes on the red parts and the second on the blue, as the engine hands them to the shader.
             // The matrices are made for a red colour, so the blue parts have their red and blue swapped on the way in:
             // through the same shift, red and blue parts come out alike (dye_blue makes both blue)
@@ -142,15 +142,21 @@ public static class LookTextures
             paint.KeepGray = Parameter(resolved, "ColorShift_ KeepGray") is float and > 0;
             paint.BlendColors = Parameter(resolved, "ColorShift_ BlendColors") is float and > 0;
         }
-        var shown = paint.Does ? paint.Apply(picture) : picture;
+        // painted over at the full size the graphics card gets, then kept small, the result stored for the card
+        var shown = paint.Does ? paint.Apply(GpuTextures.Full(picture)) : picture;
         // a face's stubble or beard shadow (pbr_skin_decal): a grey picture in the face's own UVs, darker where the hair
         // is, laid over the skin as an overlay (mid-grey leaves it as it is)
         if (resolved.Textures.FirstOrDefault(t => t.Parameter.Equals("Decal", StringComparison.OrdinalIgnoreCase)) is { } decal
             && await texture(decal.Path) is { } decalPicture)
-            shown = Overlay(shown, decalPicture);
+            shown = Overlay(GpuTextures.Full(shown), GpuTextures.Full(decalPicture));
         // hair is cards cut out by the texture's alpha: drawn whole they're solid sheets
-        if (IsHair(resolved) && MeshTextures.LoadWithAlpha(locator, diffuse.Path, Math.Max(shown.PixelWidth, shown.PixelHeight)) is { } alpha)
-            shown = WithAlpha(shown, alpha);
+        if (IsHair(resolved))
+        {
+            var full = GpuTextures.Full(shown);
+            if (MeshTextures.LoadWithAlpha(locator, diffuse.Path, Math.Max(full.PixelWidth, full.PixelHeight)) is { } alpha)
+                shown = WithAlpha(full, GpuTextures.Full(alpha));
+        }
+        if (!ReferenceEquals(shown, picture)) shown = GpuTextures.Compact(shown);
         GpuTextures.Prepare(shown);
         return (shown, look, false);
     }
