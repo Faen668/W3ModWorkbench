@@ -118,7 +118,7 @@ public sealed partial class WorldView3D
         {
             if (picture is null) return null;
             if (pictures.TryGetValue(picture, out var known)) return known;
-            return pictures[picture] = straight ? StraightTexture(picture) : Texture(picture);
+            return pictures[picture] = straight ? StraightTexture(picture) : StoredTexture(picture) ?? Texture(picture);
         }
         foreach (var kind in kinds)
         {

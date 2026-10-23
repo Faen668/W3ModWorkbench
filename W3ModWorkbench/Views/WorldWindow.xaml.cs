@@ -909,7 +909,9 @@ public partial class WorldWindow : Window, IMessageHost
         }
         var textures = new System.Collections.Concurrent.ConcurrentDictionary<string, Task<System.Windows.Media.Imaging.BitmapSource?>>(StringComparer.OrdinalIgnoreCase);
         Task<System.Windows.Media.Imaging.BitmapSource?> Texture(string path) =>
-            textures.GetOrAdd(path, p => Task.Run(() => MeshTextures.LoadWithAlpha(locator, p, 512)));
+            // up to 2048 across, the game's own blocks sent to the graphics card as they're stored (only a 512 copy kept in
+            // memory): at 512 the buildings, fences and props were a quarter of their size and looked blurred close up
+            textures.GetOrAdd(path, p => Task.Run(() => MeshTextures.LoadWithAlpha(locator, p, 2048)));
         var kinds = new System.Collections.Concurrent.ConcurrentBag<MeshKind3D>();
         var waterSurfaces = new List<(Vector3, Vector3, Vector3)>();
         await Parallel.ForEachAsync(placed, new ParallelOptions { MaxDegreeOfParallelism = Math.Clamp(Environment.ProcessorCount - 1, 2, 8) }, async (group, token) =>
@@ -987,8 +989,8 @@ public partial class WorldWindow : Window, IMessageHost
                     int count = vertices.Count - first;
                     foreach (int i in c.Stripe.Triangles()) indices.Add(first + Math.Min(i, Math.Max(count - 1, 0)));
                 }
-                var diffuse = group.Key.Diffuse is { } d ? MeshTextures.LoadWithAlpha(locator, d, 512) : null;
-                var normal = group.Key.Normal is { } n ? MeshTextures.LoadWithAlpha(locator, n, 512) : null;
+                var diffuse = group.Key.Diffuse is { } d ? MeshTextures.LoadWithAlpha(locator, d, 2048) : null;
+                var normal = group.Key.Normal is { } n ? MeshTextures.LoadWithAlpha(locator, n, 2048) : null;
                 return new StripeBatch3D(diffuse, normal, [.. vertices], [.. indices]);
             }).ToList());
         MapProgress.Visibility = Visibility.Collapsed;

@@ -1399,7 +1399,8 @@ float4 StripePS(StripeOut i) : SV_Target
     {
         float3 b = normalize(i.Along - n * dot(n, i.Along) + 1e-5), t = cross(b, n);
         float2 xy = m.xy * 2 - 1;
-        n = normalize(xy.x * t + xy.y * b + sqrt(saturate(1 - dot(xy, xy))) * n);
+        // (the texture's u runs along the stripe, its v across)
+        n = normalize(xy.x * b + xy.y * t + sqrt(saturate(1 - dot(xy, xy))) * n);
     }
     float sun = SunSeen(i.World), ao = AoAt(i.Position), sky = CanopySky(i.World);
     float3 v = normalize(Eye.xyz - i.World), sunLight = GlobalLightColour(i.World) * sun;
@@ -2258,14 +2259,20 @@ float4 StripePS(StripeOut i) : SV_Target
         if (_held.Contains(Key.E) || _held.Contains(Key.Space)) move += Vector3.UnitZ;
         if (_held.Contains(Key.Q) || _held.Contains(Key.C)) move -= Vector3.UnitZ;
         if (move == Vector3.Zero) return;
-        _eye += Vector3.Normalize(move) * speed * seconds;
+        // never more than a 60th of a second's worth at once (after the view sat idle the first frame's time was up to a
+        // tenth of a second, a jump of a metre or more when tapping a key), and slower near the ground: a tenth of the
+        // speed at the ground rising to all of it 10 m up, so the camera can be placed finely among the plants
+        float above = MathF.Max(0, _eye.Z - GroundAt(new Vector2(_eye.X, _eye.Y)));
+        speed *= Math.Clamp(above / 10, 0.1f, 1);
+        _eye += Vector3.Normalize(move) * speed * MathF.Min(seconds, 1 / 60f);
         KeepAboveGround();
         Moved();
     }
 
     private void KeepAboveGround()
     {
-        float ground = GroundAt(new Vector2(_eye.X, _eye.Y)) + 1.7f;
+        // (half a metre, as low as a crouching eye, so grass can be looked through)
+        float ground = GroundAt(new Vector2(_eye.X, _eye.Y)) + 0.5f;
         if (_eye.Z < ground) _eye.Z = ground;
     }
 
@@ -2368,7 +2375,7 @@ float4 StripePS(StripeOut i) : SV_Target
         else
         {
             float above = MathF.Max(0, _eye.Z - GroundAt(new Vector2(_eye.X, _eye.Y)));
-            _eye += Forward() * notches * _speed * Math.Clamp(above * 0.2f, 0.2f, 5);
+            _eye += Forward() * notches * _speed * Math.Clamp(above * 0.1f, 0.05f, 5);
             KeepAboveGround();
         }
         Moved();

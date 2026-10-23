@@ -177,17 +177,37 @@ public sealed record EnvProbeData(IReadOnlyList<uint> Hashes, Vector3 Origin, in
 /// vertices (the position on the entity, a colour whose alpha fades the ends, the segment's number, the texture's
 /// across and along coordinates, the way it runs, its middle line's point) and 16-bit indices.
 /// </summary>
-public sealed record StripeData(byte[] Vertices, byte[] Indices, string? Normal)
+public sealed record StripeData(byte[] Vertices, byte[] Indices, string? Normal, float TextureLength = 2)
 {
-    /// <summary>The vertices: position, texture coordinates (across, along), alpha, the way the stripe runs.</summary>
+    /// <summary>
+    /// The vertices: position, texture coordinates (across, along), alpha, the way the stripe runs. The cooked along
+    /// coordinate is only the segment's number over four, which stretched a road's texture over some 18 m; it's the
+    /// distance along the stripe's middle line (each segment's middle point at 48) over the stripe's textureLength
+    /// instead, one repeat every textureLength metres as REDkit's stripe settings say.
+    /// </summary>
     public IEnumerable<(Vector3 Position, Vector2 Uv, float Alpha, Vector3 Along)> Read()
     {
         if (Vertices.Length < 4) yield break;
         int bytes = Math.Min(BitConverter.ToInt32(Vertices, 0), Vertices.Length - 4);
+        var middles = new SortedDictionary<int, Vector3>();
+        for (int at = 4; at + 64 <= 4 + bytes; at += 64)
+            middles[(int)MathF.Round(BitConverter.ToSingle(Vertices, at + 16))] =
+                new Vector3(BitConverter.ToSingle(Vertices, at + 48), BitConverter.ToSingle(Vertices, at + 52), BitConverter.ToSingle(Vertices, at + 56));
+        var distance = new Dictionary<int, float>();
+        float run = 0;
+        Vector3? last = null;
+        foreach (var (segment, middle) in middles)
+        {
+            if (last is { } l) run += Vector3.Distance(l, middle);
+            distance[segment] = run;
+            last = middle;
+        }
+        float length = TextureLength > 0.01f ? TextureLength : 2;
         for (int at = 4; at + 64 <= 4 + bytes; at += 64)
         {
             float F(int o) => BitConverter.ToSingle(Vertices, at + o);
-            yield return (new Vector3(F(0), F(4), F(8)), new Vector2(F(20), F(28)), Vertices[at + 15] / 255f, new Vector3(F(36), F(40), F(44)));
+            float along = distance[(int)MathF.Round(F(16))] / length;
+            yield return (new Vector3(F(0), F(4), F(8)), new Vector2(along, F(20)), Vertices[at + 15] / 255f, new Vector3(F(36), F(40), F(44)));
         }
     }
 
@@ -445,7 +465,7 @@ public sealed class WorldFile
         var own = c["transform"] is byte[] raw ? Core.Entities.EntityFile.Transform(raw) : Matrix4x4.Identity;
         return new LayerComponent(c.ClassName, c["name"] as string ?? "", resource, points.Count >= 2 ? points : null, height) { Place = own * entityPlace, AutoHide = c["autoHideDistance"] is float hide ? hide : 0, DrawableFlags = c["drawableFlags"]?.ToString(),
             Stripe = c.ClassName == "CStripeComponent" && c["cookedVertices"] is byte[] sv && c["cookedIndices"] is byte[] si
-                ? new StripeData(sv, si, c["normalTexture"] is RedHandle nh ? file.PathOf(nh) : null) : null,
+                ? new StripeData(sv, si, c["normalTexture"] is RedHandle nh ? file.PathOf(nh) : null, c["textureLength"] is float tl ? tl : 2) : null,
             Probe = c.ClassName == "CEnvProbeComponent" ? EnvProbeData.From(c, at) : null };
     }
 }
