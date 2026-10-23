@@ -740,6 +740,19 @@ public partial class WorldWindow : Window, IMessageHost
         View3D.SetPlants(kinds);
         View3D.SetGrass(grass);
         View3D.TranslucencyCurve = TranslucencyOf(world);
+        View3D.Gtao = GtaoOf(world);
+    }
+
+    /// <summary>
+    /// The world's GTAO settings: radius, final power, grass's power, trees' power. The world files store the first two
+    /// with their names clipped ("dius", "nalValuePower") and grass's as "GrassPower", so both spellings are read.
+    /// </summary>
+    private static Vector4? GtaoOf(WorldFile world)
+    {
+        if (((world.World["environmentParameters"] as RedObject)?["renderSettings"] as RedObject)?["gtaoSettings"] is not RedObject g) return null;
+        float Value(float otherwise, params string[] names) => names.Select(n => g[n]).OfType<float>().Cast<float?>().FirstOrDefault() ?? otherwise;
+        return new Vector4(Value(1, "radius", "dius"), Value(1, "finalValuePower", "nalValuePower"), Value(1, "grassPower", "GrassPower"),
+            Value(1, "treesPower", "TreesPower"));
     }
 
     /// <summary>The world's remaster translucency settings (each a curve; its first key), 1 for one it doesn't keep.</summary>

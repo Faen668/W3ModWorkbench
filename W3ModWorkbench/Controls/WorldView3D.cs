@@ -389,7 +389,7 @@ cbuffer Foliage : register(b8)
     float4 SceneAdd;           // the light the scene adds to the probes; the reflections' scale in shadow
     float4 AoSettings;         // the ambient occlusion's radius, bias, power, and how much it dims direct light
     float4 SpecularSettings;   // grass's f90, the other foliage's f90, the trees' specular scale
-    float4 WaterSettings;      // the environment's water Fresnel (its reflectance looking straight down); the glint's scale
+    float4 WaterSettings;      // the environment's water Fresnel (its reflectance looking straight down); the glint's scale; the AO's power on grass and on trees
     float4 TranslucencyCurve;  // the world's remaster translucency: curve tightness, highlight dimness, normal mask power, scattering saturation
 };
 
@@ -932,7 +932,7 @@ float4 PlantPS(PlantOut i, bool front : SV_IsFrontFace) : SV_Target
         float3 tone = grass ? saturate(lerp(dot(albedo, float3(0.2125, 0.7154, 0.0721)), albedo, TranslucencyCurve.w)) : 1;
         diffuse += mask * scattering * translucent * tone / 3.14159265;
     }
-    float ao = AoAt(i.Position), directAo = lerp(1, ao, AoSettings.w);
+    float ao = pow(AoAt(i.Position), grass ? WaterSettings.z : WaterSettings.w), directAo = lerp(1, ao, AoSettings.w);
     float f90 = i.Kind > 1.5 && i.Kind < 2.5 ? SpecularSettings.x : SpecularSettings.y;
     float3 sunLight = GlobalLightColour(i.World) * sun;
     // the ambient round leaves and grass from the card's own facing upward, not the side seen from below
@@ -1490,6 +1490,12 @@ float AoPS(float4 position : SV_Position) : SV_Target
     /// </summary>
     public Vector4 TranslucencyCurve { get; set; } = Vector4.One;
 
+    /// <summary>
+    /// The world's GTAO settings (its render settings' gtaoSettings): the radius, the final power, and the extra power on
+    /// grass and on trees; null to use the environment's HBAO settings.
+    /// </summary>
+    public Vector4? Gtao { get; set; }
+
     /// <summary>A scale on the sky's brightness, for matching against REDkit (1 is the environment's own).</summary>
     public float SkyFactor { get; set; } = 1;
 
@@ -1616,9 +1622,12 @@ float AoPS(float4 position : SV_Position) : SV_Target
         foliageData[19] = V(probes.SkyTop, probes.SkyShape);
         foliageData[20] = V(probes.SkyHorizon, probes.ReflectionLight);
         foliageData[21] = V(probes.SceneAdd, probes.ReflectionShadow);
-        foliageData[22] = new Vector4(probes.AoRadius, probes.AoBias, probes.AoPower, AllowSsao ? probes.AoNonAmbient : 0);
+        // the remaster's GTAO (the world's render settings) in place of the environment's HBAO radius and power: our
+        // pass's power is half the setting
+        foliageData[22] = Gtao is { } gtao ? new Vector4(gtao.X, probes.AoBias, gtao.Y * 2, AllowSsao ? probes.AoNonAmbient : 0)
+            : new Vector4(probes.AoRadius, probes.AoBias, probes.AoPower, AllowSsao ? probes.AoNonAmbient : 0);
         foliageData[23] = new Vector4(probes.F90Grass, probes.F90Trees, probes.TreeSpecular, PlantTest);
-        foliageData[24] = new Vector4(probes.WaterFresnel, GlintScale, 0, 0);
+        foliageData[24] = new Vector4(probes.WaterFresnel, GlintScale, Gtao?.Z ?? 1, Gtao?.W ?? 1);
         foliageData[25] = TranslucencyCurve;
         c.UpdateSubresource(foliageData, _foliage);
         c.PixelShader.SetConstantBuffer(8, _foliage);
