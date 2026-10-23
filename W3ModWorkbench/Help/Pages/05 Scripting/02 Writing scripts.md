@@ -35,6 +35,8 @@ A moment after you stop typing, your project's scripts are checked the way **Com
 
 The game's scripts and your installed mods are read once, when Script Bench opens, so each check after that takes a moment. The refresh button above the tree reads them again. Turn checking off in [[Settings]] (**Scripts and editors**).
 
+Only your project's scripts are checked. With a script from anywhere else in front, the count says **Not checked**: to check it, compile its folder (see [[Compiling]]).
+
 > tip: The list says the same as **Compile** would, in the same words. [[Compiling]] says what the common messages mean.
 
 ## Parameter names and unused names

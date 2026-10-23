@@ -543,6 +543,8 @@
 
   "ScriptBench.Check.Checking": "Controllo…",
   "ScriptBench.Check.NoProblems": "Nessun problema",
+  "ScriptBench.Check.NotChecked": "Non controllato",
+  "ScriptBench.Check.NotCheckedTip": "Il controllo durante la digitazione riguarda solo gli script di {name}, e questo script non è tra quelli. Per controllarlo, fai clic destro sulla sua cartella nell'elenco e scegli «Compila questi script».",
   "ScriptBench.Check.Problems": {"one": "{count} problema", "other": "{count} problemi"},
   "ScriptBench.Check.Tip": "Ciò che il controllo durante la digitazione ha trovato negli script del progetto. Clicca per l'elenco; ogni riga porta al suo punto.",
   "ScriptBench.Check.Title": "Problemi trovati durante la digitazione",

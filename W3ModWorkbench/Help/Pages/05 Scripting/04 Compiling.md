@@ -55,6 +55,7 @@ The file and line, then what's wrong, in the same words REDkit uses. Some common
 | **Unknown type 'X' for property 'y'** | a misspelt type, or one from a mod you haven't installed: on a variable, a parameter, a local or what a function returns (`__return`) |
 | **Unable to parse value** | a `default` that can't be read as its variable's type: a name the enum hasn't got, a word for a number, or text for a bool that isn't true or false |
 | **Property 'x' does not exist in 'Class'** | a `default` for a variable the class hasn't got |
+| **Class 'X' is already defined in current compilation unit** (or **Global function 'x' already defined**) | the same class or function is in two of your files, such as a decompiled mod's `all.ws` left beside the files it repeats. Both places are listed: keep one |
 
 REDkit's warnings don't stop the compile, and the built-in compiler gives the same ones:
 

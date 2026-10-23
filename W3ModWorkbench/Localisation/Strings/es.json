@@ -543,6 +543,8 @@
 
   "ScriptBench.Check.Checking": "Comprobando…",
   "ScriptBench.Check.NoProblems": "Sin problemas",
+  "ScriptBench.Check.NotChecked": "Sin comprobar",
+  "ScriptBench.Check.NotCheckedTip": "La comprobación mientras escribes solo abarca los scripts de {name}, y este script no es uno de ellos. Para comprobarlo, haz clic derecho en su carpeta en la lista y elige «Compilar estos scripts».",
   "ScriptBench.Check.Problems": {"one": "{count} problema", "other": "{count} problemas"},
   "ScriptBench.Check.Tip": "Lo que la comprobación mientras escribes encontró en los scripts de tu proyecto. Haz clic para ver la lista; cada línea lleva a su lugar.",
   "ScriptBench.Check.Title": "Problemas encontrados mientras escribes",

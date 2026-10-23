@@ -138,8 +138,17 @@ public partial class PreviewWindow
             ProblemsButton.Visibility = Visibility.Collapsed;
             return;
         }
-        int count = _problems.Values.Sum(l => l.Count);
         ProblemsButton.Visibility = Visibility.Visible;
+        // a script from outside the project isn't checked: the project's count would read as this file's
+        if (Current is { } doc && doc.Item.IsScript && UnderScripts(doc) is null)
+        {
+            ProblemsIcon.Text = "";
+            ProblemsIcon.ClearValue(System.Windows.Controls.TextBlock.ForegroundProperty);
+            ProblemsText.Text = L.T("ScriptBench.Check.NotChecked");
+            ProblemsButton.ToolTip = L.T("ScriptBench.Check.NotCheckedTip", ProjectWorkspace.Current!.Name);
+            return;
+        }
+        int count = _problems.Values.Sum(l => l.Count);
         ProblemsIcon.Text = _checking ? "" : count > 0 ? "" : "";
         if (count > 0) ProblemsIcon.SetResourceReference(System.Windows.Controls.TextBlock.ForegroundProperty, "SystemFillColorCautionBrush");
         else ProblemsIcon.ClearValue(System.Windows.Controls.TextBlock.ForegroundProperty);

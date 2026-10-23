@@ -152,6 +152,9 @@ public static class StandaloneCompiler
         var enumProblems = new List<CompileMessage>();
         symbols.ExtendEnums(project, (file, line, text) => enumProblems.Add(new CompileMessage(true, file.Path, line, text)));
         if (enumProblems.Count > 0) return (null, enumProblems);
+        var duplicates = Duplicates.Check(project);
+        if (duplicates.Count > 0)
+            return (null, [.. duplicates.Select(p => new CompileMessage(true, p.File, Math.Max(p.Line, 1), p.Text))]);
         symbols.AddTypeNames(project);
         symbols.AddTypeNames(vanillaFiles);
         symbols.AddTypeNames(installed);

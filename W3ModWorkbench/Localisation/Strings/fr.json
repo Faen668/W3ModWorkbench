@@ -543,6 +543,8 @@
 
   "ScriptBench.Check.Checking": "Vérification…",
   "ScriptBench.Check.NoProblems": "Aucun problème",
+  "ScriptBench.Check.NotChecked": "Non vérifié",
+  "ScriptBench.Check.NotCheckedTip": "La vérification pendant la frappe ne couvre que les scripts de {name}, et ce script n'en fait pas partie. Pour le vérifier, faites un clic droit sur son dossier dans la liste et choisissez « Compiler ces scripts ».",
   "ScriptBench.Check.Problems": {"one": "{count} problème", "many": "{count} de problèmes", "other": "{count} problèmes"},
   "ScriptBench.Check.Tip": "Ce que la vérification pendant la saisie a trouvé dans les scripts de votre projet. Cliquez pour la liste ; chaque ligne mène à son emplacement.",
   "ScriptBench.Check.Title": "Problèmes trouvés pendant la saisie",

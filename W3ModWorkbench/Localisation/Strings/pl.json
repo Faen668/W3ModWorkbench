@@ -543,6 +543,8 @@
 
   "ScriptBench.Check.Checking": "Sprawdzanie…",
   "ScriptBench.Check.NoProblems": "Brak problemów",
+  "ScriptBench.Check.NotChecked": "Nie sprawdzono",
+  "ScriptBench.Check.NotCheckedTip": "Sprawdzanie podczas pisania obejmuje tylko skrypty projektu {name}, a ten skrypt do nich nie należy. Aby go sprawdzić, kliknij prawym przyciskiem jego folder na liście i wybierz „Skompiluj te skrypty”.",
   "ScriptBench.Check.Problems": {"one": "{count} problem", "few": "{count} problemy", "many": "{count} problemów", "other": "{count} problemu"},
   "ScriptBench.Check.Tip": "Co sprawdzanie podczas pisania znalazło w skryptach projektu. Kliknij, by zobaczyć listę; każda linia prowadzi do swojego miejsca.",
   "ScriptBench.Check.Title": "Problemy znalezione podczas pisania",

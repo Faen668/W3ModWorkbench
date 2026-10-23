@@ -543,6 +543,8 @@
 
   "ScriptBench.Check.Checking": "Проверка…",
   "ScriptBench.Check.NoProblems": "Проблем нет",
+  "ScriptBench.Check.NotChecked": "Не проверено",
+  "ScriptBench.Check.NotCheckedTip": "Проверка при вводе охватывает только скрипты {name}, а этот скрипт к ним не относится. Чтобы проверить его, щёлкните его папку в списке правой кнопкой и выберите «Скомпилировать эти скрипты».",
   "ScriptBench.Check.Problems": {"one": "{count} проблема", "few": "{count} проблемы", "many": "{count} проблем", "other": "{count} проблемы"},
   "ScriptBench.Check.Tip": "Что нашла проверка при вводе в скриптах вашего проекта. Щёлкните, чтобы увидеть список; каждая строка ведёт к своему месту.",
   "ScriptBench.Check.Title": "Проблемы, найденные при вводе",

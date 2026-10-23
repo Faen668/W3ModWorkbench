@@ -544,6 +544,8 @@
 
   "ScriptBench.Check.Checking": "Checking…",
   "ScriptBench.Check.NoProblems": "No problems",
+  "ScriptBench.Check.NotChecked": "Not checked",
+  "ScriptBench.Check.NotCheckedTip": "Checking as you type covers {name}'s scripts only, and this script isn't one of them. To check it, right-click its folder in the list and choose Compile these scripts.",
   "ScriptBench.Check.Problems": { "one": "{count} problem", "other": "{count} problems" },
   "ScriptBench.Check.Tip": "What checking as you type found in your project's scripts. Click for the list; each line goes to its place.",
   "ScriptBench.Check.Title": "Problems found as you type",

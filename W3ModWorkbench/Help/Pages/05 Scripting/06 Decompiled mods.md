@@ -26,6 +26,8 @@ The scripts come out sorted like this:
 
 The `annotations` folder is handy for checking two mods get on: two `@replaceMethod`s of the same function can't both win.
 
+> warning: To compile extracted scripts again, keep **either** `all.ws` **or** the other files, not both: `all.ws` repeats them, so everything would be there twice and the compile stops with **Class 'X' is already defined in current compilation unit**. `all.ws` alone suits a small mod; the separate files keep a big one tidy. **Edit as project** leaves `all.ws` out for you.
+
 ## What comes back
 
 Names, types and the code itself come back as the author wrote them. Comments don't (the compiler throws them away), and the layout is the app's own. See [[Reading decompiled code]] for the details.

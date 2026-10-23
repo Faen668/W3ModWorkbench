@@ -543,6 +543,8 @@
 
   "ScriptBench.Check.Checking": "Wird geprüft…",
   "ScriptBench.Check.NoProblems": "Keine Probleme",
+  "ScriptBench.Check.NotChecked": "Nicht geprüft",
+  "ScriptBench.Check.NotCheckedTip": "Die Prüfung beim Tippen umfasst nur die Skripte von {name}, und dieses Skript gehört nicht dazu. Um es zu prüfen, klicke seinen Ordner in der Liste mit der rechten Maustaste an und wähle „Diese Skripte kompilieren“.",
   "ScriptBench.Check.Problems": {"one": "{count} Problem", "other": "{count} Probleme"},
   "ScriptBench.Check.Tip": "Was die Prüfung während der Eingabe in den Skripten Ihres Projekts gefunden hat. Klicken Sie für die Liste; jede Zeile springt an ihre Stelle.",
   "ScriptBench.Check.Title": "Während der Eingabe gefundene Probleme",

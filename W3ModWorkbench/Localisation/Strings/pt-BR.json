@@ -543,6 +543,8 @@
 
   "ScriptBench.Check.Checking": "Verificando…",
   "ScriptBench.Check.NoProblems": "Nenhum problema",
+  "ScriptBench.Check.NotChecked": "Não verificado",
+  "ScriptBench.Check.NotCheckedTip": "A verificação enquanto você digita cobre só os scripts de {name}, e este script não é um deles. Para verificá-lo, clique com o botão direito na pasta dele na lista e escolha “Compilar estes scripts”.",
   "ScriptBench.Check.Problems": {"one": "{count} problema", "other": "{count} problemas"},
   "ScriptBench.Check.Tip": "O que a verificação durante a digitação encontrou nos scripts do seu projeto. Clique para ver a lista; cada linha leva ao seu lugar.",
   "ScriptBench.Check.Title": "Problemas encontrados durante a digitação",

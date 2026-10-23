@@ -609,7 +609,13 @@ public sealed class Decompiler(ScriptBlob blob, EnumResolver enums)
             case Op.IntToBool: case Op.IntToFloat: case Op.IntToString: case Op.FloatToBool: case Op.FloatToString:
             case Op.NameToBool: case Op.NameToString: case Op.StringToBool: case Op.ObjectToBool: case Op.ObjectToString:
             case Op.EnumToString:
-                return ParseExpr();
+            {
+                var e = ParseExpr();
+                // (int)EFDT_Head passed on as a float: an enum converts to int on its own, but not on to a float, so the cast stays
+                if (ins.Op is Op.IntToBool or Op.IntToFloat or Op.IntToString && e.EnumType is not null && e.Inner?.Literal is not null && !e.Text.StartsWith('('))
+                    return new($"(int){e.Text}", Precedence.Unary);
+                return e;
+            }
 
             default:
                 throw new NotSupportedException($"{ins.Op} cannot appear inside an expression."); // loc-ignore

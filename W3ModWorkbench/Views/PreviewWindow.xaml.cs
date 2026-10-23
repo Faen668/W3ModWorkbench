@@ -1069,7 +1069,11 @@ public partial class PreviewWindow : Window, IMessageHost
     {
         if (_isBench) BenchEmpty.Visibility = Current is null ? Visibility.Visible : Visibility.Collapsed;
         // a script shown in the bench gets what the last check found in it
-        if (_isBench) ApplyProblems(Current);
+        if (_isBench)
+        {
+            ApplyProblems(Current);
+            UpdateProblemsButton();
+        }
         if (Current is not { } doc)
         {
             if (_isBench) UpdateBenchTitle();
