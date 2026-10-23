@@ -424,7 +424,8 @@ cbuffer Foliage : register(b8)
 };
 #define GrassAlbedo GrassSettings.x
 // which of the light to show, as REDkit's decomposed views do: 0 all of it, 1 the ambient (and the probes' reflection),
-// 2 the sun's light (its diffuse, translucency and specular), 3 the albedo (as the G-buffer keeps it, in gamma)
+// 2 the sun's light (its diffuse, translucency and specular), 3 the albedo (as the G-buffer keeps it, in gamma), 4 the
+// ambient occlusion the ambient takes
 #define LightingView GrassSettings.y
 // the translucency's global scale for leaves and grass (cb0[24].x in the game's SpeedTree shaders), for billboards
 #define TranslucencyGlobal GrassSettings.zw
@@ -617,6 +618,7 @@ float4 TerrainPS(Out i) : SV_Target
     float3 ambientPart = albedo * AmbientAt(normal, sun) * ao * sky + ReflectionAt(normal, v, specularity, clamp(roughness, 0.05, 1), sun) * ao * sky;
     float3 lit = albedo * sunLight * saturate(dot(normal, Light.xyz)) / 3.14159265 * direct
         + sunLight * SpecularAt(normal, v, Light.xyz, specularity, clamp(roughness, 0.05, 1), f90) * direct + ambientPart;
+    if (LightingView > 3.5) return float4(ao.xxx, 1);
     if (LightingView > 2.5) return float4(pow(saturate(albedo), 1 / 2.2), 1);
     return Screen(Fogged(LightingPart(lit, ambientPart), i.World), 1);
 }
@@ -1025,6 +1027,7 @@ float4 PlantPS(PlantOut i, bool front : SV_IsFrontFace) : SV_Target
     float3 lit = (grass ? sunLight * diffuse * directAo : albedo * sunLight * diffuse * directAo) + albedo * AmbientAt(an, sun) * ao * sky * (grass ? CanopySettings.z : 1)
         + (grass ? 0 : sunLight * SpecularAt(specularNormal, V, L, specularity, clamp(glossiness, 0.05, 1), f90) * SpecularSettings.z * directAo);
     float3 ambientPart = albedo * AmbientAt(an, sun) * ao * sky * (grass ? CanopySettings.z : 1);
+    if (LightingView > 3.5) return float4(ao.xxx, 1);
     if (LightingView > 2.5) return float4(pow(saturate(albedo), 1 / 2.2), 1);
     return Screen(Fogged(LightingPart(lit, ambientPart), i.World), 1);
 }
@@ -1100,8 +1103,9 @@ float4 CookedSeen(float3 dir)
     float3 a = abs(dir);
     float3 world = CookedAt.xyz + dir / max(a.x, max(a.y, a.z)) * (0.5 / max(1 - depth, 1e-5));
     float sun = SunSeen(world);
-    float3 lit = albedo * (GlobalLightColour(world) * saturate(dot(n, Light.xyz)) * sun / 3.14159265
-        + AmbientAt(n, sun) * CookedGen.rgb);
+    // as the engine's probe relighting (static shader 0017) has it: the albedo under the sun and the local lights only,
+    // no ambient
+    float3 lit = albedo * GlobalLightColour(world) * saturate(dot(n, Light.xyz)) * sun / 3.14159265;
     return float4(lit, 1);
 }
 
