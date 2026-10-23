@@ -340,6 +340,13 @@ public partial class WorldWindow : Window, IMessageHost
         await reading;
         Take();
         MapProgress.Visibility = Visibility.Collapsed;
+        _layersRead = true;
+        // the 3D view, if it's already up, gets the water levels and meshes of the layers read since
+        if (View3D.HasTerrain)
+        {
+            SetWater3D();
+            if (_meshesWaiting) _ = ShowMeshes3DAsync();
+        }
         foreach (var node in _roots) Count(node);
         ShowEntities();
         ShowShapes();
@@ -745,12 +752,22 @@ public partial class WorldWindow : Window, IMessageHost
         await ShowMeshes3DAsync();
     }
 
+    /// <summary>The water shapes the layers read so far have, for the 3D view: each sets the water's level inside it.</summary>
+    private void SetWater3D() => View3D.SetWater(_dots.Values.SelectMany(d => d).SelectMany(d => d.Entity.Components)
+        .Where(c => c is { ClassName: "CWaterComponent", Outline: { Count: >= 3 } }).Select(c => (c.Outline!, c.Height)));
+
+    // whether every layer's been read; whether the 3D view's meshes wait for that
+    private bool _layersRead, _meshesWaiting;
+
     /// <summary>
     /// The layers' meshes in 3D: every mesh the layers' components draw (those read so far), read with each material's
     /// colour picture and look as the mesh viewer reads them, and where each copy stands.
     /// </summary>
     private async Task ShowMeshes3DAsync()
     {
+        // once every layer's been read, so none are missing
+        _meshesWaiting = !_layersRead;
+        if (_meshesWaiting) return;
         var locator = _locator;
         MapProgress.Visibility = Visibility.Visible;
         MapProgress.Text = L.T("WorldWindow.ReadingMeshes3D");
@@ -1110,8 +1127,7 @@ public partial class WorldWindow : Window, IMessageHost
                 View3D.LightingChanged += View3D_LightingChanged;
                 View3D.SetFoam(foam);
                 // the water shapes the layers read so far have: each sets the water's level inside it
-                View3D.SetWater(_dots.Values.SelectMany(d => d).SelectMany(d => d.Entity.Components)
-                    .Where(c => c is { ClassName: "CWaterComponent", Outline: { Count: >= 3 } }).Select(c => (c.Outline!, c.Height)));
+                SetWater3D();
                 View3DToggle.ToolTip = View3D.Painted ? L.T("WorldWindow.View3DTip") : L.T("WorldWindow.View3DNoTextures");
                 _ = ShowPlants3DAsync();
             }
