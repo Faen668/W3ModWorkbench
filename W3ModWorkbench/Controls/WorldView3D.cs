@@ -935,7 +935,7 @@ float4 PlantPS(PlantOut i, bool front : SV_IsFrontFace) : SV_Target
     // |L.N| to the power 0.3 (ApproximatedDiffuseCurvePower) dimmed as the eye looks towards the sun; the rest Lambert;
     // a tree's leaf cards keep their own facing, so a canopy's side away from the sun is lit only through the leaves
     float3 diffuse = (grass ? pow(abs(dot(L, n)), 0.3) * saturate(LoV + 0.5) * albedo : saturate(dot(n, L))) / 3.14159265;
-    float translucent = leafy && abs(SpecularSettings.w - 11) > 0.5 ? BillboardTint.w : 0;
+    float translucent = leafy ? BillboardTint.w : 0;
     if (translucent > 0)
     {
         // the remaster's translucency (UseNewTranslucency, on by default): the light through the leaf, strongest looking
@@ -953,11 +953,7 @@ float4 PlantPS(PlantOut i, bool front : SV_IsFrontFace) : SV_Target
     // (the approximated model has the albedo in it already)
     float sky = CanopySky(i.World);
     float3 lit = (grass ? sunLight * diffuse * directAo : albedo * sunLight * diffuse * directAo) + albedo * AmbientAt(an, sun) * ao * sky
-        + sunLight * SpecularAt(specularNormal, V, L, 0.04, 0.6, f90) * SpecularSettings.z * directAo * (abs(SpecularSettings.w - 12) < 0.5 ? 0 : 1);
-    if (abs(SpecularSettings.w - 13) < 0.5) return float4(albedo, 1);
-    if (abs(SpecularSettings.w - 14) < 0.5) return float4(sun.xxx * 0.3, 1);
-    if (abs(SpecularSettings.w - 15) < 0.5) return Screen(Fogged(albedo * AmbientAt(an, sun) * ao * sky, i.World), 1);
-    if (abs(SpecularSettings.w - 16) < 0.5) return float4(sky.xxx * 0.3, 1);
+        + sunLight * SpecularAt(specularNormal, V, L, 0.04, 0.6, f90) * SpecularSettings.z * directAo;
     return Screen(Fogged(lit, i.World), 1);
 }
 
