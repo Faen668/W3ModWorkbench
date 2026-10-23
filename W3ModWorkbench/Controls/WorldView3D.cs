@@ -391,7 +391,19 @@ cbuffer Foliage : register(b8)
     float4 SpecularSettings;   // grass's f90, the other foliage's f90, the trees' specular scale
     float4 WaterSettings;      // the environment's water Fresnel (its reflectance looking straight down); the glint's scale; the AO's power on grass and on trees
     float4 TranslucencyCurve;  // the world's remaster translucency: curve tightness, highlight dimness, normal mask power, scattering saturation
+    float4 CanopySettings;     // how strongly the trees' crowns over a point hide the sky from it; whether the canopy map is there
 };
+
+// The trees' crowns over each few metres (how many, the canopy's top). The game's ambient comes from probes it renders
+// in the scene, so under a forest they see the forest; ours comes from the sky, dimmed under the crowns by their count.
+Texture2D Canopy : register(t20);
+
+float CanopySky(float3 world)
+{
+    if (CanopySettings.y < 0.5) return 1;
+    float2 c = Canopy.SampleLevel(Smooth, GridUv(world.xy), 0).rg;
+    return lerp(1, exp(-CanopySettings.x * c.x), saturate((c.y - world.z) / 6));
+}
 
 Texture2D<float> AoMap : register(t18);
 
@@ -561,9 +573,10 @@ float4 TerrainPS(Out i) : SV_Target
     // the engine's lighting: Lambert over pi and GGX specular from the sun, dimmed by the AO's share for direct light;
     // the probes' ambient and reflection, dimmed by the AO
     float direct = lerp(1, ao, AoSettings.w);
-    float3 lit = albedo * (sunLight * saturate(dot(normal, Light.xyz)) / 3.14159265 * direct + AmbientAt(normal, sun) * ao)
+    float sky = CanopySky(i.World);
+    float3 lit = albedo * (sunLight * saturate(dot(normal, Light.xyz)) / 3.14159265 * direct + AmbientAt(normal, sun) * ao * sky)
         + sunLight * SpecularAt(normal, v, Light.xyz, specularity, clamp(roughness, 0.05, 1), f90) * direct
-        + ReflectionAt(normal, v, specularity, clamp(roughness, 0.05, 1), sun) * ao;
+        + ReflectionAt(normal, v, specularity, clamp(roughness, 0.05, 1), sun) * ao * sky;
     return Screen(Fogged(lit, i.World), 1);
 }
 
@@ -922,7 +935,7 @@ float4 PlantPS(PlantOut i, bool front : SV_IsFrontFace) : SV_Target
     // |L.N| to the power 0.3 (ApproximatedDiffuseCurvePower) dimmed as the eye looks towards the sun; the rest Lambert;
     // a tree's leaf cards keep their own facing, so a canopy's side away from the sun is lit only through the leaves
     float3 diffuse = (grass ? pow(abs(dot(L, n)), 0.3) * saturate(LoV + 0.5) * albedo : saturate(dot(n, L))) / 3.14159265;
-    float translucent = leafy ? BillboardTint.w : 0;
+    float translucent = leafy && abs(SpecularSettings.w - 11) > 0.5 ? BillboardTint.w : 0;
     if (translucent > 0)
     {
         // the remaster's translucency (UseNewTranslucency, on by default): the light through the leaf, strongest looking
@@ -938,8 +951,13 @@ float4 PlantPS(PlantOut i, bool front : SV_IsFrontFace) : SV_Target
     // the ambient round leaves and grass from the card's own facing upward, not the side seen from below
     float3 an = grass ? ground : leafy ? normalize(float3(i.Normal.xy, abs(i.Normal.z) + 0.3)) : n;
     // (the approximated model has the albedo in it already)
-    float3 lit = (grass ? sunLight * diffuse * directAo : albedo * sunLight * diffuse * directAo) + albedo * AmbientAt(an, sun) * ao
-        + sunLight * SpecularAt(specularNormal, V, L, 0.04, 0.6, f90) * SpecularSettings.z * directAo;
+    float sky = CanopySky(i.World);
+    float3 lit = (grass ? sunLight * diffuse * directAo : albedo * sunLight * diffuse * directAo) + albedo * AmbientAt(an, sun) * ao * sky
+        + sunLight * SpecularAt(specularNormal, V, L, 0.04, 0.6, f90) * SpecularSettings.z * directAo * (abs(SpecularSettings.w - 12) < 0.5 ? 0 : 1);
+    if (abs(SpecularSettings.w - 13) < 0.5) return float4(albedo, 1);
+    if (abs(SpecularSettings.w - 14) < 0.5) return float4(sun.xxx * 0.3, 1);
+    if (abs(SpecularSettings.w - 15) < 0.5) return Screen(Fogged(albedo * AmbientAt(an, sun) * ao * sky, i.World), 1);
+    if (abs(SpecularSettings.w - 16) < 0.5) return float4(sky.xxx * 0.3, 1);
     return Screen(Fogged(lit, i.World), 1);
 }
 
@@ -1359,7 +1377,7 @@ float AoPS(float4 position : SV_Position) : SV_Target
         _grading = new Buffer(Device, Utilities.SizeOf<Grading>(), ResourceUsage.Default, BindFlags.ConstantBuffer, CpuAccessFlags.None, ResourceOptionFlags.None, 0);
         _sky = new Buffer(Device, Utilities.SizeOf<Sky>(), ResourceUsage.Default, BindFlags.ConstantBuffer, CpuAccessFlags.None, ResourceOptionFlags.None, 0);
         _lightColour = new Buffer(Device, 48, ResourceUsage.Default, BindFlags.ConstantBuffer, CpuAccessFlags.None, ResourceOptionFlags.None, 0);
-        _foliage = new Buffer(Device, 16 * 26, ResourceUsage.Default, BindFlags.ConstantBuffer, CpuAccessFlags.None, ResourceOptionFlags.None, 0);
+        _foliage = new Buffer(Device, 16 * 27, ResourceUsage.Default, BindFlags.ConstantBuffer, CpuAccessFlags.None, ResourceOptionFlags.None, 0);
         _ambientCube = new Texture2D(Device, new Texture2DDescription
         {
             Width = 6, Height = 1, MipLevels = 1, ArraySize = 1, Format = DxgiFormat.R16G16B16A16_Float,
@@ -1601,7 +1619,7 @@ float AoPS(float4 position : SV_Position) : SV_Target
         c.PixelShader.SetConstantBuffer(7, _lightColour);
         var foliage = (_lighting ?? Fallback).Foliage(_hour);
         var alpha = (_lighting ?? Fallback).AlphaScalars;
-        var foliageData = new Vector4[26];
+        var foliageData = new Vector4[27];
         for (int k = 0; k < 3; k++)
         {
             foliageData[k] = foliage.Trees[k];
@@ -1629,6 +1647,7 @@ float AoPS(float4 position : SV_Position) : SV_Target
         foliageData[23] = new Vector4(probes.F90Grass, probes.F90Trees, probes.TreeSpecular, PlantTest);
         foliageData[24] = new Vector4(probes.WaterFresnel, GlintScale, Gtao?.Z ?? 1, Gtao?.W ?? 1);
         foliageData[25] = TranslucencyCurve;
+        foliageData[26] = new Vector4(CanopyDensity, _canopy is null ? 0 : 1, 0, 0);
         c.UpdateSubresource(foliageData, _foliage);
         c.PixelShader.SetConstantBuffer(8, _foliage);
         // the ambient cube for this light, before anything reads it
@@ -1674,6 +1693,7 @@ float AoPS(float4 position : SV_Position) : SV_Target
         c.VertexShader.SetShaderResources(0, _heightMap, null, null, null, null, _waterLevel);
         c.VertexShader.SetSampler(0, _sampler);
         c.PixelShader.SetShaderResources(0, _heightMap, _colourMap, _controlMap, _diffuse, _normals, _waterLevel);
+        c.PixelShader.SetShaderResource(20, _canopy);
         c.PixelShader.SetSamplers(0, _sampler, _tiled);
         c.Rasterizer.State = _raster;
 

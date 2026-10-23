@@ -203,7 +203,83 @@ public sealed partial class WorldView3D
                 cell.Add((index, plant));
             }
         }
+        BuildCanopy(kinds);
         Invalidate();
+    }
+
+    /// <summary>How strongly each crown over a point hides the sky's light from it (set against REDkit's forests).</summary>
+    public float CanopyDensity { get; set; } = 1;
+
+    private ShaderResourceView? _canopy;
+
+    /// <summary>
+    /// The canopy map over the terrain, a texel every few metres: the trees' crowns over it (each crown a disc of the
+    /// tree's width, counted as the share of the texels it covers, smoothed over the neighbours) and the canopy's top.
+    /// </summary>
+    private void BuildCanopy(IReadOnlyList<PlantKind3D> kinds)
+    {
+        _canopy?.Dispose();
+        _canopy = null;
+        if (_terrain is not { } terrain) return;
+        int side = Math.Clamp((int)(terrain.Size / 4), 64, 2048);
+        float cell = terrain.Size / side;
+        var cover = new float[side * side];
+        var top = new float[side * side];
+        Array.Fill(top, float.MinValue);
+        foreach (var kind in kinds)
+        {
+            if (kind.Grass) continue;
+            var tree = kind.Tree;
+            float radius = MathF.Max(MathF.Max(-tree.Min.X, tree.Max.X), MathF.Max(-tree.Min.Y, tree.Max.Y));
+            // bushes and stumps lower than a person hide little of the sky
+            if (tree.Max.Z < 2 || radius <= 0) continue;
+            foreach (var plant in kind.Instances)
+            {
+                float r = radius * plant.Scale, height = plant.Position.Z + tree.Max.Z * plant.Scale;
+                float area = MathF.PI * r * r / (cell * cell);
+                int x0 = (int)((plant.Position.X - r - terrain.Corner.X) / cell), x1 = (int)((plant.Position.X + r - terrain.Corner.X) / cell);
+                int y0 = (int)((plant.Position.Y - r - terrain.Corner.Y) / cell), y1 = (int)((plant.Position.Y + r - terrain.Corner.Y) / cell);
+                int count = Math.Max(1, (x1 - x0 + 1) * (y1 - y0 + 1));
+                for (int y = Math.Max(0, y0); y <= Math.Min(side - 1, y1); y++)
+                    for (int x = Math.Max(0, x0); x <= Math.Min(side - 1, x1); x++)
+                    {
+                        // rows from the north, as the terrain's textures
+                        int at = (side - 1 - y) * side + x;
+                        cover[at] += MathF.Min(1, area / count);
+                        top[at] = MathF.Max(top[at], height);
+                    }
+            }
+        }
+        // smoothed over the neighbours, so a gap of a tree or two still sees little sky
+        var data = new float[side * side * 2];
+        for (int y = 0; y < side; y++)
+            for (int x = 0; x < side; x++)
+            {
+                float sum = 0, high = float.MinValue;
+                int n = 0;
+                for (int dy = -2; dy <= 2; dy++)
+                    for (int dx = -2; dx <= 2; dx++)
+                    {
+                        int xx = x + dx, yy = y + dy;
+                        if (xx < 0 || yy < 0 || xx >= side || yy >= side) continue;
+                        sum += cover[yy * side + xx];
+                        high = MathF.Max(high, top[yy * side + xx]);
+                        n++;
+                    }
+                data[2 * (y * side + x)] = sum / n;
+                data[2 * (y * side + x) + 1] = high;
+            }
+        var handle = GCHandle.Alloc(data, GCHandleType.Pinned);
+        try
+        {
+            using var texture = new Texture2D(Device, new Texture2DDescription
+            {
+                Width = side, Height = side, MipLevels = 1, ArraySize = 1, Format = SharpDX.DXGI.Format.R32G32_Float,
+                SampleDescription = new SharpDX.DXGI.SampleDescription(1, 0), Usage = ResourceUsage.Immutable, BindFlags = BindFlags.ShaderResource,
+            }, new SharpDX.DataRectangle(handle.AddrOfPinnedObject(), side * 8));
+            _canopy = new ShaderResourceView(Device, texture);
+        }
+        finally { handle.Free(); }
     }
 
     private void DisposePlants()
@@ -227,8 +303,11 @@ public sealed partial class WorldView3D
     /// The plants to draw, sorted by kind and LOD (the last slot of each kind its billboards): those near enough, as
     /// fine as their distance asks, and in view when <paramref name="planes"/> is given.
     /// </summary>
-    private List<PlantPlace>[][] GatherPlants(Vector3 from, float reach, Vector4[]? planes, bool grass = true)
+    private List<PlantPlace>[][] GatherPlants(Vector3 from, float reach, Vector4[]? planes, bool grass = true, Vector3? detailFrom = null)
     {
+        // the detail is chosen by the distance from detailFrom (the eye, for the sun's view round a point ahead of it,
+        // so a plant casts its shadow with the same LOD it's seen with)
+        var eye = detailFrom ?? from;
         var lists = new List<PlantPlace>[_plants.Count][];
         int cells = (int)MathF.Ceiling(reach / PlantCell);
         int cx = (int)MathF.Floor(from.X / PlantCell), cy = (int)MathF.Floor(from.Y / PlantCell);
@@ -261,7 +340,7 @@ public sealed partial class WorldView3D
                     var slots = lists[group.Kind] ??= new List<PlantPlace>[kind.Lods.Length + 1];
                     // a whole cell in one band of detail goes in at once, its plants not looked at one by one
                     int nearSlot = Slot(nearest);
-                    if (farthest <= limit && Slot(farthest) == nearSlot)
+                    if (detailFrom is null && farthest <= limit && Slot(farthest) == nearSlot)
                     {
                         (slots[nearSlot] ??= []).AddRange(group.Places);
                         continue;
@@ -269,9 +348,10 @@ public sealed partial class WorldView3D
                     for (int i = 0; i < group.Places.Length; i++)
                     {
                         var place = group.Places[i];
-                        float distance = Vector3.Distance(from, new Vector3(place.Place.X, place.Place.Y, place.Place.Z));
+                        var at = new Vector3(place.Place.X, place.Place.Y, place.Place.Z);
+                        float distance = Vector3.Distance(from, at);
                         if (distance > limit) continue;
-                        (slots[Slot(distance)] ??= []).Add(place);
+                        (slots[Slot(detailFrom is null ? distance : Vector3.Distance(eye, at))] ??= []).Add(place);
                     }
                 }
             }
@@ -381,7 +461,7 @@ public sealed partial class WorldView3D
             shadowConstants.CameraRight = new Vector4(sunCamera.M11, sunCamera.M12, sunCamera.M13, 0);
             shadowConstants.CameraUp = new Vector4(sunCamera.M21, sunCamera.M22, sunCamera.M23, 1);
             c.UpdateSubresource(StructureBytes(shadowConstants), _plantConstants);
-            var lists = GatherPlants(centre, PlantShadowReach * 1.5f, null);
+            var lists = GatherPlants(centre, PlantShadowReach * 1.5f, null, detailFrom: _eye);
             // grass casts no shadows, as SpeedTree grass doesn't in the game
             for (int k = 0; k < lists.Length; k++)
                 if (_plants[k].Kind.Grass) lists[k] = null!;
@@ -500,7 +580,7 @@ public sealed partial class WorldView3D
     private void DisposePlantDevice()
     {
         DisposePlants();
-        foreach (var d in new IDisposable?[] { _plantVS, _billboardVS, _plantShadowVS, _billboardShadowVS, _plantPS, _plantShadowPS, _plantLayout,
+        foreach (var d in new IDisposable?[] { _canopy, _plantVS, _billboardVS, _plantShadowVS, _billboardShadowVS, _plantPS, _plantShadowPS, _plantLayout,
             _billboardLayout, _plantPlaces, _plantConstants, _billboardQuad, _billboardIndices, _plantShadow, _plantShadowDepth, _plantShadowTexture,
             _shadowCompare, _shadowRaster })
             d?.Dispose();
