@@ -958,7 +958,9 @@ float4 PlantPS(PlantOut i, bool front : SV_IsFrontFace) : SV_Target
 {
     float4 c = PlantPicture.Sample(Tiled, i.Uv);
     clip(c.a * PlantAlphaScalar(i.Kind) - 0.1);
-    float3 n = normalize(front ? i.Normal : -i.Normal);
+    // the vertex normal on both sides of a card, as the game's SpeedTree shaders keep it (they never ask which side is
+    // seen): a crown's leaves face out from it, so its sunny side is lit through and through
+    float3 n = normalize(i.Normal);
     bool billboard = i.Kind > 2.5;
     if (billboard)
     {
