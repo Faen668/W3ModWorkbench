@@ -421,13 +421,15 @@ cbuffer Foliage : register(b8)
     float4 CanopySettings;     // how strongly the trees' crowns over a point hide the sky from it; whether the canopy map is there; grass's ambient scale (m_ibl grassIBLScale); its albedo multiplier
     float4 Pigment;            // the grass's pigment: brightness, where the flood starts, over how far (m_speedTree pigment*); how much more low on the plant
     float4 GrassSettings;      // the grass's albedo multiplier
+    float4 TreeFallback;       // the trees' fallback colour (m_speedTree randomColorsFallback)
 };
 #define GrassAlbedo GrassSettings.x
 // which of the light to show, as REDkit's decomposed views do: 0 all of it, 1 the ambient (and the probes' reflection),
 // 2 the sun's light (its diffuse, translucency and specular), 3 the albedo (as the G-buffer keeps it, in gamma), 4 the
 // ambient occlusion the ambient takes
 #define LightingView GrassSettings.y
-// the translucency's global scale for leaves and grass (cb0[24].x in the game's SpeedTree shaders), for billboards
+// the translucency's global scale for leaves and grass (cb0[24].x in the game's SpeedTree shaders: 1, as REDkit's G-buffer
+// shows the leaves' translucency at their specular map's alpha times their transmission colour), for billboards
 #define TranslucencyGlobal GrassSettings.zw
 
 float3 LightingPart(float3 all, float3 ambient)
@@ -969,7 +971,11 @@ float4 PlantPS(PlantOut i, bool front : SV_IsFrontFace) : SV_Target
             n = normalize(m.x * i.Across + m.y * i.Upward + m.z * facing);
         }
     }
-    float3 albedo = RandomColour(saturate(c.rgb), i.Kind, i.Weights) * PlantTint.rgb * (i.Kind > 2.5 ? BillboardTint.rgb : 1);
+    // the trees' own leaves and branches take the fallback colour (the engine's SpeedTreeApplyRandomColorFallback), the
+    // grass and the side views the random ones; the environment's SpeedTree diffuse then on the colour in gamma, as the
+    // game's SpeedTree shaders apply it
+    float3 albedo = (i.Kind < 1.5 ? pow(saturate(c.rgb), 2.2) * TreeFallback.rgb : RandomColour(saturate(c.rgb), i.Kind, i.Weights))
+        * pow(PlantTint.rgb, 2.2) * (i.Kind > 2.5 ? BillboardTint.rgb : 1);
     albedo *= saturate(PlantTint.w * (i.Occlusion - 1) + 1);
     if (i.Kind > 1.5 && i.Kind < 2.5)
     {
@@ -1001,7 +1007,10 @@ float4 PlantPS(PlantOut i, bool front : SV_IsFrontFace) : SV_Target
     // times the environment's translucency scale; the specularity its green times the specular colour (none without a map)
     float4 specMap = PlantMat.w > 0.5 && i.Kind < 2.5 ? PlantSpecular.Sample(Tiled, i.Uv) : float4(0, 0, 0, 1);
     // (the side views by the environment's billboards translucency)
-    float translucent = leafy ? (i.Kind < 2.5 ? TranslucencyGlobal.x * specMap.a * PlantMat.y : TranslucencyGlobal.y) : 0;
+    // (grass's by how high up the blade, as the game's grass shader has it: 0.5 + 0.5 saturate(height x 0.5 x the world's
+    // grass translucency multiplier, taken as 1))
+    float grassHeight = 0.5 + 0.5 * saturate(saturate((i.Kind - 2) / 0.45) * 0.5);
+    float translucent = leafy ? (i.Kind < 2.5 ? TranslucencyGlobal.x * specMap.a * PlantMat.y * (i.Kind > 1.5 ? grassHeight : 1) : TranslucencyGlobal.y) : 0;
     // (the grass and the bushes its brushes grow take no specular at all: measured against REDkit, the sheen, even
     // the grazing one, is what made them pale)
     float specularity = i.Kind < 1.5 ? specMap.g * PlantMat.x : 0;
@@ -1661,7 +1670,7 @@ float4 StripePS(StripeOut i) : SV_Target
         _grading = new Buffer(Device, Utilities.SizeOf<Grading>(), ResourceUsage.Default, BindFlags.ConstantBuffer, CpuAccessFlags.None, ResourceOptionFlags.None, 0);
         _sky = new Buffer(Device, Utilities.SizeOf<Sky>(), ResourceUsage.Default, BindFlags.ConstantBuffer, CpuAccessFlags.None, ResourceOptionFlags.None, 0);
         _lightColour = new Buffer(Device, 48, ResourceUsage.Default, BindFlags.ConstantBuffer, CpuAccessFlags.None, ResourceOptionFlags.None, 0);
-        _foliage = new Buffer(Device, 16 * 29, ResourceUsage.Default, BindFlags.ConstantBuffer, CpuAccessFlags.None, ResourceOptionFlags.None, 0);
+        _foliage = new Buffer(Device, 16 * 30, ResourceUsage.Default, BindFlags.ConstantBuffer, CpuAccessFlags.None, ResourceOptionFlags.None, 0);
         _ambientCube = new Texture2D(Device, new Texture2DDescription
         {
             Width = 6, Height = 1, MipLevels = 1, ArraySize = 1, Format = DxgiFormat.R16G16B16A16_Float,
@@ -1922,7 +1931,7 @@ float4 StripePS(StripeOut i) : SV_Target
         c.PixelShader.SetConstantBuffer(7, _lightColour);
         var foliage = (_lighting ?? Fallback).Foliage(_hour);
         var alpha = (_lighting ?? Fallback).AlphaScalars;
-        var foliageData = new Vector4[29];
+        var foliageData = new Vector4[30];
         for (int k = 0; k < 3; k++)
         {
             foliageData[k] = foliage.Trees[k];
@@ -1951,7 +1960,8 @@ float4 StripePS(StripeOut i) : SV_Target
         foliageData[24] = new Vector4(probes.WaterFresnel, GlintScale, Gtao?.Z ?? 1, Gtao?.W ?? 1);
         foliageData[25] = TranslucencyCurve;
         foliageData[26] = new Vector4(CanopyDensity, _canopy is null ? 0 : 1, foliage.GrassAmbient, 0);
-        foliageData[28] = new Vector4(GrassAlbedoMultiplier, LightingView, foliage.TranslucencyScale, foliage.BillboardTranslucency);
+        foliageData[29] = V(foliage.Fallback);
+        foliageData[28] = new Vector4(GrassAlbedoMultiplier, LightingView, 1, foliage.BillboardTranslucency);
         foliageData[27] = new Vector4(foliage.Pigment, PigmentHeight);
 
         c.UpdateSubresource(foliageData, _foliage);

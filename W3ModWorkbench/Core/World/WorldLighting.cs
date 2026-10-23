@@ -48,7 +48,7 @@ public readonly record struct FoliageAt(
     Vector4[] Trees, Vector3 TreesLuminance, Vector4[] Branches, Vector3 BranchesLuminance, Vector4[] Grass, Vector3 GrassLuminance,
     Vector3 Diffuse, float OcclusionScale, Vector3 BillboardColour, float TranslucencyScale, Vector4 Translucency,
     float AmbientLight, float AmbientShadow, Vector3 AmbientColour,
-    float SkyBrightness, float SkySaturation, float GroundBrightness, float GroundSaturation, float MaxSkyBrightness, float GrassAmbient = 1, Vector3 Pigment = default, float BillboardTranslucency = 0.2f);
+    float SkyBrightness, float SkySaturation, float GroundBrightness, float GroundSaturation, float MaxSkyBrightness, float GrassAmbient = 1, Vector3 Pigment = default, float BillboardTranslucency = 0.2f, Vector3 Fallback = default);
 
 /// <summary>
 /// The environment probes' settings at one hour: the sky they're made from (its colours at the top and at the horizon
@@ -358,7 +358,10 @@ public sealed class WorldLighting
             Value(Ibl + "skyBrightnessScale", t, 1), Value(Ibl + "skySaturationScale", t, 1), Value(Ibl + "groundBrightnessScale", t, 1),
             Value(Ibl + "groundSaturationScale", t, 1), Value(Ibl + "maxSkyBrightness", t, 1000), Value(Ibl + "grassIBLScale", t, 1),
             new Vector3(Value(Tree + "pigmentBrightness", t, 1), Value(Tree + "pigmentFloodStartDist", t, 1), Value(Tree + "pigmentFloodRange", t, 30)),
-            Value(Tree + "billboardsTranslucency", t, 0.2f));
+            Value(Tree + "billboardsTranslucency", t, 0.2f),
+            // the colour the trees' own leaves and branches take in place of the random ones (the engine's
+            // SpeedTreeApplyRandomColorFallback), as stored; its default is the engine's, as REDkit's environment editor shows it
+            Setting(Tree + "randomColorsFallback", t) is { } fallback ? new Vector3(fallback.X, fallback.Y, fallback.Z) / 255 * fallback.W : new Vector3(61, 66, 60) / 255);
     }
 
     /// <summary>The environment probes' settings at an hour (0 to 24).</summary>
