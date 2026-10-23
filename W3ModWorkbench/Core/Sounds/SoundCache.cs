@@ -55,7 +55,8 @@ public sealed class SoundCache
         else
         {
             list = BinaryPrimitives.ReadInt64LittleEndian(head.AsSpan(16));
-            count = BinaryPrimitives.ReadInt64LittleEndian(head.AsSpan(24));
+            // the count is four bytes: some mods' caches keep another number in the four after it, which the game's own leave 0
+            count = BinaryPrimitives.ReadUInt32LittleEndian(head.AsSpan(24));
             namesAt = BinaryPrimitives.ReadInt64LittleEndian(head.AsSpan(32));
             namesSize = BinaryPrimitives.ReadInt32LittleEndian(head.AsSpan(40));
         }
