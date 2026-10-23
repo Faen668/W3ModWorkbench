@@ -29,6 +29,7 @@ public sealed partial class WorldView3D
         public Matrix4x4 SunViewProjection;
         public Vector4 CameraRight, CameraUp, BillboardShape;
         [MarshalAs(UnmanagedType.ByValArray, SizeConst = 32)] public Vector4[] BillboardViews;
+        public Vector4 BillboardStyle;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -118,7 +119,7 @@ public sealed partial class WorldView3D
         using (var code = Compile(source, "PlantPS", "ps_4_0")) _plantPS = new PixelShader(Device, code);
         using (var code = Compile(source, "PlantShadowPS", "ps_4_0")) _plantShadowPS = new PixelShader(Device, code);
         _plantMaterial = new Buffer(Device, 16, ResourceUsage.Default, BindFlags.ConstantBuffer, CpuAccessFlags.None, ResourceOptionFlags.None, 0);
-        _plantConstants = new Buffer(Device, Utilities.SizeOf<Matrix4x4>() + 16 * (3 + 32), ResourceUsage.Default, BindFlags.ConstantBuffer, CpuAccessFlags.None, ResourceOptionFlags.None, 0);
+        _plantConstants = new Buffer(Device, Utilities.SizeOf<Matrix4x4>() + 16 * (3 + 32 + 1), ResourceUsage.Default, BindFlags.ConstantBuffer, CpuAccessFlags.None, ResourceOptionFlags.None, 0);
         _billboardQuad = Buffer.Create(Device, BindFlags.VertexBuffer, new[] { new Vector2(-0.5f, 0), new Vector2(0.5f, 0), new Vector2(0.5f, 1), new Vector2(-0.5f, 1) });
         _billboardIndices = Buffer.Create(Device, BindFlags.IndexBuffer, new ushort[] { 0, 1, 2, 0, 2, 3 });
         _plantShadowTexture = new Texture2D(Device, new Texture2DDescription
@@ -557,6 +558,7 @@ public sealed partial class WorldView3D
                 var tree = kind.Kind.Tree;
                 var constants = ReadConstants();
                 constants.BillboardShape = new Vector4(tree.BillboardWidth, tree.BillboardTop, tree.BillboardBottom, kind.Views.Length);
+                constants.BillboardStyle = new Vector4(tree.BillboardColours, 0, 0, 0);
                 for (int v = 0; v < 32; v++) constants.BillboardViews[v] = v < kind.Views.Length ? kind.Views[v] : default;
                 c.UpdateSubresource(StructureBytes(constants), _plantConstants);
                 c.InputAssembler.InputLayout = _billboardLayout;
@@ -588,10 +590,10 @@ public sealed partial class WorldView3D
     private byte[] StructureBytes(PlantConstants constants)
     {
         _lastPlantConstants = constants;
-        var bytes = new byte[Utilities.SizeOf<Matrix4x4>() + 16 * (3 + 32)];
+        var bytes = new byte[Utilities.SizeOf<Matrix4x4>() + 16 * (3 + 32 + 1)];
         MemoryMarshal.Write(bytes, in constants.SunViewProjection);
         int at = Utilities.SizeOf<Matrix4x4>();
-        foreach (var v in new[] { constants.CameraRight, constants.CameraUp, constants.BillboardShape }.Concat(constants.BillboardViews ?? new Vector4[32]))
+        foreach (var v in new[] { constants.CameraRight, constants.CameraUp, constants.BillboardShape }.Concat(constants.BillboardViews ?? new Vector4[32]).Append(constants.BillboardStyle))
         {
             MemoryMarshal.Write(bytes.AsSpan(at), in v);
             at += 16;

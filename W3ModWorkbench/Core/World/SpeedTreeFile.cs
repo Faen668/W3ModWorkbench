@@ -71,6 +71,15 @@ public sealed class SpeedTreeFile
     public required Vector4 LodDistances { get; init; }
     public required IReadOnlyList<string> Strings { get; init; }
 
+    /// <summary>Whether the tree's user strings (the engine's tags for it, kept in the string table) name a tag:
+    /// BillboardRandomTrees, BillboardRandomBranch, BillboardRandomGrass, BillboardRandomOff, RandomOff, TerrainNormalsOn,
+    /// PigmentFloodOff, EnvMaterialSettingsOff, InteractiveOn.</summary>
+    public bool HasTag(string tag) => Strings.Contains(tag, StringComparer.Ordinal);
+
+    /// <summary>Which of the environment's random colours the tree's side views take, by its tags: 0 the trees', 1 the
+    /// branches', 2 the grass's, 3 none (the picture's own colour; also when no tag says, as the engine's default isn't known).</summary>
+    public int BillboardColours => HasTag("BillboardRandomTrees") ? 0 : HasTag("BillboardRandomBranch") ? 1 : HasTag("BillboardRandomGrass") ? 2 : 3;
+
     /// <summary>The collision capsules: their two ends and radius.</summary>
     public required IReadOnlyList<(Vector3 From, Vector3 To, float Radius)> Collisions { get; init; }
 

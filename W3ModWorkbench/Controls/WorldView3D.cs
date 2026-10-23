@@ -356,6 +356,7 @@ cbuffer Plants : register(b4)
     float4 CameraUp;                      // w: whether the plants' shadows are there
     float4 BillboardShape;                // a kind's billboard: width, top, bottom, number of views
     float4 BillboardViews[32];            // each view's place in the atlas: left, top, width, height
+    float4 BillboardStyle;                // which random colours the side views take: 0 trees, 1 branches, 2 grass, 3 none
 };
 
 Texture2D PlantPicture : register(t14);
@@ -941,9 +942,8 @@ PlantOut BillboardShadowVS(BillboardIn v) { return BillboardAt(v, v.Place.xyz + 
 float PlantAlphaScalar(float kind) { return kind > 2.5 ? AlphaScalars.z : kind > 1.5 ? AlphaScalars.y : AlphaScalars.x; }
 
 // the engine's SpeedTreeApplyRandomColorAlbedo: towards the colour's luminance by the saturation, then times the colour
-float3 RandomColour(float3 gamma, float kind, float3 w)
+float3 RandomColour(float3 gamma, int k, float3 w)
 {
-    int k = kind > 1.5 && kind < 2.5 ? 2 : kind > 0.5 && kind < 1.5 ? 1 : 0;
     float4 c0 = k == 2 ? GrassRandom[0] : k == 1 ? BranchRandom[0] : TreeRandom[0];
     float4 c1 = k == 2 ? GrassRandom[1] : k == 1 ? BranchRandom[1] : TreeRandom[1];
     float4 c2 = k == 2 ? GrassRandom[2] : k == 1 ? BranchRandom[2] : TreeRandom[2];
@@ -976,8 +976,12 @@ float4 PlantPS(PlantOut i, bool front : SV_IsFrontFace) : SV_Target
     // the trees' own leaves and branches take the fallback colour (the engine's SpeedTreeApplyRandomColorFallback), the
     // grass and the side views the random ones; the environment's SpeedTree diffuse then on the colour in gamma, as the
     // game's SpeedTree shaders apply it
-    float3 albedo = (i.Kind < 1.5 ? pow(saturate(c.rgb), 2.2) * TreeFallback.rgb : RandomColour(saturate(c.rgb), i.Kind, i.Weights))
-        * pow(PlantTint.rgb, 2.2) * (i.Kind > 2.5 ? BillboardTint.rgb : 1);
+    // (the side views by the tree's tag, as the game's billboard shader picks them, times the billboards' colour and not
+    // the diffuse)
+    int set = (int)BillboardStyle.x;
+    float3 albedo = i.Kind < 1.5 ? pow(saturate(c.rgb), 2.2) * TreeFallback.rgb * pow(PlantTint.rgb, 2.2)
+        : i.Kind < 2.5 ? RandomColour(saturate(c.rgb), 2, i.Weights) * pow(PlantTint.rgb, 2.2)
+        : (set > 2 ? pow(saturate(c.rgb), 2.2) : RandomColour(saturate(c.rgb), set, i.Weights)) * BillboardTint.rgb;
     albedo *= saturate(PlantTint.w * (i.Occlusion - 1) + 1);
     if (i.Kind > 1.5 && i.Kind < 2.5)
     {
