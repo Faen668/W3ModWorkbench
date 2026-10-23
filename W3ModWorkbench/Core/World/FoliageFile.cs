@@ -14,8 +14,8 @@ public sealed record FoliageGroup(string Tree, bool Grass, IReadOnlyList<Foliage
 /// <summary>
 /// A foliage cell (.flyr, a CFoliageResource): the trees and grass of a square of a world, 64 m a side, named by its
 /// corner (foliage_-128.00_0.00.flyr). After its properties it keeps two lists, trees then grass: a compressed count of
-/// kinds, each the import of its .srt and a compressed count of instances of 24 bytes each (position, scale, then the
-/// cosine and sine of its turn).
+/// kinds, each the import of its .srt and a compressed count of instances of 24 bytes each (position, scale, then its
+/// turn as a quaternion about Z, w then z: the cosine and sine of half the angle).
 /// </summary>
 public sealed class FoliageFile
 {
@@ -44,7 +44,8 @@ public sealed class FoliageFile
                 for (int i = 0; i < count; i++, at += 24)
                 {
                     float F(int o) => BitConverter.ToSingle(tail, at + o);
-                    instances[i] = new FoliageInstance(new Vector3(F(0), F(4), F(8)), F(12), MathF.Atan2(F(20), F(16)));
+                    // half angles: over White Orchard's 769,833 plants all but 4 read within a quarter turn either side
+                    instances[i] = new FoliageInstance(new Vector3(F(0), F(4), F(8)), F(12), 2 * MathF.Atan2(F(20), F(16)));
                 }
                 groups.Add(new FoliageGroup(file.PathOf(new RedHandle(handle, false)) ?? "", list == 1, instances));
             }
