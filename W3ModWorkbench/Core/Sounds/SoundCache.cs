@@ -10,7 +10,8 @@ namespace W3ModWorkbench.Core.Sounds;
 /// A sound cache (<c>soundspc.cache</c>): the game's Wwise sound banks (<c>.bnk</c>) and streamed sounds (<c>.wem</c>,
 /// named by their ID), one after another. The file starts "CS3W" and its version (2), then eight bytes, where the list
 /// of files is, how many there are, where their names are and how long the names are. Each file in the list is
-/// twenty-four bytes: where its name starts in the names, where the file is and how long.
+/// twenty-four bytes: where its name starts in the names, where the file is and how long. Version 1, which older
+/// mods' caches are, keeps the same numbers in 32 bits each.
 /// </summary>
 public sealed class SoundCache
 {
@@ -40,22 +41,39 @@ public sealed class SoundCache
         var head = new byte[48];
         fs.ReadExactly(head);
         if (BinaryPrimitives.ReadUInt32LittleEndian(head) != Magic) throw new InvalidDataException(L.T("SoundCache.IsntSoundCache"));
-        long list = BinaryPrimitives.ReadInt64LittleEndian(head.AsSpan(16)), count = BinaryPrimitives.ReadInt64LittleEndian(head.AsSpan(24));
-        long namesAt = BinaryPrimitives.ReadInt64LittleEndian(head.AsSpan(32));
-        int namesSize = BinaryPrimitives.ReadInt32LittleEndian(head.AsSpan(40));
-        if (count < 0 || count > 1_000_000 || namesSize < 0 || namesAt + namesSize > fs.Length || list + count * 24 > fs.Length)
+        // version 1 (older mods' caches, which the game still reads) keeps 32-bit numbers and twelve bytes a file
+        bool old = BinaryPrimitives.ReadUInt32LittleEndian(head.AsSpan(4)) == 1;
+        long list, count, namesAt;
+        int namesSize, entrySize = old ? 12 : 24;
+        if (old)
+        {
+            list = BinaryPrimitives.ReadUInt32LittleEndian(head.AsSpan(16));
+            count = BinaryPrimitives.ReadUInt32LittleEndian(head.AsSpan(20));
+            namesAt = BinaryPrimitives.ReadUInt32LittleEndian(head.AsSpan(24));
+            namesSize = BinaryPrimitives.ReadInt32LittleEndian(head.AsSpan(28));
+        }
+        else
+        {
+            list = BinaryPrimitives.ReadInt64LittleEndian(head.AsSpan(16));
+            count = BinaryPrimitives.ReadInt64LittleEndian(head.AsSpan(24));
+            namesAt = BinaryPrimitives.ReadInt64LittleEndian(head.AsSpan(32));
+            namesSize = BinaryPrimitives.ReadInt32LittleEndian(head.AsSpan(40));
+        }
+        if (count < 0 || count > 1_000_000 || namesSize < 0 || namesAt + namesSize > fs.Length || list + count * entrySize > fs.Length)
             throw new InvalidDataException(L.T("SoundCache.SoundCachesListMakes"));
         var names = new byte[namesSize];
         fs.Position = namesAt;
         fs.ReadExactly(names);
-        var table = new byte[count * 24];
+        var table = new byte[count * entrySize];
         fs.Position = list;
         fs.ReadExactly(table);
         var files = new Dictionary<string, (long, long)>((int)count, StringComparer.OrdinalIgnoreCase);
         for (int i = 0; i < count; i++)
         {
-            var entry = table.AsSpan(i * 24, 24);
-            long name = BinaryPrimitives.ReadInt64LittleEndian(entry), offset = BinaryPrimitives.ReadInt64LittleEndian(entry[8..]), size = BinaryPrimitives.ReadInt64LittleEndian(entry[16..]);
+            var entry = table.AsSpan(i * entrySize, entrySize);
+            long name, offset, size;
+            if (old) (name, offset, size) = (BinaryPrimitives.ReadUInt32LittleEndian(entry), BinaryPrimitives.ReadUInt32LittleEndian(entry[4..]), BinaryPrimitives.ReadUInt32LittleEndian(entry[8..]));
+            else (name, offset, size) = (BinaryPrimitives.ReadInt64LittleEndian(entry), BinaryPrimitives.ReadInt64LittleEndian(entry[8..]), BinaryPrimitives.ReadInt64LittleEndian(entry[16..]));
             if (name < 0 || name >= names.Length) continue;
             int end = Array.IndexOf(names, (byte)0, (int)name);
             if (end < 0) end = names.Length;

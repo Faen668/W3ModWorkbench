@@ -172,6 +172,12 @@ public partial class SoundWindow : Window, IMessageHost
             WaveMessage.Visibility = Visibility.Collapsed;
             PlayButton.IsEnabled = WavButton.IsEnabled = true;
             ShowPosition();
+            // asked for from the Objects tab before it had loaded
+            if (_playWhenReady)
+            {
+                _playWhenReady = false;
+                TogglePlay();
+            }
         }
         catch (Exception ex) when (ex is InvalidDataException or NotSupportedException or ArgumentException or IndexOutOfRangeException)
         {
@@ -314,20 +320,25 @@ public partial class SoundWindow : Window, IMessageHost
         DetailText.Text = L.T("SoundWindow.WwiseSoundBankVersion", bank.Version, bank.Id, L.T("Count.Sound", bank.Embedded.Count), L.T("Count.Sound", bank.Sounds.Where(s => s.Streamed).Select(s => s.SourceId).Distinct().Count()), L.T("Count.Event", events));
         if (bank.Version != Core.Packing.SoundCacheWriter.GameBankVersion)
             DetailText.Text += "  ·  " + L.T("SoundWindow.GameWontLoadBank", Core.Packing.SoundCacheWriter.GameBankVersion);
-        var objects = bank.Objects.OrderByDescending(o => o.Value).Select(o => new DetailRow(o.Key, $"{o.Value:N0}")).ToList();
-        objects.Add(new DetailRow("", ""));
-        objects.AddRange(bank.Sections.Select(s => new DetailRow(L.T("SoundWindow.Section", s.Id), L.T("SoundWindow.Bytes4", s.Size))));
-        ObjectList.ItemsSource = objects;
         ObjectsTab.Header = L.T("SoundWindow.Objects2", bank.Objects.Values.Sum());
         SoundsNote.Text = L.T("SoundWindow.ReadingBanksSounds");
         Tabs.SelectedItem = SoundsTab;
+        var objects = ShowObjectsAsync(data);
 
         var rows = await RowsAsync(bank.Sounds, bank);
         SoundGrid.ItemsSource = rows;
         SoundsTab.Header = L.T("SoundWindow.Sounds2", rows.Count);
         int playable = rows.Count(r => r.Info is { } i && SoundDecoder.CanPlay(i.Codec));
         SoundsNote.Text = L.T("SoundWindow.BankPlaysKeepsCan", L.T("Count.Sound", rows.Count), playable);
+        if (rows.Count == 0)
+        {
+            // a bank of settings only (an Init.bnk, a bank of events for others' sounds): nothing to show in the waveform
+            WaveMessage.Text = L.T("SoundWindow.BankHasNoSounds");
+            WaveMessage.Visibility = Visibility.Visible;
+            Tabs.SelectedItem = ObjectsTab;
+        }
         PickFirst(rows);
+        await objects;
     }
 
     private void PickFirst(List<SoundRow> rows)
@@ -432,7 +443,14 @@ public partial class SoundWindow : Window, IMessageHost
         DetailText.Text = L.T("SoundWindow.EventDetail", id, Path.GetFileNameWithoutExtension(e.Bank), does.Length > 0 ? does : L.T("SoundWindow.DoesNothing"))
                         + (sounds.Count == 0 ? L.T("SoundWindow.PlaysNoSound") : L.T("SoundWindow.CanPlay", L.T("Count.Sound", sounds.Count)));
         InfoText.Text = L.T("SoundWindow.In", name, SoundCacheArchive.Banks, e.Bank);
-        ObjectList.ItemsSource = e.Actions.Select(a => new DetailRow(ActionName(a.Action), L.T("SoundWindow.Object2", a.Target))).Prepend(new DetailRow(L.T("SoundWindow.Bank3"), e.Bank)).ToList();
+        // the event's actions, as one line of the objects tree
+        var actionRows = e.Actions.Select(a => new Core.Sounds.Banks.BankSummaryRow(ActionName(a.Action), L.T("SoundWindow.Object2", a.Target)))
+            .Prepend(new Core.Sounds.Banks.BankSummaryRow(L.T("SoundWindow.Bank3"), e.Bank)).ToList();
+        var node = new ObjectNode(new Core.Sounds.Banks.BankTreeNode(name, L.T("BankView.Kind.Event"), null, []) { Rows = actionRows });
+        _objectRoots = [node];
+        ObjectTree.ItemsSource = _objectRoots;
+        node.Selected = true;
+        SaveObjectsButton.Visibility = CopyObjectsButton.Visibility = ObjectSearch.Visibility = ObjectSearchPlaceholder.Visibility = Visibility.Collapsed;
         ObjectsTab.Header = L.T("SoundWindow.Actions", e.Actions.Count);
         Tabs.SelectedItem = SoundsTab;
         if (sounds.Count == 0)

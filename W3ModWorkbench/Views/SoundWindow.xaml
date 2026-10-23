@@ -103,7 +103,7 @@
                             <Button x:Name="CopyButton" Padding="10,4" Margin="6,0,0,0" Click="CopyButton_Click" ToolTip="{l:T SoundWindow.CopyIDCtrlC}" Content="{l:T SoundWindow.CopyID}" />
                         </StackPanel>
                     </DockPanel>
-                    <Grid Height="170">
+                    <Grid x:Name="WaveArea" Height="170">
                         <local:Waveform x:Name="Wave" Seek="Wave_Seek" />
                         <TextBlock x:Name="WaveMessage" HorizontalAlignment="Center" VerticalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center"
                                    MaxWidth="560" Opacity="0.8" Visibility="Collapsed" />
@@ -131,7 +131,7 @@
             </Border>
 
             <Border Style="{StaticResource Card}" Margin="0,8,0,0">
-                <TabControl x:Name="Tabs" Margin="8,8,8,6" Style="{StaticResource PanelTabs}" ItemContainerStyle="{StaticResource PanelTab}">
+                <TabControl x:Name="Tabs" Margin="8,8,8,6" Style="{StaticResource PanelTabs}" ItemContainerStyle="{StaticResource PanelTab}" SelectionChanged="Tabs_SelectionChanged">
                     <TabItem x:Name="SoundsTab" Header="{l:T SoundWindow.Sounds}">
                         <DockPanel Margin="0,6,0,0">
                             <TextBlock x:Name="SoundsNote" DockPanel.Dock="Top" Style="{StaticResource Small}" TextWrapping="Wrap" Margin="2,0,0,6" />
@@ -188,22 +188,128 @@
                         </DockPanel>
                     </TabItem>
                     <TabItem x:Name="ObjectsTab" Header="{l:T SoundWindow.Objects}">
-                        <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="0,6,0,0">
-                            <ItemsControl x:Name="ObjectList">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <Grid Margin="2,2,0,2">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="260" />
-                                                <ColumnDefinition Width="*" />
-                                            </Grid.ColumnDefinitions>
-                                            <TextBlock Text="{Binding Name}" Opacity="0.75" />
-                                            <TextBlock Grid.Column="1" Text="{Binding Value}" FontFamily="Consolas" FontSize="13" />
-                                        </Grid>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </ScrollViewer>
+                        <!-- every object of the bank: a tree of its events down to what they play, then each kind; the picked one's settings in words, then all its values -->
+                        <Grid Margin="0,6,0,0">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+                            <DockPanel Margin="0,0,0,6">
+                                <Button x:Name="SaveObjectsButton" DockPanel.Dock="Right" Padding="10,4" Margin="6,0,0,0" Click="SaveObjects_Click" ToolTip="{l:T SoundWindow.SaveObjectsTip}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Style="{StaticResource IconText}" Text="&#xE74E;" Margin="0,0,6,0" />
+                                        <TextBlock Text="{l:T SoundWindow.SaveAsText}" />
+                                    </StackPanel>
+                                </Button>
+                                <Button x:Name="CopyObjectsButton" DockPanel.Dock="Right" Padding="10,4" Margin="6,0,0,0" Click="CopyObjects_Click" Content="{l:T SoundWindow.CopyAll}"
+                                        ToolTip="{l:T SoundWindow.CopyAllTip}" />
+                                <Grid HorizontalAlignment="Left" Width="280">
+                                    <TextBox x:Name="ObjectSearch" Padding="28,4,8,4" MinHeight="0" VerticalContentAlignment="Center" TextChanged="ObjectSearch_TextChanged"
+                                             ToolTip="{l:T SoundWindow.ObjectSearchTip}" />
+                                    <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE71C;" FontSize="11" Margin="10,0,0,0" Opacity="0.6"
+                                               HorizontalAlignment="Left" VerticalAlignment="Center" IsHitTestVisible="False" />
+                                    <TextBlock x:Name="ObjectSearchPlaceholder" Text="{l:T SoundWindow.ObjectSearchTip}" Margin="29,0,0,0" Opacity="0.5" FontSize="12.5"
+                                               VerticalAlignment="Center" IsHitTestVisible="False" />
+                                </Grid>
+                            </DockPanel>
+                            <TextBlock x:Name="ObjectsNote" Grid.Row="1" Style="{StaticResource Small}" TextWrapping="Wrap" Margin="2,0,0,6" />
+                            <Grid Grid.Row="2">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="320" MinWidth="180" />
+                                    <ColumnDefinition Width="6" />
+                                    <ColumnDefinition Width="*" MinWidth="260" />
+                                </Grid.ColumnDefinitions>
+                                <TreeView x:Name="ObjectTree" BorderThickness="0" Background="Transparent" SelectedItemChanged="ObjectTree_SelectedItemChanged">
+                                    <TreeView.ContextMenu>
+                                        <ContextMenu>
+                                            <MenuItem Header="{l:T SoundWindow.CopyID}" Click="CopyObjectId_Click" />
+                                            <MenuItem Header="{l:T SoundWindow.CopyName}" Click="CopyObjectName_Click" />
+                                            <MenuItem Header="{l:T SoundWindow.CopyObjectText}" Click="CopyObjectText_Click" />
+                                        </ContextMenu>
+                                    </TreeView.ContextMenu>
+                                    <TreeView.ItemContainerStyle>
+                                        <Style TargetType="TreeViewItem" BasedOn="{StaticResource {x:Type TreeViewItem}}">
+                                            <Setter Property="IsExpanded" Value="{Binding Expanded, Mode=TwoWay}" />
+                                            <Setter Property="IsSelected" Value="{Binding Selected, Mode=TwoWay}" />
+                                            <Setter Property="Visibility" Value="{Binding Visibility}" />
+                                        </Style>
+                                    </TreeView.ItemContainerStyle>
+                                    <TreeView.ItemTemplate>
+                                        <HierarchicalDataTemplate ItemsSource="{Binding Children}">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="{Binding Title}" FontWeight="{Binding Weight}" />
+                                                <TextBlock Text="{Binding Kind}" Margin="8,0,0,0" Style="{StaticResource Small}" VerticalAlignment="Center" />
+                                            </StackPanel>
+                                        </HierarchicalDataTemplate>
+                                    </TreeView.ItemTemplate>
+                                </TreeView>
+                                <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch" />
+                                <Grid Grid.Column="2" Margin="8,0,0,0">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="3*" MinHeight="60" />
+                                        <RowDefinition Height="6" />
+                                        <RowDefinition Height="2*" MinHeight="60" />
+                                    </Grid.RowDefinitions>
+                                    <DockPanel Margin="2,0,0,6">
+                                        <Button x:Name="PlayObjectButton" DockPanel.Dock="Right" Padding="10,3" Click="PlayObject_Click" Visibility="Collapsed" ToolTip="{l:T SoundWindow.PlayObjectTip}">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Style="{StaticResource IconText}" Text="&#xE768;" Margin="0,0,6,0" />
+                                                <TextBlock Text="{l:T SoundWindow.PlayObject}" />
+                                            </StackPanel>
+                                        </Button>
+                                        <TextBlock x:Name="ObjectTitle" FontSize="14" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                    </DockPanel>
+                                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                                        <ItemsControl x:Name="ObjectSummary" Background="Transparent">
+                                            <ItemsControl.ContextMenu>
+                                                <ContextMenu>
+                                                    <MenuItem Header="{l:T SoundWindow.CopySettings}" Click="CopySummary_Click" />
+                                                    <MenuItem Header="{l:T SoundWindow.CopyObjectText}" Click="CopyObjectText_Click" />
+                                                </ContextMenu>
+                                            </ItemsControl.ContextMenu>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Grid Margin="2,2,0,3">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="150" />
+                                                            <ColumnDefinition Width="*" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <TextBlock Text="{Binding Label}" Opacity="0.75" TextWrapping="Wrap" />
+                                                        <TextBlock Grid.Column="1" Text="{Binding Value}" TextWrapping="Wrap" FontFamily="Consolas" FontSize="12.5" />
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </ScrollViewer>
+                                    <GridSplitter Grid.Row="2" Height="6" HorizontalAlignment="Stretch" />
+                                    <DockPanel Grid.Row="3">
+                                        <TextBlock DockPanel.Dock="Top" Text="{l:T SoundWindow.AllValues}" Style="{StaticResource Small}" Margin="2,2,0,4" />
+                                        <TreeView x:Name="FieldTree" BorderThickness="0" Background="Transparent">
+                                            <TreeView.ContextMenu>
+                                                <ContextMenu>
+                                                    <MenuItem Header="{l:T SoundWindow.CopyValue}" Click="CopyField_Click" />
+                                                </ContextMenu>
+                                            </TreeView.ContextMenu>
+                                            <TreeView.ItemContainerStyle>
+                                                <Style TargetType="TreeViewItem" BasedOn="{StaticResource {x:Type TreeViewItem}}">
+                                                    <Setter Property="IsExpanded" Value="{Binding Expanded, Mode=TwoWay}" />
+                                                </Style>
+                                            </TreeView.ItemContainerStyle>
+                                            <TreeView.ItemTemplate>
+                                                <HierarchicalDataTemplate ItemsSource="{Binding Children}">
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <TextBlock Text="{Binding Name}" Opacity="0.75" />
+                                                        <TextBlock Text="{Binding Value}" Margin="10,0,0,0" FontFamily="Consolas" FontSize="12.5" VerticalAlignment="Center" />
+                                                    </StackPanel>
+                                                </HierarchicalDataTemplate>
+                                            </TreeView.ItemTemplate>
+                                        </TreeView>
+                                    </DockPanel>
+                                </Grid>
+                            </Grid>
+                        </Grid>
                     </TabItem>
                 </TabControl>
             </Border>

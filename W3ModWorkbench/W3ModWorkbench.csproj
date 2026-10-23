@@ -49,6 +49,8 @@
     <EmbeddedResource Include="Core\Cr2w\scriptclasses.txt.gz" LogicalName="W3ModWorkbench.Core.Cr2w.scriptclasses.txt.gz" />
     <!-- ww2ogg's library of the aoTuV 6.03 Vorbis codebooks Wwise numbers (BSD, https://github.com/hcs64/ww2ogg) -->
     <EmbeddedResource Include="Assets\Sounds\packed_codebooks_aoTuV_603.bin" LogicalName="W3ModWorkbench.Assets.Sounds.packed_codebooks_aoTuV_603.bin" />
+    <!-- The game's sound names (events, banks, buses, states, switches, game parameters) found by hashing the strings in its scripts and files against its banks' IDs -->
+    <EmbeddedResource Include="Core\Sounds\Banks\gamesoundnames.txt.gz" LogicalName="W3ModWorkbench.Core.Sounds.Banks.gamesoundnames.txt.gz" />
   </ItemGroup>
 
   <ItemGroup>
