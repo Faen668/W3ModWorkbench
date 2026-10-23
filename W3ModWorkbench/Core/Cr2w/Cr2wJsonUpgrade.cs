@@ -341,19 +341,16 @@ public static partial class Cr2wJson
         private byte[]? Tail(string className, byte[] bytes, out string? why)
         {
             why = null;
+            // a class of a mod's own scripts (which the engine's and the game's classes don't name) whose data is a node's,
+            // as from 162 on, the same in 164: two mods' cooked 163 entities keep 0000000000000000800000, as 4,370 of the
+            // game's 164 ones do
+            if (from > 161 && !RttiClasses.Value.ContainsKey(className) && !ScriptParents.Value.ContainsKey(className) && NodeLists(bytes) >= 0)
+                return bytes;
             if (IsNode(className))
             {
                 if (from > 161) return bytes;
-                int at = 0;
-                for (int list = 0; list < 2; list++)
-                {
-                    if (at + 4 > bytes.Length) return null;
-                    int count = BitConverter.ToInt32(bytes, at);
-                    at += 4;
-                    if (count < 0 || at + count * 4L > bytes.Length) return null;
-                    at += count * 4;
-                }
-                if (at + 64 > bytes.Length) return null;
+                int at = NodeLists(bytes);
+                if (at < 0 || at + 64 > bytes.Length) return null;
                 byte[] node = [.. bytes.AsSpan(0, at), .. bytes.AsSpan(at + 64)];
                 if (!AreaShapes(node.AsSpan(at), DerivesFrom(className, "CAreaComponent"), out why)) return null;
                 return node;
@@ -402,6 +399,14 @@ public static partial class Cr2wJson
                     long at = 8;
                     for (int m = 0; m < mips && at + 16 <= bytes.Length; m++) at += 16 + (uint)BitConverter.ToInt32(bytes, (int)at + 12);
                     if (mips >= 0 && at + 4 == bytes.Length) return bytes;
+                    // or cooked (an older mod's): a u32 0, how many mips, each its width, height and pitch, then the size
+                    // of the mips it keeps, a u32 16 and those bytes; the same in all 394 of the game's cooked 163
+                    // textures and all 14,978 of its 164 ones
+                    if (BitConverter.ToInt32(bytes) == 0 && 8 + 12L * (uint)mips + 8 <= bytes.Length)
+                    {
+                        int kept = 8 + 12 * mips;
+                        if (BitConverter.ToInt32(bytes, kept + 4) == 16 && kept + 8L + (uint)BitConverter.ToInt32(bytes, kept) == bytes.Length) return bytes;
+                    }
                     // a few of REDkit's 163 textures (20) end with a low-resolution copy of their smallest mips instead
                     // of the u32 0: its size, a u32 16, then those bytes. No 164 texture has one (REDkit's 760 and the
                     // game's all end with the 0), so it's left out, the mips themselves kept, as every 164 texture is
@@ -574,6 +579,16 @@ public static partial class Cr2wJson
                     return null;
                 case "CCubeTexture":
                     return CubeTexture(bytes);
+                case "CParticleEmitter":
+                {
+                    // its cooked data (an older mod's; REDkit's emitters keep none), which ends with FFFFFFFF 00000000
+                    // FFFFFFFF and 8 bytes of zeros in 163, and 16 more bytes, always zeros, in 164: every one of the
+                    // game's 42 cooked 163 emitters and 8,663 164 ones, and the three 163 copies of the game's own
+                    // emitters line up with them so
+                    if (from != 163 || bytes.Length < 20) return null;
+                    var end = bytes.AsSpan(bytes.Length - 20);
+                    return end[..12].SequenceEqual(CookedEmitterEnd) && end[12..].IndexOfAnyExcept((byte)0) < 0 ? [.. bytes, .. new byte[16]] : null;
+                }
             }
             if (className == "CCurve")
                 // its points, 48 bytes each, as in every version
@@ -679,6 +694,9 @@ public static partial class Cr2wJson
         /// <summary>What 164 added to the end of each destruction chunk's record, as the engine fills it in for an older one.</summary>
         private static readonly byte[] DestructionChunkAdded = [0xFF, 0xFF, 0xFF, 0x7F, 0xFF, 0xFF, 0xFF, 0x7F, 0xFF, 0xFF, 0, 0, 0];
 
+        /// <summary>What a cooked emitter's data ends with before its zeros.</summary>
+        private static readonly byte[] CookedEmitterEnd = [0xFF, 0xFF, 0xFF, 0xFF, 0, 0, 0, 0, 0xFF, 0xFF, 0xFF, 0xFF];
+
         /// <summary>
         /// Whether a behaviour graph's container node keeps what it does after its properties in the form every version
         /// has (it's the same from 120 to 164): its child nodes (a compressed count and their object numbers), two lists
@@ -775,6 +793,21 @@ public static partial class Cr2wJson
 
         /// <summary>Whether a class is a node (CNode or one derived from it: entities and components).</summary>
         private static bool IsNode(string className) => DerivesFrom(className, "CNode");
+
+        /// <summary>Where a node's two lists of the objects attached to it and below it (each a u32 count and that many u32s) end in its data, or -1 when they don't fit.</summary>
+        private static int NodeLists(byte[] bytes)
+        {
+            int at = 0;
+            for (int list = 0; list < 2; list++)
+            {
+                if (at + 4 > bytes.Length) return -1;
+                int count = BitConverter.ToInt32(bytes, at);
+                at += 4;
+                if (count < 0 || at + count * 4L > bytes.Length) return -1;
+                at += count * 4;
+            }
+            return at;
+        }
 
         /// <summary>Whether a class is or derives from another, by the engine's classes and the game's script classes, which go on from them.</summary>
         private static bool DerivesFrom(string className, string ancestor)
