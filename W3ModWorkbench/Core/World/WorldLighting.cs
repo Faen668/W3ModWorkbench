@@ -48,7 +48,7 @@ public readonly record struct FoliageAt(
     Vector4[] Trees, Vector3 TreesLuminance, Vector4[] Branches, Vector3 BranchesLuminance, Vector4[] Grass, Vector3 GrassLuminance,
     Vector3 Diffuse, float OcclusionScale, Vector3 BillboardColour, float TranslucencyScale, Vector4 Translucency,
     float AmbientLight, float AmbientShadow, Vector3 AmbientColour,
-    float SkyBrightness, float SkySaturation, float GroundBrightness, float GroundSaturation, float MaxSkyBrightness);
+    float SkyBrightness, float SkySaturation, float GroundBrightness, float GroundSaturation, float MaxSkyBrightness, float GrassAmbient = 1, Vector3 Pigment = default);
 
 /// <summary>
 /// The environment probes' settings at one hour: the sky they're made from (its colours at the top and at the horizon
@@ -356,7 +356,8 @@ public sealed class WorldLighting
             Value(Light + "envProbeAmbientScaleLight", t, 1), Value(Light + "envProbeAmbientScaleShadow", t, 1),
             Colour(Light + "envProbeBaseLightingAmbient › colorAmbient", t, Vector3.One),
             Value(Ibl + "skyBrightnessScale", t, 1), Value(Ibl + "skySaturationScale", t, 1), Value(Ibl + "groundBrightnessScale", t, 1),
-            Value(Ibl + "groundSaturationScale", t, 1), Value(Ibl + "maxSkyBrightness", t, 1000));
+            Value(Ibl + "groundSaturationScale", t, 1), Value(Ibl + "maxSkyBrightness", t, 1000), Value(Ibl + "grassIBLScale", t, 1),
+            new Vector3(Value(Tree + "pigmentBrightness", t, 1), Value(Tree + "pigmentFloodStartDist", t, 1), Value(Tree + "pigmentFloodRange", t, 30)));
     }
 
     /// <summary>The environment probes' settings at an hour (0 to 24).</summary>

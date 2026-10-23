@@ -178,7 +178,9 @@ public sealed partial class WorldView3D
                             Position = draw.Positions[v], Uv = draw.Uvs[v], Normal = draw.Normals?[v] ?? Vector3.UnitZ,
                             Corner = new Vector4(draw.Corners?[v] ?? Vector3.Zero, draw.Occlusion?[v] ?? 1),
                             // the random colours and translucency by kind: grass, branches (bark), else leaves
-                            Kind = kind.Grass || material.Grass ? 2 : material.Branches ? 1 : 0,
+                            // grass carries how high up the plant the vertex is (0 to 0.45 over 2), for its pigment
+                            Kind = kind.Grass || material.Grass ? 2 + 0.45f * Math.Clamp(draw.Positions[v].Z / MathF.Max(kind.Tree.Max.Z, 0.05f), 0, 1)
+                                : material.Branches ? 1 : 0,
                         });
                     draws.Add((Picture(material.Diffuse), indices.Count, draw.Indices.Length, first));
                     indices.AddRange(draw.Indices);
@@ -496,8 +498,8 @@ public sealed partial class WorldView3D
         c.OutputMerger.SetDepthStencilState(null);
         c.OutputMerger.SetBlendState(null);
         c.Rasterizer.State = _raster;
-        // the heights, for the ground's normal the grass is lit by
-        c.PixelShader.SetShaderResource(0, _heightMap);
+        // the heights, colour map, control map and textures, for the ground's normal the grass is lit by and its pigment
+        c.PixelShader.SetShaderResources(0, _heightMap, _colourMap, _controlMap, _diffuse);
         var lists = GatherPlants(_eye, PlantFarthest, planes);
         PlantsDrawn = DrawPlantLists(lists, _plantVS!, _billboardVS!, _plantPS!, new Vector4[32]);
     }

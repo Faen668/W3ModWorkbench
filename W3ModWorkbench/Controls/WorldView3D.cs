@@ -283,6 +283,27 @@ float2 GridUv(float2 world)
     return float2((world.x - Ground.x) / Ground.z + 0.5 / Ground.w, 1 - (world.y - Ground.y) / Ground.z - 0.5 / Ground.w);
 }
 
+// the ground's colour at a point, as the grass takes its pigment from it: the four control samples' background
+// textures far down their mips (their average colour), blended by the samples' weights, the colour map laid over
+float3 TerrainPigment(float2 world)
+{
+    float2 uv = GridUv(world);
+    float3 tint = ColourMap.SampleLevel(Smooth, uv, 0).rgb;
+    if (Paint.w <= 0) return tint;
+    float2 cell = uv * Ground.w - 0.5;
+    int2 at = (int2)floor(cell);
+    float2 f = cell - at;
+    float3 painted = 0;
+    [unroll] for (int k = 0; k < 4; k++)
+    {
+        int2 o = int2(k & 1, k >> 1);
+        float w = (o.x ? f.x : 1 - f.x) * (o.y ? f.y : 1 - f.y);
+        uint control = ControlMap.Load(int3(clamp(at + o, 0, (int)Ground.w - 1), 0));
+        painted += Diffuse.SampleLevel(Tiled, float3(world * 0.333, (control & 31) - 1), 8).rgb * w;
+    }
+    return tint < 0.5 ? 2 * painted * tint : 1 - 2 * (1 - painted) * (1 - tint);
+}
+
 // the ground's normal at a point, from the heights round it
 float3 GroundNormal(float2 world)
 {
@@ -391,7 +412,8 @@ cbuffer Foliage : register(b8)
     float4 SpecularSettings;   // grass's f90, the other foliage's f90, the trees' specular scale
     float4 WaterSettings;      // the environment's water Fresnel (its reflectance looking straight down); the glint's scale; the AO's power on grass and on trees
     float4 TranslucencyCurve;  // the world's remaster translucency: curve tightness, highlight dimness, normal mask power, scattering saturation
-    float4 CanopySettings;     // how strongly the trees' crowns over a point hide the sky from it; whether the canopy map is there
+    float4 CanopySettings;     // how strongly the trees' crowns over a point hide the sky from it; whether the canopy map is there; grass's ambient scale (m_ibl grassIBLScale); its albedo multiplier
+    float4 Pigment;            // the grass's pigment: brightness, where the flood starts, over how far (m_speedTree pigment*); how much more low on the plant
 };
 
 // The trees' crowns over each few metres (how many, the canopy's top). The game's ambient comes from probes it renders
@@ -923,6 +945,18 @@ float4 PlantPS(PlantOut i, bool front : SV_IsFrontFace) : SV_Target
     }
     float3 albedo = RandomColour(saturate(c.rgb), i.Kind, i.Weights) * PlantTint.rgb * (i.Kind > 2.5 ? BillboardTint.rgb : 1);
     albedo *= saturate(PlantTint.w * (i.Occlusion - 1) + 1);
+    if (i.Kind > 1.5 && i.Kind < 2.5)
+    {
+        // the grass's pigment, as the game's grass shader has it: its colour drawn towards the ground's under it (its
+        // brightness times the pigment's brightness), the more the lower on the plant and the further off, past the
+        // flood's start over its range (in gamma, as the shader works)
+        float up = saturate((i.Kind - 2) / 0.45);
+        float amount = saturate((1 - up) * Pigment.w + saturate((length(Eye.xyz - i.World) - Pigment.y) / max(Pigment.z, 1e-4)));
+        // the world's SpeedTree parameters' grass albedo multiplier, on the colour in gamma as the shader has it
+        float3 g = pow(saturate(albedo), 1 / 2.2) * CanopySettings.w;
+        float3 pigmented = saturate(dot(g, float3(0.3, 0.5, 0.2))) * Pigment.x * TerrainPigment(i.World.xy);
+        albedo = pow(saturate(lerp(g, pigmented, amount)), 2.2);
+    }
     float3 V = normalize(Eye.xyz - i.World), L = Light.xyz;
     float sun = SunSeen(i.World);
     bool leafy = !(i.Kind > 0.5 && i.Kind < 1.5);
@@ -954,7 +988,7 @@ float4 PlantPS(PlantOut i, bool front : SV_IsFrontFace) : SV_Target
     float3 an = grass ? ground : leafy ? normalize(float3(i.Normal.xy, abs(i.Normal.z) + 0.3)) : n;
     // (the approximated model has the albedo in it already)
     float sky = CanopySky(i.World);
-    float3 lit = (grass ? sunLight * diffuse * directAo : albedo * sunLight * diffuse * directAo) + albedo * AmbientAt(an, sun) * ao * sky
+    float3 lit = (grass ? sunLight * diffuse * directAo : albedo * sunLight * diffuse * directAo) + albedo * AmbientAt(an, sun) * ao * sky * (grass ? CanopySettings.z : 1)
         + sunLight * SpecularAt(specularNormal, V, L, 0.04, 0.6, f90) * SpecularSettings.z * directAo;
     return Screen(Fogged(lit, i.World), 1);
 }
@@ -1486,7 +1520,7 @@ float4 StripePS(StripeOut i) : SV_Target
         _grading = new Buffer(Device, Utilities.SizeOf<Grading>(), ResourceUsage.Default, BindFlags.ConstantBuffer, CpuAccessFlags.None, ResourceOptionFlags.None, 0);
         _sky = new Buffer(Device, Utilities.SizeOf<Sky>(), ResourceUsage.Default, BindFlags.ConstantBuffer, CpuAccessFlags.None, ResourceOptionFlags.None, 0);
         _lightColour = new Buffer(Device, 48, ResourceUsage.Default, BindFlags.ConstantBuffer, CpuAccessFlags.None, ResourceOptionFlags.None, 0);
-        _foliage = new Buffer(Device, 16 * 27, ResourceUsage.Default, BindFlags.ConstantBuffer, CpuAccessFlags.None, ResourceOptionFlags.None, 0);
+        _foliage = new Buffer(Device, 16 * 28, ResourceUsage.Default, BindFlags.ConstantBuffer, CpuAccessFlags.None, ResourceOptionFlags.None, 0);
         _ambientCube = new Texture2D(Device, new Texture2DDescription
         {
             Width = 6, Height = 1, MipLevels = 1, ArraySize = 1, Format = DxgiFormat.R16G16B16A16_Float,
@@ -1623,6 +1657,17 @@ float4 StripePS(StripeOut i) : SV_Target
     /// </summary>
     public Vector4? Gtao { get; set; }
 
+    /// <summary>
+    /// The world's speedTreeParameters GrassAlbedoMultiplier (m_GrassAlbedoMultiplier): the cooked worlds keep it at its
+    /// default, which is in the engine's code, so it's set against REDkit's grass here.
+    /// </summary>
+    public float GrassAlbedoMultiplier { get; set; } = 0.65f;
+
+    /// <summary>How much more pigment grass takes low on the plant than at its top (set against REDkit's grass).</summary>
+    public float PigmentHeight { get; set; } = 0.2f;
+
+
+
     /// <summary>A scale on the sky's brightness, for matching against REDkit (1 is the environment's own).</summary>
     public float SkyFactor { get; set; } = 1;
 
@@ -1728,7 +1773,7 @@ float4 StripePS(StripeOut i) : SV_Target
         c.PixelShader.SetConstantBuffer(7, _lightColour);
         var foliage = (_lighting ?? Fallback).Foliage(_hour);
         var alpha = (_lighting ?? Fallback).AlphaScalars;
-        var foliageData = new Vector4[27];
+        var foliageData = new Vector4[28];
         for (int k = 0; k < 3; k++)
         {
             foliageData[k] = foliage.Trees[k];
@@ -1756,7 +1801,8 @@ float4 StripePS(StripeOut i) : SV_Target
         foliageData[23] = new Vector4(probes.F90Grass, probes.F90Trees, probes.TreeSpecular, PlantTest);
         foliageData[24] = new Vector4(probes.WaterFresnel, GlintScale, Gtao?.Z ?? 1, Gtao?.W ?? 1);
         foliageData[25] = TranslucencyCurve;
-        foliageData[26] = new Vector4(CanopyDensity, _canopy is null ? 0 : 1, 0, 0);
+        foliageData[26] = new Vector4(CanopyDensity, _canopy is null ? 0 : 1, foliage.GrassAmbient, GrassAlbedoMultiplier);
+        foliageData[27] = new Vector4(foliage.Pigment, PigmentHeight);
         c.UpdateSubresource(foliageData, _foliage);
         c.PixelShader.SetConstantBuffer(8, _foliage);
         // the ambient cube for this light, before anything reads it
