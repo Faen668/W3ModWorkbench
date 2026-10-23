@@ -90,7 +90,27 @@ internal static class BankEffects
             F("Wet Level", "dB"), I("Window Size"), B("Process LFE"), B("Sync Dry"),
         ],
         [0x008B0003] = [F("Gain", "dB"), F("LFE Gain", "dB")], // Wwise Gain
+        [0x00880003] = // Wwise Pitch Shifter (worked out from one next-gen bank: the two switches are both off there)
+        [
+            C("Input", "As Input", "Center", "Stereo", "3.0", "4.0", "5.0", "Left Only"), F("Dry Level", "dB"), F("Wet Level", "dB"),
+            F("Delay Time", "ms"), B("Process LFE"), B("Sync Dry"), F("Pitch", "cents"), C("Filter", Filters), F("Filter Gain", "dB"),
+            F("Filter Frequency", "Hz"), F("Filter Q"),
+        ],
     };
+
+    /// <summary>Layouts an older Wwise kept for a plugin, by plugin and size: the Meter before it had Infinite Hold.</summary>
+    private static readonly Dictionary<(long Plugin, long Size), Setting[]> OlderLayouts = new()
+    {
+        [(0x00810003, 27)] =
+        [
+            F("Attack", "s"), F("Release", "s"), F("Min", "dB"), F("Max", "dB"), F("Hold", "s"), C8("Mode", "Peak", "RMS"),
+            C8("Scope", "Global", "Game Object"), B("Apply Downstream Volume"), new("Game Parameter", T.Id),
+        ],
+    };
+
+    private static Setting[]? LayoutFor(long plugin, long size) =>
+        OlderLayouts.TryGetValue((plugin, size), out var older) ? older
+        : Layouts.TryGetValue(plugin, out var layout) && layout.Sum(SizeOf) == size ? layout : null;
 
     private static int SizeOf(Setting s) => s.Type is T.Flag or T.Choice8 ? 1 : 4;
 
@@ -98,7 +118,7 @@ internal static class BankEffects
     public static bool Known(long plugin, long size)
     {
         if (plugin == 0x00730003) return size >= 29;
-        return Layouts.TryGetValue(plugin, out var layout) && layout.Sum(SizeOf) == size;
+        return LayoutFor(plugin, size) is not null;
     }
 
     /// <summary>Reads a plugin's settings block as named values under <paramref name="o"/>.</summary>
@@ -109,7 +129,7 @@ internal static class BankEffects
             MatrixReverb(o, size);
             return;
         }
-        foreach (var s in Layouts[plugin]) Value(o, s);
+        foreach (var s in LayoutFor(plugin, size)!) Value(o, s);
     }
 
     private static void Value(BankNode o, Setting s)
