@@ -118,6 +118,12 @@ public sealed record OcclusionGrid(int Side, float TileSize, IReadOnlyList<(Vect
 /// </summary>
 public sealed record LayerComponent(string ClassName, string Name, string? Resource, IReadOnlyList<Vector2>? Outline, float Height = 0)
 {
+    /// <summary>Where it is in the world: its own transform on its entity's (scale, rotation and position, as the engine applies them).</summary>
+    public Matrix4x4 Place { get; init; } = Matrix4x4.Identity;
+
+    /// <summary>How far off it's still drawn, as its component sets it (0 for the mesh's own distance).</summary>
+    public float AutoHide { get; init; }
+
     /// <summary>Whether it uses a file of its own (a mesh, a template), for a link to it.</summary>
     public bool HasResource => Resource is { Length: > 0 };
 }
@@ -297,8 +303,9 @@ public sealed class WorldFile
         {
             if (file.Object(h) is not { } e) continue;
             var (position, rotation) = SceneStaging.Transform(e["transform"]);
+            var place = e["transform"] is byte[] raw ? Core.Entities.EntityFile.Transform(raw) : Matrix4x4.CreateTranslation(position);
             result.Add(new LayerEntity(e.ClassName, e["name"] as string ?? "", position, rotation.Z * MathF.PI / 180,
-                e["template"] is RedHandle t ? file.PathOf(t) : null, e, Components(file, e, h.Export ?? -1, children, position, rotation.Z * MathF.PI / 180)));
+                e["template"] is RedHandle t ? file.PathOf(t) : null, e, Components(file, e, h.Export ?? -1, children, position, rotation.Z * MathF.PI / 180, place)));
         }
         return result;
     }
@@ -308,13 +315,13 @@ public sealed class WorldFile
     /// child exports), and
     /// those streamed in near the player, kept in a CR2W file of their own in its streamingDataBuffer (meshes, lights).
     /// </summary>
-    private static List<LayerComponent> Components(Cr2wFile file, RedObject entity, int index, ILookup<int, int> children, Vector3 at, float yaw)
+    private static List<LayerComponent> Components(Cr2wFile file, RedObject entity, int index, ILookup<int, int> children, Vector3 at, float yaw, Matrix4x4 place)
     {
         var components = new List<LayerComponent>();
         var seen = new HashSet<int>();
         foreach (int i in entity.Array("components").OfType<RedHandle>().Select(h => h.Export ?? -1).Concat(children[index]))
             if (i >= 0 && i < file.Exports.Count && seen.Add(i) && file.Exports[i].ClassName.EndsWith("Component", StringComparison.Ordinal))
-                components.Add(Component(file, file.Object(i), at, yaw));
+                components.Add(Component(file, file.Object(i), at, yaw, place));
         if (entity.Bytes("streamingDataBuffer") is { Length: > 8 } streamed)
         {
             // the CR2W file, straight away or after its size
@@ -324,14 +331,14 @@ public sealed class WorldFile
                 {
                     var inner = Cr2wFile.Read(streamed[start..]);
                     for (int i = 0; i < inner.Exports.Count; i++)
-                        if (inner.Exports[i].ClassName.EndsWith("Component", StringComparison.Ordinal)) components.Add(Component(inner, inner.Object(i), at, yaw));
+                        if (inner.Exports[i].ClassName.EndsWith("Component", StringComparison.Ordinal)) components.Add(Component(inner, inner.Object(i), at, yaw, place));
                 }
                 catch (InvalidDataException) { }
         }
         return components;
     }
 
-    private static LayerComponent Component(Cr2wFile file, RedObject c, Vector3 at, float yaw)
+    private static LayerComponent Component(Cr2wFile file, RedObject c, Vector3 at, float yaw, Matrix4x4 entityPlace)
     {
         string? resource = null;
         foreach (string name in new[] { "mesh", "resource", "template", "particleSystem", "spawnTree", "dialogset", "cloth", "furMesh" })
@@ -354,6 +361,7 @@ public sealed class WorldFile
             points = placed.Select(p => new Vector2(p.X, p.Y)).ToList();
             height = placed.Average(p => p.Z);
         }
-        return new LayerComponent(c.ClassName, c["name"] as string ?? "", resource, points.Count >= 2 ? points : null, height);
+        var own = c["transform"] is byte[] raw ? Core.Entities.EntityFile.Transform(raw) : Matrix4x4.Identity;
+        return new LayerComponent(c.ClassName, c["name"] as string ?? "", resource, points.Count >= 2 ? points : null, height) { Place = own * entityPlace, AutoHide = c["autoHideDistance"] is float hide ? hide : 0 };
     }
 }

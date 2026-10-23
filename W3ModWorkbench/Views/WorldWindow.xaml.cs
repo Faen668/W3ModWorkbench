@@ -741,6 +741,55 @@ public partial class WorldWindow : Window, IMessageHost
         View3D.SetGrass(grass);
         View3D.TranslucencyCurve = TranslucencyOf(world);
         View3D.Gtao = GtaoOf(world);
+        await ShowMeshes3DAsync();
+    }
+
+    /// <summary>
+    /// The layers' meshes in 3D: every mesh the layers' components draw (those read so far), read with each material's
+    /// colour picture and look as the mesh viewer reads them, and where each copy stands.
+    /// </summary>
+    private async Task ShowMeshes3DAsync()
+    {
+        var locator = _locator;
+        var placed = _dots.Values.SelectMany(d => d).SelectMany(d => d.Entity.Components)
+            .Where(c => c.Resource is { } r && r.EndsWith(".w2mesh", StringComparison.OrdinalIgnoreCase))
+            .GroupBy(c => c.Resource!, StringComparer.OrdinalIgnoreCase).ToList();
+        if (placed.Count == 0) return;
+        MapProgress.Visibility = Visibility.Visible;
+        MapProgress.Text = L.T("WorldWindow.ReadingMeshes3D");
+        var textures = new System.Collections.Concurrent.ConcurrentDictionary<string, Task<System.Windows.Media.Imaging.BitmapSource?>>(StringComparer.OrdinalIgnoreCase);
+        Task<System.Windows.Media.Imaging.BitmapSource?> Texture(string path) =>
+            textures.GetOrAdd(path, p => Task.Run(() => MeshTextures.LoadWithAlpha(locator, p, 512)));
+        var kinds = new System.Collections.Concurrent.ConcurrentBag<MeshKind3D>();
+        await Parallel.ForEachAsync(placed, new ParallelOptions { MaxDegreeOfParallelism = Math.Clamp(Environment.ProcessorCount - 1, 2, 8) }, async (group, token) =>
+        {
+            string path = group.Key;
+            try
+            {
+                if (locator.ReadFile(path) is not { } data) return;
+                var archive = locator.Find(path)?.Archive;
+                var mesh = Core.Meshes.MeshFile.Read(data, n => locator.ReadBuffer(path, n, archive));
+                var materials = new List<(System.Windows.Media.Imaging.BitmapSource?, MaterialLook?, MeshUse)>();
+                for (int m = 0; m < mesh.Materials.Count; m++)
+                {
+                    try
+                    {
+                        // volumes (weather, interiors) aren't seen; see-through surfaces (puddles, glass) aren't drawn yet;
+                        // the merged shadow meshes only cast the sun's shadow
+                        string shader = Core.Meshes.MeshMaterial.Resolve(mesh.File, mesh.Materials[m], locator.ReadFile).Shader.ToLowerInvariant();
+                        if (shader is "volume" || shader.StartsWith("transparent")) { materials.Add((null, null, MeshUse.Hidden)); continue; }
+                        if (shader is "mergedmesh") { materials.Add((null, null, MeshUse.ShadowOnly)); continue; }
+                        var (picture, look, leaveOut) = await LookTextures.ForMaterial(mesh, m, locator, Texture);
+                        materials.Add((picture, look, leaveOut ? MeshUse.Hidden : MeshUse.Drawn));
+                    }
+                    catch (Exception ex) when (ex is IOException or InvalidDataException) { materials.Add((null, null, MeshUse.Drawn)); }
+                }
+                kinds.Add(new MeshKind3D(path, mesh, materials, group.Max(c => c.AutoHide), group.Select(c => c.Place).ToList()));
+            }
+            catch (Exception ex) when (ex is IOException or InvalidDataException) { }
+        });
+        MapProgress.Visibility = Visibility.Collapsed;
+        View3D.SetMeshes([.. kinds.OrderBy(k => k.Path, StringComparer.OrdinalIgnoreCase)]);
     }
 
     /// <summary>

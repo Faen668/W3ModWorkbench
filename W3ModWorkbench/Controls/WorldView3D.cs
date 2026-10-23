@@ -1045,6 +1045,74 @@ float AoPS(float4 position : SV_Position) : SV_Target
     }
     return pow(saturate(1 - occlusion / 32 * 2), AoSettings.z * 0.5);
 }
+
+// ---- meshes ----
+// The layers' meshes, each copy placed by its matrix (four rows, as instance data), lit as the ground: the sun with its
+// shadows, the probes' ambient under the canopy, GGX specular, the sky's reflection, the fog. Materials as the mesh
+// viewer reads them: roughness in the normal map's alpha between the least and most, specularity by RSpecScale and
+// RSpecBase from it, the tint mask's red baked occlusion.
+
+cbuffer MeshMaterial : register(b9)
+{
+    float4 MeshSpec;       // RSpecScale, RSpecBase, the least and most roughness
+    float4 MeshSpecColour; // the specular colour (linear); how much of the tint mask's occlusion counts
+    float4 MeshFlags;      // a normal map, a tint mask; the alpha cut (0 for none)
+    float4 MeshSpare;
+};
+
+Texture2D MeshDiffuse : register(t21);
+Texture2D MeshNormal : register(t22);
+Texture2D MeshMask : register(t23);
+
+struct MeshIn
+{
+    float3 Position : POSITION; float3 Normal : NORMAL; float4 Tangent : TANGENT; float2 Uv : TEXCOORD0;
+    float4 Row0 : WORLD0; float4 Row1 : WORLD1; float4 Row2 : WORLD2; float4 Row3 : WORLD3;
+};
+struct MeshOut { float4 Position : SV_Position; float3 World : TEXCOORD0; float2 Uv : TEXCOORD1; float3 Normal : TEXCOORD2; float4 Tangent : TEXCOORD3; };
+
+MeshOut MeshAt(MeshIn v, row_major float4x4 projection)
+{
+    float4x4 place = float4x4(v.Row0, v.Row1, v.Row2, v.Row3);
+    MeshOut o;
+    o.World = mul(float4(v.Position, 1), place).xyz;
+    o.Position = mul(float4(o.World, 1), projection);
+    o.Uv = v.Uv;
+    o.Normal = mul(v.Normal, (float3x3)place);
+    o.Tangent = float4(mul(v.Tangent.xyz, (float3x3)place), v.Tangent.w);
+    return o;
+}
+
+MeshOut MeshVS(MeshIn v) { return MeshAt(v, ViewProjection); }
+MeshOut MeshShadowVS(MeshIn v) { return MeshAt(v, SunViewProjection); }
+
+float4 MeshPS(MeshOut i, bool front : SV_IsFrontFace) : SV_Target
+{
+    float4 c = MeshDiffuse.Sample(Tiled, i.Uv);
+    if (MeshFlags.z > 0) clip(c.a - MeshFlags.z);
+    float3 albedo = pow(saturate(c.rgb), 2.2);
+    float3 n = normalize(front ? i.Normal : -i.Normal);
+    float roughness = 0.7;
+    if (MeshFlags.x > 0)
+    {
+        // the normal map's x and y, z worked out, in the surface's tangent space (the bitangent by the tangent's handedness)
+        float4 m = MeshNormal.Sample(Tiled, i.Uv);
+        float2 xy = m.xy * 2 - 1;
+        float3 t = normalize(i.Tangent.xyz - n * dot(n, i.Tangent.xyz) + 1e-5), b = cross(n, t) * (i.Tangent.w < 0 ? -1 : 1);
+        n = normalize(xy.x * t + xy.y * b + sqrt(saturate(1 - dot(xy, xy))) * n);
+        roughness = m.a;
+    }
+    roughness = clamp(lerp(MeshSpec.z, MeshSpec.w, roughness), 0.05, 1);
+    float3 specularity = saturate(MeshSpecColour.rgb * ((1 - roughness) * MeshSpec.x + MeshSpec.y));
+    float baked = MeshFlags.y > 0 ? lerp(1, MeshMask.Sample(Tiled, i.Uv).r, saturate(MeshSpecColour.w)) : 1;
+    float sun = SunSeen(i.World), ao = AoAt(i.Position) * baked, sky = CanopySky(i.World);
+    float3 v = normalize(Eye.xyz - i.World), sunLight = GlobalLightColour(i.World) * sun;
+    float direct = lerp(1, ao, AoSettings.w);
+    float3 lit = albedo * (sunLight * saturate(dot(n, Light.xyz)) / 3.14159265 * direct + AmbientAt(n, sun) * ao * sky)
+        + sunLight * SpecularAt(n, v, Light.xyz, dot(specularity, 0.3333), roughness, 1) * direct
+        + ReflectionAt(n, v, dot(specularity, 0.3333), roughness, sun) * ao * sky;
+    return Screen(Fogged(lit, i.World), 1);
+}
 ";
     // loc-ignore-end
 
@@ -1353,6 +1421,7 @@ float AoPS(float4 position : SV_Position) : SV_Target
         using (var code = Compile(Shaders, "PostPS", "ps_4_0")) _postPS = new PixelShader(Device, code);
         using (var code = Compile(Shaders, "ShadowPS", "ps_4_0")) _shadowPS = new PixelShader(Device, code);
         StartPlants();
+        StartMeshes();
         StartEnvironment();
         _adaptBuffer = new Buffer(Device, 16, ResourceUsage.Default, BindFlags.ConstantBuffer, CpuAccessFlags.None, ResourceOptionFlags.None, 0);
         var blend = new BlendStateDescription();
@@ -1737,6 +1806,7 @@ float AoPS(float4 position : SV_Position) : SV_Target
             for (int i = 0; i < Steps.Length; i++)
                 if (byStep[i].Count > 0 && _grids[i] is { } depthGrid) DrawPatches(depthGrid, byStep[i]);
             DrawPlantsDepth(planes);
+            DrawMeshesDepth(planes);
             c.OutputMerger.SetRenderTargets((DepthStencilView?)null, _aoTarget);
             c.OutputMerger.SetDepthStencilState(_noDepth);
             c.InputAssembler.InputLayout = null;
@@ -1764,8 +1834,9 @@ float AoPS(float4 position : SV_Position) : SV_Target
                 PatchesDrawn += byStep[i].Count;
             }
 
-        // the trees, bushes and grass
+        // the trees, bushes and grass, and the layers' meshes
         DrawPlants(planes);
+        DrawMeshes(planes);
         c.InputAssembler.InputLayout = _layout;
         c.Rasterizer.State = _raster;
 
@@ -1986,6 +2057,7 @@ float AoPS(float4 position : SV_Position) : SV_Target
                 g.Indices.Dispose();
             }
         DisposePlantDevice();
+        DisposeMeshDevice();
         DisposeEnvironment();
         foreach (var d in new IDisposable?[] { _aoPS, _ao, _aoTarget, _aoView, _foliage, _ambientCube, _ambientTarget, _ambientView, _ambientPS, _lightColour, _shadowPS, _shadow, _shadowTarget, _shadowTexture, _sky, _grading, _postPS, _balanceA, _balanceB, _waves, _foam, _textureSettings, _skyVS, _skyPS, _waterVS, _waterPS, _waterBlend, _noDepth, _depthTestOnly, _waterLevel, _patches, _heightMap, _colourMap, _controlMap, _diffuse, _normals, _tiled, _depthState, _raster, _sampler, _frame, _layout, _ps, _vs })
             d?.Dispose();

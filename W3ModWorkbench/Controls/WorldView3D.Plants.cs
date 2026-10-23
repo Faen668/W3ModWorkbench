@@ -422,7 +422,7 @@ public sealed partial class WorldView3D
     private void PreparePlants(Vector3 toLight, Matrix4x4 view)
     {
         var c = Context!;
-        bool shadows = _plants.Count > 0 && toLight.Z > 0.02f;
+        bool shadows = (_plants.Count > 0 || _meshes.Count > 0) && toLight.Z > 0.02f;
         // the shadow map is kept until the camera has moved far enough across it or the light has moved
         var centre = _eye + Forward() * (PlantShadowReach * 0.5f);
         bool redraw = !_sunValid || Vector3.Distance(centre, _sunCentre) > PlantShadowReach * 0.08f || Vector3.DistanceSquared(toLight, _sunFor) > 1e-7f;
@@ -466,6 +466,7 @@ public sealed partial class WorldView3D
             for (int k = 0; k < lists.Length; k++)
                 if (_plants[k].Kind.Grass) lists[k] = null!;
             DrawPlantLists(lists, _plantShadowVS!, _billboardShadowVS!, _plantShadowPS!, constants.BillboardViews);
+            DrawMeshesShadow(centre, PlantShadowReach * 1.5f);
             c.UpdateSubresource(StructureBytes(constants), _plantConstants);
             c.Rasterizer.SetViewport(0, 0, PixelWidth, PixelHeight);
             c.Rasterizer.State = _raster;

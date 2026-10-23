@@ -5656,6 +5656,7 @@
   "WorldWindow.Environment": "Environment",
   "WorldWindow.EnvironmentTip": "The world's environment in 3D, as REDkit's World Environment tool: the weather, a forced preset, the day cycle, what's drawn, the environments mixed in and their properties",
   "WorldWindow.ReadingPlants3D": "Reading the trees, bushes and grass for 3D…",
+  "WorldWindow.ReadingMeshes3D": "Reading the buildings and other meshes for 3D…",
   "WorldWindow.PlayDayTip": "Let the day go by, an hour every two seconds",
   "WorldWindow.NoTerrain3D": "This world's terrain isn't read yet, or it has none, so there's nothing to show in 3D.",
   "WorldWindow.Camera3D": "X {x:0.0}   Y {y:0.0}   Z {z:0.0}   ·   facing {heading:0}°   ·   {speed:0} m/s   ·   drag to look, W A S D to move, Q and E down and up, Shift faster, the wheel for speed, Ctrl+Alt+C and Ctrl+Alt+V copy and go to a camera view as REDkit does",
