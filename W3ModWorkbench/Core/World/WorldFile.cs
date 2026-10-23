@@ -142,8 +142,34 @@ public sealed record LayerComponent(string ClassName, string Name, string? Resou
         return (set.Contains("DF_IsVisible"), set.Contains("DF_CastShadows"));
     }
 
+    /// <summary>An environment probe's settings and its cooked captures; null for other components.</summary>
+    public EnvProbeData? Probe { get; init; }
+
     /// <summary>Whether it uses a file of its own (a mesh, a template), for a link to it.</summary>
     public bool HasResource => Resource is { Length: > 0 };
+}
+
+/// <summary>
+/// A CEnvProbeComponent: where its capture was taken (kept after its properties), the four cube maps cooking left in the
+/// texture cache under its textureCacheHashes (the scene's albedo as two-channel YCbCr, its normals, the sun's shadow at
+/// four times of day, the depth), and its settings: its contribution (-1 for a world's global probe), how deep it
+/// nests among others, its area (its entity's box) and the area's margins and offset, and its generation parameters.
+/// </summary>
+public sealed record EnvProbeData(IReadOnlyList<uint> Hashes, Vector3 Origin, int Contribution, int Nesting, bool Parallax,
+    Vector4 AreaMargin, Vector3 AreaDisplace, float AmbientIntensity, Vector3 AmbientColour, bool UseInExterior)
+{
+    public static EnvProbeData? From(RedObject c, Vector3 at)
+    {
+        var hashes = c.Array("textureCacheHashes").Select(h => h is IConvertible v ? Convert.ToUInt32(v) : 0u).ToList();
+        if (hashes.Count < 4) return null;
+        // the tail: two zero words, a one, then the capture's origin and a 1
+        var origin = c.Tail.Length >= 24 ? new Vector3(BitConverter.ToSingle(c.Tail, 12), BitConverter.ToSingle(c.Tail, 16), BitConverter.ToSingle(c.Tail, 20)) : at;
+        var gen = c.Struct("genParams");
+        var colour = gen?.Struct("ambientColor") is { } col ? new Vector3(col.Float("Red", 255), col.Float("Green", 255), col.Float("Blue", 255)) / 255 : Vector3.One;
+        var margin = c.Struct("areaMarginFactor") is { } m ? new Vector4(m.Float("X", 0.1f), m.Float("Y", 0.1f), m.Float("Z", 0.1f), m.Float("W", 1)) : new Vector4(0.1f, 0.1f, 0.1f, 1);
+        return new EnvProbeData(hashes, origin, (int)c.Integer("contribution", 0), (int)c.Integer("nestingLevel", 0), c["isParallaxCorrected"] is true,
+            margin, c.Vector("areaDisplace"), gen?.Float("ambientIntensity", 1) ?? 1, colour, gen?["useInExterior"] is not false);
+    }
 }
 
 /// <summary>
@@ -419,6 +445,7 @@ public sealed class WorldFile
         var own = c["transform"] is byte[] raw ? Core.Entities.EntityFile.Transform(raw) : Matrix4x4.Identity;
         return new LayerComponent(c.ClassName, c["name"] as string ?? "", resource, points.Count >= 2 ? points : null, height) { Place = own * entityPlace, AutoHide = c["autoHideDistance"] is float hide ? hide : 0, DrawableFlags = c["drawableFlags"]?.ToString(),
             Stripe = c.ClassName == "CStripeComponent" && c["cookedVertices"] is byte[] sv && c["cookedIndices"] is byte[] si
-                ? new StripeData(sv, si, c["normalTexture"] is RedHandle nh ? file.PathOf(nh) : null) : null };
+                ? new StripeData(sv, si, c["normalTexture"] is RedHandle nh ? file.PathOf(nh) : null) : null,
+            Probe = c.ClassName == "CEnvProbeComponent" ? EnvProbeData.From(c, at) : null };
     }
 }

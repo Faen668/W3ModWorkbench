@@ -49,7 +49,7 @@ public sealed partial class WorldView3D
     }
 
     /// <summary>One LOD of a kind on the card: its vertices and indices, and each draw's picture and index range.</summary>
-    private sealed record PlantLod(Buffer Vertices, Buffer Indices, (ShaderResourceView? Picture, int Start, int Count, int Base)[] Draws);
+    private sealed record PlantLod(Buffer Vertices, Buffer Indices, (ShaderResourceView? Picture, int Start, int Count, int Base, ShaderResourceView? Specular, Vector4 Material)[] Draws);
 
     private sealed class PlantKindGpu
     {
@@ -68,7 +68,7 @@ public sealed partial class WorldView3D
     private VertexShader? _plantVS, _billboardVS, _plantShadowVS, _billboardShadowVS;
     private PixelShader? _plantPS, _plantShadowPS;
     private InputLayout? _plantLayout, _billboardLayout;
-    private Buffer? _plantPlaces, _plantConstants, _billboardQuad, _billboardIndices;
+    private Buffer? _plantPlaces, _plantConstants, _billboardQuad, _billboardIndices, _plantMaterial;
     private int _plantPlaceCapacity;
     private Texture2D? _plantShadowTexture;
     private DepthStencilView? _plantShadowDepth;
@@ -117,6 +117,7 @@ public sealed partial class WorldView3D
         using (var code = Compile(source, "BillboardShadowVS", "vs_4_0")) _billboardShadowVS = new VertexShader(Device, code);
         using (var code = Compile(source, "PlantPS", "ps_4_0")) _plantPS = new PixelShader(Device, code);
         using (var code = Compile(source, "PlantShadowPS", "ps_4_0")) _plantShadowPS = new PixelShader(Device, code);
+        _plantMaterial = new Buffer(Device, 16, ResourceUsage.Default, BindFlags.ConstantBuffer, CpuAccessFlags.None, ResourceOptionFlags.None, 0);
         _plantConstants = new Buffer(Device, Utilities.SizeOf<Matrix4x4>() + 16 * (3 + 32), ResourceUsage.Default, BindFlags.ConstantBuffer, CpuAccessFlags.None, ResourceOptionFlags.None, 0);
         _billboardQuad = Buffer.Create(Device, BindFlags.VertexBuffer, new[] { new Vector2(-0.5f, 0), new Vector2(0.5f, 0), new Vector2(0.5f, 1), new Vector2(-0.5f, 1) });
         _billboardIndices = Buffer.Create(Device, BindFlags.IndexBuffer, new ushort[] { 0, 1, 2, 0, 2, 3 });
@@ -162,12 +163,21 @@ public sealed partial class WorldView3D
                 _plantPictures[path] = view;
                 return view;
             }
+            ShaderResourceView? SpecularPicture(string name)
+            {
+                if (name.Length == 0) return null;
+                string path = SpeedTreeFile.TexturePath(kind.Path, name);
+                if (_plantPictures.TryGetValue(path + "|s", out var known)) return known;
+                var view = kind.Pictures.GetValueOrDefault(path) is { } picture ? StraightTexture(picture) : null;
+                _plantPictures[path + "|s"] = view;
+                return view;
+            }
             var lods = new List<PlantLod>();
             foreach (var lod in kind.Tree.Lods)
             {
                 var vertices = new List<PlantVertex>();
                 var indices = new List<int>();
-                var draws = new List<(ShaderResourceView?, int, int, int)>();
+                var draws = new List<(ShaderResourceView?, int, int, int, ShaderResourceView?, Vector4)>();
                 foreach (var draw in lod)
                 {
                     var material = kind.Tree.Materials[draw.Material];
@@ -182,7 +192,11 @@ public sealed partial class WorldView3D
                             Kind = kind.Grass || material.Grass ? 2 + 0.45f * Math.Clamp(draw.Positions[v].Z / MathF.Max(kind.Tree.Max.Z, 0.05f), 0, 1)
                                 : material.Branches ? 1 : 0,
                         });
-                    draws.Add((Picture(material.Diffuse), indices.Count, draw.Indices.Length, first));
+                    // its specular map and the render state's settings the game's SpeedTree shader reads with it: the specular
+                    // colour's green, the transmission colour's green, the glossiness (shininess over 128)
+                    var specular = SpecularPicture(material.Specular);
+                    draws.Add((Picture(material.Diffuse), indices.Count, draw.Indices.Length, first, specular,
+                        new Vector4(material.SpecularColour.Y, material.TransmissionColour.Y, material.Shininess / 128, specular is null ? 0 : 1)));
                     indices.AddRange(draw.Indices);
                 }
                 if (vertices.Count == 0) continue;
@@ -512,6 +526,7 @@ public sealed partial class WorldView3D
         int drawn = 0;
         c.InputAssembler.PrimitiveTopology = PrimitiveTopology.TriangleList;
         c.PixelShader.Set(ps);
+        c.PixelShader.SetConstantBuffer(10, _plantMaterial);
         for (int k = 0; k < lists.Length; k++)
         {
             if (lists[k] is not { } slots) continue;
@@ -525,10 +540,13 @@ public sealed partial class WorldView3D
                 c.InputAssembler.SetVertexBuffers(0, new VertexBufferBinding(lod.Vertices, Utilities.SizeOf<PlantVertex>(), 0),
                     new VertexBufferBinding(_plantPlaces, Utilities.SizeOf<PlantPlace>(), 0));
                 c.InputAssembler.SetIndexBuffer(lod.Indices, DxgiFormat.R32_UInt, 0);
-                foreach (var (picture, start, count, first) in lod.Draws)
+                foreach (var (picture, start, count, first, specular, material) in lod.Draws)
                 {
                     if (picture is null) continue;
                     c.PixelShader.SetShaderResource(14, picture);
+                    c.PixelShader.SetShaderResource(24, specular);
+                    var m = material;
+                    c.UpdateSubresource(ref m, _plantMaterial);
                     c.DrawIndexedInstanced(count, list.Count, start, first, starts[k][s]);
                 }
                 drawn += list.Count;
@@ -584,7 +602,7 @@ public sealed partial class WorldView3D
     private void DisposePlantDevice()
     {
         DisposePlants();
-        foreach (var d in new IDisposable?[] { _canopy, _plantVS, _billboardVS, _plantShadowVS, _billboardShadowVS, _plantPS, _plantShadowPS, _plantLayout,
+        foreach (var d in new IDisposable?[] { _canopy, _plantMaterial, _plantVS, _billboardVS, _plantShadowVS, _billboardShadowVS, _plantPS, _plantShadowPS, _plantLayout,
             _billboardLayout, _plantPlaces, _plantConstants, _billboardQuad, _billboardIndices, _plantShadow, _plantShadowDepth, _plantShadowTexture,
             _shadowCompare, _shadowRaster })
             d?.Dispose();

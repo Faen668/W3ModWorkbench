@@ -43,6 +43,10 @@ public sealed class TextureEntry : ArchiveEntry
 {
     public required TextureInfo Info { get; init; }
 
+    /// <summary>The number the cache files it under: its path's hash, or for an environment probe's cube map the number its
+    /// component keeps.</summary>
+    public uint Hash { get; init; }
+
     public override long SortKey => Info.DataOffset;
 
     public override string ExtractPath => Path.EndsWith(".dds", StringComparison.OrdinalIgnoreCase) ? Path : Path + ".dds";
@@ -161,6 +165,7 @@ public sealed class TextureCacheArchive : IArchive
                 Size = unpacked,
                 PackedSize = packed,
                 Info = info,
+                Hash = BinaryPrimitives.ReadUInt32LittleEndian(e),
             });
         }
         return archive;

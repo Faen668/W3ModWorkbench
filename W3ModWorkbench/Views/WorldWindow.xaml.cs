@@ -350,6 +350,7 @@ public partial class WorldWindow : Window, IMessageHost
         if (View3D.HasTerrain)
         {
             SetWater3D();
+            _ = SetProbe3DAsync();
             if (_meshesWaiting) _ = ShowMeshes3DAsync();
         }
         foreach (var node in _roots) Count(node);
@@ -762,6 +763,33 @@ public partial class WorldWindow : Window, IMessageHost
     private void SetWater3D() => View3D.SetWater(_dots.Values.SelectMany(d => d).SelectMany(d => d.Entity.Components)
         .Where(c => c is { ClassName: "CWaterComponent", Outline: { Count: >= 3 } }).Select(c => (c.Outline!, c.Height)), _waterSurfaces);
 
+    /// <summary>
+    /// The world's global environment probe (its contribution -1, else the one with the largest area) for the 3D view's
+    /// ambient: its cooked albedo, normals and depth from the texture cache, where it was taken and its ambient colour and
+    /// intensity. A world without one keeps the view's own capture.
+    /// </summary>
+    private async Task SetProbe3DAsync()
+    {
+        var probes = _dots.Values.SelectMany(d => d).SelectMany(d => d.Entity.Components).Where(c => c.Probe is not null).ToList();
+        var chosen = probes.FirstOrDefault(c => c.Probe!.Contribution == -1)
+            ?? probes.OrderByDescending(c => c.Place.M11 * c.Place.M22 * c.Place.M33).FirstOrDefault();
+        if (chosen?.Probe is not { } probe) return;
+        var locator = _locator;
+        var faces = await Task.Run(() =>
+        {
+            byte[]? Pixels(uint hash)
+            {
+                if (locator.FindTexture(hash) is not { Archive: Core.Textures.TextureCacheArchive cache } entry) return null;
+                using var stream = new FileStream(cache.FilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                return Core.Textures.TextureCacheArchive.ReadPixels(stream, entry.Info);
+            }
+            try { return (Albedo: Pixels(probe.Hashes[0]), Normals: Pixels(probe.Hashes[1]), Depth: Pixels(probe.Hashes[3])); }
+            catch (Exception e) when (e is IOException or InvalidDataException) { return (null, null, null); }
+        });
+        if (faces is { Albedo.Length: 128 * 128 * 6 * 4, Normals.Length: 128 * 128 * 6 * 4, Depth.Length: 128 * 128 * 6 * 2 })
+            View3D.SetCookedProbe(probe.Origin, probe.AmbientColour, probe.AmbientIntensity, faces.Albedo, faces.Normals, faces.Depth);
+    }
+
     // the water meshes' triangles in the world (rivers drawn with the game's water shaders), for the water's level
     private List<(Vector3 A, Vector3 B, Vector3 C)> _waterSurfaces = [];
 
@@ -1042,7 +1070,8 @@ public partial class WorldWindow : Window, IMessageHost
                 if (Read(first.Tree) is not { } data) return;
                 var tree = SpeedTreeFile.Read(data);
                 var mine = new Dictionary<string, System.Windows.Media.Imaging.BitmapSource?>(StringComparer.OrdinalIgnoreCase);
-                foreach (var name in tree.Materials.Select(m => m.Diffuse).Append(tree.BillboardMaterial?.Diffuse ?? "").Append(tree.BillboardMaterial?.Normal ?? "").Where(n => n.Length > 0).Distinct())
+                foreach (var name in tree.Materials.Select(m => m.Diffuse).Concat(tree.Materials.Select(m => m.Specular)).Append(tree.BillboardMaterial?.Diffuse ?? "")
+                    .Append(tree.BillboardMaterial?.Normal ?? "").Where(n => n.Length > 0).Distinct())
                 {
                     string path = SpeedTreeFile.TexturePath(first.Tree, name);
                     mine[path] = pictures.GetOrAdd(path, t => MeshTextures.LoadWithAlpha(_locator, t, 1024));
@@ -1219,6 +1248,7 @@ public partial class WorldWindow : Window, IMessageHost
                 View3D.SetFoam(foam);
                 // the water shapes the layers read so far have: each sets the water's level inside it
                 SetWater3D();
+                _ = SetProbe3DAsync();
                 View3DToggle.ToolTip = View3D.Painted ? L.T("WorldWindow.View3DTip") : L.T("WorldWindow.View3DNoTextures");
                 _ = ShowPlants3DAsync();
             }

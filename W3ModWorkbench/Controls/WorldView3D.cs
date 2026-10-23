@@ -359,6 +359,12 @@ cbuffer Plants : register(b4)
 };
 
 Texture2D PlantPicture : register(t14);
+Texture2D PlantSpecular : register(t24);
+
+cbuffer PlantMaterial : register(b10)
+{
+    float4 PlantMat; // the specular colour's green, the transmission colour's green, the glossiness, whether there's a specular map
+};
 Texture2D PlantNormals : register(t19);
 Texture2D<float> PlantShadowMap : register(t15);
 SamplerComparisonState ShadowCompare : register(s2);
@@ -414,7 +420,9 @@ cbuffer Foliage : register(b8)
     float4 TranslucencyCurve;  // the world's remaster translucency: curve tightness, highlight dimness, normal mask power, scattering saturation
     float4 CanopySettings;     // how strongly the trees' crowns over a point hide the sky from it; whether the canopy map is there; grass's ambient scale (m_ibl grassIBLScale); its albedo multiplier
     float4 Pigment;            // the grass's pigment: brightness, where the flood starts, over how far (m_speedTree pigment*); how much more low on the plant
+    float4 GrassSettings;      // the grass's albedo multiplier
 };
+#define GrassAlbedo GrassSettings.x
 
 // The trees' crowns over each few metres (how many, the canopy's top). The game's ambient comes from probes it renders
 // in the scene, so under a forest they see the forest; ours comes from the sky, dimmed under the crowns by their count.
@@ -705,10 +713,13 @@ float4 WaterPS(Out i) : SV_Target
     // the game takes the sun's colour to the power 1/2.2 for it, a colour, not the sun's whole strength
     float3 sunTint = pow(saturate(LightColour.rgb / max(max(LightColour.r, LightColour.g), max(LightColour.b, 1e-4))), 0.4545);
     float3 glint = Screen(seen * sunTint * lobe * GlintScale * saturate(Light.z * 4) * lerp(0.04, 1, FogHeight.y), 1).rgb;
-    // the water's colour taking over from what's under it the more water there is to look through
-    // water takes the red out of what's under it first, then the green, so shallows over sand turn turquoise
-    float3 through = exp(-thickness * Water.w * float3(0.18, 0.13, 0.12));
-    float3 colour = lerp(body, under, through);
+    // the water's colour taking over from what's under it, as the game's water shader has it: the water looked through
+    // (towards its vertical depth further off, over 200 metres) to the power 0.6; what's under it dimmed by that, to
+    // 0.6 of itself through none, then each channel moved to the water's colour by it, the red first (0.5 of the way a
+    // metre, the green 0.32, the blue 0.34; the shader's red and blue take a constant we haven't placed at its most)
+    float looked = pow(max(lerp(thickness, max(depth, 0), saturate(distance * 0.005)), 0), 0.6) * Water.w;
+    under *= 0.6 - 0.267 * saturate(looked);
+    float3 colour = lerp(under, body, saturate(looked * float3(0.5, 0.32, 0.34)));
     colour = lerp(colour, sky, fresnel) + glint;
 
     // foam in the shallows, its loop played as the game plays it
@@ -953,7 +964,7 @@ float4 PlantPS(PlantOut i, bool front : SV_IsFrontFace) : SV_Target
         float up = saturate((i.Kind - 2) / 0.45);
         float amount = saturate((1 - up) * Pigment.w + saturate((length(Eye.xyz - i.World) - Pigment.y) / max(Pigment.z, 1e-4)));
         // the world's SpeedTree parameters' grass albedo multiplier, on the colour in gamma as the shader has it
-        float3 g = pow(saturate(albedo), 1 / 2.2) * CanopySettings.w;
+        float3 g = pow(saturate(albedo), 1 / 2.2) * GrassAlbedo;
         float3 pigmented = saturate(dot(g, float3(0.3, 0.5, 0.2))) * Pigment.x * TerrainPigment(i.World.xy);
         albedo = pow(saturate(lerp(g, pigmented, amount)), 2.2);
     }
@@ -971,7 +982,16 @@ float4 PlantPS(PlantOut i, bool front : SV_IsFrontFace) : SV_Target
     // |L.N| to the power 0.3 (ApproximatedDiffuseCurvePower) dimmed as the eye looks towards the sun; the rest Lambert;
     // a tree's leaf cards keep their own facing, so a canopy's side away from the sun is lit only through the leaves
     float3 diffuse = (grass ? pow(abs(dot(L, n)), 0.3) * saturate(LoV + 0.5) * albedo : saturate(dot(n, L))) / 3.14159265;
-    float translucent = leafy ? BillboardTint.w : 0;
+    // the translucency as the game's SpeedTree shader writes it: the specular map's alpha times the transmission colour,
+    // times the environment's translucency scale; the specularity its green times the specular colour (none without a map)
+    float4 specMap = PlantMat.w > 0.5 && i.Kind < 2.5 ? PlantSpecular.Sample(Tiled, i.Uv) : float4(0, 0, 0, 1);
+    float translucent = leafy ? BillboardTint.w * (i.Kind < 2.5 ? specMap.a * PlantMat.y : 1) : 0;
+    // (the grass and the bushes its brushes grow take no specular at all: measured against REDkit, the sheen, even
+    // the grazing one, is what made them pale)
+    float specularity = i.Kind < 1.5 ? specMap.g * PlantMat.x : 0;
+    // the shininess over 128 goes where the game's lighting reads the roughness
+    float glossiness = PlantMat.w > 0.5 ? PlantMat.z : 0.234375;
+    float3 transl = 0;
     if (translucent > 0)
     {
         // the remaster's translucency (UseNewTranslucency, on by default): the light through the leaf, strongest looking
@@ -984,12 +1004,12 @@ float4 PlantPS(PlantOut i, bool front : SV_IsFrontFace) : SV_Target
     float ao = pow(AoAt(i.Position), grass ? WaterSettings.z : WaterSettings.w), directAo = lerp(1, ao, AoSettings.w);
     float f90 = i.Kind > 1.5 && i.Kind < 2.5 ? SpecularSettings.x : SpecularSettings.y;
     float3 sunLight = GlobalLightColour(i.World) * sun;
-    // the ambient round leaves and grass from the card's own facing upward, not the side seen from below
-    float3 an = grass ? ground : leafy ? normalize(float3(i.Normal.xy, abs(i.Normal.z) + 0.3)) : n;
+    // the ambient by the leaf's own facing (the side seen), grass's by the ground under it
+    float3 an = grass ? ground : n;
     // (the approximated model has the albedo in it already)
     float sky = CanopySky(i.World);
     float3 lit = (grass ? sunLight * diffuse * directAo : albedo * sunLight * diffuse * directAo) + albedo * AmbientAt(an, sun) * ao * sky * (grass ? CanopySettings.z : 1)
-        + sunLight * SpecularAt(specularNormal, V, L, 0.04, 0.6, f90) * SpecularSettings.z * directAo;
+        + (grass ? 0 : sunLight * SpecularAt(specularNormal, V, L, specularity, clamp(glossiness, 0.05, 1), f90) * SpecularSettings.z * directAo);
     return Screen(Fogged(lit, i.World), 1);
 }
 
@@ -999,11 +1019,80 @@ void PlantShadowPS(PlantOut i)
 }
 
 // ---- the ambient cube ----
-// The game lights with environment probes (cubemaps of the scene, made in the engine). Ours: the sky as it's seen
-// (its fog too) and the ground below the horizon, each direction's half of it averaged by the cosine, the sky scaled
-// and saturated by the remaster's IBL settings and kept under its brightest, the ground likewise.
+// The game lights with environment probes: cube maps of the scene round where each was taken, relit as the light
+// changes. Ours: each direction's half of the sphere averaged by the cosine, from the world's own cooked probe where
+// there is one (else our capture round the eye), the probes' sky (the environment's probe sky colours) wherever it
+// saw no scene; the scene by the IBL settings' ground brightness and saturation, plus the scene add.
+Texture2DArray ProbeColour : register(t25);
+Texture2DArray<float> ProbeDepth : register(t26);
+
+cbuffer ProbeFaces : register(b11)
+{
+    row_major float4x4 ProbeFace[7]; // the capture's six faces' views; the seventh's first row where it was taken (w 1 once it was)
+};
+
+// what the probe's capture saw along a direction: its colour, and whether anything was there (0 for the sky)
+float4 ProbeSeen(float3 dir)
+{
+    float3 a = abs(dir);
+    int f = a.x >= a.y && a.x >= a.z ? (dir.x >= 0 ? 0 : 1) : a.y >= a.z ? (dir.y >= 0 ? 2 : 3) : (dir.z >= 0 ? 4 : 5);
+    float4 clip = mul(float4(ProbeFace[6][0].xyz + dir, 1), ProbeFace[f]);
+    float2 uv = saturate(float2(clip.x / clip.w * 0.5 + 0.5, 0.5 - clip.y / clip.w * 0.5));
+    float depth = ProbeDepth.SampleLevel(Smooth, float3(uv, f), 0);
+    return float4(ProbeColour.SampleLevel(Smooth, float3(uv, f), 0).rgb, depth < 1 ? 1 : 0);
+}
+
+// the world's own environment probe, as cooking left it in the texture cache: six 128 x 128 faces of the scene round
+// where it was taken, its albedo (two-channel YCbCr, the rows taking turns at blue and red), normals, the sun's shadow
+// and depth (1 - 0.5 / the distance along the face's axis)
+Texture2DArray<float4> CookedAlbedo : register(t27);
+Texture2DArray<float4> CookedNormals : register(t28);
+Texture2DArray<float> CookedDepth : register(t29);
+
+cbuffer CookedProbe : register(b12)
+{
+    float4 CookedAt;    // where it was taken; w 1 when there's one
+    float4 CookedGen;   // its generation parameters' ambient colour times its ambient intensity; the intensity
+};
+
+// the face and texel a direction falls on, as the engine's probe unpacking finds them
+int3 CookedTexel(float3 d)
+{
+    float3 a = abs(d);
+    int face;
+    float2 uv;
+    if (a.x > max(a.y, a.z)) { face = d.x < 0 ? 0 : 1; uv = float2(d.x < 0 ? d.z / a.x * 0.5 + 0.5 : 0.5 - d.z / a.x * 0.5, d.y / a.x * 0.5 + 0.5); }
+    else if (a.y >= max(a.x, a.z)) { face = d.y > 0 ? 3 : 2; uv = float2(0.5 - d.x / a.y * 0.5, d.y > 0 ? d.z / a.y * 0.5 + 0.5 : 0.5 - d.z / a.y * 0.5); }
+    else { face = d.z > 0 ? 5 : 4; uv = float2(d.z > 0 ? d.x / a.z * 0.5 + 0.5 : 0.5 - d.x / a.z * 0.5, d.y / a.z * 0.5 + 0.5); }
+    return int3(clamp((int2)(uv * 128), 0, 127), face);
+}
+
+// what the world's probe saw along a direction, lit for now: the scene's albedo (decoded as the engine does, then
+// linear) under the sun where it reaches that point and the ambient, as the probes' relighting does; w 0 for the sky
+float4 CookedSeen(float3 dir)
+{
+    int3 t = CookedTexel(dir);
+    float depth = CookedDepth.Load(int4(t, 0));
+    if (depth >= 1) return 0;
+    float4 here = CookedAlbedo.Load(int4(t, 0));
+    // the chroma: blue on even rows, red on odd, each texel taking the other from its neighbour
+    float other = CookedAlbedo.Load(int4(t.x, (t.y & 1) == 0 ? t.y + 1 : t.y - 1, t.z, 0)).y;
+    float cb = (t.y & 1) == 0 ? here.y : other, cr = (t.y & 1) == 0 ? other : here.y;
+    float3 albedo = saturate(float3(here.x + 1.402 * (cr - 0.5), here.x - 0.344 * (cb - 0.5) - 0.714 * (cr - 0.5), here.x + 1.772 * (cb - 0.5)));
+    albedo = pow(albedo, 2.2);
+    float3 n = normalize(CookedNormals.Load(int4(t, 0)).xyz * 2 - 1);
+    float3 a = abs(dir);
+    float3 world = CookedAt.xyz + dir / max(a.x, max(a.y, a.z)) * (0.5 / max(1 - depth, 1e-5));
+    float sun = SunSeen(world);
+    float3 lit = albedo * (GlobalLightColour(world) * saturate(dot(n, Light.xyz)) * sun / 3.14159265
+        + AmbientAt(n, sun) * CookedGen.rgb);
+    return float4(lit, 1);
+}
+
 float4 AmbientPS(float4 position : SV_Position) : SV_Target
 {
+    bool cooked = CookedAt.w > 0.5;
+    bool captured = !cooked && ProbeFace[6][0].w > 0.5;
     int face = (int)position.x;
     float3 axis = face == 0 ? float3(1, 0, 0) : face == 1 ? float3(-1, 0, 0) : face == 2 ? float3(0, 1, 0)
         : face == 3 ? float3(0, -1, 0) : face == 4 ? float3(0, 0, 1) : float3(0, 0, -1);
@@ -1013,15 +1102,22 @@ float4 AmbientPS(float4 position : SV_Position) : SV_Target
     float3 ground = 0.18 * (LightColour.rgb * saturate(Light.z) / 3.14159265) * SkyIbl.z;
     float3 sum = 0;
     float weights = 0;
-    [loop] for (int a = 0; a < 8; a++)
-        [loop] for (int b = 0; b < 8; b++)
+    [loop] for (int a = 0; a < 16; a++)
+        [loop] for (int b = 0; b < 16; b++)
         {
             // a cosine-weighted spread of directions round the axis
-            float u = (a + 0.5) / 8, v = (b + 0.5) / 8;
+            float u = (a + 0.5) / 16, v = (b + 0.5) / 16;
             float r = sqrt(u), phi = v * 6.2831853;
             float3 dir = normalize(axis * sqrt(1 - u) + (across * cos(phi) + along * sin(phi)) * r);
             float3 c;
-            if (dir.z >= 0)
+            float4 seen = cooked ? CookedSeen(dir) : captured ? ProbeSeen(dir) : 0;
+            if (seen.a > 0.5)
+            {
+                // the scene the capture saw there (the ground, the trees), by the ground's brightness and saturation
+                float l = dot(seen.rgb, float3(0.2126, 0.7152, 0.0722));
+                c = lerp(l, seen.rgb, SkyIbl.w) * SkyIbl.z + SceneAdd.rgb;
+            }
+            else if (dir.z >= 0 || captured || cooked)
             {
                 // the probes see the sky at its own brightness, not the visible sky's extra scale
                 // the probes are made from the environment's own probe sky
@@ -1346,6 +1442,7 @@ float4 StripePS(StripeOut i) : SV_Target
     public void SetLighting(WorldLighting? lighting)
     {
         _lighting = lighting;
+        RefreshAmbient();
         Invalidate();
     }
 
@@ -1418,7 +1515,8 @@ float4 StripePS(StripeOut i) : SV_Target
                     if (u < -0.01f || v < -0.01f || u + v > 1.01f) continue;
                     float z = u * a.Z + v * b.Z + (1 - u - v) * c.Z;
                     int at = (side - 1 - y) * side + x;
-                    levels[at] = levels[at] == 0 ? z : MathF.Max(levels[at], z);
+                    // (never below the level already there: the global water at 0 stays under a river lower than it)
+                    levels[at] = MathF.Max(levels[at], z);
                 }
         }
         _waterLevel?.Dispose();
@@ -1541,7 +1639,7 @@ float4 StripePS(StripeOut i) : SV_Target
         _grading = new Buffer(Device, Utilities.SizeOf<Grading>(), ResourceUsage.Default, BindFlags.ConstantBuffer, CpuAccessFlags.None, ResourceOptionFlags.None, 0);
         _sky = new Buffer(Device, Utilities.SizeOf<Sky>(), ResourceUsage.Default, BindFlags.ConstantBuffer, CpuAccessFlags.None, ResourceOptionFlags.None, 0);
         _lightColour = new Buffer(Device, 48, ResourceUsage.Default, BindFlags.ConstantBuffer, CpuAccessFlags.None, ResourceOptionFlags.None, 0);
-        _foliage = new Buffer(Device, 16 * 28, ResourceUsage.Default, BindFlags.ConstantBuffer, CpuAccessFlags.None, ResourceOptionFlags.None, 0);
+        _foliage = new Buffer(Device, 16 * 29, ResourceUsage.Default, BindFlags.ConstantBuffer, CpuAccessFlags.None, ResourceOptionFlags.None, 0);
         _ambientCube = new Texture2D(Device, new Texture2DDescription
         {
             Width = 6, Height = 1, MipLevels = 1, ArraySize = 1, Format = DxgiFormat.R16G16B16A16_Float,
@@ -1680,12 +1778,13 @@ float4 StripePS(StripeOut i) : SV_Target
 
     /// <summary>
     /// The world's speedTreeParameters GrassAlbedoMultiplier (m_GrassAlbedoMultiplier): the cooked worlds keep it at its
-    /// default, which is in the engine's code, so it's set against REDkit's grass here.
+    /// default, which is in the engine's code; 1 matches REDkit's grass.
     /// </summary>
-    public float GrassAlbedoMultiplier { get; set; } = 0.65f;
+    public float GrassAlbedoMultiplier { get; set; } = 1;
 
-    /// <summary>How much more pigment grass takes low on the plant than at its top (set against REDkit's grass).</summary>
-    public float PigmentHeight { get; set; } = 0.2f;
+    /// <summary>How much more pigment grass takes low on the plant than at its top (1, the whole of the shader's height term, matches REDkit's grass).</summary>
+    public float PigmentHeight { get; set; } = 1;
+
 
 
 
@@ -1794,7 +1893,7 @@ float4 StripePS(StripeOut i) : SV_Target
         c.PixelShader.SetConstantBuffer(7, _lightColour);
         var foliage = (_lighting ?? Fallback).Foliage(_hour);
         var alpha = (_lighting ?? Fallback).AlphaScalars;
-        var foliageData = new Vector4[28];
+        var foliageData = new Vector4[29];
         for (int k = 0; k < 3; k++)
         {
             foliageData[k] = foliage.Trees[k];
@@ -1822,25 +1921,35 @@ float4 StripePS(StripeOut i) : SV_Target
         foliageData[23] = new Vector4(probes.F90Grass, probes.F90Trees, probes.TreeSpecular, PlantTest);
         foliageData[24] = new Vector4(probes.WaterFresnel, GlintScale, Gtao?.Z ?? 1, Gtao?.W ?? 1);
         foliageData[25] = TranslucencyCurve;
-        foliageData[26] = new Vector4(CanopyDensity, _canopy is null ? 0 : 1, foliage.GrassAmbient, GrassAlbedoMultiplier);
+        foliageData[26] = new Vector4(CanopyDensity, _canopy is null ? 0 : 1, foliage.GrassAmbient, 0);
+        foliageData[28] = new Vector4(GrassAlbedoMultiplier, 0, 0, 0);
         foliageData[27] = new Vector4(foliage.Pigment, PigmentHeight);
 
         c.UpdateSubresource(foliageData, _foliage);
         c.PixelShader.SetConstantBuffer(8, _foliage);
-        // the ambient cube for this light, before anything reads it
-        c.PixelShader.SetShaderResource(17, null);
-        c.OutputMerger.SetRenderTargets((DepthStencilView?)null, _ambientTarget);
-        c.Rasterizer.SetViewport(0, 0, 6, 1);
-        c.Rasterizer.State = _raster;
-        c.OutputMerger.SetDepthStencilState(_noDepth);
-        c.OutputMerger.SetBlendState(null);
-        c.InputAssembler.InputLayout = null;
-        c.InputAssembler.PrimitiveTopology = PrimitiveTopology.TriangleList;
-        c.VertexShader.Set(_skyVS);
-        c.PixelShader.Set(_ambientPS);
-        c.Draw(3, 0);
-        c.Rasterizer.SetViewport(0, 0, PixelWidth, PixelHeight);
-        c.OutputMerger.SetRenderTargets(DepthView, HdrView);
+        // the ambient cube for this light, before anything reads it: made again when the light or the eye has moved (it
+        // folds a probe of hundreds of samples a direction, too much for every frame)
+        if (AmbientDue(light.LightDirection))
+        {
+            c.PixelShader.SetShaderResource(17, null);
+            c.OutputMerger.SetRenderTargets((DepthStencilView?)null, _ambientTarget);
+            c.Rasterizer.SetViewport(0, 0, 6, 1);
+            c.Rasterizer.State = _raster;
+            c.OutputMerger.SetDepthStencilState(_noDepth);
+            c.OutputMerger.SetBlendState(null);
+            c.InputAssembler.InputLayout = null;
+            c.InputAssembler.PrimitiveTopology = PrimitiveTopology.TriangleList;
+            c.VertexShader.Set(_skyVS);
+            c.PixelShader.Set(_ambientPS);
+            EnsureProbe();
+            c.PixelShader.SetShaderResources(25, _probeColourView, _probeDepthView);
+            c.PixelShader.SetConstantBuffer(11, _probeFaces);
+            BindCookedProbe(c);
+            c.Draw(3, 0);
+            c.PixelShader.SetShaderResources(25, null, null);
+    c.Rasterizer.SetViewport(0, 0, PixelWidth, PixelHeight);
+            c.OutputMerger.SetRenderTargets(DepthView, HdrView);
+        }
         c.PixelShader.SetShaderResource(17, _ambientView);
         // the terrain's shadows for where the light is now, made again only when it has moved
         if (_shadowTarget is not null && (!_shadowMade || Vector3.DistanceSquared(_shadowFor, light.LightDirection) > 1e-8f))
@@ -1873,6 +1982,8 @@ float4 StripePS(StripeOut i) : SV_Target
         c.PixelShader.SetShaderResource(20, _canopy);
         c.PixelShader.SetSamplers(0, _sampler, _tiled);
         c.Rasterizer.State = _raster;
+        // what's round the eye, for the next ambient
+        CaptureProbe(frame, terrain, spacing);
 
         // the sky behind everything
         c.OutputMerger.SetDepthStencilState(_noDepth);
@@ -2173,6 +2284,7 @@ float4 StripePS(StripeOut i) : SV_Target
         DisposeMeshDevice();
         DisposeStripeDevice();
         DisposeEnvironment();
+        DisposeProbe();
         foreach (var d in new IDisposable?[] { _aoPS, _ao, _aoTarget, _aoView, _foliage, _ambientCube, _ambientTarget, _ambientView, _ambientPS, _lightColour, _shadowPS, _shadow, _shadowTarget, _shadowTexture, _sky, _grading, _postPS, _balanceA, _balanceB, _waves, _foam, _textureSettings, _skyVS, _skyPS, _waterVS, _waterPS, _waterBlend, _noDepth, _depthTestOnly, _waterLevel, _patches, _heightMap, _colourMap, _controlMap, _diffuse, _normals, _tiled, _depthState, _raster, _sampler, _frame, _layout, _ps, _vs })
             d?.Dispose();
         base.Dispose();

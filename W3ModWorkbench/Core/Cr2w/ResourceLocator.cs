@@ -196,6 +196,20 @@ public sealed class ResourceLocator
         return null;
     }
 
+    /// <summary>A texture the cache keeps under a hash rather than a path of its own (an environment probe's cube maps, by
+    /// its component's textureCacheHashes). Null when no cache has it.</summary>
+    public TextureEntry? FindTexture(uint hash)
+    {
+        foreach (var cache in Caches())
+        {
+            var index = HashIndex.GetValue(cache, c => c.Entries.OfType<TextureEntry>().GroupBy(e => e.Hash).ToDictionary(g => g.Key, g => g.First()));
+            if (index.GetValueOrDefault(hash) is { } entry) return entry;
+        }
+        return null;
+    }
+
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<TextureCacheArchive, Dictionary<uint, TextureEntry>> HashIndex = [];
+
     private IEnumerable<TextureCacheArchive> Caches()
     {
         foreach (var cache in _open.OfType<TextureCacheArchive>()) yield return cache;

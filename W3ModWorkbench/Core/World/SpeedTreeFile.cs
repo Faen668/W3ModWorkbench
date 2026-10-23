@@ -13,6 +13,23 @@ namespace W3ModWorkbench.Core.World;
 public sealed record SpeedTreeMaterial(IReadOnlyList<string> Textures, string Description, bool Branches, bool Fronds, bool Leaves,
     bool FacingLeaves, bool RigidMeshes, bool Grass)
 {
+    /// <summary>The render state's bytes from 64 to 224 (its lighting settings), as stored.</summary>
+    public byte[] Lighting { get; init; } = [];
+
+    /// <summary>The specular map (green its specularity, alpha its translucency), or "".</summary>
+    public string Specular => Textures.Count > 4 ? Textures[4] : "";
+
+    private float At(int offset) => Lighting.Length >= offset - 64 + 4 ? BitConverter.ToSingle(Lighting, offset - 64) : 0;
+
+    /// <summary>The render state's shininess (its glossiness as the game's shader takes it, over 128).</summary>
+    public float Shininess => At(120);
+
+    /// <summary>The render state's specular colour.</summary>
+    public System.Numerics.Vector3 SpecularColour => new(At(124), At(128), At(132));
+
+    /// <summary>The render state's transmission (translucency) colour.</summary>
+    public System.Numerics.Vector3 TransmissionColour => new(At(140), At(144), At(148));
+
     /// <summary>The colour picture (with the leaves' cutout in its alpha), or "" for none.</summary>
     public string Diffuse => Textures[0];
 
@@ -235,7 +252,7 @@ public sealed class SpeedTreeFile
                     layout.Set(data[e + 2 + c], data[e + 6 + c], format, data[e + 10 + c]);
         }
         var material = new SpeedTreeMaterial(textures, name(BitConverter.ToInt32(data, at + 704)), data[at + 224] != 0, data[at + 225] != 0,
-            data[at + 226] != 0, data[at + 227] != 0, data[at + 228] != 0, data[at + 180] != 0);
+            data[at + 226] != 0, data[at + 227] != 0, data[at + 228] != 0, data[at + 180] != 0) { Lighting = data.AsSpan(at + 64, 160).ToArray() };
         return (material, layout);
     }
 
