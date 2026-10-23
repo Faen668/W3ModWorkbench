@@ -29,3 +29,10 @@ W3 Mod Workbench is an unofficial fan-made tool, not affiliated with, endorsed b
 - **ww2ogg**, **NVorbis** and **vgmstream**: playing the game's sounds.
 
 Their licences are in `THIRD-PARTY-NOTICES.md` beside the app, and under the **ⓘ** button. Everything else (the bundle, cache and script readers and writers, the decompiler, the viewers) is written for this app, checked against the game's and REDkit's own files. Nothing of REDkit's is shipped with it.
+
+## Works alongside
+
+Some jobs already have a good tool of their own, made by people in the community, so the app points to it rather than doing that job itself:
+
+- **[Script Merger Remastered](https://www.nexusmods.com/witcher3/mods/13076)** by relapse12: merging mods that change the same scripts or files. The load order analyser opens it (set its path in **Settings > Game**).
+- **[RedSpeech Tool](https://www.nexusmods.com/witcher3/mods/14750)** by nikich340: making voice lines (packing speech files, WAV to WEM, lip sync). Build puts the speech files it makes in your mod.

@@ -16,7 +16,8 @@ public sealed record PackResult(IReadOnlyList<string> Made, IReadOnlyList<string
 /// <c>.tga</c>, <c>.bmp</c>, or a <c>.png</c>/<c>.jpg</c> standing in for a texture the workspace or the game has) made
 /// into the <c>.xbm</c> of its name; their mip levels go in <c>texture.cache</c> (<see cref="TextureCooker"/>);</item>
 /// <item>sounds (<c>.wem</c>, <c>.bnk</c>) go in <c>soundspc.cache</c>, where the game looks for them;</item>
-/// <item>caches made some other way (a <c>collision.cache</c>, say) at the top of the workspace go in as they are.</item>
+/// <item>caches made some other way (a <c>collision.cache</c>, say) and speech files (<c>enpc.w3speech</c>, made with
+/// RedSpeech Tool) at the top of the workspace go in as they are; loose voice lines (<c>speech\…\.wem</c>) are left out.</item>
 /// </list>
 /// A cooked file (one copied from the game) goes in as it is.
 /// </summary>
@@ -36,13 +37,17 @@ public static class ModPacker
         Func<string, TextureLevels?>? gameTexture = null, Func<string, bool>? include = null, IReadOnlyList<(string File, string GamePath)>? extra = null)
     {
         string root = Path.GetFullPath(workspace);
+        // speech files (<language>pc.w3speech, made with RedSpeech Tool) at the workspace's top go in as they are, as caches do
+        bool TopSpeech(FileInfo f) => f.Extension.Equals(".w3speech", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(f.DirectoryName, root.TrimEnd(Path.DirectorySeparatorChar), StringComparison.OrdinalIgnoreCase);
         var all = new DirectoryInfo(root).EnumerateFiles("*", SearchOption.AllDirectories)
-            .Where(f => BundleWriter.Packs(f.Name, f.Length))
+            .Where(f => BundleWriter.Packs(f.Name, f.Length) && !TopSpeech(f))
             .Select(f => new BundleWriter.Source(f.FullName, BundleWriter.GamePath(Path.GetRelativePath(root, f.FullName)), f.Length))
             .Where(s => include?.Invoke(s.GamePath) ?? true)
             .Concat((extra ?? []).Select(e => new BundleWriter.Source(e.File, e.GamePath, new FileInfo(e.File).Length)))
             .ToList();
-        var caches = new DirectoryInfo(root).GetFiles("*.cache").Where(c => include?.Invoke(c.Name) ?? true).ToArray();
+        var caches = new DirectoryInfo(root).GetFiles("*.cache").Concat(new DirectoryInfo(root).GetFiles("*.w3speech"))
+            .Where(c => include?.Invoke(c.Name) ?? true).ToArray();
         if (all.Count == 0 && caches.Length == 0) return null;
 
         var made = new List<string>();
@@ -56,6 +61,12 @@ public static class ModPacker
         foreach (var file in BundleWriter.InFolderOrder(all))
         {
             string ext = Path.GetExtension(file.GamePath);
+            if (file.GamePath.StartsWith(@"speech\", StringComparison.OrdinalIgnoreCase) && ext.Equals(".wem", StringComparison.OrdinalIgnoreCase))
+            {
+                // a voice line: the game reads them only from a .w3speech file, which this tool doesn't make
+                notes.Add(L.T("ModPacker.VoiceLineLeftOut", file.GamePath));
+                continue;
+            }
             if (SoundCacheWriter.IsSound(file.GamePath)) { sounds.Add(file); continue; }
             if (ext.Equals(".dds", StringComparison.OrdinalIgnoreCase) || Pictures.Extensions.Contains(ext))
             {
