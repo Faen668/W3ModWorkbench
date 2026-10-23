@@ -327,6 +327,7 @@ cbuffer Plants : register(b4)
 };
 
 Texture2D PlantPicture : register(t14);
+Texture2D PlantNormals : register(t19);
 Texture2D<float> PlantShadowMap : register(t15);
 SamplerComparisonState ShadowCompare : register(s2);
 
@@ -471,6 +472,9 @@ float4 TriplanarNormal(float3 world, float scale, float slice, float3 weights, f
 float4 TerrainPS(Out i) : SV_Target
 {
     float roughness = 0.8;
+    // the material settings (the clip map's textureParams' second half: specularity, its base, its scale by
+    // smoothness, the falloff), the horizontal textures' and the vertical ones'
+    float4 material = float4(0.45, 0.5, 0, 0);
     float texel = 1 / Ground.w;
     float hw = HeightMap.Sample(Smooth, i.Uv - float2(texel, 0)).r, he = HeightMap.Sample(Smooth, i.Uv + float2(texel, 0)).r;
     float hn = HeightMap.Sample(Smooth, i.Uv - float2(0, texel)).r, hs = HeightMap.Sample(Smooth, i.Uv + float2(0, texel)).r;
@@ -493,6 +497,7 @@ float4 TerrainPS(Out i) : SV_Target
         float3 tangent = normalize(float3(1, 0, 0) - normal * normal.x), binormal = cross(normal, tangent);
         float4 horizontal = 0, vertical = 0, horizontalN = 0, verticalN = 0;
         float threshold = 0, sharpness = 0, damp = 0, normalDamp = 0;
+        float4 horizontalM = 0, verticalM = 0;
         [unroll] for (int k = 0; k < 4; k++)
         {
             int2 o = int2(k & 1, k >> 1);
@@ -504,6 +509,8 @@ float4 TerrainPS(Out i) : SV_Target
             sharpness += Slot[min(back, 31) * 2].x * w;
             damp += Slot[min(over, 31) * 2].y * w;
             normalDamp += Slot[min(over, 31) * 2].z * w;
+            horizontalM += Slot[min(back, 31) * 2 + 1] * w;
+            verticalM += Slot[min(over, 31) * 2 + 1] * w;
             float2 flat = i.World.xy * 0.333;
             horizontal += Diffuse.Sample(Tiled, float3(flat, back)) * w;
             horizontalN += Normals.Sample(Tiled, float3(flat, back)) * w;
@@ -525,16 +532,23 @@ float4 TerrainPS(Out i) : SV_Target
         colour = tint < 0.5 ? 2 * painted * tint : 1 - 2 * (1 - painted) * (1 - tint);
         normal = normalize(lerp(both, combinedVertical, amount));
         roughness = lerp(horizontalN.a, verticalN.a, amount);
+        material = lerp(horizontalM, verticalM, amount);
     }
+    float3 v = normalize(Eye.xyz - i.World);
+    // the world's terrain material graph (levels\prolog_village	errain_material.w2mg, as REDkit has it): the
+    // diffuse brightened at grazing angles by the falloff (its Fresnel block at power 16), and the specularity the
+    // texture's own (gamma) times its smoothness by the scale plus three times the base past a half
+    colour += saturate(pow(1 - saturate(dot(normal, v)), 16)) * material.w;
+    float specularity = saturate(pow(saturate(material.x), 2.2) * ((1 - roughness) * material.z + (material.y - 0.5) * 3));
     float3 albedo = pow(saturate(colour), 2.2);
     float sun = SunSeen(i.World), ao = AoAt(i.Position);
-    float3 v = normalize(Eye.xyz - i.World), sunLight = GlobalLightColour(i.World) * sun;
+    float3 sunLight = GlobalLightColour(i.World) * sun;
     // the engine's lighting: Lambert over pi and GGX specular from the sun, dimmed by the AO's share for direct light;
     // the probes' ambient and reflection, dimmed by the AO
     float direct = lerp(1, ao, AoSettings.w);
     float3 lit = albedo * (sunLight * saturate(dot(normal, Light.xyz)) / 3.14159265 * direct + AmbientAt(normal, sun) * ao)
-        + sunLight * SpecularAt(normal, v, Light.xyz, 0.04, clamp(roughness, 0.05, 1), 1) * direct
-        + ReflectionAt(normal, v, 0.04, clamp(roughness, 0.05, 1), sun) * ao;
+        + sunLight * SpecularAt(normal, v, Light.xyz, specularity, clamp(roughness, 0.05, 1), 1) * direct
+        + ReflectionAt(normal, v, specularity, clamp(roughness, 0.05, 1), sun) * ao;
     return Screen(Fogged(lit, i.World), 1);
 }
 
@@ -779,7 +793,7 @@ struct PlantIn
 struct PlantOut
 {
     float4 Position : SV_Position; float3 World : TEXCOORD0; float2 Uv : TEXCOORD1; float3 Normal : TEXCOORD2; float Occlusion : TEXCOORD3;
-    float Kind : TEXCOORD4; float3 Weights : TEXCOORD5;
+    float Kind : TEXCOORD4; float3 Weights : TEXCOORD5; float3 Across : TEXCOORD6; float3 Upward : TEXCOORD7;
 };
 
 float3 Turned(float3 p, float2 turn) { return float3(turn.x * p.x - turn.y * p.y, turn.y * p.x + turn.x * p.y, p.z); }
@@ -802,6 +816,8 @@ PlantOut PlantAt(PlantIn v, row_major float4x4 projection)
     o.Occlusion = v.Corner.w;
     o.Kind = v.Kind;
     o.Weights = RandomWeights(v.Turn);
+    o.Across = 0;
+    o.Upward = 0;
     return o;
 }
 
@@ -830,6 +846,11 @@ PlantOut BillboardAt(BillboardIn v, float3 eye, row_major float4x4 projection)
     o.Occlusion = 1;
     o.Kind = 3;
     o.Weights = RandomWeights(v.Turn);
+    // the world's ways along the atlas picture (its width, and up the picture), for the views' normal map; a turned
+    // view runs the plant's height along the width
+    float3 up = float3(0, 0, 1), across = float3(side, 0);
+    o.Across = at.z < 0 ? -up : across * sign(at.z);
+    o.Upward = at.z < 0 ? across * -sign(at.w) : up * -sign(at.w);
     return o;
 }
 
@@ -847,7 +868,7 @@ float3 RandomColour(float3 gamma, float kind, float3 w)
     float4 c1 = k == 2 ? GrassRandom[1] : k == 1 ? BranchRandom[1] : TreeRandom[1];
     float4 c2 = k == 2 ? GrassRandom[2] : k == 1 ? BranchRandom[2] : TreeRandom[2];
     float4 merged = w.x * c0 + w.y * c1 + w.z * c2;
-    if (SpecularSettings.w > 0.5) merged = float4(1, 1, 1, 1);
+    if (abs(SpecularSettings.w - 1) < 0.5) merged = float4(1, 1, 1, 1);
     float lum = dot(RandomLuminance[k].rgb, gamma);
     float3 lin = pow(max(0, gamma), 2.2);
     return max(0, lum + (lin - lum) * merged.w) * merged.rgb;
@@ -858,6 +879,18 @@ float4 PlantPS(PlantOut i, bool front : SV_IsFrontFace) : SV_Target
     float4 c = PlantPicture.Sample(Tiled, i.Uv);
     clip(c.a * PlantAlphaScalar(i.Kind) - 0.1);
     float3 n = normalize(front ? i.Normal : -i.Normal);
+    bool billboard = i.Kind > 2.5;
+    if (billboard)
+    {
+        // the side views' own normal map, in the picture's ways and towards the camera
+        float3 m = PlantNormals.Sample(Tiled, i.Uv).xyz;
+        if (dot(m, m) > 0.01)
+        {
+            m = m * 2 - 1;
+            float3 facing = normalize(float3(normalize(Eye.xy - i.World.xy + float2(1e-5, 0)), 0));
+            n = normalize(m.x * i.Across + m.y * i.Upward + m.z * facing);
+        }
+    }
     float3 albedo = RandomColour(saturate(c.rgb), i.Kind, i.Weights) * PlantTint.rgb * (i.Kind > 2.5 ? BillboardTint.rgb : 1);
     albedo *= saturate(PlantTint.w * (i.Occlusion - 1) + 1);
     float3 V = normalize(Eye.xyz - i.World), L = Light.xyz;
@@ -865,8 +898,10 @@ float4 PlantPS(PlantOut i, bool front : SV_IsFrontFace) : SV_Target
     // the engine's diffuse: Lambert over pi; for leaves and grass its translucency: towards a flat brightness, and the
     // light through the leaf from behind
     bool leafy = !(i.Kind > 0.5 && i.Kind < 1.5);
-    // bark is lit as anything else; leaves and grass (thin cards) by the engine's foliage model: the light on either side
-    float3 diffuse = (leafy ? abs(dot(n, L)) : saturate(dot(n, L))) / 3.14159265;
+    // bark is lit as anything else, grass (thin cards) by the light on either side
+    // (a tree's leaf cards keep their own facing: a canopy's side away from the sun is lit only through the leaves)
+    bool grass = i.Kind > 1.5 && i.Kind < 2.5;
+    float3 diffuse = (grass || (leafy && !billboard && SpecularSettings.w > 1.5) ? abs(dot(n, L)) : saturate(dot(n, L))) / 3.14159265;
     float translucent = leafy ? BillboardTint.w : 0;
     if (translucent > 0)
     {

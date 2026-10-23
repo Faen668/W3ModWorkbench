@@ -56,6 +56,7 @@ public sealed partial class WorldView3D
         public required PlantKind3D Kind { get; init; }
         public required PlantLod[] Lods { get; init; }
         public ShaderResourceView? Billboard { get; init; }
+        public ShaderResourceView? BillboardNormals { get; init; }
         public Vector4[] Views { get; init; } = [];
     }
 
@@ -192,6 +193,7 @@ public sealed partial class WorldView3D
             {
                 Kind = kind, Lods = lods.ToArray(),
                 Billboard = kind.Tree.BillboardMaterial is { } b ? Picture(b.Diffuse) : null,
+                BillboardNormals = kind.Tree.BillboardMaterial is { Normal.Length: > 0 } bn ? Picture(bn.Normal) : null,
                 Views = kind.Tree.Billboards.Take(32).Select(v => v.TexCoords).ToArray(),
             });
             foreach (var plant in kind.Instances)
@@ -459,11 +461,13 @@ public sealed partial class WorldView3D
                     new VertexBufferBinding(_plantPlaces, Utilities.SizeOf<PlantPlace>(), 0));
                 c.InputAssembler.SetIndexBuffer(_billboardIndices, DxgiFormat.R16_UInt, 0);
                 c.PixelShader.SetShaderResource(14, atlas);
+                c.PixelShader.SetShaderResource(19, kind.BillboardNormals);
                 c.DrawIndexedInstanced(6, far.Count, 0, 0, starts[k][kind.Lods.Length]);
                 drawn += far.Count;
             }
         }
         c.PixelShader.SetShaderResource(14, null);
+        c.PixelShader.SetShaderResource(19, null);
         return drawn;
     }
 
