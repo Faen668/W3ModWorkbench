@@ -760,7 +760,10 @@ public partial class WorldWindow : Window, IMessageHost
 
     /// <summary>The water shapes the layers read so far have, for the 3D view: each sets the water's level inside it.</summary>
     private void SetWater3D() => View3D.SetWater(_dots.Values.SelectMany(d => d).SelectMany(d => d.Entity.Components)
-        .Where(c => c is { ClassName: "CWaterComponent", Outline: { Count: >= 3 } }).Select(c => (c.Outline!, c.Height)));
+        .Where(c => c is { ClassName: "CWaterComponent", Outline: { Count: >= 3 } }).Select(c => (c.Outline!, c.Height)), _waterSurfaces);
+
+    // the water meshes' triangles in the world (rivers drawn with the game's water shaders), for the water's level
+    private List<(Vector3 A, Vector3 B, Vector3 C)> _waterSurfaces = [];
 
     // whether every layer's been read; whether the 3D view's meshes wait for that
     private bool _layersRead, _meshesWaiting;
@@ -790,8 +793,8 @@ public partial class WorldWindow : Window, IMessageHost
         // stand-in for far off (an entity proxy) then left out
         var fromTemplates = await Task.Run(() =>
         {
-            var byTemplate = new Dictionary<string, List<(string Mesh, Matrix4x4 Placed, bool Shadow)>?>(StringComparer.OrdinalIgnoreCase);
-            var found = new List<(string Mesh, Matrix4x4 Place, float AutoHide, bool Shadow)>();
+            var byTemplate = new Dictionary<string, List<(string Mesh, Matrix4x4 Placed, bool Shadow, (ColorShift?, ColorShift?)? Coloring)>?>(StringComparer.OrdinalIgnoreCase);
+            var found = new List<(string Mesh, Matrix4x4 Place, float AutoHide, bool Shadow, (ColorShift?, ColorShift?)? Coloring)>();
             var replaced = new HashSet<LayerEntity>();
             foreach (var entity in entities)
             {
@@ -804,9 +807,12 @@ public partial class WorldWindow : Window, IMessageHost
                         if (locator.ReadFile(template) is { } data)
                         {
                             var file = Core.Entities.EntityFile.Read(data);
+                            file.FindOrigins(locator.ReadFile);
+                            // each mesh with the colour entry its appearance gives its component, as the game dyes it
                             meshes = [.. Core.Entities.EntityFile.MeshesOf(file.Look(file.DefaultAppearance, locator.ReadFile))
                                 .Select(m => (m.Mesh, m.Placed, m.Component, Drawn: LayerComponent.Drawable(m.Component.Object["drawableFlags"]?.ToString())))
-                                .Where(m => !m.Component.Skinned && m.Drawn.Visible).Select(m => (m.Mesh, m.Placed, m.Drawn.CastsShadow))];
+                                .Where(m => !m.Component.Skinned && m.Drawn.Visible)
+                                .Select(m => (m.Mesh, m.Placed, m.Drawn.CastsShadow, LookTextures.Coloring(file, file.DefaultAppearance?.Name, m.Component.Name)))];
                         }
                     }
                     catch (Exception ex) when (ex is IOException or InvalidDataException) { }
@@ -814,13 +820,13 @@ public partial class WorldWindow : Window, IMessageHost
                 }
                 if (meshes is not { Count: > 0 }) continue;
                 var place = entity.Object["transform"] is byte[] raw ? Core.Entities.EntityFile.Transform(raw) : Matrix4x4.CreateTranslation(entity.Position);
-                foreach (var (mesh, placed, shadow) in meshes) found.Add((mesh, placed * place, 0, shadow));
+                foreach (var (mesh, placed, shadow, coloring) in meshes) found.Add((mesh, placed * place, 0, shadow, coloring));
                 replaced.Add(entity);
             }
             return (found, replaced);
         });
         var fromEntities = entities.SelectMany(e => e.Components.Where(c => IsMesh(c) && !(fromTemplates.replaced.Contains(e) && IsProxy(c.Resource!)))
-                .Select(c => (Mesh: c.Resource!, c.Place, c.AutoHide, Shadow: LayerComponent.Drawable(c.DrawableFlags).CastsShadow))).ToList();
+                .Select(c => (Mesh: c.Resource!, c.Place, c.AutoHide, Shadow: LayerComponent.Drawable(c.DrawableFlags).CastsShadow, Coloring: ((ColorShift?, ColorShift?)?)null))).ToList();
         // the layers' sector data: most of a cooked world's buildings, walls and props, named by their paths' hashes;
         // those an entity also draws where it stands left to the entity
         var sectors = _sectors.Values.SelectMany(s => s).Where(o => o.Kind is SectorObjectKind.Mesh or SectorObjectKind.RigidBody && o.Visible && o.Resource != 0).ToList();
@@ -834,7 +840,7 @@ public partial class WorldWindow : Window, IMessageHost
             var already = fromEntities.Select(e => (e.Mesh.ToLowerInvariant(), Round(e.Place.Translation))).ToHashSet();
             static (int, int, int) Round(Vector3 v) => ((int)MathF.Round(v.X * 20), (int)MathF.Round(v.Y * 20), (int)MathF.Round(v.Z * 20));
             return sectors.Where(o => paths.ContainsKey(o.Resource) && !already.Contains((paths[o.Resource].ToLowerInvariant(), Round(o.Place.Translation))))
-                .Select(o => (Mesh: paths[o.Resource], o.Place, AutoHide: 0f, Shadow: o.CastsShadow)).ToList();
+                .Select(o => (Mesh: paths[o.Resource], o.Place, AutoHide: 0f, Shadow: o.CastsShadow, Coloring: ((ColorShift?, ColorShift?)?)null)).ToList();
         });
         var placed = fromEntities.Concat(fromSectors)
             .Concat(fromTemplates.found)
@@ -848,6 +854,7 @@ public partial class WorldWindow : Window, IMessageHost
         Task<System.Windows.Media.Imaging.BitmapSource?> Texture(string path) =>
             textures.GetOrAdd(path, p => Task.Run(() => MeshTextures.LoadWithAlpha(locator, p, 512)));
         var kinds = new System.Collections.Concurrent.ConcurrentBag<MeshKind3D>();
+        var waterSurfaces = new List<(Vector3, Vector3, Vector3)>();
         await Parallel.ForEachAsync(placed, new ParallelOptions { MaxDegreeOfParallelism = Math.Clamp(Environment.ProcessorCount - 1, 2, 8) }, async (group, token) =>
         {
             string path = group.First().Mesh;
@@ -866,10 +873,25 @@ public partial class WorldWindow : Window, IMessageHost
                         // the merged shadow meshes only cast the sun's shadow
                         string shader = Core.Meshes.MeshMaterial.Resolve(mesh.File, mesh.Materials[m], locator.ReadFile).Shader.ToLowerInvariant();
                         // effect surfaces aren't drawn as solid ones: glowing planes, burnt patches, cobwebs, water and waterfalls
-                        if (shader is "volume" or "glow_plane_shader" or "web" || shader.StartsWith("transparent") || shader.StartsWith("m_")
-                            || shader.StartsWith("water_")) { materials.Add((null, null, MeshUse.Hidden)); continue; }
+                        if (shader.StartsWith("water_"))
+                        {
+                            // a river's surface: the water drawn over it at its height, as the water shapes are
+                            var triangles = new List<(Vector3, Vector3, Vector3)>();
+                            foreach (var chunk in mesh.Chunks.Where(c => c.Material == m && c.InLod(0) && c.RenderMask != 0))
+                                foreach (var place in group.Select(c => c.Place))
+                                    for (int t = 0; t + 2 < chunk.Indices.Length; t += 3)
+                                        triangles.Add((Vector3.Transform(chunk.Positions[chunk.Indices[t]], place), Vector3.Transform(chunk.Positions[chunk.Indices[t + 1]], place),
+                                            Vector3.Transform(chunk.Positions[chunk.Indices[t + 2]], place)));
+                            lock (waterSurfaces) waterSurfaces.AddRange(triangles);
+                            materials.Add((null, null, MeshUse.Hidden));
+                            continue;
+                        }
+                        if (shader is "volume" or "glow_plane_shader" or "web" || shader.StartsWith("transparent") || shader.StartsWith("m_"))
+                        { materials.Add((null, null, MeshUse.Hidden)); continue; }
                         if (shader is "mergedmesh") { materials.Add((null, null, MeshUse.ShadowOnly)); continue; }
-                        var (picture, look, leaveOut) = await LookTextures.ForMaterial(mesh, m, locator, Texture);
+                        // dyed as its entity's colour entry says, or else undyed (the dyeable parts' raw red and blue are a mask, not a colour)
+                        var coloring = group.Select(c => c.Coloring).FirstOrDefault(c => c is not null) ?? (StageTextures.Undyed, StageTextures.Undyed);
+                        var (picture, look, leaveOut) = await LookTextures.ForMaterial(mesh, m, locator, Texture, coloring);
                         if (picture is null && !leaveOut)
                         {
                             // a material whose colour isn't a plain Diffuse (pbr_vert_blend's DiffuseArray, for one): its first
@@ -915,6 +937,11 @@ public partial class WorldWindow : Window, IMessageHost
         MapProgress.Visibility = Visibility.Collapsed;
         View3D.SetMeshes([.. kinds.OrderBy(k => k.Path, StringComparer.OrdinalIgnoreCase)]);
         View3D.SetStripes(stripes);
+        if (waterSurfaces.Count > 0)
+        {
+            _waterSurfaces = waterSurfaces;
+            SetWater3D();
+        }
     }
 
     /// <summary>

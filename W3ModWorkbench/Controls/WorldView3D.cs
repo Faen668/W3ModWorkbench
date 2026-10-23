@@ -1381,7 +1381,7 @@ float4 StripePS(StripeOut i) : SV_Target
     /// The water: a level over the whole terrain, the engine's 0 except inside each water shape (a CWaterComponent's
     /// outline, at its height), kept as a texture the water's grid reads its height from.
     /// </summary>
-    public void SetWater(IEnumerable<(IReadOnlyList<Vector2> Outline, float Level)> shapes)
+    public void SetWater(IEnumerable<(IReadOnlyList<Vector2> Outline, float Level)> shapes, IReadOnlyList<(Vector3 A, Vector3 B, Vector3 C)>? surfaces = null)
     {
         if (_terrain is not { } terrain) return;
         EnsureDevice();
@@ -1399,6 +1399,27 @@ float4 StripePS(StripeOut i) : SV_Target
                     if (Inside(outline, new Vector2(terrain.Corner.X + (x + 0.5f) * cell, terrain.Corner.Y + (y + 0.5f) * cell)))
                         // rows from the north, as the terrain's textures
                         levels[(side - 1 - y) * side + x] = level;
+        }
+        // water meshes (a river's surface, drawn with the game's water shaders): their triangles' heights, the highest
+        // where they overlap
+        foreach (var (a, b, c) in surfaces ?? [])
+        {
+            float minX = MathF.Min(a.X, MathF.Min(b.X, c.X)), maxX = MathF.Max(a.X, MathF.Max(b.X, c.X));
+            float minY = MathF.Min(a.Y, MathF.Min(b.Y, c.Y)), maxY = MathF.Max(a.Y, MathF.Max(b.Y, c.Y));
+            int x0 = Math.Max(0, (int)((minX - terrain.Corner.X) / cell)), x1 = Math.Min(side - 1, (int)((maxX - terrain.Corner.X) / cell));
+            int y0 = Math.Max(0, (int)((minY - terrain.Corner.Y) / cell)), y1 = Math.Min(side - 1, (int)((maxY - terrain.Corner.Y) / cell));
+            float d = (b.Y - c.Y) * (a.X - c.X) + (c.X - b.X) * (a.Y - c.Y);
+            if (MathF.Abs(d) < 1e-6f) continue;
+            for (int y = y0; y <= y1; y++)
+                for (int x = x0; x <= x1; x++)
+                {
+                    float px = terrain.Corner.X + (x + 0.5f) * cell, py = terrain.Corner.Y + (y + 0.5f) * cell;
+                    float u = ((b.Y - c.Y) * (px - c.X) + (c.X - b.X) * (py - c.Y)) / d, v = ((c.Y - a.Y) * (px - c.X) + (a.X - c.X) * (py - c.Y)) / d;
+                    if (u < -0.01f || v < -0.01f || u + v > 1.01f) continue;
+                    float z = u * a.Z + v * b.Z + (1 - u - v) * c.Z;
+                    int at = (side - 1 - y) * side + x;
+                    levels[at] = levels[at] == 0 ? z : MathF.Max(levels[at], z);
+                }
         }
         _waterLevel?.Dispose();
         var handle = GCHandle.Alloc(levels, GCHandleType.Pinned);
@@ -1803,6 +1824,7 @@ float4 StripePS(StripeOut i) : SV_Target
         foliageData[25] = TranslucencyCurve;
         foliageData[26] = new Vector4(CanopyDensity, _canopy is null ? 0 : 1, foliage.GrassAmbient, GrassAlbedoMultiplier);
         foliageData[27] = new Vector4(foliage.Pigment, PigmentHeight);
+
         c.UpdateSubresource(foliageData, _foliage);
         c.PixelShader.SetConstantBuffer(8, _foliage);
         // the ambient cube for this light, before anything reads it
