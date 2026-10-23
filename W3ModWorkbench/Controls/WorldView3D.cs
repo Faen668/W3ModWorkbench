@@ -372,17 +372,40 @@ Texture2D PlantNormals : register(t19);
 Texture2D<float> PlantShadowMap : register(t15);
 SamplerComparisonState ShadowCompare : register(s2);
 
-// how much of the sun the plants let through to a point: the sun's view of them, four taps for a soft edge
-float PlantShade(float3 world)
+// the engine's high-quality shadow filter (include_pcf.fx): 27 taps of a Poisson disk
+static const float2 PoissonHQ[27] =
+{
+    float2(0, 0), float2(-0.2633539, 0.03965382), float2(-0.7172024, 0.3683033), float2(-0.01995306, -0.3988392),
+    float2(-0.4409938, -0.22101), float2(0.2200392, 0.2943448), float2(-0.7675657, -0.1482753), float2(-0.2381019, 0.5471062),
+    float2(0.2173031, -0.1345879), float2(-0.6387774, 0.7561339), float2(-0.1614144, 0.9776521), float2(0.2156319, 0.6123413),
+    float2(0.2328875, 0.9452872), float2(-0.9440644, 0.1236077), float2(-0.7408237, -0.507683), float2(-0.4113019, -0.8905967),
+    float2(-0.2486429, -0.6213993), float2(0.696785, 0.2644937), float2(0.5394363, 0.8173215), float2(0.6151208, -0.149864),
+    float2(0.09365336, -0.7817475), float2(0.2768067, -0.4895968), float2(0.6639181, -0.6007172), float2(0.3880369, -0.8950894),
+    float2(0.9916144, -0.07939152), float2(0.7831848, 0.6029348), float2(0.8998603, -0.3983543),
+};
+
+// how much of the sun the plants and meshes let through to a point, as the engine's CalcShadowFromCascade filters it:
+// the disk's radius the cascade's filter size for its distance from the eye (the world's shadowConfig: 0.03 m within
+// 3 m, 0.06 within 16 m, 0.12 within 80 m, 0.2 beyond), a SpeedTree plant's its own (speedTreeShadowFilterSize, 0.15 m),
+// wider where the light comes in low (by 1 / sqrt(N.L) - 1, held between 1 and 4); a plant's taps each tested a little
+// nearer the light than the last, up to speedTreeShadowGradient (3 m) for the last, so a leaf deep in a crown is
+// partly lit; the share of taps lit, squared
+float PlantShade(float3 world, float nl, bool speedTree)
 {
     if (CameraUp.w < 0.5) return 1;
     float4 s = mul(float4(world, 1), SunViewProjection);
     float2 uv = s.xy * float2(0.5, -0.5) + 0.5;
     if (any(uv < 0) || any(uv > 1) || s.z > 1) return 1;
-    float texel = 1.0 / 4096, lit = 0;
-    [unroll] for (int k = 0; k < 4; k++)
-        lit += PlantShadowMap.SampleCmpLevelZero(ShadowCompare, uv + float2((k & 1) - 0.5, (k >> 1) - 0.5) * texel * 1.5, s.z);
-    return lit / 4;
+    float away = length(world - Eye.xyz);
+    float radius = speedTree ? 0.15 : away < 3 ? 0.03 : away < 16 ? 0.06 : away < 80 ? 0.12 : 0.2;
+    radius *= clamp(1 / sqrt(max(nl, 1e-4)) - 1, 1, 4);
+    // the map's 320 m across and 3000 m deep
+    float2 reach = radius / 320 * float2(1, 1);
+    float gradient = speedTree ? 3.0 / 3000 : 0, lit = 0;
+    [loop] for (int k = 0; k < 27; k++)
+        lit += PlantShadowMap.SampleCmpLevelZero(ShadowCompare, uv + PoissonHQ[k] * reach, s.z - gradient * (k / 27.0));
+    lit /= 27;
+    return lit * lit;
 }
 
 cbuffer GlobalLightColour : register(b7)
@@ -503,7 +526,9 @@ float3 AmbientAt(float3 n, float shadow)
     return cube * AmbientColour.rgb * lerp(AmbientScales.y, AmbientScales.x, shadow);
 }
 
-float SunSeen(float3 world) { return ShadowMap.SampleLevel(Smooth, GridUv(world.xy), 0) * PlantShade(world); }
+float SunSeen(float3 world) { return ShadowMap.SampleLevel(Smooth, GridUv(world.xy), 0) * PlantShade(world, 1, false); }
+// a SpeedTree plant's, by its own filter, and the light's angle to its normal
+float SunSeenPlant(float3 world, float nl) { return ShadowMap.SampleLevel(Smooth, GridUv(world.xy), 0) * PlantShade(world, nl, true); }
 
 Out TerrainVS(float2 uv : TEXCOORD0, float skirt : TEXCOORD1, float4 patch : PATCH)
 {
@@ -1022,7 +1047,7 @@ float4 PlantPS(PlantOut i, bool front : SV_IsFrontFace) : SV_Target
         albedo = pow(saturate(lerp(g, pigmented, amount)), 2.2);
     }
     float3 V = normalize(Eye.xyz - i.World), L = Light.xyz;
-    float sun = SunSeen(i.World);
+    float sun = SunSeenPlant(i.World, saturate(dot(n, L)));
     bool leafy = !(i.Kind > 0.5 && i.Kind < 1.5);
     bool grass = i.Kind > 1.5 && i.Kind < 2.5;
     // grass is lit by the ground's normal under it (the remaster's UseTerrainNormalDiffuseGrass, at full strength), its
