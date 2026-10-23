@@ -647,6 +647,8 @@ float4 WaterPS(Out i) : SV_Target
 {
     float depth = i.World.z - GroundHeight(i.Uv);
     clip(depth + 0.05);
+    // none over the ground's holes (a cave's or a crypt's mouth), which the ground leaves out
+    if (Paint.w > 0) clip((float)ControlMap.Load(int3(clamp((int2)floor(i.Uv * Ground.w), 0, (int)Ground.w - 1), 0)) - 0.5);
     float distance = length(i.World - Eye.xyz);
     float near = saturate((250 - distance) * 0.004);
     float shallowLong = saturate((abs(depth) - 0.1) * 0.2040816) * 0.7 + 0.3;
