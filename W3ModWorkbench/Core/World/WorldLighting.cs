@@ -58,7 +58,8 @@ public readonly record struct FoliageAt(
 /// </summary>
 public readonly record struct ProbesAt(Vector3 SkyTop, Vector3 SkyHorizon, float SkyShape, Vector3 SceneAdd,
     float ReflectionLight, float ReflectionShadow, float AoRadius, float AoBias, float AoPower, float AoNonAmbient,
-    float F90Grass, float F90Trees, float TreeSpecular, float WaterFresnel);
+    float F90Grass, float F90Trees, float TreeSpecular, float WaterFresnel, float WaterAmbientScale = 0.3f, float WaterDiffuseScale = 1,
+    float WaterFoam = -0.4f);
 
 /// <summary>
 /// An environment's tone mapping and colour grading at one hour, as the game's post-process shaders take them: the
@@ -374,7 +375,8 @@ public sealed class WorldLighting
             Value(Light + "envProbeReflectionScaleLight", t, 1), Value(Light + "envProbeReflectionScaleShadow", t, 1),
             Value(Ao + "radius", t, 1), Value(Ao + "bias", t, 0.1f), Value(Ao + "powerExponent", t, 2), Value(Ao + "nonAmbientInfluence", t, 0.5f),
             Value(Pbr + "specularF90Grass", t, 1), Value(Pbr + "specularF90OtherFoliage", t, 1), Value("m_speedTree › specularScale", t, 1),
-            Value("m_water › waterFresnel", t, 0.02f));
+            Value("m_water › waterFresnel", t, 0.02f), Value("m_water › waterAmbientScale", t, 0.3f), Value("m_water › waterDiffuseScale", t, 1),
+            Value("m_water › waterFoamIntensity", t, -0.4f));
     }
 
     /// <summary>The tone mapping and colour grading at an hour (0 to 24).</summary>

@@ -424,6 +424,7 @@ cbuffer Foliage : register(b8)
     float4 Pigment;            // the grass's pigment: brightness, where the flood starts, over how far (m_speedTree pigment*); how much more low on the plant
     float4 GrassSettings;      // the grass's albedo multiplier
     float4 TreeFallback;       // the trees' fallback colour (m_speedTree randomColorsFallback)
+    float4 WaterLook;          // the environment's water ambient scale (in shadow), diffuse scale (in light), foam intensity
 };
 #define GrassAlbedo GrassSettings.x
 // which of the light to show, as REDkit's decomposed views do: 0 all of it, 1 the ambient (and the probes' reflection),
@@ -715,8 +716,18 @@ float4 WaterPS(Out i) : SV_Target
     float3 view = normalize(i.World - Eye.xyz);
     float3 reflected = reflect(view, n);
     reflected.z = abs(reflected.z);
-    float fresnel = WaterSettings.x + (1 - WaterSettings.x) * pow(1 - saturate(dot(n, -view)), 5);
     float seen = SunSeen(i.World);
+    // how much water the eye looks through (towards its vertical depth further off, over 200 metres), to the power 0.6
+    float looked = pow(max(lerp(thickness, max(depth, 0), saturate(distance * 0.005)), 0), 0.6);
+    // how much the water mirrors, as the game's water shader writes it for the reflections drawn after it: its own
+    // Fresnel, ((1 - n.v)^4 / 4 + 0.05) to the power of the environment's waterFresnel + 0.5, times its diffuse scale in
+    // light and its ambient scale in shadow, times the water looked through (0.33 + 0.17 x a light's w we haven't placed,
+    // taken at a half), so shallow water mirrors less; the wave height's share of it (0.4 to 1) taken at its least; and
+    // the square root of all that, as the shader writes it
+    float nv0 = saturate(dot(n, -view));
+    float lookScale = lerp(WaterLook.x, WaterLook.y, seen);
+    float fresnel = sqrt(saturate(lookScale * pow(pow(1 - nv0, 4) * 0.25 + 0.05, clamp(WaterSettings.x + 0.5, 0.01, 6)) * 0.4
+        * saturate(0.415 * looked)));
     float3 body = Screen(Water.rgb * (GlobalLightColour(i.World) * saturate(Light.z) * seen / 3.14159265 + AmbientAt(float3(0, 0, 1), seen)), 1).rgb;
     // the sky as it's seen: measured against REDkit's lake, the water mirrors it at its own brightness
     float3 sky = Screen(SkySeen(reflected), 1).rgb;
@@ -726,26 +737,38 @@ float4 WaterPS(Out i) : SV_Target
     float3 halfway = normalize(Light.xyz - view);
     float nh = saturate(dot(n, halfway)), nl = saturate(dot(n, Light.xyz)), nv = saturate(dot(n, -view));
     float a2 = 1e-4, dd = nh * nh * (a2 - 1) + 1;
-    float lobe = saturate(a2 / (3.14159 * dd * dd) * nl / (4 * nl * nv + 1e-4) * fresnel);
+    // (its Fresnel its own: 0.85, the per-water constant at its least, up to 0.9 by (1 - h.v)^4)
+    float sunFresnel = 0.85 + 0.05 * pow(1 - saturate(dot(halfway, -view)), 4);
+    float lobe = saturate(a2 / (3.14159 * dd * dd) * nl / (4 * nl * nv + 1e-4) * sunFresnel);
     // the game takes the sun's colour to the power 1/2.2 for it, a colour, not the sun's whole strength
     float3 sunTint = pow(saturate(LightColour.rgb / max(max(LightColour.r, LightColour.g), max(LightColour.b, 1e-4))), 0.4545);
     float3 glint = Screen(seen * sunTint * lobe * GlintScale * saturate(Light.z * 4) * lerp(0.04, 1, FogHeight.y), 1).rgb;
-    // the water's colour taking over from what's under it, as the game's water shader has it: the water looked through
-    // (towards its vertical depth further off, over 200 metres) to the power 0.6; what's under it dimmed by that, to
-    // 0.6 of itself through none, then each channel moved to the water's colour by it, the red first (0.5 of the way a
-    // metre, the green 0.32, the blue 0.34; the shader's red and blue take a constant we haven't placed at its most)
-    float looked = pow(max(lerp(thickness, max(depth, 0), saturate(distance * 0.005)), 0), 0.6) * Water.w;
-    under *= 0.6 - 0.267 * saturate(looked);
-    float3 colour = lerp(under, body, saturate(looked * float3(0.5, 0.32, 0.34)));
-    colour = lerp(colour, sky, fresnel) + glint;
-
-    // foam in the shallows, its loop played as the game plays it
+    // the foam as the game's water shader makes it, over all the water near the eye, not only the shore: its loop (32
+    // frames, played at 0.024 a second) at 0.04 a metre, nudged by the waves, and again 15 times finer; the coarse loop
+    // where the waves slope, fading out to 350 m, times the fine one to the power 2.2, plus the coarse one fading out
+    // sooner, to the power 1.6; brightened by (2 + 18) x the environment's foam intensity + 0.5 and its diffuse scale in
+    // light (ambient in shadow), and added to the water's own colour (a per-water constant we haven't placed is taken at
+    // its least, 0.05)
     float frame = frac(Eye.w * 0.024) * 32;
-    float2 foamUv = i.World.xy * 0.04;
-    float foam = lerp(FoamLoop.Sample(Tiled, float3(foamUv, floor(frame))).r, FoamLoop.Sample(Tiled, float3(foamUv, floor(frame + 1) % 32)).r, frac(frame));
-    // only a thin line of it where the water meets the shore
-    float shore = saturate(1 - depth * 14) * near * smoothstep(0.4, 0.75, foam);
-    colour = lerp(colour, Screen((LightColour.rgb * saturate(Light.z) / 3.14159265 + AmbientAt(float3(0, 0, 1), 1)) * 0.6, 1).rgb, shore * 0.45);
+    float2 foamUv = n.xy * 0.002 + i.World.xy * 0.04;
+    float coarse = lerp(FoamLoop.Sample(Tiled, float3(foamUv, floor(frame))).r, FoamLoop.Sample(Tiled, float3(foamUv, floor(frame + 1) % 32)).r, frac(frame));
+    float fine = lerp(FoamLoop.Sample(Tiled, float3(foamUv * 15, floor(frame))).r, FoamLoop.Sample(Tiled, float3(foamUv * 15, floor(frame + 1) % 32)).r, frac(frame));
+    float reach = saturate((350 - length(i.World.xy - Eye.xy)) / 350);
+    float foamA = coarse * 1.3 * saturate(length(n.xy) * 1.5) * pow(reach, 12) * pow(fine, 2.2)
+        + pow(saturate(pow(reach, 1.2) * coarse), 2.6) * 0.4;
+    float foamB = pow(foamA, 1.6);
+    const float perWater = 0.05;
+    float foam = (1 - 0.9 * perWater) * 20 * max(foamB, saturate(foamA) * (perWater * 0.7 + 0.3)) * lookScale * clamp(WaterLook.z + 0.5, 0, 20);
+    body += Screen(foam.xxx, 1).rgb;
+
+    // the water's colour taking over from what's under it, as the game's water shader has it: what's under it dimmed
+    // to 0.6 of itself through none, then each channel moved to the water's colour by the water looked through, the red
+    // first (0.5 of the way a metre, the green 0.32, the blue 0.34; the shader's red and blue take a constant we haven't
+    // placed at its most)
+    float lookedFog = looked * Water.w;
+    under *= 0.6 - 0.267 * saturate(lookedFog);
+    float3 colour = lerp(under, body, saturate(lookedFog * float3(0.5, 0.32, 0.34)));
+    colour = lerp(colour, sky, fresnel) + glint;
     float3 fog, aerial;
     float2 amount = FogAt(i.World, 0, fog, aerial);
     colour = lerp(colour, Screen(fog * FogLimits.z, 1).rgb, amount.x);
@@ -1678,7 +1701,7 @@ float4 StripePS(StripeOut i) : SV_Target
         _grading = new Buffer(Device, Utilities.SizeOf<Grading>(), ResourceUsage.Default, BindFlags.ConstantBuffer, CpuAccessFlags.None, ResourceOptionFlags.None, 0);
         _sky = new Buffer(Device, Utilities.SizeOf<Sky>(), ResourceUsage.Default, BindFlags.ConstantBuffer, CpuAccessFlags.None, ResourceOptionFlags.None, 0);
         _lightColour = new Buffer(Device, 48, ResourceUsage.Default, BindFlags.ConstantBuffer, CpuAccessFlags.None, ResourceOptionFlags.None, 0);
-        _foliage = new Buffer(Device, 16 * 30, ResourceUsage.Default, BindFlags.ConstantBuffer, CpuAccessFlags.None, ResourceOptionFlags.None, 0);
+        _foliage = new Buffer(Device, 16 * 31, ResourceUsage.Default, BindFlags.ConstantBuffer, CpuAccessFlags.None, ResourceOptionFlags.None, 0);
         _ambientCube = new Texture2D(Device, new Texture2DDescription
         {
             Width = 6, Height = 1, MipLevels = 1, ArraySize = 1, Format = DxgiFormat.R16G16B16A16_Float,
@@ -1939,7 +1962,7 @@ float4 StripePS(StripeOut i) : SV_Target
         c.PixelShader.SetConstantBuffer(7, _lightColour);
         var foliage = (_lighting ?? Fallback).Foliage(_hour);
         var alpha = (_lighting ?? Fallback).AlphaScalars;
-        var foliageData = new Vector4[30];
+        var foliageData = new Vector4[31];
         for (int k = 0; k < 3; k++)
         {
             foliageData[k] = foliage.Trees[k];
@@ -1969,6 +1992,7 @@ float4 StripePS(StripeOut i) : SV_Target
         foliageData[25] = TranslucencyCurve;
         foliageData[26] = new Vector4(CanopyDensity, _canopy is null ? 0 : 1, foliage.GrassAmbient, 0);
         foliageData[29] = V(foliage.Fallback);
+        foliageData[30] = new Vector4(probes.WaterAmbientScale, probes.WaterDiffuseScale, probes.WaterFoam, 0);
         foliageData[28] = new Vector4(GrassAlbedoMultiplier, LightingView, 1, foliage.BillboardTranslucency);
         foliageData[27] = new Vector4(foliage.Pigment, PigmentHeight);
 
