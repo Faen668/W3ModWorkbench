@@ -760,7 +760,7 @@ public partial class WorldWindow : Window, IMessageHost
     }
 
     /// <summary>The water shapes the layers read so far have, for the 3D view: each sets the water's level inside it.</summary>
-    private void SetWater3D() => View3D.SetWater(_dots.Values.SelectMany(d => d).SelectMany(d => d.Entity.Components)
+    private void SetWater3D() => View3D.SetWater(_dots.Values.Where(_ => _layers3D).SelectMany(d => d).SelectMany(d => d.Entity.Components)
         .Where(c => c is { ClassName: "CWaterComponent", Outline: { Count: >= 3 } }).Select(c => (c.Outline!, c.Height)), _waterSurfaces);
 
     /// <summary>
@@ -770,6 +770,7 @@ public partial class WorldWindow : Window, IMessageHost
     /// </summary>
     private async Task SetProbe3DAsync()
     {
+        if (!_layers3D) return;
         var probes = _dots.Values.SelectMany(d => d).SelectMany(d => d.Entity.Components).Where(c => c.Probe is not null).ToList();
         var chosen = probes.FirstOrDefault(c => c.Probe!.Contribution == -1)
             ?? probes.OrderByDescending(c => c.Place.M11 * c.Place.M22 * c.Place.M33).FirstOrDefault();
@@ -790,6 +791,10 @@ public partial class WorldWindow : Window, IMessageHost
             View3D.SetCookedProbe(probe.Origin, probe.AmbientColour, probe.AmbientIntensity, faces.Albedo, faces.Normals, faces.Depth);
     }
 
+    // whether the 3D view takes what the layers place (meshes, paths, water shapes, the probes): off, it's the world's
+    // terrain, foliage, water and sky alone, as REDkit shows a world with its layers unloaded
+    private bool _layers3D = true;
+
     // the water meshes' triangles in the world (rivers drawn with the game's water shaders), for the water's level
     private List<(Vector3 A, Vector3 B, Vector3 C)> _waterSurfaces = [];
 
@@ -804,7 +809,7 @@ public partial class WorldWindow : Window, IMessageHost
     {
         // once every layer's been read, so none are missing
         _meshesWaiting = !_layersRead;
-        if (_meshesWaiting) return;
+        if (_meshesWaiting || !_layers3D) return;
         var locator = _locator;
         MapProgress.Visibility = Visibility.Visible;
         MapProgress.Text = L.T("WorldWindow.ReadingMeshes3D");

@@ -1782,6 +1782,9 @@ float4 StripePS(StripeOut i) : SV_Target
     /// </summary>
     public float GrassAlbedoMultiplier { get; set; } = 1;
 
+    /// <summary>The camera's vertical field of view, in degrees.</summary>
+    public float FieldOfView { get; set; } = 60;
+
     /// <summary>How much more pigment grass takes low on the plant than at its top (1, the whole of the shader's height term, matches REDkit's grass).</summary>
     public float PigmentHeight { get; set; } = 1;
 
@@ -1820,7 +1823,7 @@ float4 StripePS(StripeOut i) : SV_Target
 
         float aspect = PixelWidth / (float)Math.Max(1, PixelHeight);
         var view = Matrix4x4.CreateLookAt(_eye, _eye + Forward(), Vector3.UnitZ);
-        var projection = Matrix4x4.CreatePerspectiveFieldOfView(60 * MathF.PI / 180, aspect, NearPlane, FarPlane);
+        var projection = Matrix4x4.CreatePerspectiveFieldOfView(FieldOfView * MathF.PI / 180, aspect, NearPlane, FarPlane);
         var viewProjection = view * projection;
         Matrix4x4.Invert(viewProjection, out var unproject);
         float spacing = terrain.Size / _side;
@@ -2193,8 +2196,10 @@ float4 StripePS(StripeOut i) : SV_Target
         if (!m.Success) return false;
         float F(int i) => float.Parse(m.Groups[i].Value, System.Globalization.CultureInfo.InvariantCulture);
         _eye = new Vector3(F(1), F(2), F(3));
-        _pitch = Math.Clamp(F(4) * MathF.PI / 180, -1.5f, 1.5f);
-        _yaw = -F(5) * MathF.PI / 180;
+        // REDkit keeps turning its angles past a full turn as the mouse goes round (a pitch of -3993.81 is -33.81)
+        static float Wrapped(float degrees) => degrees - 360 * MathF.Round(degrees / 360);
+        _pitch = Math.Clamp(Wrapped(F(4)) * MathF.PI / 180, -1.5f, 1.5f);
+        _yaw = -Wrapped(F(5)) * MathF.PI / 180;
         Moved();
         return true;
     }
