@@ -27,6 +27,9 @@ public static class GpuTextures
     public static TextureModel Of(BitmapSource picture) => Made.GetValue(picture, p =>
         Stored.TryGetValue(p, out var dds) ? TextureModel.Create(new MemoryStream(dds)) ?? Make(p) : Make(p));
 
+    /// <summary>The texture's stored blocks (a .dds file) a picture was decoded from, at full size; null for none.</summary>
+    public static byte[]? StoredBlocks(BitmapSource picture) => Stored.TryGetValue(picture, out var dds) ? dds : null;
+
     /// <summary>
     /// Notes a texture's stored blocks for a picture decoded from them, so the graphics card gets the blocks themselves:
     /// a quarter to an eighth of the memory, the game's own mip levels, and the alpha kept (a normal map's roughness).

@@ -187,6 +187,7 @@ public sealed partial class WorldView3D
     /// <summary>A picture's texture with its alpha kept straight (a normal map's roughness, a mask's channels), not multiplied in.</summary>
     private ShaderResourceView StraightTexture(BitmapSource picture)
     {
+        if (StoredTexture(picture) is { } stored) return stored;
         var source = picture.Format == PixelFormats.Bgra32 ? picture : new FormatConvertedBitmap(picture, PixelFormats.Bgra32, null, 0);
         var pixels = new byte[source.PixelWidth * source.PixelHeight * 4];
         source.CopyPixels(pixels, source.PixelWidth * 4, 0);

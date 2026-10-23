@@ -139,6 +139,7 @@ public abstract class D3DHost : FrameworkElement, IDisposable
     /// </summary>
     protected ShaderResourceView CutoutTexture(BitmapSource picture)
     {
+        if (StoredTexture(picture) is { } stored) return stored;
         var source = picture.Format == PixelFormats.Bgra32 ? picture : new FormatConvertedBitmap(picture, PixelFormats.Bgra32, null, 0);
         int w = source.PixelWidth, h = source.PixelHeight;
         var pixels = new byte[w * h * 4];
@@ -180,6 +181,15 @@ public abstract class D3DHost : FrameworkElement, IDisposable
         }
         return Texture(pixels, w, h, DxgiFormat.B8G8R8A8_UNorm, 4);
     }
+
+    /// <summary>
+    /// The texture's own blocks a picture was decoded from, at full size with the game's mip levels and its alpha
+    /// straight; null when there are none. The picture kept in memory is a small copy (GpuTextures.KeptSize), so a
+    /// texture made from it was a quarter of the game's size or less: grass atlases' plumes turned into broad blobs.
+    /// </summary>
+    protected ShaderResourceView? StoredTexture(BitmapSource picture) =>
+        GpuTextures.StoredBlocks(picture) is { } dds && Core.Textures.Dds.TryRead(dds, out var info, out var pixels) && info.Slices == 1 && !info.IsCube
+            ? TextureArray(info, pixels) : null;
 
     /// <summary>A texture made from a picture, with its smaller copies.</summary>
     protected ShaderResourceView Texture(BitmapSource picture)

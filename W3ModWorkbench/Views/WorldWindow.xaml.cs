@@ -1103,7 +1103,10 @@ public partial class WorldWindow : Window, IMessageHost
                     .Append(tree.BillboardMaterial?.Normal ?? "").Where(n => n.Length > 0).Distinct())
                 {
                     string path = SpeedTreeFile.TexturePath(first.Tree, name);
-                    mine[path] = pictures.GetOrAdd(path, t => MeshTextures.LoadWithAlpha(_locator, t, 1024));
+                    // grass's pictures up to 2048 (the game's own size for its atlases, 1024 by 2048): an atlas holds dozens of
+                    // blades and plumes a few texels wide each, which turned into broad, jagged cards at half the size
+                    int size = (first.Grass || tree.Materials.Any(m => m.Grass)) && tree.Materials.Any(m => m.Diffuse == name) ? 2048 : 1024;
+                    mine[path] = pictures.GetOrAdd(path, t => MeshTextures.LoadWithAlpha(_locator, t, size));
                 }
                 kinds.Add(new PlantKind3D(first.Tree, tree, first.Grass, mine, kind.SelectMany(g => g.Instances).ToList()));
             }

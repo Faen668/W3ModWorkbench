@@ -24,6 +24,10 @@ public sealed record SpeedTreeMaterial(IReadOnlyList<string> Textures, string De
     /// <summary>The render state's shininess (its glossiness as the game's shader takes it, over 128).</summary>
     public float Shininess => At(120);
 
+    /// <summary>The render state's alpha scalar (SpeedTree's m_fAlphaScalar): the cutout's alpha is scaled by it, and by the
+    /// world's scalar, before the 0.1 cut.</summary>
+    public float AlphaScalar => Lighting.Length >= 212 - 64 + 4 ? At(212) : 1;
+
     /// <summary>The render state's specular colour.</summary>
     public System.Numerics.Vector3 SpecularColour => new(At(124), At(128), At(132));
 
@@ -77,8 +81,9 @@ public sealed class SpeedTreeFile
     public bool HasTag(string tag) => Strings.Contains(tag, StringComparer.Ordinal);
 
     /// <summary>Which of the environment's random colours the tree's side views take, by its tags: 0 the trees', 1 the
-    /// branches', 2 the grass's, 3 none (the picture's own colour; also when no tag says, as the engine's default isn't known).</summary>
-    public int BillboardColours => HasTag("BillboardRandomTrees") ? 0 : HasTag("BillboardRandomBranch") ? 1 : HasTag("BillboardRandomGrass") ? 2 : 3;
+    /// branches', 2 the grass's, 3 none (the picture's own colour, BillboardRandomOff). Untagged trees take the trees' (measured
+    /// against REDkit's distant forests, which match that and not the pictures' own colour).</summary>
+    public int BillboardColours => HasTag("BillboardRandomOff") ? 3 : HasTag("BillboardRandomBranch") ? 1 : HasTag("BillboardRandomGrass") ? 2 : 0;
 
     /// <summary>The collision capsules: their two ends and radius.</summary>
     public required IReadOnlyList<(Vector3 From, Vector3 To, float Radius)> Collisions { get; init; }

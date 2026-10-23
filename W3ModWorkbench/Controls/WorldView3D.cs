@@ -364,7 +364,8 @@ Texture2D PlantSpecular : register(t24);
 
 cbuffer PlantMaterial : register(b10)
 {
-    float4 PlantMat; // the specular colour's green, the transmission colour's green, the glossiness, whether there's a specular map
+    float4 PlantMat; // the specular colour's green, the transmission colour's green, the glossiness (negative without a
+                     // specular map), the render state's alpha scalar
 };
 Texture2D PlantNormals : register(t19);
 Texture2D<float> PlantShadowMap : register(t15);
@@ -957,7 +958,8 @@ float3 RandomColour(float3 gamma, int k, float3 w)
 float4 PlantPS(PlantOut i, bool front : SV_IsFrontFace) : SV_Target
 {
     float4 c = PlantPicture.Sample(Tiled, i.Uv);
-    clip(c.a * PlantAlphaScalar(i.Kind) - 0.1);
+    // the cut as the game's SpeedTree shaders make it: the alpha times the render state's alpha scalar and the world's
+    clip(c.a * PlantMat.w * PlantAlphaScalar(i.Kind) - 0.1);
     // the vertex normal on both sides of a card, as the game's SpeedTree shaders keep it (they never ask which side is
     // seen): a crown's leaves face out from it, so its sunny side is lit through and through
     float3 n = normalize(i.Normal);
@@ -1011,7 +1013,7 @@ float4 PlantPS(PlantOut i, bool front : SV_IsFrontFace) : SV_Target
     float3 diffuse = (grass ? pow(abs(dot(L, n)), 0.3) * saturate(LoV + 0.5) * albedo : saturate(dot(n, L))) / 3.14159265;
     // the translucency as the game's SpeedTree shader writes it: the specular map's alpha times the transmission colour,
     // times the environment's translucency scale; the specularity its green times the specular colour (none without a map)
-    float4 specMap = PlantMat.w > 0.5 && i.Kind < 2.5 ? PlantSpecular.Sample(Tiled, i.Uv) : float4(0, 0, 0, 1);
+    float4 specMap = PlantMat.z >= 0 && i.Kind < 2.5 ? PlantSpecular.Sample(Tiled, i.Uv) : float4(0, 0, 0, 1);
     // (the side views by the environment's billboards translucency)
     // (grass's by how high up the blade, as the game's grass shader has it: 0.5 + 0.5 saturate(height x 0.5 x the world's
     // grass translucency multiplier, taken as 1))
@@ -1021,7 +1023,7 @@ float4 PlantPS(PlantOut i, bool front : SV_IsFrontFace) : SV_Target
     // the grazing one, is what made them pale)
     float specularity = i.Kind < 1.5 ? specMap.g * PlantMat.x : 0;
     // the shininess over 128 goes where the game's lighting reads the roughness
-    float glossiness = PlantMat.w > 0.5 ? PlantMat.z : 0.234375;
+    float glossiness = PlantMat.z >= 0 ? PlantMat.z : 0.234375;
     float3 transl = 0;
     if (translucent > 0)
     {
@@ -1049,7 +1051,7 @@ float4 PlantPS(PlantOut i, bool front : SV_IsFrontFace) : SV_Target
 
 void PlantShadowPS(PlantOut i)
 {
-    clip(PlantPicture.Sample(Tiled, i.Uv).a * PlantAlphaScalar(i.Kind) - 0.1);
+    clip(PlantPicture.Sample(Tiled, i.Uv).a * PlantMat.w * PlantAlphaScalar(i.Kind) - 0.1);
 }
 
 // ---- the ambient cube ----

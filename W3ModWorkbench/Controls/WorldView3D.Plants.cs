@@ -197,7 +197,7 @@ public sealed partial class WorldView3D
                     // colour's green, the transmission colour's green, the glossiness (shininess over 128)
                     var specular = SpecularPicture(material.Specular);
                     draws.Add((Picture(material.Diffuse), indices.Count, draw.Indices.Length, first, specular,
-                        new Vector4(material.SpecularColour.Y, material.TransmissionColour.Y, material.Shininess / 128, specular is null ? 0 : 1)));
+                        new Vector4(material.SpecularColour.Y, material.TransmissionColour.Y, specular is null ? -1 : MathF.Max(material.Shininess / 128, 1e-3f), material.AlphaScalar)));
                     indices.AddRange(draw.Indices);
                 }
                 if (vertices.Count == 0) continue;
@@ -556,6 +556,8 @@ public sealed partial class WorldView3D
             if (slots[kind.Lods.Length] is { Count: > 0 } far && kind.Billboard is { } atlas)
             {
                 var tree = kind.Kind.Tree;
+                var billboardMaterial = new Vector4(0, 0, -1, tree.BillboardMaterial?.AlphaScalar ?? 1);
+                c.UpdateSubresource(ref billboardMaterial, _plantMaterial);
                 var constants = ReadConstants();
                 constants.BillboardShape = new Vector4(tree.BillboardWidth, tree.BillboardTop, tree.BillboardBottom, kind.Views.Length);
                 constants.BillboardStyle = new Vector4(tree.BillboardColours, 0, 0, 0);
