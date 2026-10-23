@@ -29,7 +29,7 @@ public static class MeshTextures
 
     private static BitmapSource? Read(ResourceLocator locator, string xbmPath, int max, PixelFormat format)
     {
-        if (locator.FindTexture(xbmPath) is not { } texture) return ProjectPicture(locator, xbmPath, format);
+        if (locator.FindTexture(xbmPath) is not { } texture) return ProjectPicture(locator, xbmPath, format) ?? OwnPixels(locator, xbmPath, max, format);
         try
         {
             var info = texture.Info;
@@ -166,6 +166,32 @@ public static class MeshTextures
     }
 
     /// <summary>A project picture standing for a texture not built yet, as the format asked for; null when there's none or it can't be read.</summary>
+    /// <summary>
+    /// A texture that keeps its pixels in its own file rather than the texture cache (the entity proxies' far pictures,
+    /// for one): its largest level no larger than asked for. Null when it isn't such a file.
+    /// </summary>
+    private static BitmapSource? OwnPixels(ResourceLocator locator, string xbmPath, int max, PixelFormat format)
+    {
+        try
+        {
+            if (Core.Packing.TextureCooker.GameLevels(locator, xbmPath) is not { Levels.Count: > 0 } levels) return null;
+            int level = 0;
+            while (level + 1 < levels.Levels.Count && Math.Max(levels.Levels[level + 1].Width, levels.Levels[level + 1].Height) >= max) level++;
+            var chosen = levels.Levels[level];
+            var info = new TextureInfo(chosen.Width, chosen.Height, 1, 1, levels.Format, TextureCacheArchive.FormatOf(levels.Format), 0, 0, chosen.Data.Length, chosen.Data.Length);
+            if (TextureDecoder.Decode(info, chosen.Data) is not { } image) return null;
+            var picture = format == PixelFormats.Bgra32 || format == PixelFormats.Bgr32
+                ? BitmapSource.Create(image.Width, image.Height, 96, 96, format, null, image.Bgra, image.Width * 4)
+                : new FormatConvertedBitmap(BitmapSource.Create(image.Width, image.Height, 96, 96, PixelFormats.Bgra32, null, image.Bgra, image.Width * 4), format, null, 0);
+            picture.Freeze();
+            return picture;
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or NotSupportedException or ArgumentException)
+        {
+            return null;
+        }
+    }
+
     private static BitmapSource? ProjectPicture(ResourceLocator locator, string xbmPath, PixelFormat format)
     {
         if (PictureFile(locator, xbmPath) is not { } file) return null;

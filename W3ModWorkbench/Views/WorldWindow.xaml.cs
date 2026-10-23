@@ -38,6 +38,8 @@ public partial class WorldWindow : Window, IMessageHost
     private LayerGroup? _layers;
     private readonly List<LayerNode> _roots = [];
     private readonly Dictionary<LayerInfo, List<MapDot>> _dots = [];
+    // what each layer's sector data places (the meshes, decals and lights cooking moved out of its entities)
+    private readonly Dictionary<LayerInfo, List<SectorObject>> _sectors = [];
     private readonly Dictionary<LayerInfo, LayerNode> _layerNodes = [];
     private List<string> _areaFiles = [];
     private string? _diskRoot;
@@ -320,13 +322,16 @@ public partial class WorldWindow : Window, IMessageHost
         var groupOf = _layerNodes.ToDictionary(p => p.Key, p => p.Value.Colour);
         int done = 0;
         var clock = System.Diagnostics.Stopwatch.StartNew();
-        var found = new System.Collections.Concurrent.ConcurrentQueue<(LayerInfo Layer, List<MapDot> Dots)>();
+        var found = new System.Collections.Concurrent.ConcurrentQueue<(LayerInfo Layer, List<MapDot> Dots, List<SectorObject> Sector)>();
         var reading = Task.Run(() => Parallel.ForEach(layers, new ParallelOptions { CancellationToken = token, MaxDegreeOfParallelism = Math.Clamp(Environment.ProcessorCount - 1, 2, 8) }, layer =>
         {
             try
             {
                 if (Read(layer.Path) is { } data)
-                    found.Enqueue((layer, WorldFile.Entities(data).Select(e => new MapDot(e, layer, groupOf[layer])).ToList()));
+                {
+                    var (entities, sector) = WorldFile.Layer(data);
+                    found.Enqueue((layer, entities.Select(e => new MapDot(e, layer, groupOf[layer])).ToList(), sector));
+                }
             }
             catch (Exception ex) when (ex is IOException or InvalidDataException) { }
             Interlocked.Increment(ref done);
@@ -357,6 +362,7 @@ public partial class WorldWindow : Window, IMessageHost
             while (found.TryDequeue(out var item))
             {
                 _dots[item.Layer] = item.Dots;
+                if (item.Sector.Count > 0) _sectors[item.Layer] = item.Sector;
                 _entities += item.Dots.Count;
                 any = true;
             }
@@ -813,8 +819,24 @@ public partial class WorldWindow : Window, IMessageHost
             }
             return (found, replaced);
         });
-        var placed = entities.SelectMany(e => e.Components.Where(c => IsMesh(c) && !(fromTemplates.replaced.Contains(e) && IsProxy(c.Resource!)))
-                .Select(c => (Mesh: c.Resource!, c.Place, c.AutoHide, Shadow: LayerComponent.Drawable(c.DrawableFlags).CastsShadow)))
+        var fromEntities = entities.SelectMany(e => e.Components.Where(c => IsMesh(c) && !(fromTemplates.replaced.Contains(e) && IsProxy(c.Resource!)))
+                .Select(c => (Mesh: c.Resource!, c.Place, c.AutoHide, Shadow: LayerComponent.Drawable(c.DrawableFlags).CastsShadow))).ToList();
+        // the layers' sector data: most of a cooked world's buildings, walls and props, named by their paths' hashes;
+        // those an entity also draws where it stands left to the entity
+        var sectors = _sectors.Values.SelectMany(s => s).Where(o => o.Kind is SectorObjectKind.Mesh or SectorObjectKind.RigidBody && o.Visible && o.Resource != 0).ToList();
+        var fromSectors = await Task.Run(() =>
+        {
+            var wanted = sectors.Select(o => o.Resource).ToHashSet();
+            var paths = new Dictionary<ulong, string>();
+            foreach (var extension in new[] { ".w2mesh", ".reddest", ".redcloth" })
+                foreach (var path in locator.AllPaths(extension))
+                    if (SectorData.PathHash(path) is var hash && wanted.Contains(hash)) paths.TryAdd(hash, path);
+            var already = fromEntities.Select(e => (e.Mesh.ToLowerInvariant(), Round(e.Place.Translation))).ToHashSet();
+            static (int, int, int) Round(Vector3 v) => ((int)MathF.Round(v.X * 20), (int)MathF.Round(v.Y * 20), (int)MathF.Round(v.Z * 20));
+            return sectors.Where(o => paths.ContainsKey(o.Resource) && !already.Contains((paths[o.Resource].ToLowerInvariant(), Round(o.Place.Translation))))
+                .Select(o => (Mesh: paths[o.Resource], o.Place, AutoHide: 0f, Shadow: o.CastsShadow)).ToList();
+        });
+        var placed = fromEntities.Concat(fromSectors)
             .Concat(fromTemplates.found)
             .GroupBy(c => (Mesh: c.Mesh.ToLowerInvariant(), c.Shadow)).ToList();
         if (placed.Count == 0)
@@ -843,9 +865,22 @@ public partial class WorldWindow : Window, IMessageHost
                         // volumes (weather, interiors) aren't seen; see-through surfaces (puddles, glass) aren't drawn yet;
                         // the merged shadow meshes only cast the sun's shadow
                         string shader = Core.Meshes.MeshMaterial.Resolve(mesh.File, mesh.Materials[m], locator.ReadFile).Shader.ToLowerInvariant();
-                        if (shader is "volume" || shader.StartsWith("transparent")) { materials.Add((null, null, MeshUse.Hidden)); continue; }
+                        // effect surfaces aren't drawn as solid ones: glowing planes, burnt patches, cobwebs, water and waterfalls
+                        if (shader is "volume" or "glow_plane_shader" or "web" || shader.StartsWith("transparent") || shader.StartsWith("m_")
+                            || shader.StartsWith("water_")) { materials.Add((null, null, MeshUse.Hidden)); continue; }
                         if (shader is "mergedmesh") { materials.Add((null, null, MeshUse.ShadowOnly)); continue; }
                         var (picture, look, leaveOut) = await LookTextures.ForMaterial(mesh, m, locator, Texture);
+                        if (picture is null && !leaveOut)
+                        {
+                            // a material whose colour isn't a plain Diffuse (pbr_vert_blend's DiffuseArray, for one): its first
+                            // colour texture, and its normal map likewise
+                            var textures = Core.Meshes.MeshMaterial.Resolve(mesh.File, mesh.Materials[m], locator.ReadFile).Textures;
+                            if (textures.FirstOrDefault(t => t.Parameter.Contains("Diffuse", StringComparison.OrdinalIgnoreCase)) is { } colour)
+                                picture = await Texture(colour.Path);
+                            if (look?.Normal is null && textures.FirstOrDefault(t => t.Parameter.Contains("Normal", StringComparison.OrdinalIgnoreCase)) is { } normal
+                                && await Texture(normal.Path) is { } normalPicture)
+                                look = new MaterialLook { Normal = normalPicture, Constants = look?.Constants ?? W3Constants.Plain(true) };
+                        }
                         materials.Add((picture, look, leaveOut ? MeshUse.Hidden : MeshUse.Drawn));
                     }
                     catch (Exception ex) when (ex is IOException or InvalidDataException) { materials.Add((null, null, MeshUse.Drawn)); }

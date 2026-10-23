@@ -62,6 +62,8 @@ public sealed partial class WorldView3D
         public required (ShaderResourceView? Diffuse, ShaderResourceView? Normal, ShaderResourceView? Mask, MeshMaterialConstants Constants, MeshUse Use)[] Materials { get; init; }
         public required float[] LodStarts { get; init; }
         public required float Farthest { get; init; }
+        // an entity proxy (the stand-in a building's whole is drawn as far off) only past where the building itself is
+        public float Nearest { get; init; }
         // each copy's middle and reach, for culling
         public required (Vector3 Middle, float Radius)[] Spheres { get; init; }
     }
@@ -77,6 +79,9 @@ public sealed partial class WorldView3D
 
     /// <summary>Meshes drawn in the last frame.</summary>
     public int MeshesDrawn { get; private set; }
+
+    /// <summary>How near an entity proxy (a building's far stand-in) is drawn at least, in metres.</summary>
+    public float ProxyDistance { get; set; } = 120;
 
     /// <summary>How far meshes are drawn at most, in metres.</summary>
     public float MeshFarthest { get; set; } = 1500;
@@ -168,7 +173,12 @@ public sealed partial class WorldView3D
                 float scale = MathF.Max(new Vector3(p.M11, p.M12, p.M13).Length(), MathF.Max(new Vector3(p.M21, p.M22, p.M23).Length(), new Vector3(p.M31, p.M32, p.M33).Length()));
                 return (Vector3.Transform(middle, p), radius * scale);
             }).ToArray();
-            _meshes.Add(new MeshKindGpu { Kind = kind, Lods = lods, Materials = materials, LodStarts = starts, Farthest = farthest, Spheres = spheres });
+            bool proxy = kind.Path.Contains(@"	extures_entity_proxy\", StringComparison.OrdinalIgnoreCase);
+            _meshes.Add(new MeshKindGpu
+            {
+                Kind = kind, Lods = lods, Materials = materials, LodStarts = starts, Farthest = proxy ? MeshFarthest : farthest, Spheres = spheres,
+                Nearest = proxy ? ProxyDistance : 0,
+            });
         }
         _sunValid = false;
         Invalidate();
@@ -198,6 +208,7 @@ public sealed partial class WorldView3D
             {
                 var (middle, radius) = kind.Spheres[i];
                 if (Vector3.Distance(from, middle) - radius > limit) continue;
+                if (kind.Nearest > 0 && Vector3.Distance(eye, middle) < kind.Nearest) continue;
                 if (planes is not null && !InView(planes, middle - new Vector3(radius), middle + new Vector3(radius))) continue;
                 float distance = MathF.Max(0, Vector3.Distance(eye, middle) - radius);
                 int lod = 0;

@@ -338,9 +338,18 @@ public sealed class WorldFile
     }
 
     /// <summary>The entities of a layer file, for a map.</summary>
-    public static List<LayerEntity> Entities(byte[] layerData)
+    public static List<LayerEntity> Entities(byte[] layerData) => Entities(Cr2wFile.Read(layerData));
+
+    /// <summary>A layer file's entities and what its sector data places (the meshes, decals and lights cooking took out of them).</summary>
+    public static (List<LayerEntity> Entities, List<SectorObject> Sector) Layer(byte[] layerData)
     {
         var file = Cr2wFile.Read(layerData);
+        var sector = file.First("CSectorData") is { Tail.Length: > 8 } data ? SectorData.Read(data.Tail) : [];
+        return (Entities(file), sector);
+    }
+
+    private static List<LayerEntity> Entities(Cr2wFile file)
+    {
         var result = new List<LayerEntity>();
         if (file.First("CLayer") is not { } layer) return result;
         // the exports under each entity: cooked layers keep the areas only as the entity's children, not in its list
