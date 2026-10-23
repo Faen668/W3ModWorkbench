@@ -123,6 +123,12 @@ public sealed class WorldLighting
     /// </summary>
     public Vector3 AlphaScalars { get; private init; } = new(1, 1, 1);
 
+    /// <summary>The world's skybox brightness through the day (environmentParameters › skybox › visibleSkyBrightnessScale), or null.</summary>
+    private RedCurve? VisibleSky { get; init; }
+
+    /// <summary>The world's skybox brightness at an hour: the sky shader's second brightness scale, times the environment's global sky brightness.</summary>
+    public float SkyboxBrightness(float hour) => VisibleSky?.At(((hour % 24) + 24) % 24 / 24) ?? 1;
+
     /// <summary>An environment forced over everything (REDkit's Force preset), or null.</summary>
     public string? Preset { get; }
 
@@ -177,7 +183,7 @@ public sealed class WorldLighting
         EnvironmentParameters? parameters = null, bool keepWeather = true, bool keepPreset = true) =>
         new(_bearing, _trajectory, Environment, ScenesEnvironment, WeatherTable, Weathers,
             keepWeather ? Weather : weather, keepWeather ? PreviousWeather : previous, transition ?? Transition,
-            keepPreset ? Preset : preset, parameters ?? Parameters, _read, _cache) { AlphaScalars = AlphaScalars };
+            keepPreset ? Preset : preset, parameters ?? Parameters, _read, _cache) { AlphaScalars = AlphaScalars, VisibleSky = VisibleSky };
 
     /// <summary>
     /// A world's lighting: its environment parameters' trajectory, and its environment definition read by
@@ -196,6 +202,7 @@ public sealed class WorldLighting
         var lighting = new WorldLighting(bearing, trajectory, path, scenes, table, weathers, null, null, 1, null, EnvironmentParameters.Outdoors, read, null)
         {
             AlphaScalars = new Vector3(speedTree?.Float("alphaScalar3d") ?? 1, speedTree?.Float("alphaScalarGrass") ?? 1, speedTree?.Float("alphaScalarBillboards") ?? 1),
+            VisibleSky = (parameters?["skybox"] as RedObject)?["visibleSkyBrightnessScale"] is RedObject sky ? RedCurve.FromSimpleCurve(sky) : null,
         };
         return weathers.Count > 0 ? lighting.WithWeather(weathers[0].Name) : lighting;
     }
@@ -299,15 +306,15 @@ public sealed class WorldLighting
         float sunBearing = _bearing + 180 + (t - 0.5f) * 360;
         const string Sky = "m_sky › ";
         return new SkyAt(
-            Colour(Sky + "skyColor", t, new Vector3(0.01f, 0.08f, 0.2f)),
-            Colour(Sky + "skyColorHorizon", t, new Vector3(0.02f)),
+            Bytes(Sky + "skyColor", t, new Vector3(0.01f, 0.08f, 0.2f)),
+            Bytes(Sky + "skyColorHorizon", t, new Vector3(0.02f)),
             // the colours round the sun and the moon at the horizon, scaled as the environment's horizontal scales say
-            Colour(Sky + "sunColorHorizon", t, new Vector3(0.8f)) * Value(Sky + "sunColorHorizonHorizontalScale", t, 1),
-            Colour(Sky + "sunBackHorizonColor", t, new Vector3(0.2f, 0.3f, 0.5f)),
-            Colour(Sky + "sunColorSky", t, new Vector3(0.2f)) * Value(Sky + "sunColorSkyBrightness", t, 1),
-            Colour(Sky + "moonColorHorizon", t, new Vector3(0.5f)) * Value(Sky + "moonColorHorizonHorizontalScale", t, 1),
-            Colour(Sky + "moonBackHorizonColor", t, new Vector3(0.3f)),
-            Colour(Sky + "moonColorSky", t, new Vector3(0.5f)) * MathF.Max(0, Value(Sky + "moonColorSkyBrightness", t, 0)),
+            Bytes(Sky + "sunColorHorizon", t, new Vector3(0.8f)) * Value(Sky + "sunColorHorizonHorizontalScale", t, 1),
+            Bytes(Sky + "sunBackHorizonColor", t, new Vector3(0.2f, 0.3f, 0.5f)),
+            Bytes(Sky + "sunColorSky", t, new Vector3(0.2f)) * Value(Sky + "sunColorSkyBrightness", t, 1),
+            Bytes(Sky + "moonColorHorizon", t, new Vector3(0.5f)) * Value(Sky + "moonColorHorizonHorizontalScale", t, 1),
+            Bytes(Sky + "moonBackHorizonColor", t, new Vector3(0.3f)),
+            Bytes(Sky + "moonColorSky", t, new Vector3(0.5f)) * MathF.Max(0, Value(Sky + "moonColorSkyBrightness", t, 0)),
             Direction(sunBearing, sunHeight), Direction(sunBearing + 180, moonHeight),
             Value(Sky + "sunAreaSkySize", t, 100), Value(Sky + "moonAreaSkySize", t, 30),
             Value(Sky + "sunInfluence", t, 1), Value(Sky + "moonInfluence", t, 0),
@@ -363,6 +370,19 @@ public sealed class WorldLighting
             // the colour the trees' own leaves and branches take in place of the random ones (the engine's
             // SpeedTreeApplyRandomColorFallback), as stored; its default is the engine's, as REDkit's environment editor shows it
             Setting(Tree + "randomColorsFallback", t) is { } fallback ? new Vector3(fallback.X, fallback.Y, fallback.Z) / 255 * fallback.W : new Vector3(61, 66, 60) / 255);
+    }
+
+    /// <summary>
+    /// How far across the sun's disc (or, by night, the moon's) looks, in radians from its middle to its edge: the
+    /// skybox's sun mesh (environment\skyboxes\sun\sun.w2mesh, a sphere 0.41 across its middle) scaled by the
+    /// environment's sunSize (moonSize); how big a size is on the sky measured from REDkit's disc (sunSize 2.014 drew it
+    /// 7.5 degrees across).
+    /// </summary>
+    public float DiscRadius(float hour, bool moon)
+    {
+        float t = ((hour % 24) + 24) % 24 / 24;
+        float size = Value(moon ? "m_sunAndMoonParams › moonSize" : "m_sunAndMoonParams › sunSize", t, 2);
+        return MathF.Atan(0.41f * size * 0.0793f);
     }
 
     /// <summary>The environment probes' settings at an hour (0 to 24).</summary>
@@ -531,6 +551,14 @@ public sealed class WorldLighting
     private float Value(string path, float t, float otherwise) => Setting(path, t)?.X ?? otherwise;
 
     /// <summary>A colour setting at a time, linear: its 0 to 255 values taken as sRGB, times its strength.</summary>
+    /// <summary>
+    /// A colour curve as the engine hands it to the sky shader: its bytes over 255, not linearised, times its strength
+    /// (as the trees' fallback colour is taken). Linearised, the horizon outshone the sun's own glow and the zenith went
+    /// a deep navy where REDkit's sky is pale.
+    /// </summary>
+    private Vector3 Bytes(string path, float t, Vector3 otherwise) =>
+        Setting(path, t) is { } v ? Vector3.Clamp(new Vector3(v.X, v.Y, v.Z) / 255, Vector3.Zero, Vector3.One) * v.W : otherwise;
+
     private Vector3 Colour(string path, float t, Vector3 otherwise)
     {
         if (Setting(path, t) is not { } v) return otherwise;

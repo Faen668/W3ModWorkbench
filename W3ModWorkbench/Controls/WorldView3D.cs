@@ -85,7 +85,7 @@ cbuffer Frame : register(b0)
     float4 Light;      // towards the light; exposure
     float4 LightColour;
     float4 Ambient;
-    float4 SunDir;     // towards the sun (or the moon); how big its glow is
+    float4 SunDir;     // towards the sun (or the moon); its disc's radius on the sky (radians)
     float4 SkyZenith;  // and the sky's brightness
     float4 SkyHorizon; // and how much brighter the sky is than the ground
     float4 SunGlow;
@@ -105,7 +105,7 @@ cbuffer Frame : register(b0)
 
 cbuffer SkyParameters : register(b3)
 {
-    float4 SkyTop;            // the sky's colour at the top; the visible sky's brightness scale
+    float4 SkyTop;            // the sky's colour at the top; the world's skybox brightness (the visible sky's alone)
     float4 SkyAtHorizon;      // at the horizon
     float4 SunHorizon;        // at the horizon towards the sun
     float4 SunBackHorizon;    // and away from it
@@ -156,9 +156,10 @@ float3 SkyColour(float3 dir)
     sky = lerp(sky, SunSky.rgb, pow(saturate(dot(SunAt.xyz, dir)), SunAt.w) * saturate(SkyScale.x));
     sky = lerp(sky, MoonSky.rgb, saturate(SkyScale.y) * pow(saturate(dot(MoonAt.xyz, dir)), MoonAt.w));
     sky *= SkyScale.z;
-    // the sun's disc (half a degree across), or by night the moon's, smaller and paler
+    // the sun's disc, or by night the moon's, paler: as big as the environment's sun (moon) size makes the skybox's sun
+    // mesh, its rim softened over a tenth of its radius
     float day = max(FogHeight.y, 0.02);
-    float disc = smoothstep(0.99996, 0.99999, saturate(dot(dir, SunDir.xyz)));
+    float disc = smoothstep(cos(SunDir.w * 1.05), cos(SunDir.w * 0.95), saturate(dot(dir, SunDir.xyz)));
     sky += lerp(float3(0.6, 0.65, 0.7) * 2 * SkyScale.z * 0.02, LightColour.rgb * 40, day) * disc;
     return sky;
 }
@@ -228,12 +229,13 @@ SkyOut SkyVS(uint id : SV_VertexID)
     return o;
 }
 
-// the sky as it's seen: fogged as far off as the far plane, by the fog's sky density
-float3 SkySeen(float3 dir)
+// the sky as it's seen: fogged as far off as the far plane, by the fog's sky density; the visible sky (not what's
+// mirrored) brightened first by the world's skybox brightness, as the sky shader's second scale has it
+float3 SkySeen(float3 dir, bool visible = false)
 {
     float3 fog, aerial;
     float2 amount = FogAt(Eye.xyz + dir * FogLimits.x, 1, fog, aerial);
-    return lerp(SkyColour(dir), fog * FogLimits.z, amount.x);
+    return lerp(SkyColour(dir) * (visible ? SkyTop.w : 1), fog * FogLimits.z, amount.x);
 }
 
 cbuffer TrajectoryDots : register(b5)
@@ -245,7 +247,7 @@ float4 SkyPS(SkyOut i) : SV_Target
 {
     float4 far = mul(float4(i.Ndc, 1, 1), Unproject);
     float3 dir = normalize(far.xyz / far.w - Eye.xyz);
-    float4 sky = Screen(SkySeen(dir), 1);
+    float4 sky = Screen(SkySeen(dir, true), 1);
     // the sun's and the moon's paths, as REDkit's trajectory display shows them
     [loop] for (int k = 0; k < 96; k++)
         if (TrajectoryPoints[k].w > 0 && dot(dir, TrajectoryPoints[k].xyz) > 0.99996)
@@ -755,8 +757,9 @@ float4 WaterPS(Out i) : SV_Target
     float fresnel = sqrt(saturate(lookScale * pow(pow(1 - nv0, 4) * 0.25 + 0.05, clamp(WaterSettings.x + 0.5, 0.01, 6)) * 0.4
         * saturate(0.415 * looked)));
     float3 body = Screen(Water.rgb * (GlobalLightColour(i.World) * saturate(Light.z) * seen / 3.14159265 + AmbientAt(float3(0, 0, 1), seen)), 1).rgb;
-    // the sky as it's seen: measured against REDkit's lake, the water mirrors it at its own brightness
-    float3 sky = Screen(SkySeen(reflected), 1).rgb;
+    // the sky as the engine's reflections give it where nothing in the scene is mirrored: the environment probes' sky,
+    // by the probes' reflection scale in light and in shadow, as the ground's reflections take it (not the visible sky)
+    float3 sky = Screen(ProbeSky(reflected) * lerp(SceneAdd.w, ProbeSkyHorizon.w, seen), 1).rgb;
     if (Paint.x > 0.5) sky = Reflection(i.World + float3(0, 0, 0.05), reflected, sky);
     // the sun's (or moon's) highlight as the game's water shader has it: GGX with alpha squared 1e-4 (its 3.183e-05 is
     // that over pi), the visibility term, held to 1, times the light
@@ -1368,9 +1371,13 @@ float4 StripePS(StripeOut i) : SV_Target
     float sun = SunSeen(i.World), ao = AoAt(i.Position), sky = CanopySky(i.World);
     float3 v = normalize(Eye.xyz - i.World), sunLight = GlobalLightColour(i.World) * sun;
     float direct = lerp(1, ao, AoSettings.w);
-    float3 lit = albedo * (sunLight * saturate(dot(n, Light.xyz)) / 3.14159265 * direct + AmbientAt(n, sun) * ao * sky)
+    float3 ambientPart = albedo * AmbientAt(n, sun) * ao * sky;
+    float3 lit = albedo * sunLight * saturate(dot(n, Light.xyz)) / 3.14159265 * direct + ambientPart
         + sunLight * SpecularAt(n, v, Light.xyz, 0.02, 0.8, 0.3) * direct;
-    return float4(Screen(Fogged(lit, i.World), 1).rgb, alpha);
+    // the debug views, as the ground shows them
+    if (LightingView > 3.5) return float4(ao.xxx, alpha);
+    if (LightingView > 2.5) return float4(pow(saturate(albedo), 1 / 2.2), alpha);
+    return float4(Screen(Fogged(LightingPart(lit, ambientPart), i.World), 1).rgb, alpha);
 }
 ";
     // loc-ignore-end
@@ -1932,7 +1939,7 @@ float4 StripePS(StripeOut i) : SV_Target
             Light = V(light.LightDirection, Units),
             LightColour = V(light.LightColour),
             Ambient = V(light.Ambient),
-            SunDir = V(light.SunDirection, light.SunGlowSize),
+            SunDir = V(light.SunDirection, (_lighting ?? Fallback).DiscRadius(_hour, light.Moon)),
             SkyZenith = V(light.SkyZenith, light.SkyBrightness),
             SkyHorizon = V(light.SkyHorizon),
             SunGlow = V(light.SunGlow),
@@ -1972,7 +1979,7 @@ float4 StripePS(StripeOut i) : SV_Target
         var skyAt = (_lighting ?? Fallback).Sky(_hour);
         var sky = new Sky
         {
-            Top = V(skyAt.Top, skyAt.VisibleScale), Horizon = V(skyAt.Horizon),
+            Top = V(skyAt.Top, (_lighting ?? Fallback).SkyboxBrightness(_hour)), Horizon = V(skyAt.Horizon),
             // the sky's own vertical fog density towards and away from the light ride in the horizon colours' w
             SunHorizon = V(skyAt.SunHorizon, skyAt.FogVerticalFront), SunBackHorizon = V(skyAt.SunBackHorizon, skyAt.FogVerticalBack),
             SunSky = V(skyAt.SunSky), MoonHorizon = V(skyAt.MoonHorizon), MoonBackHorizon = V(skyAt.MoonBackHorizon), MoonSky = V(skyAt.MoonSky, skyAt.ReflectedSky),
