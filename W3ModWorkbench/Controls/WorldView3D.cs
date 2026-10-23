@@ -283,6 +283,17 @@ float2 GridUv(float2 world)
     return float2((world.x - Ground.x) / Ground.z + 0.5 / Ground.w, 1 - (world.y - Ground.y) / Ground.z - 0.5 / Ground.w);
 }
 
+// the ground's normal at a point, from the heights round it
+float3 GroundNormal(float2 world)
+{
+    float2 uv = GridUv(world);
+    float texel = 1 / Ground.w;
+    float hw = HeightMap.SampleLevel(Smooth, uv - float2(texel, 0), 0).r, he = HeightMap.SampleLevel(Smooth, uv + float2(texel, 0), 0).r;
+    float hn = HeightMap.SampleLevel(Smooth, uv - float2(0, texel), 0).r, hs = HeightMap.SampleLevel(Smooth, uv + float2(0, texel), 0).r;
+    float scale = Heights.y / (2 * Heights.z);
+    return normalize(float3((hw - he) * scale, (hs - hn) * scale, 1));
+}
+
 float GroundHeight(float2 uv) { return HeightMap.SampleLevel(Smooth, uv, 0).r * Heights.y + Heights.x; }
 
 struct Out { float4 Position : SV_Position; float3 World : TEXCOORD0; float2 Uv : TEXCOORD1; };
@@ -379,6 +390,7 @@ cbuffer Foliage : register(b8)
     float4 AoSettings;         // the ambient occlusion's radius, bias, power, and how much it dims direct light
     float4 SpecularSettings;   // grass's f90, the other foliage's f90, the trees' specular scale
     float4 WaterSettings;      // the environment's water Fresnel (its reflectance looking straight down); the glint's scale
+    float4 TranslucencyCurve;  // the world's remaster translucency: curve tightness, highlight dimness, normal mask power, scattering saturation
 };
 
 Texture2D<float> AoMap : register(t18);
@@ -541,13 +553,16 @@ float4 TerrainPS(Out i) : SV_Target
     colour += saturate(pow(1 - saturate(dot(normal, v)), 16)) * material.w;
     float specularity = saturate(pow(saturate(material.x), 2.2) * ((1 - roughness) * material.z + (material.y - 0.5) * 3));
     float3 albedo = pow(saturate(colour), 2.2);
+    // the sun's f90 on the ground, as the remaster's lookdev defaults have it (read from REDkit's editor.exe):
+    // TerrainF90ForGlobalLightStartValue 0.35 at 5 m from the eye, SceneF90EndValue 0.25 from 200 m
+    float f90 = lerp(max(0.35, specularity), max(0.25, specularity), saturate((length(Eye.xyz - i.World) - 5) / 195));
     float sun = SunSeen(i.World), ao = AoAt(i.Position);
     float3 sunLight = GlobalLightColour(i.World) * sun;
     // the engine's lighting: Lambert over pi and GGX specular from the sun, dimmed by the AO's share for direct light;
     // the probes' ambient and reflection, dimmed by the AO
     float direct = lerp(1, ao, AoSettings.w);
     float3 lit = albedo * (sunLight * saturate(dot(normal, Light.xyz)) / 3.14159265 * direct + AmbientAt(normal, sun) * ao)
-        + sunLight * SpecularAt(normal, v, Light.xyz, specularity, clamp(roughness, 0.05, 1), 1) * direct
+        + sunLight * SpecularAt(normal, v, Light.xyz, specularity, clamp(roughness, 0.05, 1), f90) * direct
         + ReflectionAt(normal, v, specularity, clamp(roughness, 0.05, 1), sun) * ao;
     return Screen(Fogged(lit, i.World), 1);
 }
@@ -895,29 +910,36 @@ float4 PlantPS(PlantOut i, bool front : SV_IsFrontFace) : SV_Target
     albedo *= saturate(PlantTint.w * (i.Occlusion - 1) + 1);
     float3 V = normalize(Eye.xyz - i.World), L = Light.xyz;
     float sun = SunSeen(i.World);
-    // the engine's diffuse: Lambert over pi; for leaves and grass its translucency: towards a flat brightness, and the
-    // light through the leaf from behind
     bool leafy = !(i.Kind > 0.5 && i.Kind < 1.5);
-    // bark is lit as anything else, grass (thin cards) by the light on either side
-    // (a tree's leaf cards keep their own facing: a canopy's side away from the sun is lit only through the leaves)
     bool grass = i.Kind > 1.5 && i.Kind < 2.5;
-    float3 diffuse = (grass || (leafy && !billboard && SpecularSettings.w > 1.5) ? abs(dot(n, L)) : saturate(dot(n, L))) / 3.14159265;
+    // grass is lit by the ground's normal under it (the remaster's UseTerrainNormalDiffuseGrass, at full strength), its
+    // specular by the card's normal three quarters of the way to the ground's (TerrainNormalSpecGrassSlider 0.75)
+    float3 ground = GroundNormal(i.World.xy);
+    float3 specularNormal = grass ? normalize(lerp(n, ground, 0.75)) : n;
+    if (grass) n = ground;
+    float LoV = dot(L, V);
+    // the engine's diffuse (include_constants.fx, DiffuseLightingPBRPipeline): grass by its approximated foliage model,
+    // |L.N| to the power 0.3 (ApproximatedDiffuseCurvePower) dimmed as the eye looks towards the sun; the rest Lambert;
+    // a tree's leaf cards keep their own facing, so a canopy's side away from the sun is lit only through the leaves
+    float3 diffuse = (grass ? pow(abs(dot(L, n)), 0.3) * saturate(LoV + 0.5) * albedo : saturate(dot(n, L))) / 3.14159265;
     float translucent = leafy ? BillboardTint.w : 0;
     if (translucent > 0)
     {
-        float scatter = (dot(L, n) + 1) * 0.5, back = (dot(L, -V) + 1) * 0.5, reduction = (dot(n, -V) + 1) * 0.5;
-        back *= back;
-        back *= back;
-        float gain = Translucency.w * reduction * lerp(scatter, back, Translucency.x);
-        diffuse = lerp(diffuse, Translucency.z * 0.96 * albedo, Translucency.y * translucent) + gain * translucent * albedo;
+        // the remaster's translucency (UseNewTranslucency, on by default): the light through the leaf, strongest looking
+        // into the sun, masked by how squarely the light meets the card; coloured by the albedo by the saturation
+        float mask = pow(abs(dot(L, n)), TranslucencyCurve.z);
+        float scattering = exp(-(LoV + TranslucencyCurve.x)) + exp(-3 * (LoV + TranslucencyCurve.y));
+        float3 tone = grass ? saturate(lerp(dot(albedo, float3(0.2125, 0.7154, 0.0721)), albedo, TranslucencyCurve.w)) : 1;
+        diffuse += mask * scattering * translucent * tone / 3.14159265;
     }
     float ao = AoAt(i.Position), directAo = lerp(1, ao, AoSettings.w);
     float f90 = i.Kind > 1.5 && i.Kind < 2.5 ? SpecularSettings.x : SpecularSettings.y;
     float3 sunLight = GlobalLightColour(i.World) * sun;
     // the ambient round leaves and grass from the card's own facing upward, not the side seen from below
-    float3 an = leafy ? normalize(float3(i.Normal.xy, abs(i.Normal.z) + 0.3)) : n;
-    float3 lit = albedo * (sunLight * diffuse * directAo + AmbientAt(an, sun) * ao)
-        + sunLight * SpecularAt(n, V, L, 0.04, 0.6, f90) * SpecularSettings.z * directAo;
+    float3 an = grass ? ground : leafy ? normalize(float3(i.Normal.xy, abs(i.Normal.z) + 0.3)) : n;
+    // (the approximated model has the albedo in it already)
+    float3 lit = (grass ? sunLight * diffuse * directAo : albedo * sunLight * diffuse * directAo) + albedo * AmbientAt(an, sun) * ao
+        + sunLight * SpecularAt(specularNormal, V, L, 0.04, 0.6, f90) * SpecularSettings.z * directAo;
     return Screen(Fogged(lit, i.World), 1);
 }
 
@@ -1337,7 +1359,7 @@ float AoPS(float4 position : SV_Position) : SV_Target
         _grading = new Buffer(Device, Utilities.SizeOf<Grading>(), ResourceUsage.Default, BindFlags.ConstantBuffer, CpuAccessFlags.None, ResourceOptionFlags.None, 0);
         _sky = new Buffer(Device, Utilities.SizeOf<Sky>(), ResourceUsage.Default, BindFlags.ConstantBuffer, CpuAccessFlags.None, ResourceOptionFlags.None, 0);
         _lightColour = new Buffer(Device, 48, ResourceUsage.Default, BindFlags.ConstantBuffer, CpuAccessFlags.None, ResourceOptionFlags.None, 0);
-        _foliage = new Buffer(Device, 16 * 25, ResourceUsage.Default, BindFlags.ConstantBuffer, CpuAccessFlags.None, ResourceOptionFlags.None, 0);
+        _foliage = new Buffer(Device, 16 * 26, ResourceUsage.Default, BindFlags.ConstantBuffer, CpuAccessFlags.None, ResourceOptionFlags.None, 0);
         _ambientCube = new Texture2D(Device, new Texture2DDescription
         {
             Width = 6, Height = 1, MipLevels = 1, ArraySize = 1, Format = DxgiFormat.R16G16B16A16_Float,
@@ -1461,6 +1483,13 @@ float AoPS(float4 position : SV_Position) : SV_Target
     /// <summary>The fog colours' scale against the light, measured against REDkit (the sky at the horizon at 09:10 over White Orchard).</summary>
     public float FogScale { get; set; } = 0.7f;
 
+    /// <summary>
+    /// The world's remaster translucency settings (its environmentParameters' translucencyRemasterSettings): the curve's
+    /// tightness, the highlights' dimness, the normal mask's power and the scattering's saturation. A setting the world
+    /// doesn't keep is 1 (the engine's own default for it isn't in REDkit's data).
+    /// </summary>
+    public Vector4 TranslucencyCurve { get; set; } = Vector4.One;
+
     /// <summary>A scale on the sky's brightness, for matching against REDkit (1 is the environment's own).</summary>
     public float SkyFactor { get; set; } = 1;
 
@@ -1566,7 +1595,7 @@ float AoPS(float4 position : SV_Position) : SV_Target
         c.PixelShader.SetConstantBuffer(7, _lightColour);
         var foliage = (_lighting ?? Fallback).Foliage(_hour);
         var alpha = (_lighting ?? Fallback).AlphaScalars;
-        var foliageData = new Vector4[25];
+        var foliageData = new Vector4[26];
         for (int k = 0; k < 3; k++)
         {
             foliageData[k] = foliage.Trees[k];
@@ -1590,6 +1619,7 @@ float AoPS(float4 position : SV_Position) : SV_Target
         foliageData[22] = new Vector4(probes.AoRadius, probes.AoBias, probes.AoPower, AllowSsao ? probes.AoNonAmbient : 0);
         foliageData[23] = new Vector4(probes.F90Grass, probes.F90Trees, probes.TreeSpecular, PlantTest);
         foliageData[24] = new Vector4(probes.WaterFresnel, GlintScale, 0, 0);
+        foliageData[25] = TranslucencyCurve;
         c.UpdateSubresource(foliageData, _foliage);
         c.PixelShader.SetConstantBuffer(8, _foliage);
         // the ambient cube for this light, before anything reads it

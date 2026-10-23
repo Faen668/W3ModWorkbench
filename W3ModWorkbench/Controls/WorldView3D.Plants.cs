@@ -414,6 +414,8 @@ public sealed partial class WorldView3D
         c.OutputMerger.SetDepthStencilState(null);
         c.OutputMerger.SetBlendState(null);
         c.Rasterizer.State = _raster;
+        // the heights, for the ground's normal the grass is lit by
+        c.PixelShader.SetShaderResource(0, _heightMap);
         var lists = GatherPlants(_eye, PlantFarthest, planes);
         PlantsDrawn = DrawPlantLists(lists, _plantVS!, _billboardVS!, _plantPS!, new Vector4[32]);
     }

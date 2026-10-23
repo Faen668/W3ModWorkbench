@@ -14,6 +14,7 @@ using W3ModWorkbench.ViewModels;
 using W3ModWorkbench.Localisation;
 using Vector2 = System.Numerics.Vector2;
 using Vector3 = System.Numerics.Vector3;
+using Vector4 = System.Numerics.Vector4;
 
 namespace W3ModWorkbench;
 
@@ -738,6 +739,16 @@ public partial class WorldWindow : Window, IMessageHost
         MapProgress.Visibility = Visibility.Collapsed;
         View3D.SetPlants(kinds);
         View3D.SetGrass(grass);
+        View3D.TranslucencyCurve = TranslucencyOf(world);
+    }
+
+    /// <summary>The world's remaster translucency settings (each a curve; its first key), 1 for one it doesn't keep.</summary>
+    private static Vector4 TranslucencyOf(WorldFile world)
+    {
+        var settings = (world.World["environmentParameters"] as RedObject)?["translucencyRemasterSettings"] as RedObject;
+        float Value(string name) => (settings?[name] as RedObject)?.Array("dataCurveValues").OfType<RedObject>().FirstOrDefault()?.Float("value", 1) ?? 1;
+        return new Vector4(Value("translucencyCurveTightness"), Value("translucencyHighlightDimness"), Value("translucencyNormalMaskPower"),
+            Value("translucencyScatteringSaturation"));
     }
 
     /// <summary>
@@ -820,7 +831,7 @@ public partial class WorldWindow : Window, IMessageHost
                 foreach (var name in tree.Materials.Select(m => m.Diffuse).Append(tree.BillboardMaterial?.Diffuse ?? "").Append(tree.BillboardMaterial?.Normal ?? "").Where(n => n.Length > 0).Distinct())
                 {
                     string path = SpeedTreeFile.TexturePath(first.Tree, name);
-                    mine[path] = pictures.GetOrAdd(path, t => MeshTextures.LoadWithAlpha(_locator, t, first.Grass ? 256 : 1024));
+                    mine[path] = pictures.GetOrAdd(path, t => MeshTextures.LoadWithAlpha(_locator, t, 1024));
                 }
                 kinds.Add(new PlantKind3D(first.Tree, tree, first.Grass, mine, kind.SelectMany(g => g.Instances).ToList()));
             }
