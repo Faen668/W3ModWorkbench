@@ -15,6 +15,7 @@ using W3ModWorkbench.Localisation;
 using Vector2 = System.Numerics.Vector2;
 using Vector3 = System.Numerics.Vector3;
 using Vector4 = System.Numerics.Vector4;
+using Matrix4x4 = System.Numerics.Matrix4x4;
 
 namespace W3ModWorkbench;
 
@@ -751,12 +752,53 @@ public partial class WorldWindow : Window, IMessageHost
     private async Task ShowMeshes3DAsync()
     {
         var locator = _locator;
-        var placed = _dots.Values.SelectMany(d => d).SelectMany(d => d.Entity.Components)
-            .Where(c => c.Resource is { } r && r.EndsWith(".w2mesh", StringComparison.OrdinalIgnoreCase))
-            .GroupBy(c => c.Resource!, StringComparer.OrdinalIgnoreCase).ToList();
-        if (placed.Count == 0) return;
         MapProgress.Visibility = Visibility.Visible;
         MapProgress.Text = L.T("WorldWindow.ReadingMeshes3D");
+        var entities = _dots.Values.SelectMany(d => d).Select(d => d.Entity).ToList();
+        static bool IsProxy(string mesh) => mesh.Contains(@"	extures_entity_proxy", StringComparison.OrdinalIgnoreCase);
+        static bool IsMesh(LayerComponent c) => c.Resource is { } r && r.EndsWith(".w2mesh", StringComparison.OrdinalIgnoreCase);
+        // an entity made from a template whose meshes the layer doesn't stream itself (a windmill, a fence, a door): the
+        // template's meshes (its default appearance's, those not skinned to a skeleton), each placed on the entity; its
+        // stand-in for far off (an entity proxy) then left out
+        var fromTemplates = await Task.Run(() =>
+        {
+            var byTemplate = new Dictionary<string, List<(string Mesh, Matrix4x4 Placed)>?>(StringComparer.OrdinalIgnoreCase);
+            var found = new List<(string Mesh, Matrix4x4 Place, float AutoHide)>();
+            var replaced = new HashSet<LayerEntity>();
+            foreach (var entity in entities)
+            {
+                if (entity.Template is not { } template || entity.Components.Any(c => IsMesh(c) && !IsProxy(c.Resource!))) continue;
+                if (!byTemplate.TryGetValue(template, out var meshes))
+                {
+                    meshes = null;
+                    try
+                    {
+                        if (locator.ReadFile(template) is { } data)
+                        {
+                            var file = Core.Entities.EntityFile.Read(data);
+                            meshes = [.. Core.Entities.EntityFile.MeshesOf(file.Look(file.DefaultAppearance, locator.ReadFile))
+                                .Where(m => !m.Component.Skinned).Select(m => (m.Mesh, m.Placed))];
+                        }
+                    }
+                    catch (Exception ex) when (ex is IOException or InvalidDataException) { }
+                    byTemplate[template] = meshes;
+                }
+                if (meshes is not { Count: > 0 }) continue;
+                var place = entity.Object["transform"] is byte[] raw ? Core.Entities.EntityFile.Transform(raw) : Matrix4x4.CreateTranslation(entity.Position);
+                foreach (var (mesh, placed) in meshes) found.Add((mesh, placed * place, 0));
+                replaced.Add(entity);
+            }
+            return (found, replaced);
+        });
+        var placed = entities.SelectMany(e => e.Components.Where(c => IsMesh(c) && !(fromTemplates.replaced.Contains(e) && IsProxy(c.Resource!)))
+                .Select(c => (Mesh: c.Resource!, c.Place, c.AutoHide)))
+            .Concat(fromTemplates.found)
+            .GroupBy(c => c.Mesh, StringComparer.OrdinalIgnoreCase).ToList();
+        if (placed.Count == 0)
+        {
+            MapProgress.Visibility = Visibility.Collapsed;
+            return;
+        }
         var textures = new System.Collections.Concurrent.ConcurrentDictionary<string, Task<System.Windows.Media.Imaging.BitmapSource?>>(StringComparer.OrdinalIgnoreCase);
         Task<System.Windows.Media.Imaging.BitmapSource?> Texture(string path) =>
             textures.GetOrAdd(path, p => Task.Run(() => MeshTextures.LoadWithAlpha(locator, p, 512)));
