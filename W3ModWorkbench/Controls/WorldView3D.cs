@@ -450,7 +450,7 @@ cbuffer Foliage : register(b8)
     float4 Pigment;            // the grass's pigment: brightness, where the flood starts, over how far (m_speedTree pigment*); how much more low on the plant
     float4 GrassSettings;      // the grass's albedo multiplier
     float4 TreeFallback;       // the trees' fallback colour (m_speedTree randomColorsFallback)
-    float4 WaterLook;          // the environment's water ambient scale (in shadow), diffuse scale (in light), foam intensity
+    float4 WaterLook;          // the environment's water ambient scale (in shadow), diffuse scale (in light), foam intensity, caustics
 };
 #define GrassAlbedo GrassSettings.x
 // which of the light to show, as REDkit's decomposed views do: 0 all of it, 1 the ambient (and the probes' reflection),
@@ -666,7 +666,7 @@ float4 TerrainPS(Out i) : SV_Target
 Texture2D<float> DepthMap : register(t6);
 Texture2D SceneMap : register(t7);
 Texture2DArray FoamLoop : register(t8);
-Texture2D WaveMap : register(t9);
+Texture2D WaveMap : register(t9); // the wave simulation (WorldView3D.Waves): the slopes, a crest measure, the height
 
 float ViewDepth(float stored) { return Camera.x * Camera.y / (Camera.y - stored * (Camera.y - Camera.x)); }
 
@@ -681,16 +681,19 @@ Out WaterVS(float2 uv : TEXCOORD0, float skirt : TEXCOORD1, float4 patch : PATCH
     return o;
 }
 
-// the waves' slope: the wave map (a tileable sea made once from a spectrum of waves, as the game's simulation makes
-// its own each frame) at three sizes, as the game's large, medium and small layers, each drifting its own way; the
-// long layers damped in shallower water than the short one, as the game damps them
-float2 Ripples(float2 p, float shallowLong, float shallowShort)
+// the waves as the game's water shader reads its wave simulation (WaveMap: the slopes, a crest measure, the height):
+// one layer's normal from its slopes, blended to flat by how far it's kept, and two normals laid one on the other
+float3 WaveNormal(float2 slope, float flat, float kept)
 {
-    float time = Eye.w;
-    float2 large = WaveMap.Sample(Tiled, p / 34 + time * float2(0.011, 0.006)).rg * 2 - 1;
-    float2 medium = WaveMap.Sample(Tiled, p / 11 + time * float2(-0.017, 0.021)).rg * 2 - 1;
-    float2 small = WaveMap.Sample(Tiled, p / 3.3 + time * float2(0.043, -0.031)).rg * 2 - 1;
-    return (large * 0.55 + medium * 0.35) * shallowLong + small * 0.22 * shallowShort;
+    float r = rsqrt(dot(slope, slope) + flat * flat);
+    return normalize(float3(slope * r * kept, (r * flat - 1) * kept + 1));
+}
+
+float3 AddWaveNormals(float3 n1, float3 n2)
+{
+    float3 t = normalize(n1) + float3(0, 0, 1);
+    float3 u = normalize(float3(-n2.xy, n2.z));
+    return normalize(t * dot(t, u) - u * t.z);
 }
 
 // what the water mirrors: the reflected ray walked through the scene already drawn until it passes behind something
@@ -726,17 +729,28 @@ float4 WaterPS(Out i) : SV_Target
     // none over the ground's holes (a cave's or a crypt's mouth), which the ground leaves out
     if (Paint.w > 0) clip((float)ControlMap.Load(int3(clamp((int2)floor(i.Uv * Ground.w), 0, (int)Ground.w - 1), 0)) - 0.5);
     float distance = length(i.World - Eye.xyz);
-    float near = saturate((250 - distance) * 0.004);
-    float shallowLong = saturate((abs(depth) - 0.1) * 0.2040816) * 0.7 + 0.3;
-    float shallowShort = saturate((abs(depth) - 0.1) * 0.5263158) * 0.4 + 0.6;
-    float3 n = normalize(float3(-Ripples(i.World.xy, shallowLong, shallowShort) * lerp(0.3, 1, near) * FogLimits.w, 1));
+    // the simulation's layers at 161.5, 34.58 and 8 m (the engine's defaults), the large and medium ones warped by their
+    // own slopes (3.32 and 3.61: the ocean tessellation factor's polynomials at REDkit's 52), kept out to 2000, 40 and
+    // 20 m; the wind strength the per-water constant (at least 0.05)
+    float across = length(i.World.xy - Eye.xy), reach = saturate((350 - across) / 350), wind = saturate(max(0.05, FogLimits.w));
+    float2 p = i.World.xy;
+    float4 large = WaveMap.SampleLevel(Tiled, p / 161.5, 0);
+    large = WaveMap.SampleLevel(Tiled, p / 161.5 + 3.32 * large.xy, 0);
+    float4 medium = WaveMap.SampleLevel(Tiled, p / 34.58, 0);
+    medium = WaveMap.SampleLevel(Tiled, p / 34.58 + 3.61 * medium.xy, 0);
+    float4 small = WaveMap.SampleLevel(Tiled, p / 8, 0);
+    float3 n = AddWaveNormals(WaveNormal(large.xy, 0.00015, saturate((2000 - across) * 0.0005)),
+        AddWaveNormals(WaveNormal(medium.xy, 0.00035, reach * saturate((40 - across) * 0.025)), WaveNormal(small.xy, 0.0008, reach * saturate((20 - across) * 0.05))));
+    // the crests' energy: the large and medium layers' crest measures, damped in the shallows, out to 350 m
+    float bed = saturate(max(depth, 0) * 0.2) * 0.4;
+    float crests = clamp(((bed - 0.92) * wind + 0.92) * large.z + ((bed - 0.2) * wind + 0.2) * medium.z, 0, 100) * reach;
 
     // how much water the eye looks through to what's behind
     int2 pixel = int2(i.Position.xy);
     float behind = ViewDepth(DepthMap.Load(int3(pixel, 0)));
     float thickness = max(behind - i.Position.w, 0);
     float2 screen = i.Position.xy / Camera.zw;
-    float2 bent = screen + n.xy * 0.03 * saturate(thickness * 2);
+    float2 bent = screen + n.xy * (0.03 - wind * 0.015) * pow(reach, 8) * saturate(thickness * 2);
     // keep it straight where the bent view would find something in front of the water
     if (ViewDepth(DepthMap.SampleLevel(Smooth, bent, 0)) < i.Position.w) bent = screen;
     float3 under = SceneMap.SampleLevel(Smooth, bent, 0).rgb;
@@ -782,13 +796,15 @@ float4 WaterPS(Out i) : SV_Target
     float2 foamUv = n.xy * 0.002 + i.World.xy * 0.04;
     float coarse = lerp(FoamLoop.Sample(Tiled, float3(foamUv, floor(frame))).r, FoamLoop.Sample(Tiled, float3(foamUv, floor(frame + 1) % 32)).r, frac(frame));
     float fine = lerp(FoamLoop.Sample(Tiled, float3(foamUv * 15, floor(frame))).r, FoamLoop.Sample(Tiled, float3(foamUv * 15, floor(frame + 1) % 32)).r, frac(frame));
-    float reach = saturate((350 - length(i.World.xy - Eye.xy)) / 350);
     float foamA = coarse * 1.3 * saturate(length(n.xy) * 1.5) * pow(reach, 12) * pow(fine, 2.2)
         + pow(saturate(pow(reach, 1.2) * coarse), 2.6) * 0.4;
     float foamB = pow(foamA, 1.6);
-    const float perWater = 0.05;
-    float foam = (1 - 0.9 * perWater) * 20 * max(foamB, saturate(foamA) * (perWater * 0.7 + 0.3)) * lookScale * clamp(WaterLook.z + 0.5, 0, 20);
-    body += Screen(foam.xxx, 1).rgb;
+    float foamScale = clamp(WaterLook.z + 0.5, 0, 20);
+    float foam = (1 - 0.9 * wind) * 20 * max(foamB, saturate(foamA) * (wind * 0.7 + 0.3)) * lookScale * foamScale;
+    // the waves' energy as the shader lights it: the crests to the power 7 - 5 x wind, a tenth, brighter where the
+    // light grazes the surface, by the foam intensity; a turquoise glow of it in the water's colour, as the foam is
+    float energy = 0.1 * pow(crests, clamp(7 - 5 * wind, 0.01, 7)) * ((1 - saturate(dot(n, Light.xyz))) * 0.8 + 0.2) * saturate(foamScale * 2);
+    body += Screen(max(saturate(3 - wind) * energy * float3(0.25, 0.74, 0.9), foam.xxx), 1).rgb;
 
     // the water's colour taking over from what's under it, as the game's water shader has it: what's under it dimmed
     // to 0.6 of itself through none, then each channel moved to the water's colour by the water looked through, the red
@@ -796,8 +812,14 @@ float4 WaterPS(Out i) : SV_Target
     // placed at its most)
     float lookedFog = looked * Water.w;
     under *= 0.6 - 0.267 * saturate(lookedFog);
+    // the caustics on the bed, added to it: under 1.7 m of water, by the environment's waterCaustics, on the crests'
+    // energy (the foam loop's caustic channel is 1 in the game's single-channel texture), dimmer in shadow
+    float bedDepth = max(depth, 0);
+    under += Screen(saturate(saturate(bedDepth * 15) * saturate(1.7 - bedDepth) * WaterLook.w) * (seen * 0.7 + 0.3) * saturate(energy * 3), 1).rgb;
     float3 colour = lerp(under, body, saturate(lookedFog * float3(0.5, 0.32, 0.34)));
     colour = lerp(colour, sky, fresnel) + glint;
+    // and the foam along the shore, in the first metre
+    colour += Screen(foam * saturate(bedDepth * 2) * saturate(1 - bedDepth), 1).rgb;
     float3 fog, aerial;
     float2 amount = FogAt(i.World, 0, fog, aerial);
     colour = lerp(colour, Screen(fog * FogLimits.z, 1).rgb, amount.x);
@@ -1772,54 +1794,7 @@ float4 StripePS(StripeOut i) : SV_Target
             IsDepthEnabled = true, DepthWriteMask = DepthWriteMask.All, DepthComparison = Comparison.Less,
         });
         for (int i = 0; i < Steps.Length; i++) _grids[i] = Grid(PatchSamples / Steps[i]);
-        _waves = Texture(WaveMap(256), 256, 256, DxgiFormat.R8G8B8A8_UNorm, 4);
-    }
-
-    /// <summary>
-    /// A tileable sea's slopes (R, G: the slope across and up, 0.5 flat), made from a few hundred waves whose
-    /// wavelengths fit the tile, each as tall as a wind-driven sea's spectrum gives it (Phillips', as the game's own wave
-    /// simulation uses), with random phases.
-    /// </summary>
-    private static byte[] WaveMap(int size)
-    {
-        var random = new Random(1764);
-        var waves = new List<(float Kx, float Ky, float Amplitude, float Phase)>();
-        var wind = Vector2.Normalize(new Vector2(0.8f, 0.6f));
-        for (int i = -20; i <= 20; i++)
-            for (int j = -20; j <= 20; j++)
-            {
-                float k = MathF.Sqrt(i * i + j * j);
-                if (k < 1 || k > 20) continue;
-                float along = Vector2.Dot(new Vector2(i, j) / k, wind);
-                // long waves along the wind, few short ones, none against it
-                float energy = MathF.Exp(-1 / (k * k * 0.02f)) / (k * k * k * k) * (along * along * 0.8f + 0.2f);
-                waves.Add((i * MathF.Tau, j * MathF.Tau, MathF.Sqrt(energy), (float)random.NextDouble() * MathF.Tau));
-            }
-        var slopes = new float[size * size * 2];
-        Parallel.For(0, size, y =>
-        {
-            for (int x = 0; x < size; x++)
-            {
-                float u = (float)x / size, v = (float)y / size, sx = 0, sy = 0;
-                foreach (var (kx, ky, amplitude, phase) in waves)
-                {
-                    float c = MathF.Cos(kx * u + ky * v + phase) * amplitude;
-                    sx += kx * c;
-                    sy += ky * c;
-                }
-                slopes[(y * size + x) * 2] = sx;
-                slopes[(y * size + x) * 2 + 1] = sy;
-            }
-        });
-        float most = slopes.Max(Math.Abs);
-        var pixels = new byte[size * size * 4];
-        for (int i = 0; i < size * size; i++)
-        {
-            pixels[i * 4] = (byte)Math.Clamp(128 + slopes[i * 2] / most * 127, 0, 255);
-            pixels[i * 4 + 1] = (byte)Math.Clamp(128 + slopes[i * 2 + 1] / most * 127, 0, 255);
-            pixels[i * 4 + 3] = 255;
-        }
-        return pixels;
+        StartWaves();
     }
 
     /// <summary>
@@ -1864,7 +1839,6 @@ float4 StripePS(StripeOut i) : SV_Target
     /// <summary>How bright the sky is drawn against the ground, at the same exposure: the environment's sky colours are kept far dimmer than its light.</summary>
 
     /// <summary>How wavy the water is for a weather's wind (its windScale): nearly a mirror when it's still, full waves from 0.3 up.</summary>
-    private static float Waviness(float wind) => 0.12f + 0.88f * Math.Clamp(wind / 0.3f, 0, 1);
 
     /// <summary>The fog colours' scale against the light, measured against REDkit (the sky at the horizon at 09:10 over White Orchard).</summary>
     public float FogScale { get; set; } = 0.7f;
@@ -1965,7 +1939,7 @@ float4 StripePS(StripeOut i) : SV_Target
             AerialBack = V(light.AerialBack, light.FogAppearRange),
             FogCustom = V(light.FogCustom, light.FogCustomAmount),
             FogCustomShape = new Vector4(light.FogCustomColourStart, light.FogCustomColourRange, light.FogCustomAmountStart, light.FogCustomAmountRange),
-            FogLimits = new Vector4(light.FogDistanceLimit, light.FogSkyDensity, FogScale, Waviness((_lighting ?? Fallback).Wind)),
+            FogLimits = new Vector4(light.FogDistanceLimit, light.FogSkyDensity, FogScale, Math.Clamp((_lighting ?? Fallback).Wind, 0, 1)),
         };
         c.UpdateSubresource(ref frame, _frame);
         c.VertexShader.SetConstantBuffer(0, _frame);
@@ -2036,7 +2010,7 @@ float4 StripePS(StripeOut i) : SV_Target
         foliageData[25] = TranslucencyCurve;
         foliageData[26] = new Vector4(CanopyDensity, _canopy is null ? 0 : 1, foliage.GrassAmbient, 0);
         foliageData[29] = V(foliage.Fallback);
-        foliageData[30] = new Vector4(probes.WaterAmbientScale, probes.WaterDiffuseScale, probes.WaterFoam, 0);
+        foliageData[30] = new Vector4(probes.WaterAmbientScale, probes.WaterDiffuseScale, probes.WaterFoam, probes.WaterCaustics);
         foliageData[28] = new Vector4(GrassAlbedoMultiplier, LightingView, 1, foliage.BillboardTranslucency);
         foliageData[27] = new Vector4(foliage.Pigment, PigmentHeight);
 
@@ -2186,6 +2160,7 @@ float4 StripePS(StripeOut i) : SV_Target
             c.OutputMerger.SetRenderTargets(ReadOnlyDepthView, HdrView);
             c.OutputMerger.SetDepthStencilState(_depthTestOnly);
             c.OutputMerger.SetBlendState(null);
+            UpdateWaves((float)_clock.Elapsed.TotalSeconds, (_lighting ?? Fallback).Wind);
             c.PixelShader.SetShaderResources(6, DepthTexture, SceneTexture, _foam, _waves);
             c.VertexShader.Set(_waterVS);
             c.PixelShader.Set(_waterPS);
@@ -2420,6 +2395,7 @@ float4 StripePS(StripeOut i) : SV_Target
         DisposeStripeDevice();
         DisposeEnvironment();
         DisposeProbe();
+        DisposeWaves();
         foreach (var d in new IDisposable?[] { _aoPS, _ao, _aoTarget, _aoView, _foliage, _ambientCube, _ambientTarget, _ambientView, _ambientPS, _lightColour, _shadowPS, _shadow, _shadowTarget, _shadowTexture, _sky, _grading, _postPS, _balanceA, _balanceB, _waves, _foam, _textureSettings, _skyVS, _skyPS, _waterVS, _waterPS, _waterBlend, _noDepth, _depthTestOnly, _waterLevel, _patches, _heightMap, _colourMap, _controlMap, _diffuse, _normals, _tiled, _depthState, _raster, _sampler, _frame, _layout, _ps, _vs })
             d?.Dispose();
         base.Dispose();
