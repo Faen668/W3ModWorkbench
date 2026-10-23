@@ -1113,6 +1113,47 @@ float4 MeshPS(MeshOut i, bool front : SV_IsFrontFace) : SV_Target
         + ReflectionAt(n, v, dot(specularity, 0.3333), roughness, sun) * ao * sky;
     return Screen(Fogged(lit, i.World), 1);
 }
+
+// ---- stripes ----
+// The layers' stripes (paths and roads over the ground): the game's cooked triangles, lifted a little off the ground so
+// they're drawn over it, lit as the ground under them (its normal, bent by the stripe's normal map along the way it
+// runs), blended in by their texture's alpha and their vertices' (clear at the ends).
+
+struct StripeIn { float3 Position : POSITION; float2 Uv : TEXCOORD0; float Alpha : TEXCOORD1; float3 Along : TEXCOORD2; };
+struct StripeOut { float4 Position : SV_Position; float3 World : TEXCOORD0; float2 Uv : TEXCOORD1; float Alpha : TEXCOORD2; float3 Along : TEXCOORD3; };
+
+StripeOut StripeVS(StripeIn v)
+{
+    StripeOut o;
+    o.World = v.Position + float3(0, 0, 0.04);
+    o.Position = mul(float4(o.World, 1), ViewProjection);
+    o.Uv = v.Uv;
+    o.Alpha = v.Alpha;
+    o.Along = v.Along;
+    return o;
+}
+
+float4 StripePS(StripeOut i) : SV_Target
+{
+    float4 c = MeshDiffuse.Sample(Tiled, i.Uv);
+    float alpha = saturate(c.a * i.Alpha);
+    clip(alpha - 0.01);
+    float3 albedo = pow(saturate(c.rgb), 2.2);
+    float3 n = GroundNormal(i.World.xy);
+    float4 m = MeshNormal.Sample(Tiled, i.Uv);
+    if (dot(m.rgb, m.rgb) > 0.01)
+    {
+        float3 b = normalize(i.Along - n * dot(n, i.Along) + 1e-5), t = cross(b, n);
+        float2 xy = m.xy * 2 - 1;
+        n = normalize(xy.x * t + xy.y * b + sqrt(saturate(1 - dot(xy, xy))) * n);
+    }
+    float sun = SunSeen(i.World), ao = AoAt(i.Position), sky = CanopySky(i.World);
+    float3 v = normalize(Eye.xyz - i.World), sunLight = GlobalLightColour(i.World) * sun;
+    float direct = lerp(1, ao, AoSettings.w);
+    float3 lit = albedo * (sunLight * saturate(dot(n, Light.xyz)) / 3.14159265 * direct + AmbientAt(n, sun) * ao * sky)
+        + sunLight * SpecularAt(n, v, Light.xyz, 0.02, 0.8, 0.3) * direct;
+    return float4(Screen(Fogged(lit, i.World), 1).rgb, alpha);
+}
 ";
     // loc-ignore-end
 
@@ -1422,6 +1463,7 @@ float4 MeshPS(MeshOut i, bool front : SV_IsFrontFace) : SV_Target
         using (var code = Compile(Shaders, "ShadowPS", "ps_4_0")) _shadowPS = new PixelShader(Device, code);
         StartPlants();
         StartMeshes();
+        StartStripes();
         StartEnvironment();
         _adaptBuffer = new Buffer(Device, 16, ResourceUsage.Default, BindFlags.ConstantBuffer, CpuAccessFlags.None, ResourceOptionFlags.None, 0);
         var blend = new BlendStateDescription();
@@ -1834,7 +1876,8 @@ float4 MeshPS(MeshOut i, bool front : SV_IsFrontFace) : SV_Target
                 PatchesDrawn += byStep[i].Count;
             }
 
-        // the trees, bushes and grass, and the layers' meshes
+        // the paths laid over the ground, then the trees, bushes and grass, and the layers' meshes
+        DrawStripes();
         DrawPlants(planes);
         DrawMeshes(planes);
         c.InputAssembler.InputLayout = _layout;
@@ -2058,6 +2101,7 @@ float4 MeshPS(MeshOut i, bool front : SV_IsFrontFace) : SV_Target
             }
         DisposePlantDevice();
         DisposeMeshDevice();
+        DisposeStripeDevice();
         DisposeEnvironment();
         foreach (var d in new IDisposable?[] { _aoPS, _ao, _aoTarget, _aoView, _foliage, _ambientCube, _ambientTarget, _ambientView, _ambientPS, _lightColour, _shadowPS, _shadow, _shadowTarget, _shadowTexture, _sky, _grading, _postPS, _balanceA, _balanceB, _waves, _foam, _textureSettings, _skyVS, _skyPS, _waterVS, _waterPS, _waterBlend, _noDepth, _depthTestOnly, _waterLevel, _patches, _heightMap, _colourMap, _controlMap, _diffuse, _normals, _tiled, _depthState, _raster, _sampler, _frame, _layout, _ps, _vs })
             d?.Dispose();

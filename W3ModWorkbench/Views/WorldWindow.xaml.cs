@@ -853,8 +853,32 @@ public partial class WorldWindow : Window, IMessageHost
             }
             catch (Exception ex) when (ex is IOException or InvalidDataException or ArgumentException or IndexOutOfRangeException) { }
         });
+        // the stripes (paths and roads over the ground): their triangles into the world, batched by their textures
+        var stripes = await Task.Run(() => entities.SelectMany(e => e.Components).Where(c => c.Stripe is not null)
+            .GroupBy(c => (Diffuse: c.Resource?.ToLowerInvariant(), Normal: c.Stripe!.Normal?.ToLowerInvariant()))
+            .Select(group =>
+            {
+                var vertices = new List<StripeVertex3D>();
+                var indices = new List<int>();
+                foreach (var c in group)
+                {
+                    int first = vertices.Count;
+                    foreach (var (position, uv, alpha, along) in c.Stripe!.Read())
+                        vertices.Add(new StripeVertex3D
+                        {
+                            Position = Vector3.Transform(position, c.Place), Uv = uv, Alpha = alpha,
+                            Along = Vector3.Normalize(Vector3.TransformNormal(along, c.Place) + new Vector3(1e-6f, 0, 0)),
+                        });
+                    int count = vertices.Count - first;
+                    foreach (int i in c.Stripe.Triangles()) indices.Add(first + Math.Min(i, Math.Max(count - 1, 0)));
+                }
+                var diffuse = group.Key.Diffuse is { } d ? MeshTextures.LoadWithAlpha(locator, d, 512) : null;
+                var normal = group.Key.Normal is { } n ? MeshTextures.LoadWithAlpha(locator, n, 512) : null;
+                return new StripeBatch3D(diffuse, normal, [.. vertices], [.. indices]);
+            }).ToList());
         MapProgress.Visibility = Visibility.Collapsed;
         View3D.SetMeshes([.. kinds.OrderBy(k => k.Path, StringComparer.OrdinalIgnoreCase)]);
+        View3D.SetStripes(stripes);
     }
 
     /// <summary>

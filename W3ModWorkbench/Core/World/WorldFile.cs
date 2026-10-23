@@ -124,6 +124,9 @@ public sealed record LayerComponent(string ClassName, string Name, string? Resou
     /// <summary>How far off it's still drawn, as its component sets it (0 for the mesh's own distance).</summary>
     public float AutoHide { get; init; }
 
+    /// <summary>A stripe's triangles as the game cooked them, and its normal map; null for other components.</summary>
+    public StripeData? Stripe { get; init; }
+
     /// <summary>Its drawable flags as set (DF_IsVisible, DF_CastShadows…), null when it keeps the class's own.</summary>
     public string? DrawableFlags { get; init; }
 
@@ -141,6 +144,34 @@ public sealed record LayerComponent(string ClassName, string Name, string? Resou
 
     /// <summary>Whether it uses a file of its own (a mesh, a template), for a link to it.</summary>
     public bool HasResource => Resource is { Length: > 0 };
+}
+
+/// <summary>
+/// A stripe's cooked triangles (CStripeComponent's cookedVertices and cookedIndices): each a byte count, then 64-byte
+/// vertices (the position on the entity, a colour whose alpha fades the ends, the segment's number, the texture's
+/// across and along coordinates, the way it runs, its middle line's point) and 16-bit indices.
+/// </summary>
+public sealed record StripeData(byte[] Vertices, byte[] Indices, string? Normal)
+{
+    /// <summary>The vertices: position, texture coordinates (across, along), alpha, the way the stripe runs.</summary>
+    public IEnumerable<(Vector3 Position, Vector2 Uv, float Alpha, Vector3 Along)> Read()
+    {
+        if (Vertices.Length < 4) yield break;
+        int bytes = Math.Min(BitConverter.ToInt32(Vertices, 0), Vertices.Length - 4);
+        for (int at = 4; at + 64 <= 4 + bytes; at += 64)
+        {
+            float F(int o) => BitConverter.ToSingle(Vertices, at + o);
+            yield return (new Vector3(F(0), F(4), F(8)), new Vector2(F(20), F(28)), Vertices[at + 15] / 255f, new Vector3(F(36), F(40), F(44)));
+        }
+    }
+
+    /// <summary>The triangles' indices.</summary>
+    public IEnumerable<int> Triangles()
+    {
+        if (Indices.Length < 4) yield break;
+        int bytes = Math.Min(BitConverter.ToInt32(Indices, 0), Indices.Length - 4);
+        for (int at = 4; at + 2 <= 4 + bytes; at += 2) yield return BitConverter.ToUInt16(Indices, at);
+    }
 }
 
 /// <summary>An entity of a layer, for a map: its class and name, where it stands, which way it faces, its template, its components.</summary>
@@ -377,6 +408,8 @@ public sealed class WorldFile
             height = placed.Average(p => p.Z);
         }
         var own = c["transform"] is byte[] raw ? Core.Entities.EntityFile.Transform(raw) : Matrix4x4.Identity;
-        return new LayerComponent(c.ClassName, c["name"] as string ?? "", resource, points.Count >= 2 ? points : null, height) { Place = own * entityPlace, AutoHide = c["autoHideDistance"] is float hide ? hide : 0, DrawableFlags = c["drawableFlags"]?.ToString() };
+        return new LayerComponent(c.ClassName, c["name"] as string ?? "", resource, points.Count >= 2 ? points : null, height) { Place = own * entityPlace, AutoHide = c["autoHideDistance"] is float hide ? hide : 0, DrawableFlags = c["drawableFlags"]?.ToString(),
+            Stripe = c.ClassName == "CStripeComponent" && c["cookedVertices"] is byte[] sv && c["cookedIndices"] is byte[] si
+                ? new StripeData(sv, si, c["normalTexture"] is RedHandle nh ? file.PathOf(nh) : null) : null };
     }
 }
