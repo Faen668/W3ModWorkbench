@@ -43,10 +43,10 @@ public sealed record SpeedTreeMaterial(IReadOnlyList<string> Textures, string De
 
 /// <summary>
 /// One draw of a LOD: a material and its triangles. A leaf card's corners are its offsets from its middle, facing the
-/// camera; normals and ambient occlusion (1 in the open) are there when the material's vertices keep them.
+/// camera; normals, tangents and ambient occlusion (1 in the open) are there when the material's vertices keep them.
 /// </summary>
 public sealed record SpeedTreeDraw(int Material, Vector3[] Positions, Vector2[] Uvs, Vector3[]? Corners, int[] Indices,
-    Vector3[]? Normals = null, float[]? Occlusion = null);
+    Vector3[]? Normals = null, float[]? Occlusion = null, Vector3[]? Tangents = null);
 
 /// <summary>A side view of the tree in its billboard atlas: the rectangle (left, top, width, height; a negative size flips it) and whether it's turned.</summary>
 public readonly record struct SpeedTreeBillboard(Vector4 TexCoords, bool Rotated);
@@ -65,7 +65,7 @@ public sealed class SpeedTreeFile
     private const int WindSize = 1376, RenderStateSize = 720;
 
     /// <summary>Where the vertex declaration's properties are: SpeedTree's numbering of them.</summary>
-    private const int PropertyPosition = 0, PropertyUv = 1, PropertyNormal = 2, PropertyCorner = 5, PropertyOcclusion = 18;
+    private const int PropertyPosition = 0, PropertyUv = 1, PropertyNormal = 2, PropertyCorner = 5, PropertyTangent = 16, PropertyOcclusion = 18;
 
     public required Vector3 Min { get; init; }
     public required Vector3 Max { get; init; }
@@ -211,6 +211,7 @@ public sealed class SpeedTreeFile
             Vector3[]? corners = layout.Has(PropertyCorner) ? new Vector3[vertices] : null;
             Vector3[]? normals = layout.Has(PropertyNormal) ? new Vector3[vertices] : null;
             float[]? occlusion = layout.Has(PropertyOcclusion) ? new float[vertices] : null;
+            Vector3[]? tangents = layout.Has(PropertyTangent) ? new Vector3[vertices] : null;
             for (int v = 0; v < vertices; v++)
             {
                 int at = vertexData + v * layout.Size;
@@ -226,8 +227,14 @@ public sealed class SpeedTreeFile
                     normals[v] = n.LengthSquared() > 1e-6f ? Vector3.Normalize(n) : Vector3.UnitZ;
                 }
                 if (occlusion is not null) occlusion[v] = layout.Get(r.Data, at, PropertyOcclusion, 0);
+                if (tangents is not null)
+                {
+                    var t = new Vector3(layout.Get(r.Data, at, PropertyTangent, 0), layout.Get(r.Data, at, PropertyTangent, 1), layout.Get(r.Data, at, PropertyTangent, 2));
+                    if (layout.IsBytes(PropertyTangent)) t = t * 2 - Vector3.One;
+                    tangents[v] = t.LengthSquared() > 1e-6f ? Vector3.Normalize(t) : Vector3.Zero;
+                }
             }
-            draws.Add(new SpeedTreeDraw(state, positions, uvs, corners, indices, normals, occlusion));
+            draws.Add(new SpeedTreeDraw(state, positions, uvs, corners, indices, normals, occlusion, tangents));
         }
         var lodList = new List<IReadOnlyList<SpeedTreeDraw>>();
         int taken = 0;

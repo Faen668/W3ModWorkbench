@@ -1099,7 +1099,8 @@ public partial class WorldWindow : Window, IMessageHost
                 if (Read(first.Tree) is not { } data) return;
                 var tree = SpeedTreeFile.Read(data);
                 var mine = new Dictionary<string, System.Windows.Media.Imaging.BitmapSource?>(StringComparer.OrdinalIgnoreCase);
-                foreach (var name in tree.Materials.Select(m => m.Diffuse).Concat(tree.Materials.Select(m => m.Specular)).Append(tree.BillboardMaterial?.Diffuse ?? "")
+                foreach (var name in tree.Materials.Select(m => m.Diffuse).Concat(tree.Materials.Select(m => m.Specular)).Concat(tree.Materials.Select(m => m.Normal))
+                    .Append(tree.BillboardMaterial?.Diffuse ?? "")
                     .Append(tree.BillboardMaterial?.Normal ?? "").Where(n => n.Length > 0).Distinct())
                 {
                     string path = SpeedTreeFile.TexturePath(first.Tree, name);

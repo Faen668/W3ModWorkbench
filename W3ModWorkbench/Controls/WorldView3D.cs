@@ -921,7 +921,7 @@ float4 PostPS(SkyOut i) : SV_Target
 struct PlantIn
 {
     float3 Position : POSITION; float2 Uv : TEXCOORD0; float3 Normal : NORMAL; float4 Corner : TEXCOORD1; float Kind : TEXCOORD2;
-    float4 Place : PLACE; float2 Turn : TURN;
+    float3 Tangent : TANGENT; float4 Place : PLACE; float2 Turn : TURN;
 };
 // the kind: 0 leaves, 1 branches, 2 grass, 3 a billboard
 struct PlantOut
@@ -950,8 +950,9 @@ PlantOut PlantAt(PlantIn v, row_major float4x4 projection)
     o.Occlusion = v.Corner.w;
     o.Kind = v.Kind;
     o.Weights = RandomWeights(v.Turn);
-    o.Across = 0;
-    o.Upward = 0;
+    // the tangent frame the leaf's normal map is read in (none where the vertices keep no tangent)
+    o.Across = Turned(v.Tangent, v.Turn);
+    o.Upward = cross(o.Normal, o.Across);
     return o;
 }
 
@@ -1025,6 +1026,16 @@ float4 PlantPS(PlantOut i, bool front : SV_IsFrontFace) : SV_Target
             m = m * 2 - 1;
             float3 facing = normalize(float3(normalize(Eye.xy - i.World.xy + float2(1e-5, 0)), 0));
             n = normalize(m.x * i.Across + m.y * i.Upward + m.z * facing);
+        }
+    }
+    else if (dot(i.Across, i.Across) > 0.01)
+    {
+        // the leaf's or bark's own normal map in its tangent frame, as the game's SpeedTree shaders bend the normal by it
+        float3 m = PlantNormals.Sample(Tiled, i.Uv).xyz;
+        if (dot(m, m) > 0.01)
+        {
+            m = m * 2 - 1;
+            n = normalize(m.x * normalize(i.Across) + m.y * normalize(i.Upward) + m.z * n);
         }
     }
     // the trees' own leaves and branches take the fallback colour (the engine's SpeedTreeApplyRandomColorFallback), the

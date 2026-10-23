@@ -40,6 +40,7 @@ public sealed partial class WorldView3D
         public Vector3 Normal;
         public Vector4 Corner;
         public float Kind;
+        public Vector3 Tangent;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -50,7 +51,7 @@ public sealed partial class WorldView3D
     }
 
     /// <summary>One LOD of a kind on the card: its vertices and indices, and each draw's picture and index range.</summary>
-    private sealed record PlantLod(Buffer Vertices, Buffer Indices, (ShaderResourceView? Picture, int Start, int Count, int Base, ShaderResourceView? Specular, Vector4 Material)[] Draws);
+    private sealed record PlantLod(Buffer Vertices, Buffer Indices, (ShaderResourceView? Picture, int Start, int Count, int Base, ShaderResourceView? Specular, Vector4 Material, ShaderResourceView? Normals)[] Draws);
 
     private sealed class PlantKindGpu
     {
@@ -103,6 +104,7 @@ public sealed partial class WorldView3D
                 new InputElement("NORMAL", 0, DxgiFormat.R32G32B32_Float, 20, 0, InputClassification.PerVertexData, 0),
                 new InputElement("TEXCOORD", 1, DxgiFormat.R32G32B32A32_Float, 32, 0, InputClassification.PerVertexData, 0),
                 new InputElement("TEXCOORD", 2, DxgiFormat.R32_Float, 48, 0, InputClassification.PerVertexData, 0),
+                new InputElement("TANGENT", 0, DxgiFormat.R32G32B32_Float, 52, 0, InputClassification.PerVertexData, 0),
                 new InputElement("PLACE", 0, DxgiFormat.R32G32B32A32_Float, 0, 1, InputClassification.PerInstanceData, 1),
                 new InputElement("TURN", 0, DxgiFormat.R32G32_Float, 16, 1, InputClassification.PerInstanceData, 1)]);
         }
@@ -178,7 +180,7 @@ public sealed partial class WorldView3D
             {
                 var vertices = new List<PlantVertex>();
                 var indices = new List<int>();
-                var draws = new List<(ShaderResourceView?, int, int, int, ShaderResourceView?, Vector4)>();
+                var draws = new List<(ShaderResourceView?, int, int, int, ShaderResourceView?, Vector4, ShaderResourceView?)>();
                 foreach (var draw in lod)
                 {
                     var material = kind.Tree.Materials[draw.Material];
@@ -187,7 +189,7 @@ public sealed partial class WorldView3D
                         vertices.Add(new PlantVertex
                         {
                             Position = draw.Positions[v], Uv = draw.Uvs[v], Normal = draw.Normals?[v] ?? Vector3.UnitZ,
-                            Corner = new Vector4(draw.Corners?[v] ?? Vector3.Zero, draw.Occlusion?[v] ?? 1),
+                            Corner = new Vector4(draw.Corners?[v] ?? Vector3.Zero, draw.Occlusion?[v] ?? 1), Tangent = draw.Tangents?[v] ?? Vector3.Zero,
                             // the random colours and translucency by kind: grass, branches (bark), else leaves
                             // grass carries how high up the plant the vertex is (0 to 0.45 over 2), for its pigment
                             Kind = kind.Grass || material.Grass ? 2 + 0.45f * Math.Clamp(draw.Positions[v].Z / MathF.Max(kind.Tree.Max.Z, 0.05f), 0, 1)
@@ -197,7 +199,8 @@ public sealed partial class WorldView3D
                     // colour's green, the transmission colour's green, the glossiness (shininess over 128)
                     var specular = SpecularPicture(material.Specular);
                     draws.Add((Picture(material.Diffuse), indices.Count, draw.Indices.Length, first, specular,
-                        new Vector4(material.SpecularColour.Y, material.TransmissionColour.Y, specular is null ? -1 : MathF.Max(material.Shininess / 128, 1e-3f), material.AlphaScalar)));
+                        new Vector4(material.SpecularColour.Y, material.TransmissionColour.Y, specular is null ? -1 : MathF.Max(material.Shininess / 128, 1e-3f), material.AlphaScalar),
+                        material.Normal.Length > 0 ? SpecularPicture(material.Normal) : null));
                     indices.AddRange(draw.Indices);
                 }
                 if (vertices.Count == 0) continue;
@@ -543,11 +546,12 @@ public sealed partial class WorldView3D
                 c.InputAssembler.SetVertexBuffers(0, new VertexBufferBinding(lod.Vertices, Utilities.SizeOf<PlantVertex>(), 0),
                     new VertexBufferBinding(_plantPlaces, Utilities.SizeOf<PlantPlace>(), 0));
                 c.InputAssembler.SetIndexBuffer(lod.Indices, DxgiFormat.R32_UInt, 0);
-                foreach (var (picture, start, count, first, specular, material) in lod.Draws)
+                foreach (var (picture, start, count, first, specular, material, normals) in lod.Draws)
                 {
                     if (picture is null) continue;
                     c.PixelShader.SetShaderResource(14, picture);
                     c.PixelShader.SetShaderResource(24, specular);
+                    c.PixelShader.SetShaderResource(19, normals);
                     c.UpdateSubresource(new[] { material, flags }, _plantMaterial);
                     c.DrawIndexedInstanced(count, list.Count, start, first, starts[k][s]);
                 }
