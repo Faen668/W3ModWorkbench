@@ -775,8 +775,9 @@ public partial class WorldWindow : Window, IMessageHost
         static bool IsProxy(string mesh) => mesh.Contains(@"	extures_entity_proxy", StringComparison.OrdinalIgnoreCase);
         // meshes, and cloth (banners, washing, awnings) in the shape it has before it's simulated
         // (a character's cloth, a monster's rags, needs its skeleton: left out)
+        // and what breaks (fences, crates), whole as it stands before
         static bool IsMesh(LayerComponent c) => c.Resource is { } r && (r.EndsWith(".w2mesh", StringComparison.OrdinalIgnoreCase)
-                || Core.Meshes.ClothFile.IsCloth(r) && !r.StartsWith(@"characters\", StringComparison.OrdinalIgnoreCase))
+                || Core.Meshes.ClothFile.IsCloth(r) && !r.StartsWith(@"characters\", StringComparison.OrdinalIgnoreCase) || r.EndsWith(".reddest", StringComparison.OrdinalIgnoreCase))
             && LayerComponent.Drawable(c.DrawableFlags).Visible;
         // an entity made from a template whose meshes the layer doesn't stream itself (a windmill, a fence, a door): the
         // template's meshes (its default appearance's, those not skinned to a skeleton), each placed on the entity; its

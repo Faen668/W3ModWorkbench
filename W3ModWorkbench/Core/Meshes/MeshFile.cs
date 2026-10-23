@@ -115,7 +115,8 @@ public sealed class MeshFile
     public static MeshFile Read(byte[] data, Func<int, byte[]?> buffer)
     {
         var file = Cr2wFile.Read(data);
-        var mesh = file.First("CMesh") ?? throw new InvalidDataException(
+        // (a destructible, CPhysicsDestructionResource, is a mesh with the pieces it breaks into)
+        var mesh = file.First("CMesh") ?? file.First("CPhysicsDestructionResource") ?? throw new InvalidDataException(
             file.Exports.Count > 0 ? L.T("MeshFile.NotMesh", file.Exports[0].ClassName) : L.T("MeshFile.TheresNoMeshFile"));
         var cooked = mesh.Struct("cookedData");
         var materials = mesh.Array("materials").OfType<RedHandle>().ToList();
