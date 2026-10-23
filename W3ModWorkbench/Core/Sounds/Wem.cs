@@ -179,6 +179,21 @@ public sealed class SoundBank
     /// <summary>A sound the bank keeps, as a Wwise RIFF file, or null.</summary>
     public byte[]? EmbeddedSound(uint id) => Embedded.TryGetValue(id, out var at) ? _data.AsSpan(at.Offset, at.Size).ToArray() : null;
 
+    /// <summary>
+    /// What kind of object a type is. Banks up to version 126 number the types from 16 on differently (16 and 17 were
+    /// motion feedback, and effects to devices came two later), so theirs are moved to the later numbers first.
+    /// </summary>
+    public static string KindOf(byte type, uint version)
+    {
+        if (version <= 126 && type >= 0x10)
+        {
+            if (type == 0x10) return L.T("Wem.FeedbackBuses");
+            if (type == 0x11) return L.T("Wem.FeedbackNodes");
+            type -= 2;
+        }
+        return KindOf(type);
+    }
+
     private static string KindOf(byte type) => type switch
     {
         1 => L.T("Wem.States"), 2 => L.T("Wem.Sounds"), 3 => L.T("Wem.Actions"), 4 => L.T("Wem.Events"), 5 => L.T("Wem.RandomSequenceContainers"), 6 => L.T("Wem.SwitchContainers"),
@@ -225,7 +240,7 @@ public sealed class SoundBank
                         byte type = bank[i];
                         int length = BinaryPrimitives.ReadInt32LittleEndian(bank.AsSpan(i + 1));
                         if (length < 4 || i + 5 + length > body + size) break;
-                        string kind = KindOf(type);
+                        string kind = KindOf(type, version);
                         objects[kind] = objects.GetValueOrDefault(kind) + 1;
                         uint objectId = BinaryPrimitives.ReadUInt32LittleEndian(bank.AsSpan(i + 5));
                         hierarchy.Add((type, objectId, i + 9, length - 4));
@@ -244,7 +259,32 @@ public sealed class SoundBank
         if (data >= 0)
             foreach (var (soundId, offset, size) in index)
                 if (offset >= 0 && size > 0 && data + offset + size <= bank.Length) embedded.TryAdd(soundId, (data + offset, size));
+        // the quick reading above is laid out as the game's own banks (150) are; older and newer banks keep their
+        // sources differently, so theirs are read with everything else
+        if (version != GameVersion && version >= Banks.BankFormat.Oldest) sounds = SourcesOf(Banks.BankObjects.Read(bank));
         return new SoundBank { Version = version, Id = id, Embedded = embedded, Sounds = sounds, Objects = objects, Sections = sections, Hierarchy = hierarchy, _data = bank };
+    }
+
+    /// <summary>The bank version the game's own banks are.</summary>
+    public const uint GameVersion = 150;
+
+    /// <summary>The sounds a bank's sound objects and music tracks play, from its objects read in full.</summary>
+    private static List<BankSound> SourcesOf(Banks.BankObjects objects)
+    {
+        var sounds = new List<BankSound>();
+        foreach (var o in objects.Objects)
+        {
+            string? kind = o.ClassName switch { "CAkSound" => "Sound", "CAkMusicTrack" => L.T("Wem.MusicTrack"), _ => null }; // loc-ignore
+            if (kind is null) continue;
+            foreach (var id in o.Fields.FindAll("sourceId"))
+            {
+                // a source: how it's kept (0 in the bank, else streamed or prefetched), its audio's ID and size
+                if (id.Parent?.Find("storage") is not { } storage) continue;
+                int size = (int)(id.Parent.Find("size")?.Long ?? 0);
+                sounds.Add(new BankSound(o.Id, (uint)id.Long, kind, storage.Long != 0, size));
+            }
+        }
+        return sounds;
     }
 
     /// <summary>A source as a sound object or a music track keeps it: the codec's plugin, how it's kept (0 in the bank, 1 and 2 streamed), its ID and size.</summary>
