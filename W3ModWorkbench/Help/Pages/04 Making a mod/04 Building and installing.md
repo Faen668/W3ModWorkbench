@@ -24,6 +24,7 @@ build\modMyFirstMod\content\
 - **Scripts** are always compiled into `precompiled.rsblob`, the way REDkit publishes a mod. If any don't compile, nothing is built, and **Show errors** lists the mistakes, each opening its line.
 - With **Also ship the loose scripts** ticked in [[Projects|Project properties]], the `.ws` files go in `content\scripts` beside it, as your mod's source for others to read or merge. The `info.json` tells the game to run the compiled ones.
 - **Workspace files** are packed into the bundle, textures into the texture cache (cooked from your pictures, see [[Changing game files]]) and sounds into the sound cache.
+- **Sound banks** (`.bnk`) must be made with Wwise 2023.1, as the game's own are (bank version 150). The game won't load a bank of any other version, such as one made for the next-gen game, and never plays it. Build still packs it, but says which banks those are.
 
 ## The project's own DLC
 
