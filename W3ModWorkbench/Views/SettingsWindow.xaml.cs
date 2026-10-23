@@ -153,6 +153,7 @@ public partial class SettingsWindow : Window, IMessageHost
         (settings.MeshImportFillLods ? ImportFillLods : ImportKeepLods).IsChecked = true;
         (settings.MakeModPictureFormat switch { ".tga" => MakeModTga, ".dds" => MakeModDds, _ => MakeModPng }).IsChecked = true;
         MakeModOpenCheck.IsChecked = settings.MakeModOpenCopy;
+        SoundUpgradeReplaceCheck.IsChecked = settings.SoundUpgradeReplace;
         RedkitPropsStatus.Text = FileSafety.RedkitInstalled ? "" : L.T("Settings.Viewers.RedkitMissing");
         RedkitPropsStatus.Visibility = RedkitPropsStatus.Text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
         (settings.TextureDetail switch { 512 => Detail512, 2048 => Detail2048, 0 => DetailFull, _ => Detail1024 }).IsChecked = true;
@@ -689,6 +690,7 @@ public partial class SettingsWindow : Window, IMessageHost
         _settings.MeshImportFillLods = ImportFillLods.IsChecked == true;
         _settings.MakeModPictureFormat = MakeModTga.IsChecked == true ? ".tga" : MakeModDds.IsChecked == true ? ".dds" : ".png";
         _settings.MakeModOpenCopy = MakeModOpenCheck.IsChecked == true;
+        _settings.SoundUpgradeReplace = SoundUpgradeReplaceCheck.IsChecked == true;
         Core.Animation.ClothRig.Enabled = _settings.SimulateCloth;
         _settings.TextureDetail = Detail512.IsChecked == true ? 512 : Detail2048.IsChecked == true ? 2048 : DetailFull.IsChecked == true ? 0 : 1024;
         _settings.Save();

@@ -27,7 +27,7 @@ Double-click one to open the sound viewer.
 - **A voice line**: its words, in its own language or any other, who says it, its string ID and its lip sync. **Copy ID** ({{Ctrl+C}}) copies the ID.
 - **Details**: everything the sound says about itself: its codec, channels, rate, length, loop and size.
 - **Played by**: the banks that play a streamed sound. Double-click one to open it.
-- **A bank** lists every sound it plays: click one to play it, or right-click to open it in a window of its own. The line at the top gives the bank's version, and says so when the game won't load it: the game loads only version 150 banks, made with Wwise 2023.1, so a bank from the next-gen game or the original game plays here but not in the game.
+- **A bank** lists every sound it plays: click one to play it, or right-click to open it in a window of its own. The line at the top gives the bank's version, and says so when the game won't load it: the game loads only version 150 banks, made with Wwise 2023.1, so a bank from the next-gen game or the original game plays here but not in the game. **Upgrade to v150…** at the top makes such a bank, or the whole cache it's in, one the game loads (see [[Upgrading old sounds]]).
 
 ## What's in a bank
 

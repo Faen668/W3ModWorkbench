@@ -1674,6 +1674,7 @@ public partial class MainWindow : Window, IMessageHost
         Add(L.T("MainWindow.KeyBindingHelper"), "", () => InputBindingsWindow.Open(this));
         Add(L.T("MainWindow.HashesIDs"), "", () => HashToolsWindow.Open(this));
         Add(L.T("MainWindow.CR2WJson"), "", () => Cr2wJsonWindow.Open(this));
+        Add(L.T("SoundUpgrade.MenuItem"), "", () => SoundUpgradeWindow.Open(this));
         menu.IsOpen = true;
     }
 

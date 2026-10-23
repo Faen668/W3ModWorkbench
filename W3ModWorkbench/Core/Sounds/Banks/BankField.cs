@@ -150,7 +150,9 @@ public sealed class BankReadException(string message) : Exception(message);
 
 /// <summary>
 /// Reads values from a bank into a <see cref="BankField"/> tree, each under its name, never past the end of the object
-/// being read.
+/// being read. The same calls also write: given a source tree (<see cref="Source"/>) and a cursor that writes, each
+/// value is taken from the source's next field of that name and written in the cursor's version's layout, so one
+/// description of each layout serves both reading and writing.
 /// </summary>
 internal sealed class BankNode
 {
@@ -158,14 +160,21 @@ internal sealed class BankNode
     public BankField Field { get; }
     public int Version => _r.Version;
     public bool Feedback => _r.Feedback;
+    public bool Writing => _r.Writing;
 
-    /// <summary>The value read last (as Wwise's parser keeps it, to decide what comes next).</summary>
+    /// <summary>When writing: the tree the values come from (the node matching this one).</summary>
+    public BankField? Source { get; }
+
+    private readonly Dictionary<string, int> _taken = [];
+
+    /// <summary>The value read (or written) last, which decides what comes next.</summary>
     public long Last { get; private set; }
 
-    public BankNode(BankCursor reader, BankField field)
+    public BankNode(BankCursor reader, BankField field, BankField? source = null)
     {
         _r = reader;
         Field = field;
+        Source = source;
     }
 
     private BankField Add(string name, string type, object? value, int offset, int size)
@@ -183,107 +192,154 @@ internal sealed class BankNode
         return at;
     }
 
-    public BankField U8(string name)
+    /// <summary>When writing: the source's next field of this name (the first, then the second… of that name).</summary>
+    private BankField From(string name)
     {
-        int at = Take(1);
-        Last = _r.Data[at];
-        return Add(name, "u8", Last, at, 1);
+        if (Source is null) throw new BankReadException($"nothing to write {name} from");
+        int n = _taken.GetValueOrDefault(name);
+        _taken[name] = n + 1;
+        int seen = 0;
+        foreach (var c in Source.Children)
+            if (c.Name == name && seen++ == n) return c;
+        throw new BankReadException($"{Source.Name} has no {(n == 0 ? "" : $"{n + 1}th ")}{name} to write");
     }
 
-    public BankField S8(string name)
+    /// <summary>When writing: puts a value's bytes out, and records the field as reading it back would.</summary>
+    private BankField Put(string name, string type, BankField from, ReadOnlySpan<byte> bytes, object? value)
     {
-        int at = Take(1);
-        Last = (sbyte)_r.Data[at];
-        return Add(name, "s8", Last, at, 1);
+        int at = _r.Out!.Count;
+        foreach (byte b in bytes) _r.Out.Add(b);
+        Last = value switch { long l => l, float x => (long)x, double d => (long)d, _ => 0 };
+        var field = Add(name, type, value, at, bytes.Length);
+        field.Meaning = from.Meaning;
+        field.Unit = from.Unit;
+        field.Hash = from.Hash;
+        return field;
     }
 
-    public BankField U16(string name)
+    private static long WholeOf(BankField f) => f.Value switch
     {
-        int at = Take(2);
-        Last = BinaryPrimitives.ReadUInt16LittleEndian(_r.Data.AsSpan(at));
-        return Add(name, "u16", Last, at, 2);
+        long l => l, int i => i, uint u => u, float x => BitConverter.SingleToInt32Bits(x), _ => 0,
+    };
+
+    private BankField Small(string name, string type, int size)
+    {
+        if (_r.Writing)
+        {
+            var from = From(name);
+            long v = WholeOf(from);
+            Span<byte> b = stackalloc byte[size];
+            if (size == 1) b[0] = (byte)v;
+            else BinaryPrimitives.WriteUInt16LittleEndian(b, (ushort)v);
+            return Put(name, type, from, b, v);
+        }
+        int at = Take(size);
+        Last = type switch
+        {
+            "u8" => _r.Data[at],
+            "s8" => (sbyte)_r.Data[at],
+            "u16" => BinaryPrimitives.ReadUInt16LittleEndian(_r.Data.AsSpan(at)),
+            _ => BinaryPrimitives.ReadInt16LittleEndian(_r.Data.AsSpan(at)),
+        };
+        return Add(name, type, Last, at, size);
     }
 
-    public BankField S16(string name)
-    {
-        int at = Take(2);
-        Last = BinaryPrimitives.ReadInt16LittleEndian(_r.Data.AsSpan(at));
-        return Add(name, "s16", Last, at, 2);
-    }
+    public BankField U8(string name) => Small(name, "u8", 1);
+    public BankField S8(string name) => Small(name, "s8", 1);
+    public BankField U16(string name) => Small(name, "u16", 2);
+    public BankField S16(string name) => Small(name, "s16", 2);
 
-    public BankField U32(string name) => ReadU32(name, "u32");
+    public BankField U32(string name) => Word(name, "u32");
 
     /// <summary>An object's or a name's ID (a u32).</summary>
-    public BankField Tid(string name) => ReadU32(name, "tid");
+    public BankField Tid(string name) => Word(name, "tid");
 
-    private BankField ReadU32(string name, string type)
+    public BankField S32(string name) => Word(name, "s32");
+
+    private BankField Word(string name, string type)
     {
+        if (_r.Writing)
+        {
+            var from = From(name);
+            Span<byte> b = stackalloc byte[4];
+            // a value read as a float (a property's) goes back as its bits
+            if (from.Value is float x) BinaryPrimitives.WriteSingleLittleEndian(b, x);
+            else BinaryPrimitives.WriteUInt32LittleEndian(b, unchecked((uint)WholeOf(from)));
+            return Put(name, type, from, b, from.Value is float ? from.Value : WholeOf(from));
+        }
         int at = Take(4);
         uint v = BinaryPrimitives.ReadUInt32LittleEndian(_r.Data.AsSpan(at));
-        Last = v == 0xFFFFFFFF ? -1 : v;
+        Last = type == "s32" ? (int)v : v == 0xFFFFFFFF ? -1 : v;
         return Add(name, type, Last, at, 4);
-    }
-
-    public BankField S32(string name)
-    {
-        int at = Take(4);
-        Last = BinaryPrimitives.ReadInt32LittleEndian(_r.Data.AsSpan(at));
-        return Add(name, "s32", Last, at, 4);
     }
 
     public BankField F32(string name)
     {
+        if (_r.Writing)
+        {
+            var from = From(name);
+            Span<byte> b = stackalloc byte[4];
+            float v = from.Value is float x ? x : from.Value is double d ? (float)d : WholeOf(from);
+            BinaryPrimitives.WriteSingleLittleEndian(b, v);
+            return Put(name, "f32", from, b, v);
+        }
         int at = Take(4);
-        float v = BinaryPrimitives.ReadSingleLittleEndian(_r.Data.AsSpan(at));
-        Last = (long)v;
-        return Add(name, "f32", v, at, 4);
+        float value = BinaryPrimitives.ReadSingleLittleEndian(_r.Data.AsSpan(at));
+        Last = (long)value;
+        return Add(name, "f32", value, at, 4);
     }
 
     public BankField D64(string name)
     {
+        if (_r.Writing)
+        {
+            var from = From(name);
+            Span<byte> b = stackalloc byte[8];
+            double v = from.Value is double d ? d : from.Value is float x ? x : WholeOf(from);
+            BinaryPrimitives.WriteDoubleLittleEndian(b, v);
+            return Put(name, "d64", from, b, v);
+        }
         int at = Take(8);
-        double v = BinaryPrimitives.ReadDoubleLittleEndian(_r.Data.AsSpan(at));
-        Last = (long)v;
-        return Add(name, "d64", v, at, 8);
+        double value = BinaryPrimitives.ReadDoubleLittleEndian(_r.Data.AsSpan(at));
+        Last = (long)value;
+        return Add(name, "d64", value, at, 8);
     }
 
     /// <summary>A whole number of 7-bit parts, the top bit of each byte saying another follows.</summary>
     public BankField Var(string name)
     {
-        int at = _r.Position;
+        if (_r.Writing)
+        {
+            var from = From(name);
+            long v = WholeOf(from);
+            var groups = new List<byte>();
+            do { groups.Insert(0, (byte)(v & 0x7F)); v >>= 7; } while (v > 0);
+            for (int i = 0; i < groups.Count - 1; i++) groups[i] |= 0x80;
+            return Put(name, "var", from, groups.ToArray(), WholeOf(from));
+        }
+        int at0 = _r.Position;
         long value = 0;
         for (int i = 0; ; i++)
         {
-            if (i >= 10) throw new BankReadException($"variable-length number too long at 0x{at:X}");
+            if (i >= 10) throw new BankReadException($"variable-length number too long at 0x{at0:X}");
             int b = _r.Data[Take(1)];
             value = (value << 7) | (uint)(b & 0x7F);
             if ((b & 0x80) == 0) break;
         }
         Last = value;
-        return Add(name, "var", value, at, _r.Position - at);
-    }
-
-    /// <summary>
-    /// A property's value, which Wwise keeps as a float or a whole number depending on the property: large values
-    /// are floats (a float's exponent fills the top bits), small ones whole numbers.
-    /// </summary>
-    public BankField Uni(string name)
-    {
-        int at = Take(4);
-        uint raw = BinaryPrimitives.ReadUInt32LittleEndian(_r.Data.AsSpan(at));
-        if (raw > 0x10000000)
-        {
-            float f = BitConverter.UInt32BitsToSingle(raw);
-            Last = (long)f;
-            return Add(name, "uni", f, at, 4);
-        }
-        Last = raw;
-        return Add(name, "uni", (long)raw, at, 4);
+        return Add(name, "var", value, at0, _r.Position - at0);
     }
 
     /// <summary>Bytes kept as they are.</summary>
     public BankField Gap(string name, long size)
     {
+        if (_r.Writing)
+        {
+            var from = From(name);
+            var bytes = from.Value as byte[] ?? new byte[size];
+            if (bytes.Length != size) throw new BankReadException($"{name} has {bytes.Length} bytes to write, not {size}");
+            return Put(name, "gap", from, bytes, bytes);
+        }
         if (size < 0 || size > int.MaxValue) throw new BankReadException($"unlikely size {size}");
         int at = Take((int)size);
         Last = size;
@@ -292,6 +348,13 @@ internal sealed class BankNode
 
     public BankField Str(string name, long size)
     {
+        if (_r.Writing)
+        {
+            var from = From(name);
+            var bytes = Encoding.UTF8.GetBytes(from.Value as string ?? "");
+            if (bytes.Length != size) throw new BankReadException($"{name} is {bytes.Length} bytes, not {size}");
+            return Put(name, "str", from, bytes, from.Value);
+        }
         if (size > 255) throw new BankReadException($"unlikely string size {size}");
         int at = Take((int)size);
         return Add(name, "str", Encoding.UTF8.GetString(_r.Data, at, (int)size), at, (int)size);
@@ -300,6 +363,11 @@ internal sealed class BankNode
     /// <summary>A string ending at a zero byte.</summary>
     public BankField Stz(string name)
     {
+        if (_r.Writing)
+        {
+            var from = From(name);
+            return Put(name, "str", from, [.. Encoding.UTF8.GetBytes(from.Value as string ?? ""), 0], from.Value);
+        }
         int at = _r.Position;
         int end = Array.IndexOf(_r.Data, (byte)0, at, Math.Max(0, _r.Limit - at));
         if (end < 0 || end - at > 255) throw new BankReadException($"string without an end at 0x{at:X}");
@@ -307,16 +375,22 @@ internal sealed class BankNode
         return Add(name, "str", Encoding.UTF8.GetString(_r.Data, at, end - at), at, end - at + 1);
     }
 
-    public uint Peek32() => _r.Position + 4 <= _r.Limit ? BinaryPrimitives.ReadUInt32LittleEndian(_r.Data.AsSpan(_r.Position)) : 0;
-
     /// <summary>A group of values under a name of their own.</summary>
-    public BankNode Node(string name) => new(_r, Add(name, "node", null, _r.Position, 0));
+    public BankNode Node(string name)
+    {
+        int at = _r.Writing ? _r.Out!.Count : _r.Position;
+        var source = _r.Writing ? From(name) : null;
+        return new(_r, Add(name, "node", null, at, 0), source);
+    }
 
     /// <summary>A list of <paramref name="count"/> items, each a node named <paramref name="item"/>.</summary>
     public List<BankNode> List(string name, string item, long count)
     {
         if (count < 0 || count > 0x30000) throw new BankReadException($"unlikely count {count}");
-        var list = new BankNode(_r, Add(name, "list", count, _r.Position, 0));
+        var list = Node(name);
+        list.Field.Value = count;
+        if (_r.Writing && list.Source!.Children.Count(c => c.Name == item) != count)
+            throw new BankReadException($"{name} says {count} but has {list.Source.Children.Count(c => c.Name == item)}");
         var items = new List<BankNode>((int)count);
         for (int i = 0; i < count; i++) items.Add(list.Node(item));
         return items;
@@ -328,6 +402,13 @@ internal sealed class BankNode
     /// </summary>
     public void Within(long size, Action read)
     {
+        if (_r.Writing)
+        {
+            int start = _r.Out!.Count;
+            read();
+            if (_r.Out.Count - start != size) throw new BankReadException($"block wrote {_r.Out.Count - start} of its {size} bytes");
+            return;
+        }
         int outer = _r.Limit, end = _r.Position + (int)size;
         if (size < 0 || end > outer) throw new BankReadException($"block of {size} bytes runs past its object");
         _r.Limit = end;
@@ -337,13 +418,20 @@ internal sealed class BankNode
     }
 }
 
-/// <summary>Where reading a bank is: its bytes, the position, how far the object being read goes, its version.</summary>
-internal sealed class BankCursor(byte[] data, int version, bool feedback)
+/// <summary>
+/// Where reading a bank is (its bytes, the position, how far the object being read goes, its version), or, when
+/// writing, the bytes written so far.
+/// </summary>
+internal sealed class BankCursor(byte[] data, int version, bool feedback, List<byte>? output = null)
 {
     public byte[] Data { get; } = data;
     public int Position { get; set; }
     public int Limit { get; set; } = data.Length;
     public int Version { get; } = version;
     public bool Feedback { get; } = feedback;
+
+    /// <summary>When writing: the bytes written so far.</summary>
+    public List<byte>? Out { get; } = output;
+    public bool Writing => Out is not null;
 }
 // loc-ignore-end

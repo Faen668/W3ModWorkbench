@@ -72,10 +72,16 @@
 
         <DockPanel x:Name="Body" Margin="14,12,14,0" Visibility="Hidden">
             <!-- what it is -->
-            <StackPanel DockPanel.Dock="Top" Margin="2,0,0,10">
-                <TextBlock x:Name="TitleText" FontSize="18" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
-                <TextBlock x:Name="DetailText" Style="{StaticResource Small}" TextWrapping="Wrap" Margin="0,3,0,0" />
-            </StackPanel>
+            <DockPanel DockPanel.Dock="Top" Margin="2,0,0,10">
+                <!-- a bank the Remastered won't load: upgrade it (or the cache it's in) -->
+                <Button x:Name="UpgradeBankButton" DockPanel.Dock="Right" VerticalAlignment="Top" Padding="12,5" Margin="12,0,0,0"
+                        Style="{DynamicResource AccentButtonStyle}" Content="{l:T SoundWindow.UpgradeBank}" ToolTip="{l:T SoundWindow.UpgradeBankTip}"
+                        Click="UpgradeBank_Click" Visibility="Collapsed" />
+                <StackPanel>
+                    <TextBlock x:Name="TitleText" FontSize="18" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                    <TextBlock x:Name="DetailText" Style="{StaticResource Small}" TextWrapping="Wrap" Margin="0,3,0,0" />
+                </StackPanel>
+            </DockPanel>
 
             <!-- the sound, to play -->
             <Border DockPanel.Dock="Top" Style="{StaticResource Card}">

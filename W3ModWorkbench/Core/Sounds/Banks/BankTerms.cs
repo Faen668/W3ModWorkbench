@@ -109,12 +109,32 @@ internal static class BankTerms
         [0x39] = "Game Send High-pass", [0x3A] = "2D Pan Z", [0x3B] = "Bypass All Metadata",
     };
 
+    /// <summary>
+    /// What a curve or a state changes. From 150 these are numbered as properties are (the game's 2,811 node curves
+    /// only make sense so: the filters blend as filters, Bypass Effect as a yes/no), an effect's bypass taking its slot
+    /// in the upper byte.
+    /// </summary>
     public static string? Target(int version, long id) => version switch
     {
         <= 89 => Targets89.GetValueOrDefault(id),
+        >= 150 when id > 0xFF && Property(version, id & 0xFF) is { } name => $"{name} (slot {id >> 8})",
+        >= 150 => Property(version, id),
         >= 135 => Targets135.GetValueOrDefault(id),
         _ => null,
     };
+
+    /// <summary>A target's number in a bank of 150 from its name in an older one's: by property, an effect's bypass by its slot.</summary>
+    public static long? Target150(string? name)
+    {
+        if (name is null) return null;
+        if (name.StartsWith("Bypass Effect ", StringComparison.Ordinal) && int.TryParse(name["Bypass Effect ".Length..], out int slot) && slot is >= 1 and <= 4)
+            return (slot - 1) << 8 | Array.IndexOf(Properties150, "Bypass Effect");
+        int at = Array.IndexOf(Properties150, name);
+        return at < 0 ? null : at;
+    }
+
+    /// <summary>A property's number in a bank of 150 from its name, or null when 150 has no such property.</summary>
+    public static long? Property150(string? name) => name is null || Array.IndexOf(Properties150, name) is var at && at < 0 ? null : at;
 
     /// <summary>A modulator's (LFO, envelope, time modulator's) own settings.</summary>
     public static string? ModulatorSetting(int version, long id)
@@ -202,7 +222,14 @@ internal static class BankTerms
         0 => "Step Sequence", 1 => "Step Random", 2 => "Continuous Sequence", 3 => "Continuous Random", 4 => "Step Sequence, New Path",
         5 => "Step Random, New Path", _ => $"{id}",
     };
-    public static string Positioning89(long id) => id switch { 1 => "2D", 2 => "3D, Defined by the Sound", 3 => "3D, Defined by the Game", _ => "None" };
+    /// <summary>
+    /// How a 3D object of up to 89 is placed: up to 72 2 is on a path and 3 where the game puts it; later (the low two
+    /// bits) 0 is on a path and 1 where the game puts it, as the original game's banks show (each path-placed one has a
+    /// path after it, each game-placed one doesn't).
+    /// </summary>
+    public static string Positioning89(int version, long id) => version <= 72
+        ? id switch { 2 => "3D, Defined by the Sound", 3 => "3D, Defined by the Game", _ => $"{id}" }
+        : (id & 3) switch { 0 => "3D, Defined by the Sound", 1 => "3D, Defined by the Game", _ => $"{id}" };
     public static string Position3d(long id) => id switch { 0 => "Emitter", 1 => "Emitter with Automation", 2 => "Listener with Automation", _ => $"{id}" };
     public static string Spatialisation(long id) => id switch { 0 => "None", 1 => "Position", 2 => "Position and Orientation", _ => $"{id}" };
     public static string Panner(long id) => id switch { 0 => "Direct Speaker Assignment", 1 => "Balance-Fade", 2 => "Steering", _ => $"{id}" };

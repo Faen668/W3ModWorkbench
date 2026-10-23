@@ -1,0 +1,111 @@
+<Window x:Class="W3ModWorkbench.SoundUpgradeWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:l="clr-namespace:W3ModWorkbench.Localisation"
+        xmlns:local="clr-namespace:W3ModWorkbench"
+        Title="{l:T SoundUpgrade.Title}" Icon="pack://application:,,,/W3ModWorkbench;component/Assets/app.ico"
+        Width="980" Height="760" MinWidth="680" MinHeight="640"
+        WindowStartupLocation="CenterOwner" AllowDrop="True" Drop="Window_Drop" DragOver="Window_DragOver">
+    <Window.Resources>
+        <Style x:Key="Card" TargetType="Border">
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="14,12" />
+            <Setter Property="Margin" Value="0,0,0,10" />
+            <Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}" />
+            <Setter Property="Background" Value="{DynamicResource CardBackgroundFillColorDefaultBrush}" />
+        </Style>
+        <Style x:Key="Heading" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+        <Style x:Key="Note" TargetType="TextBlock">
+            <Setter Property="Opacity" Value="0.65" />
+            <Setter Property="Margin" Value="0,2,0,8" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+    </Window.Resources>
+
+    <Grid>
+        <Grid Margin="14,12,14,12">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <StackPanel Margin="0,0,0,10">
+                <TextBlock Text="{l:T SoundUpgrade.Title}" FontSize="16" FontWeight="SemiBold" />
+                <TextBlock Opacity="0.65" Margin="0,2,0,0" TextWrapping="Wrap" Text="{l:T SoundUpgrade.Intro}" />
+            </StackPanel>
+
+            <Border Grid.Row="1" Style="{StaticResource Card}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <TextBlock Grid.ColumnSpan="2" Text="{l:T SoundUpgrade.File}" Style="{StaticResource Heading}" />
+                    <TextBlock Grid.Row="1" Grid.ColumnSpan="2" Style="{StaticResource Note}" Text="{l:T SoundUpgrade.FileHint}" />
+                    <TextBox x:Name="PathBox" Grid.Row="2" FontFamily="Cascadia Mono, Consolas" VerticalContentAlignment="Center" Padding="8,6"
+                             TextChanged="PathBox_TextChanged" />
+                    <Button Grid.Row="2" Grid.Column="1" Margin="8,0,0,0" Padding="12,6" Click="Browse_Click" Content="{l:T SoundUpgrade.Browse}" />
+                    <TextBlock x:Name="SurveyText" Grid.Row="3" Grid.ColumnSpan="2" Margin="0,8,0,0" TextWrapping="Wrap" Opacity="0.8" />
+                    <StackPanel Grid.Row="4" Grid.ColumnSpan="2" Margin="0,10,0,0">
+                        <RadioButton x:Name="ReplaceRadio" GroupName="SaveTo" Content="{l:T SoundUpgrade.Replace}" />
+                        <RadioButton x:Name="CopyRadio" GroupName="SaveTo" Margin="0,6,0,0" Content="{l:T SoundUpgrade.SaveCopy}" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <DockPanel Grid.Row="2" Margin="0,0,0,10">
+                <Button x:Name="UpgradeButton" DockPanel.Dock="Left" Padding="16,6" Style="{DynamicResource AccentButtonStyle}" Click="Upgrade_Click"
+                        Content="{l:T SoundUpgrade.Upgrade}" IsEnabled="False" />
+                <ProgressBar x:Name="Progress" DockPanel.Dock="Left" Width="180" Height="4" Margin="12,0,0,0" VerticalAlignment="Center" Visibility="Collapsed" />
+                <TextBlock x:Name="StatusText" Margin="12,0,0,0" VerticalAlignment="Center" TextWrapping="Wrap" />
+            </DockPanel>
+
+            <Border Grid.Row="3" Style="{StaticResource Card}" Margin="0" MinHeight="200">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+                    <TextBlock Text="{l:T SoundUpgrade.Results}" Style="{StaticResource Heading}" />
+                    <TextBlock x:Name="ResultsNote" Grid.Row="1" Style="{StaticResource Note}" Text="{l:T SoundUpgrade.ResultsHint}" />
+                    <DataGrid x:Name="ResultGrid" Grid.Row="2" Style="{StaticResource ViewerGrid}" CellStyle="{StaticResource ViewerGridCell}"
+                              HeadersVisibility="Column" GridLinesVisibility="Vertical" SelectionMode="Extended">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="{l:T SoundUpgrade.ColumnFile}" Binding="{Binding Name}" Width="220" FontFamily="Cascadia Mono, Consolas" />
+                            <DataGridTextColumn Header="{l:T SoundUpgrade.ColumnResult}" Binding="{Binding Result}" Width="150" />
+                            <DataGridTextColumn Header="{l:T SoundUpgrade.ColumnNotes}" Binding="{Binding Notes}" Width="*">
+                                <DataGridTextColumn.ElementStyle>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="TextWrapping" Value="Wrap" />
+                                        <Setter Property="Margin" Value="0,4" />
+                                    </Style>
+                                </DataGridTextColumn.ElementStyle>
+                            </DataGridTextColumn>
+                        </DataGrid.Columns>
+                        <DataGrid.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem Header="{l:T SoundUpgrade.CopyRows}" Click="CopyRows_Click" />
+                            </ContextMenu>
+                        </DataGrid.ContextMenu>
+                    </DataGrid>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <local:MessageCard x:Name="Message" IsModal="True" />
+    </Grid>
+</Window>

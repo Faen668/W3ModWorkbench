@@ -11,23 +11,40 @@ namespace W3ModWorkbench.Core.Sounds.Banks;
 internal static class BankSections
 {
     /// <summary>Reads one section's body under <paramref name="section"/>, which must take all of it.</summary>
+    /// <summary>Writes a section's body from its tree in <paramref name="f"/>'s layout (the reading, run the other way).</summary>
+    public static byte[] Write(BankField source, string tag, BankFormat f)
+    {
+        var output = new List<byte>();
+        var r = new BankCursor([], f.Version, f.Feedback, output);
+        var o = new BankNode(r, new BankField(tag, "node", null, 0, 0), source);
+        Body(o, tag, f, 0);
+        foreach (string rest in new[] { "padding", "unread" })
+            if (source.Find(rest) is { Value: byte[] bytes }) o.Gap(rest, bytes.Length);
+        return [.. output];
+    }
+
+    private static void Body(BankNode o, string tag, BankFormat f, int size)
+    {
+        switch (tag)
+        {
+            case "BKHD": Header(o, f, size); break;
+            case "DIDX": MediaIndex(o, o.Writing ? o.Source!.Find("sounds")!.Children.Count * 12 : size); break;
+            case "STID": BankNames(o); break;
+            case "STMG": GlobalSettings(o, f); break;
+            case "ENVS": ObstructionCurves(o, f); break;
+            case "INIT": Plugins(o, f); break;
+            case "PLAT": Platform(o, f); break;
+        }
+    }
+
     public static void Read(BankField section, string tag, byte[] data, int at, int size, BankFormat f)
     {
         var r = new BankCursor(data, f.Version, f.Feedback) { Position = at, Limit = at + size };
         var o = new BankNode(r, section);
         try
         {
-            switch (tag)
-            {
-                case "BKHD": Header(o, f, size); break;
-                case "DIDX": MediaIndex(o, size); break;
-                case "STID": BankNames(o); break;
-                case "STMG": GlobalSettings(o, f); break;
-                case "ENVS": ObstructionCurves(o, f); break;
-                case "INIT": Plugins(o, f); break;
-                case "PLAT": Platform(o, f); break;
-                case "DATA": o.Gap("sounds", size); break;
-            }
+            if (tag == "DATA") o.Gap("sounds", size);
+            else Body(o, tag, f, size);
         }
         catch (BankReadException ex)
         {

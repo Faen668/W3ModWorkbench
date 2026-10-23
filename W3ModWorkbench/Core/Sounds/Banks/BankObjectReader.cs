@@ -37,6 +37,20 @@ internal static partial class BankObjectReader
     /// Reads one object (its type and size already read) under <paramref name="item"/>, never past its end. What's left
     /// unread is kept as "unread"; a reading that runs into trouble is noted on the item.
     /// </summary>
+    /// <summary>
+    /// Writes an object's body (after its type and size) from its tree in <paramref name="f"/>'s layout: the same
+    /// description as reading, run the other way. Bytes the reading left unread go back as they were.
+    /// </summary>
+    public static byte[] Write(BankField source, byte type, BankFormat f)
+    {
+        var output = new List<byte>();
+        var r = new BankCursor([], f.Version, f.Feedback, output);
+        var o = new BankNode(r, new BankField(source.Name, "node", null, 0, 0), source);
+        Object(o, type, f, r);
+        if (source.Find("unread") is { Value: byte[] rest }) o.Gap("unread", rest.Length);
+        return [.. output];
+    }
+
     public static void Read(BankField item, byte[] data, int at, int size, byte type, BankFormat f)
     {
         var r = new BankCursor(data, f.Version, f.Feedback) { Position = at, Limit = at + size };
@@ -677,6 +691,26 @@ internal static partial class BankObjectReader
     private static void DecisionTree(BankNode o, long depth, long size, BankCursor r)
     {
         const int NodeSize = 12;
+        if (r.Writing)
+        {
+            // the tree's shape is the source's: a node with a child range has children, any other plays an object
+            var tw = o.Node("tree");
+            var source = tw.Source!.Children.FirstOrDefault(c => c.Name == "nodes")?.Children ?? [];
+            if (source.Count * NodeSize != size) throw new BankReadException($"tree of {source.Count} nodes isn't {size} bytes");
+            foreach (var (node, i) in tw.List("nodes", "node", source.Count).Select((n, i) => (n, i)))
+            {
+                node.Tid("key");
+                if (source[i].Find("childrenAt") is not null)
+                {
+                    node.U16("childrenAt");
+                    node.U16("childCount");
+                }
+                else node.Tid("plays");
+                node.U16("weight");
+                node.U16("probability");
+            }
+            return;
+        }
         if (size < 0 || r.Position + size > r.Limit) throw new BankReadException("decision tree runs past its object");
         int start = r.Position, count = (int)(size / NodeSize);
         var parentOf = new int[count];

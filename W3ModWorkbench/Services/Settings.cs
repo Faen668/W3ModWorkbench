@@ -170,6 +170,9 @@ public sealed class Settings
     /// <summary>Whether "Make a mod" opens the copy of the file it was made from once it's copied.</summary>
     public bool MakeModOpenCopy { get; set; } = true;
 
+    /// <summary>Whether Upgrade sounds to v150 replaces the cache or bank (keeping the original as .bak) rather than saving a new file.</summary>
+    public bool SoundUpgradeReplace { get; set; } = true;
+
     /// <summary>Whether the entity viewer shows what it's drawing (triangles, frame rate…) over the view.</summary>
     public bool ShowEntityInfo { get; set; } = true;
 

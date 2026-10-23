@@ -51,8 +51,12 @@ public partial class SoundWindow : Window, IMessageHost
 
     private sealed record BankRow(string Bank, string Object, string Kind);
 
-    private SoundWindow(string path, string source, Func<byte[]> readData, ResourceLocator locator)
+    /// <summary>The file on disk an upgrade to v150 works on: the cache the sound came from, or the file itself.</summary>
+    private readonly string? _upgradeFile;
+
+    private SoundWindow(string path, string source, Func<byte[]> readData, ResourceLocator locator, string? upgradeFile = null)
     {
+        _upgradeFile = upgradeFile;
         InitializeComponent();
         MakeModBtn.Show(path, Path.IsPathRooted(source) ? source : null, readData);
         _path = path;
@@ -74,10 +78,10 @@ public partial class SoundWindow : Window, IMessageHost
         name.EndsWith(".wem", StringComparison.OrdinalIgnoreCase) || name.EndsWith(".bnk", StringComparison.OrdinalIgnoreCase);
 
     public static void Open(string path, string source, byte[] data, ResourceLocator locator, Window owner, IArchive? archive = null) =>
-        new SoundWindow(path, source, () => data, locator).Standalone(owner).Show();
+        new SoundWindow(path, source, () => data, locator, archive is SoundCacheArchive cache ? cache.FilePath : null).Standalone(owner).Show();
 
     public static void OpenFile(string file, ResourceLocator locator, Window owner) =>
-        new SoundWindow(Path.GetFileName(file), file, () => File.ReadAllBytes(file), locator).Standalone(owner).Show();
+        new SoundWindow(Path.GetFileName(file), file, () => File.ReadAllBytes(file), locator, file).Standalone(owner).Show();
 
     /// <summary>Opens a sound event by its name: the sounds it can play, each to play, and what its actions do.</summary>
     public static void OpenEvent(string name, ResourceLocator locator, Window owner) =>
@@ -298,6 +302,12 @@ public partial class SoundWindow : Window, IMessageHost
         if (BankGrid.SelectedItem is BankRow row) _ = DataViewers.OpenLinkAsync(SoundCacheArchive.Banks + row.Bank, _locator, this, this);
     }
 
+    /// <summary>The file the upgrade works on: the sound cache this bank was opened from, or the bank file itself.</summary>
+    private string? UpgradeTarget() => _upgradeFile is { } file && File.Exists(file)
+        && (file.EndsWith(".cache", StringComparison.OrdinalIgnoreCase) || file.EndsWith(".bnk", StringComparison.OrdinalIgnoreCase)) ? file : null;
+
+    private void UpgradeBank_Click(object sender, RoutedEventArgs e) => SoundUpgradeWindow.Open(this, UpgradeTarget());
+
     /// <summary>A bank: its sounds, kept in it or streamed, each to play, and its objects by kind.</summary>
     private async Task ShowBankAsync(byte[] data)
     {
@@ -319,7 +329,11 @@ public partial class SoundWindow : Window, IMessageHost
         int events = bank.Objects.GetValueOrDefault("Events");
         DetailText.Text = L.T("SoundWindow.WwiseSoundBankVersion", bank.Version, bank.Id, L.T("Count.Sound", bank.Embedded.Count), L.T("Count.Sound", bank.Sounds.Where(s => s.Streamed).Select(s => s.SourceId).Distinct().Count()), L.T("Count.Event", events));
         if (bank.Version != Core.Packing.SoundCacheWriter.GameBankVersion)
+        {
             DetailText.Text += "  ·  " + L.T("SoundWindow.GameWontLoadBank", Core.Packing.SoundCacheWriter.GameBankVersion);
+            // only a file on disk can be upgraded: the cache the bank came from, or the bank itself
+            UpgradeBankButton.Visibility = UpgradeTarget() is not null ? Visibility.Visible : Visibility.Collapsed;
+        }
         ObjectsTab.Header = L.T("SoundWindow.Objects2", bank.Objects.Values.Sum());
         SoundsNote.Text = L.T("SoundWindow.ReadingBanksSounds");
         Tabs.SelectedItem = SoundsTab;

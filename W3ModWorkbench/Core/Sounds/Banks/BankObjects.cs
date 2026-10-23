@@ -31,6 +31,12 @@ public sealed class BankObjects
     /// <summary>The bank's other sections (header, sounds index, bank names, and an Init.bnk's global settings), read in full, by tag.</summary>
     public IReadOnlyList<(string Tag, BankField Fields)> Sections { get; private init; } = [];
 
+    /// <summary>How the bank's version lays things out.</summary>
+    internal BankFormat Format { get; private init; } = new(0, false);
+
+    /// <summary>The bank's sections' tags in the order the file has them (HIRC and DATA included).</summary>
+    public IReadOnlyList<string> Order { get; private init; } = [];
+
     /// <summary>Why the objects couldn't be read, when they couldn't (a version too old, no HIRC section).</summary>
     public string? Problem { get; private init; }
 
@@ -46,12 +52,14 @@ public sealed class BankObjects
         var names = new Dictionary<uint, string>();
         bool hasHirc = false;
         var sections = new List<(string, BankField)>();
+        var order = new List<string>();
         for (int at = 0; at + 8 <= bank.Length;)
         {
             string tag = Encoding.ASCII.GetString(bank, at, 4);
             int size = BinaryPrimitives.ReadInt32LittleEndian(bank.AsSpan(at + 4));
             int body = at + 8;
             if (size < 0 || body + size > bank.Length) break;
+            order.Add(tag);
             switch (tag)
             {
                 case "BKHD" when size >= 8:
@@ -101,7 +109,7 @@ public sealed class BankObjects
             at = body + size;
         }
         string? problem = !hasHirc ? null : version < BankFormat.Oldest ? $"version {version}" : null; // loc-ignore
-        var result = new BankObjects { Version = version, BankId = bankId, Objects = objects, BankFileNames = names, Problem = problem, Sections = sections };
+        var result = new BankObjects { Version = version, BankId = bankId, Objects = objects, BankFileNames = names, Problem = problem, Sections = sections, Order = order, Format = new BankFormat((int)version, feedback) };
         result._byId = [];
         foreach (var o in objects) result._byId.TryAdd(o.Id, o);
         return result;

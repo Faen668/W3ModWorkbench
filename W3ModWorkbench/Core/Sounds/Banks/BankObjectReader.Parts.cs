@@ -51,6 +51,8 @@ internal static partial class BankObjectReader
     /// </summary>
     private static BankField Number(BankNode o, string name)
     {
+        // when writing, a float goes back as its bits and a whole number as itself
+        if (o.Writing) return o.U32(name);
         var raw = o.U32(name);
         uint bits = unchecked((uint)raw.Long);
         int exponent = (int)((bits >> 23) & 0xFF);
@@ -246,7 +248,7 @@ internal static partial class BankObjectReader
         if (f.Positioning == BankFormat.PositionLayout.Separate2d3d)
         {
             var kind = p.U32("kind");
-            kind.Meaning = BankTerms.Positioning89(kind.Long & 3);
+            kind.Meaning = BankTerms.Positioning89(f.Version, kind.Long);
             p.Tid("attenuation");
             p.U8("spatialised");
             long k = f.Version <= 72 ? kind.Long : kind.Long & 3;

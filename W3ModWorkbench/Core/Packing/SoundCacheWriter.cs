@@ -38,7 +38,18 @@ public static class SoundCacheWriter
         path.EndsWith(".wem", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".bnk", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Writes the files, in this order, under their names, to a new cache at <paramref name="path"/>.</summary>
-    public static void Write(string path, IReadOnlyList<(string Name, string FilePath)> files, CancellationToken cancel = default)
+    public static void Write(string path, IReadOnlyList<(string Name, string FilePath)> files, CancellationToken cancel = default) =>
+        Write(path, files.Select(f => (f.Name, (Action<Stream>)(output =>
+        {
+            using var input = File.OpenRead(f.FilePath);
+            input.CopyTo(output);
+        }))).ToList(), cancel);
+
+    /// <summary>Writes the files, each given as its bytes when it's asked for, in this order, to a new cache at <paramref name="path"/>.</summary>
+    public static void Write(string path, IReadOnlyList<(string Name, Func<byte[]> Data)> files, CancellationToken cancel = default) =>
+        Write(path, files.Select(f => (f.Name, (Action<Stream>)(output => output.Write(f.Data())))).ToList(), cancel);
+
+    private static void Write(string path, IReadOnlyList<(string Name, Action<Stream> CopyTo)> files, CancellationToken cancel)
     {
         using var output = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None, 1 << 20);
         output.Write(new byte[HeaderSize]);
@@ -49,7 +60,7 @@ public static class SoundCacheWriter
         {
             cancel.ThrowIfCancellationRequested();
             long at = output.Position;
-            using (var input = File.OpenRead(files[i].FilePath)) input.CopyTo(output);
+            files[i].CopyTo(output);
             long size = output.Position - at;
             largest = Math.Max(largest, size);
             BinaryPrimitives.WriteInt64LittleEndian(list.AsSpan(i * 24), names.Length);

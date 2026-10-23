@@ -28,7 +28,25 @@ public static class WwiseVorbis
     }
 
     /// <summary>The sound as an Ogg Vorbis file.</summary>
-    public static byte[] ToOgg(byte[] riff)
+    public static byte[] ToOgg(byte[] riff) => Rebuild(riff, null);
+
+    /// <summary>
+    /// Each audio packet's end (counted from the start of the "data" chunk) and the samples decoded once it's read,
+    /// up to the first that reaches <paramref name="upTo"/> samples: how far into a sound a given length of it reaches.
+    /// </summary>
+    public static List<(int End, long Samples)> AudioPackets(byte[] riff, long upTo = long.MaxValue)
+    {
+        var packets = new List<(int, long)>();
+        Rebuild(riff, (end, samples) =>
+        {
+            packets.Add((end, samples));
+            return samples < upTo;
+        });
+        return packets;
+    }
+
+    /// <summary>The Ogg stream, each audio packet told to <paramref name="onPacket"/>, which can stop the rest.</summary>
+    private static byte[] Rebuild(byte[] riff, Func<int, long, bool>? onPacket)
     {
         var info = WemInfo.Read(riff);
         if (info.Codec != 0xFFFF) throw new InvalidDataException(L.T("WwiseVorbis.SoundIsntWwiseVorbis"));
@@ -146,6 +164,7 @@ public static class WwiseVorbis
             if (previousSize > 0) granule += previousSize / 4 + blockSize / 4;
             previousSize = blockSize;
             offset = next;
+            if (onPacket is not null && !onPacket(offset - dataStart, granule)) break;
             bool last = offset >= dataEnd;
             ogg.Packet(packet.ToArray(), last && samples > 0 ? samples : granule, last: last);
         }
