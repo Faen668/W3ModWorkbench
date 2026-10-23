@@ -124,6 +124,21 @@ public sealed record LayerComponent(string ClassName, string Name, string? Resou
     /// <summary>How far off it's still drawn, as its component sets it (0 for the mesh's own distance).</summary>
     public float AutoHide { get; init; }
 
+    /// <summary>Its drawable flags as set (DF_IsVisible, DF_CastShadows…), null when it keeps the class's own.</summary>
+    public string? DrawableFlags { get; init; }
+
+    /// <summary>
+    /// Whether a drawable component is seen, and whether it casts the sun's shadow, by its drawable flags: those it doesn't
+    /// set are the class's own (seen, casting shadows); set without DF_IsVisible it's a helper the game doesn't show (a
+    /// blockout box); DF_CastShadowsFromLocalLightsOnly casts only from lamps and fires.
+    /// </summary>
+    public static (bool Visible, bool CastsShadow) Drawable(string? flags)
+    {
+        if (flags is null) return (true, true);
+        var set = flags.Split('|', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        return (set.Contains("DF_IsVisible"), set.Contains("DF_CastShadows"));
+    }
+
     /// <summary>Whether it uses a file of its own (a mesh, a template), for a link to it.</summary>
     public bool HasResource => Resource is { Length: > 0 };
 }
@@ -362,6 +377,6 @@ public sealed class WorldFile
             height = placed.Average(p => p.Z);
         }
         var own = c["transform"] is byte[] raw ? Core.Entities.EntityFile.Transform(raw) : Matrix4x4.Identity;
-        return new LayerComponent(c.ClassName, c["name"] as string ?? "", resource, points.Count >= 2 ? points : null, height) { Place = own * entityPlace, AutoHide = c["autoHideDistance"] is float hide ? hide : 0 };
+        return new LayerComponent(c.ClassName, c["name"] as string ?? "", resource, points.Count >= 2 ? points : null, height) { Place = own * entityPlace, AutoHide = c["autoHideDistance"] is float hide ? hide : 0, DrawableFlags = c["drawableFlags"]?.ToString() };
     }
 }

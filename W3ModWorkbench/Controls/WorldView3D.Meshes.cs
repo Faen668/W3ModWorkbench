@@ -18,7 +18,7 @@ namespace W3ModWorkbench;
 /// viewer reads them), how far off it's drawn, and where each copy stands.
 /// </summary>
 public sealed record MeshKind3D(string Path, MeshFile Mesh, IReadOnlyList<(BitmapSource? Picture, MaterialLook? Look, MeshUse Use)> Materials,
-    float AutoHide, IReadOnlyList<Matrix4x4> Places);
+    float AutoHide, IReadOnlyList<Matrix4x4> Places, bool CastsShadow = true);
 
 /// <summary>
 /// What a material's chunks are for in the 3D view: drawn; only casting the sun's shadow (the merged shadow meshes the
@@ -191,6 +191,8 @@ public sealed partial class WorldView3D
         for (int k = 0; k < _meshes.Count; k++)
         {
             var kind = _meshes[k];
+            // the sun's view (detail from the eye) only of those that cast its shadow
+            if (detailFrom is not null && !kind.Kind.CastsShadow) continue;
             float limit = MathF.Min(MathF.Min(kind.Farthest, MeshFarthest), reach);
             for (int i = 0; i < kind.Spheres.Length; i++)
             {

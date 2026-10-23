@@ -410,7 +410,7 @@ public sealed partial class WorldView3D
     {
         var up = MathF.Abs(toLight.Z) > 0.99f ? Vector3.UnitY : Vector3.UnitZ;
         var look = Matrix4x4.CreateLookAt(Vector3.Zero, -toLight, up);
-        var centre = Vector3.Transform(_eye + Forward() * (PlantShadowReach * 0.5f), look);
+        var centre = Vector3.Transform(_eye, look);
         float texel = 2 * PlantShadowReach / PlantShadowSize;
         centre = new Vector3(MathF.Round(centre.X / texel) * texel, MathF.Round(centre.Y / texel) * texel, centre.Z);
         var projection = Matrix4x4.CreateOrthographicOffCenter(centre.X - PlantShadowReach, centre.X + PlantShadowReach,
@@ -424,7 +424,8 @@ public sealed partial class WorldView3D
         var c = Context!;
         bool shadows = (_plants.Count > 0 || _meshes.Count > 0) && toLight.Z > 0.02f;
         // the shadow map is kept until the camera has moved far enough across it or the light has moved
-        var centre = _eye + Forward() * (PlantShadowReach * 0.5f);
+        // round the eye, not ahead of it, so turning the camera doesn't draw it again
+        var centre = _eye;
         bool redraw = !_sunValid || Vector3.Distance(centre, _sunCentre) > PlantShadowReach * 0.08f || Vector3.DistanceSquared(toLight, _sunFor) > 1e-7f;
         if (redraw)
         {

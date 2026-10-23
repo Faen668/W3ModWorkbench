@@ -756,14 +756,15 @@ public partial class WorldWindow : Window, IMessageHost
         MapProgress.Text = L.T("WorldWindow.ReadingMeshes3D");
         var entities = _dots.Values.SelectMany(d => d).Select(d => d.Entity).ToList();
         static bool IsProxy(string mesh) => mesh.Contains(@"	extures_entity_proxy", StringComparison.OrdinalIgnoreCase);
-        static bool IsMesh(LayerComponent c) => c.Resource is { } r && r.EndsWith(".w2mesh", StringComparison.OrdinalIgnoreCase);
+        static bool IsMesh(LayerComponent c) => c.Resource is { } r && r.EndsWith(".w2mesh", StringComparison.OrdinalIgnoreCase)
+            && LayerComponent.Drawable(c.DrawableFlags).Visible;
         // an entity made from a template whose meshes the layer doesn't stream itself (a windmill, a fence, a door): the
         // template's meshes (its default appearance's, those not skinned to a skeleton), each placed on the entity; its
         // stand-in for far off (an entity proxy) then left out
         var fromTemplates = await Task.Run(() =>
         {
-            var byTemplate = new Dictionary<string, List<(string Mesh, Matrix4x4 Placed)>?>(StringComparer.OrdinalIgnoreCase);
-            var found = new List<(string Mesh, Matrix4x4 Place, float AutoHide)>();
+            var byTemplate = new Dictionary<string, List<(string Mesh, Matrix4x4 Placed, bool Shadow)>?>(StringComparer.OrdinalIgnoreCase);
+            var found = new List<(string Mesh, Matrix4x4 Place, float AutoHide, bool Shadow)>();
             var replaced = new HashSet<LayerEntity>();
             foreach (var entity in entities)
             {
@@ -777,7 +778,8 @@ public partial class WorldWindow : Window, IMessageHost
                         {
                             var file = Core.Entities.EntityFile.Read(data);
                             meshes = [.. Core.Entities.EntityFile.MeshesOf(file.Look(file.DefaultAppearance, locator.ReadFile))
-                                .Where(m => !m.Component.Skinned).Select(m => (m.Mesh, m.Placed))];
+                                .Select(m => (m.Mesh, m.Placed, m.Component, Drawn: LayerComponent.Drawable(m.Component.Object["drawableFlags"]?.ToString())))
+                                .Where(m => !m.Component.Skinned && m.Drawn.Visible).Select(m => (m.Mesh, m.Placed, m.Drawn.CastsShadow))];
                         }
                     }
                     catch (Exception ex) when (ex is IOException or InvalidDataException) { }
@@ -785,15 +787,15 @@ public partial class WorldWindow : Window, IMessageHost
                 }
                 if (meshes is not { Count: > 0 }) continue;
                 var place = entity.Object["transform"] is byte[] raw ? Core.Entities.EntityFile.Transform(raw) : Matrix4x4.CreateTranslation(entity.Position);
-                foreach (var (mesh, placed) in meshes) found.Add((mesh, placed * place, 0));
+                foreach (var (mesh, placed, shadow) in meshes) found.Add((mesh, placed * place, 0, shadow));
                 replaced.Add(entity);
             }
             return (found, replaced);
         });
         var placed = entities.SelectMany(e => e.Components.Where(c => IsMesh(c) && !(fromTemplates.replaced.Contains(e) && IsProxy(c.Resource!)))
-                .Select(c => (Mesh: c.Resource!, c.Place, c.AutoHide)))
+                .Select(c => (Mesh: c.Resource!, c.Place, c.AutoHide, Shadow: LayerComponent.Drawable(c.DrawableFlags).CastsShadow)))
             .Concat(fromTemplates.found)
-            .GroupBy(c => c.Mesh, StringComparer.OrdinalIgnoreCase).ToList();
+            .GroupBy(c => (Mesh: c.Mesh.ToLowerInvariant(), c.Shadow)).ToList();
         if (placed.Count == 0)
         {
             MapProgress.Visibility = Visibility.Collapsed;
@@ -805,7 +807,7 @@ public partial class WorldWindow : Window, IMessageHost
         var kinds = new System.Collections.Concurrent.ConcurrentBag<MeshKind3D>();
         await Parallel.ForEachAsync(placed, new ParallelOptions { MaxDegreeOfParallelism = Math.Clamp(Environment.ProcessorCount - 1, 2, 8) }, async (group, token) =>
         {
-            string path = group.Key;
+            string path = group.First().Mesh;
             try
             {
                 if (locator.ReadFile(path) is not { } data) return;
@@ -826,7 +828,7 @@ public partial class WorldWindow : Window, IMessageHost
                     }
                     catch (Exception ex) when (ex is IOException or InvalidDataException) { materials.Add((null, null, MeshUse.Drawn)); }
                 }
-                kinds.Add(new MeshKind3D(path, mesh, materials, group.Max(c => c.AutoHide), group.Select(c => c.Place).ToList()));
+                kinds.Add(new MeshKind3D(path, mesh, materials, group.Max(c => c.AutoHide), group.Select(c => c.Place).ToList(), group.Key.Shadow));
             }
             catch (Exception ex) when (ex is IOException or InvalidDataException) { }
         });
