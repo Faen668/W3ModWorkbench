@@ -118,7 +118,7 @@ public sealed partial class WorldView3D
         using (var code = Compile(source, "BillboardShadowVS", "vs_4_0")) _billboardShadowVS = new VertexShader(Device, code);
         using (var code = Compile(source, "PlantPS", "ps_4_0")) _plantPS = new PixelShader(Device, code);
         using (var code = Compile(source, "PlantShadowPS", "ps_4_0")) _plantShadowPS = new PixelShader(Device, code);
-        _plantMaterial = new Buffer(Device, 16, ResourceUsage.Default, BindFlags.ConstantBuffer, CpuAccessFlags.None, ResourceOptionFlags.None, 0);
+        _plantMaterial = new Buffer(Device, 32, ResourceUsage.Default, BindFlags.ConstantBuffer, CpuAccessFlags.None, ResourceOptionFlags.None, 0);
         _plantConstants = new Buffer(Device, Utilities.SizeOf<Matrix4x4>() + 16 * (3 + 32 + 1), ResourceUsage.Default, BindFlags.ConstantBuffer, CpuAccessFlags.None, ResourceOptionFlags.None, 0);
         _billboardQuad = Buffer.Create(Device, BindFlags.VertexBuffer, new[] { new Vector2(-0.5f, 0), new Vector2(0.5f, 0), new Vector2(0.5f, 1), new Vector2(-0.5f, 1) });
         _billboardIndices = Buffer.Create(Device, BindFlags.IndexBuffer, new ushort[] { 0, 1, 2, 0, 2, 3 });
@@ -532,6 +532,8 @@ public sealed partial class WorldView3D
         {
             if (lists[k] is not { } slots) continue;
             var kind = _plants[k];
+            // the tree's own switches: PigmentFloodOff keeps the ground's colour off its grass
+            var flags = new Vector4(kind.Kind.Tree.HasTag("PigmentFloodOff") ? 0 : 1, 0, 0, 0);
             for (int s = 0; s < kind.Lods.Length; s++)
             {
                 if (slots[s] is not { Count: > 0 } list) continue;
@@ -546,8 +548,7 @@ public sealed partial class WorldView3D
                     if (picture is null) continue;
                     c.PixelShader.SetShaderResource(14, picture);
                     c.PixelShader.SetShaderResource(24, specular);
-                    var m = material;
-                    c.UpdateSubresource(ref m, _plantMaterial);
+                    c.UpdateSubresource(new[] { material, flags }, _plantMaterial);
                     c.DrawIndexedInstanced(count, list.Count, start, first, starts[k][s]);
                 }
                 drawn += list.Count;
@@ -556,8 +557,7 @@ public sealed partial class WorldView3D
             if (slots[kind.Lods.Length] is { Count: > 0 } far && kind.Billboard is { } atlas)
             {
                 var tree = kind.Kind.Tree;
-                var billboardMaterial = new Vector4(0, 0, -1, tree.BillboardMaterial?.AlphaScalar ?? 1);
-                c.UpdateSubresource(ref billboardMaterial, _plantMaterial);
+                c.UpdateSubresource(new[] { new Vector4(0, 0, -1, tree.BillboardMaterial?.AlphaScalar ?? 1), flags }, _plantMaterial);
                 var constants = ReadConstants();
                 constants.BillboardShape = new Vector4(tree.BillboardWidth, tree.BillboardTop, tree.BillboardBottom, kind.Views.Length);
                 constants.BillboardStyle = new Vector4(tree.BillboardColours, 0, 0, 0);

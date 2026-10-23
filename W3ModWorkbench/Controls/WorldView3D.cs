@@ -366,6 +366,7 @@ cbuffer PlantMaterial : register(b10)
 {
     float4 PlantMat; // the specular colour's green, the transmission colour's green, the glossiness (negative without a
                      // specular map), the render state's alpha scalar
+    float4 PlantFlags; // whether its grass takes the ground's colour (its SpeedTree file's PigmentFloodOff tag leaves it out)
 };
 Texture2D PlantNormals : register(t19);
 Texture2D<float> PlantShadowMap : register(t15);
@@ -1008,7 +1009,7 @@ float4 PlantPS(PlantOut i, bool front : SV_IsFrontFace) : SV_Target
         : i.Kind < 2.5 ? RandomColour(saturate(c.rgb), 2, i.Weights) * pow(PlantTint.rgb, 2.2)
         : (set > 2 ? pow(saturate(c.rgb), 2.2) : RandomColour(saturate(c.rgb), set, i.Weights)) * BillboardTint.rgb;
     albedo *= saturate(PlantTint.w * (i.Occlusion - 1) + 1);
-    if (i.Kind > 1.5 && i.Kind < 2.5)
+    if (i.Kind > 1.5 && i.Kind < 2.5 && PlantFlags.x > 0.5)
     {
         // the grass's pigment, as the game's grass shader has it: its colour drawn towards the ground's under it (its
         // brightness times the pigment's brightness), the more the lower on the plant and the further off, past the
