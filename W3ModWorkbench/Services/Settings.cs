@@ -48,6 +48,9 @@ public sealed class Settings
     /// <summary>The folder and filters the asset browser was closed with, to open with again.</summary>
     public AssetBrowserState AssetBrowser { get; set; } = new();
 
+    /// <summary>Each world's 3D camera when it was last left, by the world's path: REDkit's camera view text, then "|" and the speed.</summary>
+    public Dictionary<string, string> WorldCameras { get; set; } = [];
+
     /// <summary>Where tool windows that remember it were, by window: "left,top,width,height,maximized".</summary>
     public Dictionary<string, string> WindowBounds { get; set; } = [];
 

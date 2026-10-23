@@ -5662,7 +5662,7 @@
   "WorldWindow.ReadingMeshes3D": "Reading the buildings and other meshes for 3D…",
   "WorldWindow.PlayDayTip": "Let the day go by, an hour every two seconds",
   "WorldWindow.NoTerrain3D": "This world's terrain isn't read yet, or it has none, so there's nothing to show in 3D.",
-  "WorldWindow.Camera3D": "X {x:0.0}   Y {y:0.0}   Z {z:0.0}   ·   facing {heading:0}°   ·   {speed:0} m/s   ·   drag to look, W A S D to move, Q and E down and up, Shift faster, the wheel for speed, Ctrl+Alt+C and Ctrl+Alt+V copy and go to a camera view as REDkit does",
+  "WorldWindow.Camera3D": "X {x:0.0}   Y {y:0.0}   Z {z:0.0}   ·   facing {heading:0}°   ·   speed {speed:0.00}   ·   drag to look, W A S D to move, Q and E down and up, Shift faster, Ctrl slower, the wheel to step forward and back, Shift and the wheel for speed, Ctrl+Alt+C and Ctrl+Alt+V copy and go to a camera view as REDkit does",
   "WorldWindow.GpuRead": "A test: the map drawn with the graphics card, {count:N0} plants every frame",
   "WorldWindow.WaypointsTip": "Draw the cooked waypoints NPCs walk to and stand at",
   "WorldWindow.WaypointsRead": "Waypoints: {count:N0}"

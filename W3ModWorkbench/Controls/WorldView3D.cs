@@ -423,6 +423,16 @@ cbuffer Foliage : register(b8)
     float4 GrassSettings;      // the grass's albedo multiplier
 };
 #define GrassAlbedo GrassSettings.x
+// which of the light to show, as REDkit's decomposed views do: 0 all of it, 1 the ambient (and the probes' reflection),
+// 2 the sun's light (its diffuse, translucency and specular), 3 the albedo (as the G-buffer keeps it, in gamma)
+#define LightingView GrassSettings.y
+// the translucency's global scale for leaves and grass (cb0[24].x in the game's SpeedTree shaders), for billboards
+#define TranslucencyGlobal GrassSettings.zw
+
+float3 LightingPart(float3 all, float3 ambient)
+{
+    return LightingView > 1.5 ? all - ambient : LightingView > 0.5 ? ambient : all;
+}
 
 // The trees' crowns over each few metres (how many, the canopy's top). The game's ambient comes from probes it renders
 // in the scene, so under a forest they see the forest; ours comes from the sky, dimmed under the crowns by their count.
@@ -604,10 +614,11 @@ float4 TerrainPS(Out i) : SV_Target
     // the probes' ambient and reflection, dimmed by the AO
     float direct = lerp(1, ao, AoSettings.w);
     float sky = CanopySky(i.World);
-    float3 lit = albedo * (sunLight * saturate(dot(normal, Light.xyz)) / 3.14159265 * direct + AmbientAt(normal, sun) * ao * sky)
-        + sunLight * SpecularAt(normal, v, Light.xyz, specularity, clamp(roughness, 0.05, 1), f90) * direct
-        + ReflectionAt(normal, v, specularity, clamp(roughness, 0.05, 1), sun) * ao * sky;
-    return Screen(Fogged(lit, i.World), 1);
+    float3 ambientPart = albedo * AmbientAt(normal, sun) * ao * sky + ReflectionAt(normal, v, specularity, clamp(roughness, 0.05, 1), sun) * ao * sky;
+    float3 lit = albedo * sunLight * saturate(dot(normal, Light.xyz)) / 3.14159265 * direct
+        + sunLight * SpecularAt(normal, v, Light.xyz, specularity, clamp(roughness, 0.05, 1), f90) * direct + ambientPart;
+    if (LightingView > 2.5) return float4(pow(saturate(albedo), 1 / 2.2), 1);
+    return Screen(Fogged(LightingPart(lit, ambientPart), i.World), 1);
 }
 
 // ---- water ----
@@ -795,6 +806,8 @@ float3 Lookup(Texture2D map, float3 g)
 
 float4 PostPS(SkyOut i) : SV_Target
 {
+    // the albedo view: as it was drawn, untouched by the exposure and the grading
+    if (LightingView > 2.5) return float4(HdrScene.Load(int3(int2(i.Position.xy), 0)).rgb, 1);
     // the exposure from the eye's adaptation: the scene's average luminance (the smallest level), held between the limits
     float adapted = clamp(AdaptedLuminance.Load(int3(0, 0, 0)), Exposure.z, Exposure.w);
     float k = Exposure.x * 11.2;
@@ -985,7 +998,8 @@ float4 PlantPS(PlantOut i, bool front : SV_IsFrontFace) : SV_Target
     // the translucency as the game's SpeedTree shader writes it: the specular map's alpha times the transmission colour,
     // times the environment's translucency scale; the specularity its green times the specular colour (none without a map)
     float4 specMap = PlantMat.w > 0.5 && i.Kind < 2.5 ? PlantSpecular.Sample(Tiled, i.Uv) : float4(0, 0, 0, 1);
-    float translucent = leafy ? BillboardTint.w * (i.Kind < 2.5 ? specMap.a * PlantMat.y : 1) : 0;
+    // (the side views by the environment's billboards translucency)
+    float translucent = leafy ? (i.Kind < 2.5 ? TranslucencyGlobal.x * specMap.a * PlantMat.y : TranslucencyGlobal.y) : 0;
     // (the grass and the bushes its brushes grow take no specular at all: measured against REDkit, the sheen, even
     // the grazing one, is what made them pale)
     float specularity = i.Kind < 1.5 ? specMap.g * PlantMat.x : 0;
@@ -1010,7 +1024,9 @@ float4 PlantPS(PlantOut i, bool front : SV_IsFrontFace) : SV_Target
     float sky = CanopySky(i.World);
     float3 lit = (grass ? sunLight * diffuse * directAo : albedo * sunLight * diffuse * directAo) + albedo * AmbientAt(an, sun) * ao * sky * (grass ? CanopySettings.z : 1)
         + (grass ? 0 : sunLight * SpecularAt(specularNormal, V, L, specularity, clamp(glossiness, 0.05, 1), f90) * SpecularSettings.z * directAo);
-    return Screen(Fogged(lit, i.World), 1);
+    float3 ambientPart = albedo * AmbientAt(an, sun) * ao * sky * (grass ? CanopySettings.z : 1);
+    if (LightingView > 2.5) return float4(pow(saturate(albedo), 1 / 2.2), 1);
+    return Screen(Fogged(LightingPart(lit, ambientPart), i.World), 1);
 }
 
 void PlantShadowPS(PlantOut i)
@@ -1354,7 +1370,9 @@ float4 StripePS(StripeOut i) : SV_Target
 
     private Vector3 _eye;
     private float _yaw, _pitch = -0.35f;
-    private float _speed = 40;
+    // the flying speed as REDkit shows it: a multiplier, 1 being a slow walk (SpeedUnit metres a second)
+    private float _speed = 1;
+    private const float SpeedUnit = 2;
     private readonly HashSet<Key> _held = [];
     private Point _lastMouse;
     private bool _looking;
@@ -1782,6 +1800,10 @@ float4 StripePS(StripeOut i) : SV_Target
     /// </summary>
     public float GrassAlbedoMultiplier { get; set; } = 1;
 
+    /// <summary>Which of the light the view shows, as REDkit's decomposed views: 0 all of it, 1 the ambient alone, 2 the sun's alone.</summary>
+    public float LightingView { get; set; }
+
+
     /// <summary>The camera's vertical field of view, in degrees.</summary>
     public float FieldOfView { get; set; } = 60;
 
@@ -1925,7 +1947,7 @@ float4 StripePS(StripeOut i) : SV_Target
         foliageData[24] = new Vector4(probes.WaterFresnel, GlintScale, Gtao?.Z ?? 1, Gtao?.W ?? 1);
         foliageData[25] = TranslucencyCurve;
         foliageData[26] = new Vector4(CanopyDensity, _canopy is null ? 0 : 1, foliage.GrassAmbient, 0);
-        foliageData[28] = new Vector4(GrassAlbedoMultiplier, 0, 0, 0);
+        foliageData[28] = new Vector4(GrassAlbedoMultiplier, LightingView, foliage.TranslucencyScale, foliage.BillboardTranslucency);
         foliageData[27] = new Vector4(foliage.Pigment, PigmentHeight);
 
         c.UpdateSubresource(foliageData, _foliage);
@@ -2159,7 +2181,7 @@ float4 StripePS(StripeOut i) : SV_Target
     private void Fly(float seconds)
     {
         if (_held.Count == 0) return;
-        float speed = _speed * (_held.Contains(Key.LeftShift) || _held.Contains(Key.RightShift) ? 4 : 1)
+        float speed = _speed * SpeedUnit * (_held.Contains(Key.LeftShift) || _held.Contains(Key.RightShift) ? 5 : 1)
             * (_held.Contains(Key.LeftCtrl) || _held.Contains(Key.RightCtrl) ? 0.25f : 1);
         var forward = Forward();
         var right = Vector3.Normalize(new Vector3(MathF.Cos(_yaw), -MathF.Sin(_yaw), 0));
@@ -2269,12 +2291,30 @@ float4 StripePS(StripeOut i) : SV_Target
         }
     }
 
-    /// <summary>The wheel sets how fast the camera flies.</summary>
+    /// <summary>
+    /// As REDkit's camera: the wheel with Shift held sets how fast the camera flies; the wheel alone moves it forward or
+    /// back, a step that shrinks the nearer the ground it is.
+    /// </summary>
     protected override void OnMouseWheel(MouseWheelEventArgs e)
     {
-        _speed = Math.Clamp(_speed * (e.Delta > 0 ? 1.25f : 0.8f), 2, 800);
+        int notches = Math.Sign(e.Delta);
+        if (Keyboard.Modifiers.HasFlag(ModifierKeys.Shift))
+            _speed = Math.Clamp(_speed * (notches > 0 ? 1.25f : 0.8f), 0.05f, 100);
+        else
+        {
+            float above = MathF.Max(0, _eye.Z - GroundAt(new Vector2(_eye.X, _eye.Y)));
+            _eye += Forward() * notches * _speed * Math.Clamp(above * 0.2f, 0.2f, 5);
+            KeepAboveGround();
+        }
         Moved();
         e.Handled = true;
+    }
+
+    /// <summary>How fast the camera flies, as REDkit shows it (1 a slow walk).</summary>
+    public float Speed
+    {
+        get => _speed;
+        set { _speed = Math.Clamp(value, 0.05f, 100); Moved(); }
     }
 
     public override void Dispose()

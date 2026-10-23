@@ -128,6 +128,7 @@ public partial class WorldWindow : Window, IMessageHost
         Loaded += async (_, _) => await LoadAsync();
         Closed += (_, _) =>
         {
+            KeepCamera3D();
             _closing.Cancel();
             GpuMap.Dispose();
             View3D.Dispose();
@@ -770,7 +771,7 @@ public partial class WorldWindow : Window, IMessageHost
     /// </summary>
     private async Task SetProbe3DAsync()
     {
-        if (!_layers3D) return;
+        if (!_probes3D) return;
         var probes = _dots.Values.SelectMany(d => d).SelectMany(d => d.Entity.Components).Where(c => c.Probe is not null).ToList();
         var chosen = probes.FirstOrDefault(c => c.Probe!.Contribution == -1)
             ?? probes.OrderByDescending(c => c.Place.M11 * c.Place.M22 * c.Place.M33).FirstOrDefault();
@@ -791,9 +792,32 @@ public partial class WorldWindow : Window, IMessageHost
             View3D.SetCookedProbe(probe.Origin, probe.AmbientColour, probe.AmbientIntensity, faces.Albedo, faces.Normals, faces.Depth);
     }
 
+    // whether the 3D view's camera has been put back where it was left
+    private bool _cameraRestored;
+
+    private bool RestoreCamera3D(string kept)
+    {
+        var parts = kept.Split('|');
+        if (!View3D.PasteCamera(kept)) return false;
+        if (parts.Length > 2 && float.TryParse(parts[^1], NumberStyles.Float, CultureInfo.InvariantCulture, out float speed)) View3D.Speed = speed;
+        return true;
+    }
+
+    /// <summary>The 3D camera kept for the world, to come back to (only once it's been shown).</summary>
+    private void KeepCamera3D()
+    {
+        if (!_cameraRestored) return;
+        App.Settings.WorldCameras[_path.ToLowerInvariant()] = View3D.CameraText + "|" + View3D.Speed.ToString("0.###", CultureInfo.InvariantCulture);
+        App.Settings.Save();
+    }
+
     // whether the 3D view takes what the layers place (meshes, paths, water shapes, the probes): off, it's the world's
     // terrain, foliage, water and sky alone, as REDkit shows a world with its layers unloaded
     private bool _layers3D = true;
+
+    // whether the 3D view takes its ambient from the world's own environment probe (in the layers too, kept apart from
+    // the rest, as REDkit can load its env_global_pbr group alone)
+    private bool _probes3D = true;
 
     // the water meshes' triangles in the world (rivers drawn with the game's water shaders), for the water's level
     private List<(Vector3 A, Vector3 B, Vector3 C)> _waterSurfaces = [];
@@ -1257,11 +1281,20 @@ public partial class WorldWindow : Window, IMessageHost
                 View3DToggle.ToolTip = View3D.Painted ? L.T("WorldWindow.View3DTip") : L.T("WorldWindow.View3DNoTextures");
                 _ = ShowPlants3DAsync();
             }
-            var content = Map.Content();
-            View3D.LookAt(new Vector2((float)((Map.ActualWidth / 2 - content.Offset.X) / content.Scale), (float)(-(Map.ActualHeight / 2 - content.Offset.Y) / content.Scale)));
+            // the first time, where the camera was when the world was last left (as REDkit keeps it), else over the map's middle
+            if (!(_cameraRestored is false && App.Settings.WorldCameras.TryGetValue(_path.ToLowerInvariant(), out var kept) && RestoreCamera3D(kept)))
+            {
+                var content = Map.Content();
+                View3D.LookAt(new Vector2((float)((Map.ActualWidth / 2 - content.Offset.X) / content.Scale), (float)(-(Map.ActualHeight / 2 - content.Offset.Y) / content.Scale)));
+            }
+            _cameraRestored = true;
             View3D.Focus();
         }
-        else HoverText.Text = L.T("WorldWindow.MouseHint");
+        else
+        {
+            KeepCamera3D();
+            HoverText.Text = L.T("WorldWindow.MouseHint");
+        }
         // the map's own switches put away while the 3D view shows
         DayPanel.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
         if (!on && View3D.PlayingDay) PlayDay(false);
