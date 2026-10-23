@@ -773,7 +773,10 @@ public partial class WorldWindow : Window, IMessageHost
         MapProgress.Text = L.T("WorldWindow.ReadingMeshes3D");
         var entities = _dots.Values.SelectMany(d => d).Select(d => d.Entity).ToList();
         static bool IsProxy(string mesh) => mesh.Contains(@"	extures_entity_proxy", StringComparison.OrdinalIgnoreCase);
-        static bool IsMesh(LayerComponent c) => c.Resource is { } r && r.EndsWith(".w2mesh", StringComparison.OrdinalIgnoreCase)
+        // meshes, and cloth (banners, washing, awnings) in the shape it has before it's simulated
+        // (a character's cloth, a monster's rags, needs its skeleton: left out)
+        static bool IsMesh(LayerComponent c) => c.Resource is { } r && (r.EndsWith(".w2mesh", StringComparison.OrdinalIgnoreCase)
+                || Core.Meshes.ClothFile.IsCloth(r) && !r.StartsWith(@"characters\", StringComparison.OrdinalIgnoreCase))
             && LayerComponent.Drawable(c.DrawableFlags).Visible;
         // an entity made from a template whose meshes the layer doesn't stream itself (a windmill, a fence, a door): the
         // template's meshes (its default appearance's, those not skinned to a skeleton), each placed on the entity; its
@@ -829,7 +832,8 @@ public partial class WorldWindow : Window, IMessageHost
             {
                 if (locator.ReadFile(path) is not { } data) return;
                 var archive = locator.Find(path)?.Archive;
-                var mesh = Core.Meshes.MeshFile.Read(data, n => locator.ReadBuffer(path, n, archive));
+                var mesh = Core.Meshes.ClothFile.IsCloth(path) ? Core.Meshes.ClothFile.Read(data, () => locator.ReadCollision(path))
+                    : Core.Meshes.MeshFile.Read(data, n => locator.ReadBuffer(path, n, archive));
                 var materials = new List<(System.Windows.Media.Imaging.BitmapSource?, MaterialLook?, MeshUse)>();
                 for (int m = 0; m < mesh.Materials.Count; m++)
                 {
@@ -847,7 +851,7 @@ public partial class WorldWindow : Window, IMessageHost
                 }
                 kinds.Add(new MeshKind3D(path, mesh, materials, group.Max(c => c.AutoHide), group.Select(c => c.Place).ToList(), group.Key.Shadow));
             }
-            catch (Exception ex) when (ex is IOException or InvalidDataException) { }
+            catch (Exception ex) when (ex is IOException or InvalidDataException or ArgumentException or IndexOutOfRangeException) { }
         });
         MapProgress.Visibility = Visibility.Collapsed;
         View3D.SetMeshes([.. kinds.OrderBy(k => k.Path, StringComparer.OrdinalIgnoreCase)]);
