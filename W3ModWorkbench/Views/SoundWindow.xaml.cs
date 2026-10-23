@@ -583,6 +583,15 @@ public partial class SoundWindow : Window, IMessageHost
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { _ = ShowMessage(L.T("SoundWindow.CouldNotSaved"), ex.Message, MessageKind.Error); }
     }
 
+    /// <summary>RedSpeech Tool (by nikich340), which makes voice lines: packs .w3speech files, converts WAV to WEM and lip sync.</summary>
+    public const string RedSpeechUrl = "https://www.nexusmods.com/witcher3/mods/14750"; // loc-ignore
+
+    private void RedSpeech_Click(object sender, RoutedEventArgs e)
+    {
+        try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(RedSpeechUrl) { UseShellExecute = true })?.Dispose(); }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException) { }
+    }
+
     private void WemButton_Click(object sender, RoutedEventArgs e)
     {
         if (_riff is not { } riff) return;

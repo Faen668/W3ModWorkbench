@@ -33,4 +33,8 @@ Double-click one to open the sound viewer.
 
 The game plays sounds through **events**: a footstep plays `g_footstep_walk`, a scene or an emitter plays others. Wherever an event is named (in a property list, on an animation's timeline, in a cutscene's events) you can open it, and the sound viewer lists every sound it can play, each to click and hear, and what the event does.
 
+## Making voice lines
+
+For voice lines of your own, use [RedSpeech Tool](https://www.nexusmods.com/witcher3/mods/14750) by nikich340. It packs and unpacks the game's speech files (`enpc.w3speech` and the others), turns WAV into the game's WEM, and converts lip sync to and from REDkit's. The link under a voice line's words opens its page. Put the speech file it makes at the top of your workspace, and **Build** puts it in your mod as it is (see [[Building and installing]]).
+
 > note: Every one of the game's 90,995 sounds plays, read straight from the game's files. REDkit isn't needed.
