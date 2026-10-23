@@ -51,6 +51,8 @@ Save **beside each file** or **into a folder**. Every file is checked as it's co
 
 A path is property names separated by dots, with `[n]` for an item of a list: `envParams.m_globalFog.fogDensity.dataCurveValues[0].value`. **Choose…** picks from a file's properties. **Check** tries the edits without saving; **Make the edits** saves.
 
+Some of REDkit's older `.env` files keep a group as a class the game no longer has: their `envProbeBaseLightingAmbient` has `colorSkyMul` and `colorSkyAdd` where the game's has `colorSkyTop` and `colorSkyHorizon`. The game skips a group like that when it loads the file. When an edit puts the game's properties into one, the group is made the game's class, holding only what the edit puts in, so the game reads it.
+
 ## Recipes: the same job again later
 
 A recipe is a filled-in **Convert** or **Bulk edit** form, saved so you can run it again in one click: after you've tuned your look again, or on the next version of your mod.

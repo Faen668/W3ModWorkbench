@@ -63,6 +63,7 @@ public sealed class Cr2wBulkEdit
             MergeFileInfo(document, copied);
         }
 
+        var types = document["file"]?["types"] as JsonObject;
         int changed = 0;
         foreach (var node in objects)
         {
@@ -71,17 +72,17 @@ public sealed class Cr2wBulkEdit
             switch (Kind)
             {
                 case BulkEditKind.Copy:
-                    if (Put(obj, steps, copied!.DeepClone())) changed++;
+                    if (Put(obj, steps, copied!.DeepClone(), types)) changed++;
                     break;
                 case BulkEditKind.Set:
-                    if (Put(obj, steps, Value?.DeepClone())) changed++;
+                    if (Put(obj, steps, Value?.DeepClone(), types)) changed++;
                     break;
                 case BulkEditKind.Remove:
                     if (Remove(obj, steps)) changed++;
                     break;
                 case BulkEditKind.Scale or BulkEditKind.Offset:
                     if (Find(obj, steps) is not { } under) break;
-                    if (under is JsonValue) { if (Change(under) is double result && Put(obj, steps, Round(result))) changed++; }
+                    if (under is JsonValue) { if (Change(under) is double result && Put(obj, steps, Round(result), types)) changed++; }
                     else changed += Numbers(under, null, Fields.Count == 0);
                     break;
             }
@@ -135,14 +136,19 @@ public sealed class Cr2wBulkEdit
         return node;
     }
 
-    private bool Put(JsonObject root, IReadOnlyList<object> steps, JsonNode? value)
+    private bool Put(JsonObject root, IReadOnlyList<object> steps, JsonNode? value, JsonObject? types)
     {
         JsonNode node = root;
+        // the class of the struct the walk is in, while it's known (a list's items aren't followed)
+        string? className = (string?)root["$class"];
         for (int i = 0; i < steps.Count - 1; i++)
         {
+            if (className is not null && node is JsonObject o && steps[i] is string property)
+                className = steps[i + 1] is string wanted ? Retype(o, className, property, [wanted], types) : null;
+            else className = null;
             JsonNode? next = (node, steps[i]) switch
             {
-                (JsonObject o, string name) => o[name],
+                (JsonObject o2, string name) => o2[name],
                 (JsonArray a, int index) when index < a.Count => a[index],
                 _ => null,
             };
@@ -155,6 +161,8 @@ public sealed class Cr2wBulkEdit
             if (next is JsonObject { } raw && raw["$raw"] is not null) return false;
             node = next;
         }
+        if (className is not null && node is JsonObject last && steps[^1] is string lastProperty && value is JsonObject whole)
+            Retype(last, className, lastProperty, whole.Select(p => p.Key).Where(k => !k.StartsWith('$')).ToList(), types, keep: true);
         switch (node, steps[^1])
         {
             case (JsonObject o, string name):
@@ -168,6 +176,34 @@ public sealed class Cr2wBulkEdit
                 return false;
         }
     }
+
+    /// <summary>
+    /// The class of a struct property, made the engine's where the file has it as an older class the engine no longer
+    /// has (or another struct) and the edit puts in properties only the engine's has: an old <c>.env</c>'s
+    /// envProbeBaseLightingAmbient is a CEnvAmbientOnlyParameters, which has no colorSkyTop. The engine skips a struct
+    /// of another class when it loads the file, as the upgrade to 164 does, so what was in it goes and only the
+    /// edit's properties are kept. Null when the property isn't a struct the engine or the file knows.
+    /// </summary>
+    private static string? Retype(JsonObject parent, string className, string property, List<string> wanted, JsonObject? types, bool keep = false)
+    {
+        string? type = TypeOf(types, className, property, parent);
+        string? engine = Cr2wJson.EngineType(className, property);
+        if (type is null || engine is null || type == engine || wanted.Count == 0) return type ?? engine;
+        if (!Cr2wJson.IsEngineClass(engine, out bool engineStruct) || !engineStruct || type.IndexOfAny([':', '@', '*', '#', '~', '[']) >= 0) return type;
+        if (Cr2wJson.IsEngineClass(type, out bool oldStruct) && !oldStruct) return type;
+        var child = parent[property] as JsonObject;
+        if (!wanted.All(p => TypeOf(types, engine, p, null) is not null)) return type;
+        if (wanted.All(p => TypeOf(types, type, p, child) is not null) && Cr2wJson.IsEngineClass(type, out _)) return type;
+        var local = parent["$types"] as JsonObject ?? (JsonObject)(parent["$types"] = new JsonObject());
+        local[property] = engine;
+        if (!keep && child is not null) parent[property] = new JsonObject();
+        return engine;
+    }
+
+    /// <summary>A property's type in the file's JSON: the object's own $types, then the file's list, then the engine's.</summary>
+    private static string? TypeOf(JsonObject? types, string className, string property, JsonObject? local) =>
+        (string?)(local?["$types"]?[property] as JsonValue) ?? (string?)(types?[className + "." + property] as JsonValue)
+        ?? Cr2wJson.EngineType(className, property);
 
     private static bool Remove(JsonObject root, IReadOnlyList<object> steps)
     {

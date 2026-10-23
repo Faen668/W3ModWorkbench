@@ -59,6 +59,14 @@ public static partial class Cr2wJson
         return null;
     }
 
+    /// <summary>Whether the engine has a class of that name; with <paramref name="isStruct"/>, whether it's a struct.</summary>
+    public static bool IsEngineClass(string name, out bool isStruct)
+    {
+        bool known = RttiClasses.Value.TryGetValue(name, out var c);
+        isStruct = known && c!.IsStruct;
+        return known;
+    }
+
     // ---------------------------------------------------------------- to JSON
 
     public static string ToJsonText(Cr2wFile file, out Cr2wJsonReport report, string? source = null) =>
