@@ -17,6 +17,22 @@ public static class SoundCacheWriter
     private const uint Magic = 0x57335343; // "CS3W"
     private const int HeaderSize = 64;
 
+    /// <summary>
+    /// The bank version the game loads (its banks are all 150, built with Wwise 2023.1; witcher3.exe has Wwise 2023.1.19).
+    /// Wwise refuses a bank of any other version (AK_WrongBankVersion), so a bank from the next-gen game or an older Wwise
+    /// sits in the cache unheard.
+    /// </summary>
+    public const uint GameBankVersion = 150;
+
+    /// <summary>A bank file's version (from its BKHD header), or null when it doesn't start with one.</summary>
+    public static uint? BankVersion(string filePath)
+    {
+        using var input = File.OpenRead(filePath);
+        Span<byte> head = stackalloc byte[12];
+        if (input.ReadAtLeast(head, 12, throwOnEndOfStream: false) < 12 || BinaryPrimitives.ReadUInt32LittleEndian(head) != 0x44484B42) return null; // "BKHD"
+        return BinaryPrimitives.ReadUInt32LittleEndian(head[8..]);
+    }
+
     /// <summary>The files a sound cache holds.</summary>
     public static bool IsSound(string path) =>
         path.EndsWith(".wem", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".bnk", StringComparison.OrdinalIgnoreCase);

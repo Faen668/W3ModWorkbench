@@ -186,6 +186,13 @@ public static class ModPacker
                     string name = Path.GetFileName(sound.GamePath);
                     if (seen.Add(name)) named.Add((name, sound.FilePath));
                     else notes.Add(L.T("ModPacker.LeftOutSoundCache", sound.GamePath, name));
+                    // the game's Wwise loads only banks of its own version; any other is packed, but never heard
+                    if (name.EndsWith(".bnk", StringComparison.OrdinalIgnoreCase))
+                    {
+                        uint? version = SoundCacheWriter.BankVersion(sound.FilePath);
+                        if (version is null) notes.Add(L.T("ModPacker.IsntSoundBank", sound.GamePath));
+                        else if (version != SoundCacheWriter.GameBankVersion) notes.Add(L.T("ModPacker.BankWrongVersion", sound.GamePath, version, SoundCacheWriter.GameBankVersion));
+                    }
                 }
                 SoundCacheWriter.Write(Path.Combine(content, SoundCacheWriter.FileName), named, cancel);
                 made.Add(L.T("ModPacker.SoundsIn", L.T("Count.Sound", named.Count), SoundCacheWriter.FileName));

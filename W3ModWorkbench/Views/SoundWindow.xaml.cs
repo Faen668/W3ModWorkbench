@@ -312,6 +312,8 @@ public partial class SoundWindow : Window, IMessageHost
         TitleText.Text = Path.GetFileName(_path);
         int events = bank.Objects.GetValueOrDefault("Events");
         DetailText.Text = L.T("SoundWindow.WwiseSoundBankVersion", bank.Version, bank.Id, L.T("Count.Sound", bank.Embedded.Count), L.T("Count.Sound", bank.Sounds.Where(s => s.Streamed).Select(s => s.SourceId).Distinct().Count()), L.T("Count.Event", events));
+        if (bank.Version != Core.Packing.SoundCacheWriter.GameBankVersion)
+            DetailText.Text += "  ·  " + L.T("SoundWindow.GameWontLoadBank", Core.Packing.SoundCacheWriter.GameBankVersion);
         var objects = bank.Objects.OrderByDescending(o => o.Value).Select(o => new DetailRow(o.Key, $"{o.Value:N0}")).ToList();
         objects.Add(new DetailRow("", ""));
         objects.AddRange(bank.Sections.Select(s => new DetailRow(L.T("SoundWindow.Section", s.Id), L.T("SoundWindow.Bytes4", s.Size))));
