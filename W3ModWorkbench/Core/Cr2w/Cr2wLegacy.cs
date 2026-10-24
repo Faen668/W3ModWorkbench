@@ -208,32 +208,11 @@ public static class Cr2wLegacy
 
     /// <summary>A length: its low six bits in the first byte with 0x80 for 8-bit text and 0x40 when more follow, then
     /// seven bits a byte.</summary>
-    private static void WriteLength(Stream o, int length, bool narrow)
-    {
-        int first = (narrow ? 0x80 : 0) | (length & 0x3F);
-        if (length > 0x3F) first |= 0x40;
-        o.WriteByte((byte)first);
-        for (int rest = length >> 6; rest > 0; rest >>= 7)
-            o.WriteByte((byte)((rest & 0x7F) | (rest > 0x7F ? 0x80 : 0)));
-    }
+    private static void WriteLength(Stream o, int length, bool narrow) => PackedInt.Write(o, length, narrow);
 
     private static int Length(byte[] d, ref int at, out bool narrow)
     {
-        Need(d, at, 1);
-        int first = d[at++];
-        narrow = (first & 0x80) != 0;
-        int length = first & 0x3F;
-        if ((first & 0x40) != 0)
-        {
-            int shift = 6, b;
-            do
-            {
-                Need(d, at, 1);
-                b = d[at++];
-                length |= (b & 0x7F) << shift;
-                shift += 7;
-            } while ((b & 0x80) != 0 && shift < 32);
-        }
+        if (!PackedInt.TryRead(d, ref at, out int length, out narrow)) Need(d, at, 1);
         return length;
     }
 

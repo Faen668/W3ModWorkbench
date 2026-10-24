@@ -138,19 +138,7 @@ public sealed class LipSync
         int at = 4;
         float duration = BinaryPrimitives.ReadSingleLittleEndian(blob.AsSpan(at));
         at += 4;
-        int Packed()
-        {
-            int b = blob[at++], value = b & 0x3F, shift = 6;
-            bool more = (b & 0x40) != 0;
-            while (more)
-            {
-                b = blob[at++];
-                value |= (b & 0x7F) << shift;
-                shift += 7;
-                more = (b & 0x80) != 0;
-            }
-            return value;
-        }
+        int Packed() => PackedInt.Read(blob, ref at);
         int bones = Packed();
         if (bones < 0 || bones > 64) throw new InvalidDataException(L.T("MimicFace.LipSyncsBonesMake"));
         at += bones * 2 * 16; // the neck and head stay where they are

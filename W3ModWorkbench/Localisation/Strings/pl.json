@@ -3423,7 +3423,7 @@
   "SpeechWindow.MenuItem": "Kwestie (.w3speech)…",
   "SpeechWindow.Intro": "Gra trzyma kwestie każdego języka w jednym pliku mowy (enpc.w3speech dla angielskiego): dźwięk i synchronizację ust każdej kwestii, odszukiwane po ID tekstu. Rozpakuj go do folderu albo spakuj folder do niego. Build pakuje tak samo foldery speech\\en (i innych języków) projektu.",
   "SpeechWindow.Unpack": "Rozpakuj plik mowy",
-  "SpeechWindow.UnpackHint": "Każda kwestia staje się plikiem ID.wem, a jej synchronizacja ust ID.raw (lub ID.cr2w w starszych plikach), z nazwami jak w RedSpeech Tool, albo ID.re do edycji w Blenderze.",
+  "SpeechWindow.UnpackHint": "Każda kwestia staje się plikiem ID.wem, a jej synchronizacja ust ID.raw (lub ID.cr2w w plikach sprzed aktualizacji next-gen), z nazwami jak w RedSpeech Tool, albo ID.re do edycji w Blenderze.",
   "SpeechWindow.SpeechFile": "Plik mowy",
   "SpeechWindow.Choose": "Wybierz…",
   "SpeechWindow.IntoFolder": "Do folderu",

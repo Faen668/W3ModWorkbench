@@ -22,15 +22,8 @@ public sealed record AnimEvent(string Animation, string Track, string Name, floa
     {
         if (value is string s) return s;
         if (value is not byte[] b || b.Length == 0) return null;
-        int at = 0, first = b[at++], length = first & 0x3F;
-        if ((first & 0x40) != 0)
-            for (int shift = 6; at < b.Length; shift += 7)
-            {
-                int next = b[at++];
-                length |= (next & 0x7F) << shift;
-                if ((next & 0x80) == 0) break;
-            }
-        if ((first & 0x80) != 0 || length <= 1 || at + length - 1 > b.Length) return null;
+        int at = 0;
+        if (!PackedInt.TryRead(b, ref at, out int length, out bool top) || top || length <= 1 || at + length - 1 > b.Length) return null;
         return System.Text.Encoding.Latin1.GetString(b, at, length - 1);
     }
 

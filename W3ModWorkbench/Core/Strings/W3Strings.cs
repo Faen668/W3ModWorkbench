@@ -249,35 +249,9 @@ public static class W3Strings
     }
 
     /// <summary>The engine's packed integer: 6 bits in the first byte, with a sign bit and a "more" bit, then 7 bits a byte.</summary>
-    private static int ReadPacked(ReadOnlySpan<byte> span, ref int pos)
-    {
-        byte b = span[pos++];
-        bool negative = (b & 0x80) != 0;
-        int value = b & 0x3F;
-        if ((b & 0x40) != 0)
-        {
-            int shift = 6;
-            do
-            {
-                b = span[pos++];
-                value |= (b & 0x7F) << shift;
-                shift += 7;
-            } while ((b & 0x80) != 0 && shift < 32);
-        }
-        return negative ? -value : value;
-    }
+    private static int ReadPacked(ReadOnlySpan<byte> span, ref int pos) => PackedInt.ReadSigned(span, ref pos);
 
-    private static void WritePacked(Stream output, int value)
-    {
-        int rest = value >> 6;
-        output.WriteByte((byte)((value & 0x3F) | (rest > 0 ? 0x40 : 0)));
-        while (rest > 0)
-        {
-            int b = rest & 0x7F;
-            rest >>= 7;
-            output.WriteByte((byte)(b | (rest > 0 ? 0x80 : 0)));
-        }
-    }
+    private static void WritePacked(Stream output, int value) => PackedInt.Write(output, value);
 
     // ---------------------------------------------------------------- CSV
 

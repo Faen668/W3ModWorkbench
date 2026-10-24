@@ -163,14 +163,8 @@ public static partial class Cr2wJson
         return [.. result];
     }
 
-    /// <summary>A count as the engine compresses it: six bits and more-follows in the first byte, then seven bits a byte.</summary>
-    private static byte[] CompressedCountBytes(int value)
-    {
-        if (value == 0) return [0x80]; // as the engine writes an empty list's
-        var bytes = new List<byte> { (byte)(value & 0x3F | (value > 0x3F ? 0x40 : 0)) };
-        for (value >>= 6; value > 0; value >>= 7) bytes.Add((byte)(value & 0x7F | (value > 0x7F ? 0x80 : 0)));
-        return [.. bytes];
-    }
+    /// <summary>A count as the engine compresses it (<see cref="PackedInt"/>), an empty one written 0x80 as the engine writes an empty list's.</summary>
+    private static byte[] CompressedCountBytes(int value) => PackedInt.CountBytes(value);
 
     /// <summary>
     /// Properties the engine renamed, which it moves to their new name when it loads an older file: by class and old
@@ -764,25 +758,8 @@ public static partial class Cr2wJson
         }
 
         /// <summary>A compressed count: six bits and more-follows in the first byte (an empty one sometimes written as -0), then seven bits a byte.</summary>
-        internal static bool CompressedCount(byte[] bytes, ref int at, out int value)
-        {
-            value = 0;
-            if (at >= bytes.Length) return false;
-            int first = bytes[at++];
-            value = first & 0x3F;
-            if ((first & 0x40) != 0)
-            {
-                int shift = 6, next;
-                do
-                {
-                    if (at >= bytes.Length) return false;
-                    next = bytes[at++];
-                    value |= (next & 0x7F) << shift;
-                    shift += 7;
-                } while ((next & 0x80) != 0 && shift < 32);
-            }
-            return (first & 0x80) == 0 || value == 0;
-        }
+        internal static bool CompressedCount(byte[] bytes, ref int at, out int value) =>
+            PackedInt.TryRead(bytes, ref at, out value, out bool top) && (!top || value == 0);
 
         /// <summary>How many objects a CR2W file has, or null when the bytes aren't one.</summary>
         private static int? Cr2wObjects(ReadOnlySpan<byte> data)

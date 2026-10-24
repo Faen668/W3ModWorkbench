@@ -34,12 +34,12 @@ public sealed class FoliageFile
         int at = 0;
         for (int list = 0; list < 2; list++)
         {
-            if (!Packed.Count(tail, ref at, out int kinds)) break;
+            if (!PackedInt.TryRead(tail, ref at, out int kinds, out _)) break;
             for (int k = 0; k < kinds && at + 4 <= tail.Length; k++)
             {
                 int handle = BitConverter.ToInt32(tail, at);
                 at += 4;
-                if (!Packed.Count(tail, ref at, out int count) || at + 24L * count > tail.Length) break;
+                if (!PackedInt.TryRead(tail, ref at, out int count, out _) || at + 24L * count > tail.Length) break;
                 var instances = new FoliageInstance[count];
                 for (int i = 0; i < count; i++, at += 24)
                 {

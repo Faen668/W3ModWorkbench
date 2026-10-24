@@ -194,19 +194,8 @@ public sealed class MeshFile
     }
 
     /// <summary>A length as the engine packs it: six bits, and more in the next bytes while a bit says so. (-1, at) when it runs out.</summary>
-    private static (int Count, int Next) PackedCount(byte[] data, int at)
-    {
-        if (at >= data.Length) return (-1, at);
-        int count = data[at] & 0x3F;
-        bool more = (data[at++] & 0x40) != 0;
-        for (int shift = 6; more; shift += 7)
-        {
-            if (at >= data.Length || shift > 27) return (-1, at);
-            count |= (data[at] & 0x7F) << shift;
-            more = (data[at++] & 0x80) != 0;
-        }
-        return (count, at);
-    }
+    private static (int Count, int Next) PackedCount(byte[] data, int at) =>
+        PackedInt.TryRead(data, ref at, out int count, out _) ? (count, at) : (-1, at);
 
     private const int ChunkSize = 37;
 
@@ -217,15 +206,9 @@ public sealed class MeshFile
         long indexBase = cooked.Integer("indexBufferOffset");
         var packed = mesh.Array("chunks").OfType<RedObject>().ToList();
 
-        // the count is written as the engine writes lengths: six bits, and more in the next byte when bit 6 is set
-        int count = info[0] & 0x3F, start = 1;
-        if ((info[0] & 0x40) != 0)
-            for (int shift = 6; start < info.Length; shift += 7)
-            {
-                count |= (info[start] & 0x7F) << shift;
-                if ((info[start++] & 0x80) == 0) break;
-            }
-        if (start + (long)count * ChunkSize > info.Length) throw new InvalidDataException(L.T("MeshFile.MeshsChunkTableShorter"));
+        // the count is written as the engine writes lengths
+        int start = 0;
+        if (!PackedInt.TryRead(info, ref start, out int count, out _) || start + (long)count * ChunkSize > info.Length) throw new InvalidDataException(L.T("MeshFile.MeshsChunkTableShorter"));
         var chunks = new List<MeshChunk>(count);
         for (int c = 0; c < count; c++)
         {

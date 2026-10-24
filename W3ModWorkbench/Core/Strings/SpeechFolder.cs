@@ -13,8 +13,9 @@ public sealed record SpeechFolderLine(uint StringId, string? Wem, string? LipSyn
 /// Voice lines as loose files and back: a speech file unpacked into a folder, and a folder packed into a speech file.
 /// The files are named as RedSpeech Tool names them, so a folder from either opens in the other: the string ID first
 /// (anything after it is left for people to read), <c>.wem</c> for the sound, <c>.raw</c> for the lip sync as the
-/// Remastered keeps it and <c>.cr2w</c> for one as older files keep it. A lip sync can also be a <c>.re</c>, as REDkit's
-/// Blender plugin edits them, which is made the game's own when packed.
+/// next-gen update (version 163) and the Remastered (164) keep it, and <c>.cr2w</c> for one as files before it (162)
+/// keep it. A lip sync can also be a <c>.re</c>, as REDkit's Blender plugin edits them, which is made the game's own
+/// when packed.
 /// </summary>
 public static class SpeechFolder
 {

@@ -3423,7 +3423,7 @@
   "SpeechWindow.MenuItem": "Battute (.w3speech)…",
   "SpeechWindow.Intro": "Il gioco tiene le battute di ogni lingua in un file vocale (enpc.w3speech per l'inglese): il suono e il lip sync di ogni battuta, trovati dal suo ID di stringa. Spacchettane uno in una cartella o impacchetta una cartella in uno. Build impacchetta allo stesso modo le cartelle speech\\en (e delle altre lingue) di un progetto.",
   "SpeechWindow.Unpack": "Spacchetta un file vocale",
-  "SpeechWindow.UnpackHint": "Ogni battuta diventa ID.wem, con la sincronizzazione labiale come ID.raw (o ID.cr2w nei file più vecchi), con i nomi di RedSpeech Tool, oppure come ID.re da modificare in Blender.",
+  "SpeechWindow.UnpackHint": "Ogni battuta diventa ID.wem, con la sincronizzazione labiale come ID.raw (o ID.cr2w nei file precedenti all'aggiornamento next-gen), con i nomi di RedSpeech Tool, oppure come ID.re da modificare in Blender.",
   "SpeechWindow.SpeechFile": "File vocale",
   "SpeechWindow.Choose": "Scegli…",
   "SpeechWindow.IntoFolder": "Nella cartella",

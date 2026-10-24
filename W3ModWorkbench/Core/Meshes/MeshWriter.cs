@@ -454,33 +454,11 @@ public static class MeshWriter
     private static JsonObject Vector(Vector3 v, double w) => new() { ["X"] = (double)v.X, ["Y"] = (double)v.Y, ["Z"] = (double)v.Z, ["W"] = w };
 
     /// <summary>A count as the engine writes one: six bits, and seven more a byte while there are more; nothing as 80.</summary>
-    private static void WriteCount(Stream s, int count)
-    {
-        if (count == 0)
-        {
-            s.WriteByte(0x80);
-            return;
-        }
-        int rest = count >> 6;
-        s.WriteByte((byte)(count & 0x3F | (rest > 0 ? 0x40 : 0)));
-        while (rest > 0)
-        {
-            int next = rest >> 7;
-            s.WriteByte((byte)(rest & 0x7F | (next > 0 ? 0x80 : 0)));
-            rest = next;
-        }
-    }
+    private static void WriteCount(Stream s, int count) => s.Write(PackedInt.CountBytes(count));
 
     private static (int Count, int Next) ReadCount(byte[] data, int at)
     {
-        if (at >= data.Length) return (0, at);
-        int count = data[at] & 0x3F;
-        bool more = (data[at++] & 0x40) != 0;
-        for (int shift = 6; more && at < data.Length; shift += 7)
-        {
-            count |= (data[at] & 0x7F) << shift;
-            more = (data[at++] & 0x80) != 0;
-        }
+        PackedInt.TryRead(data, ref at, out int count, out _);
         return (count, at);
     }
 }

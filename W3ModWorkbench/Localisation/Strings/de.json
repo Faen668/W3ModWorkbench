@@ -3423,7 +3423,7 @@
   "SpeechWindow.MenuItem": "Sprachzeilen (.w3speech)…",
   "SpeechWindow.Intro": "Das Spiel speichert die Sprachzeilen jeder Sprache in einer Sprachdatei (enpc.w3speech für Englisch): Sound und Lippensynchronisation jeder Zeile, gefunden über ihre String-ID. Entpacke eine in einen Ordner oder packe einen Ordner in eine. Build packt die Ordner speech\\en (und anderer Sprachen) eines Projekts genauso.",
   "SpeechWindow.Unpack": "Sprachdatei entpacken",
-  "SpeechWindow.UnpackHint": "Jede Zeile wird zu ID.wem, ihre Lippensynchronisation zu ID.raw (oder ID.cr2w in älteren Dateien), benannt wie bei RedSpeech Tool, oder zu ID.re zum Bearbeiten in Blender.",
+  "SpeechWindow.UnpackHint": "Jede Zeile wird zu ID.wem, ihre Lippensynchronisation zu ID.raw (oder ID.cr2w in Dateien von vor dem Next-Gen-Update), benannt wie bei RedSpeech Tool, oder zu ID.re zum Bearbeiten in Blender.",
   "SpeechWindow.SpeechFile": "Sprachdatei",
   "SpeechWindow.Choose": "Auswählen…",
   "SpeechWindow.IntoFolder": "In Ordner",

@@ -3430,7 +3430,7 @@
   "SpeechWindow.MenuItem": "Voice lines (.w3speech)…",
   "SpeechWindow.Intro": "The game keeps each language's voice lines in one speech file (enpc.w3speech for English): each line's sound and its lip sync, found by the line's string ID. Unpack one into a folder of files, or pack a folder into one. Build packs a project's speech\\en (and other languages') folders the same way.",
   "SpeechWindow.Unpack": "Unpack a speech file",
-  "SpeechWindow.UnpackHint": "Each line becomes ID.wem, with its lip sync as ID.raw (or ID.cr2w in older files), named as RedSpeech Tool names them, or as ID.re to edit in Blender.",
+  "SpeechWindow.UnpackHint": "Each line becomes ID.wem, with its lip sync as ID.raw (or ID.cr2w in files from before the next-gen update), named as RedSpeech Tool names them, or as ID.re to edit in Blender.",
   "SpeechWindow.SpeechFile": "Speech file",
   "SpeechWindow.Choose": "Choose…",
   "SpeechWindow.IntoFolder": "Into folder",

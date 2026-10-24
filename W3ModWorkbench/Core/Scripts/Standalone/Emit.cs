@@ -81,25 +81,7 @@ public sealed class BlobWriter
     /// The game's variable-length integer: a sign bit and 6 bits in the first byte, 7 more bits for each byte after it.
     /// Zero is written as a negative zero, which is how the compiler wrote it.
     /// </summary>
-    public void Compressed(int value)
-    {
-        int sign = value <= 0 ? 0x80 : 0;
-        uint magnitude = value < 0 ? (uint)(-(long)value) : (uint)value;
-        int first = sign | (int)(magnitude & 0x3F);
-        magnitude >>= 6;
-        if (magnitude == 0)
-        {
-            U8(first);
-            return;
-        }
-        U8(first | 0x40);
-        while (magnitude > 0x7F)
-        {
-            U8((int)(magnitude & 0x7F) | 0x80);
-            magnitude >>= 7;
-        }
-        U8((int)magnitude);
-    }
+    public void Compressed(int value) => PackedInt.Write(_bytes, value < 0 ? (uint)(-(long)value) : (uint)value, top: value <= 0);
 
     public void String(string value)
     {

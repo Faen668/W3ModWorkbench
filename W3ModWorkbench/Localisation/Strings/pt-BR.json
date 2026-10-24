@@ -3423,7 +3423,7 @@
   "SpeechWindow.MenuItem": "Falas (.w3speech)…",
   "SpeechWindow.Intro": "O jogo guarda as falas de cada idioma num arquivo de fala (enpc.w3speech para inglês): o som e a sincronia labial de cada fala, encontrados pelo ID de string. Descompacte um numa pasta ou compacte uma pasta num deles. O Build compacta do mesmo jeito as pastas speech\\en (e de outros idiomas) de um projeto.",
   "SpeechWindow.Unpack": "Descompactar um arquivo de fala",
-  "SpeechWindow.UnpackHint": "Cada fala vira ID.wem, com a sincronia labial como ID.raw (ou ID.cr2w em arquivos antigos), com os nomes do RedSpeech Tool, ou como ID.re para editar no Blender.",
+  "SpeechWindow.UnpackHint": "Cada fala vira ID.wem, com a sincronia labial como ID.raw (ou ID.cr2w em arquivos de antes da atualização next-gen), com os nomes do RedSpeech Tool, ou como ID.re para editar no Blender.",
   "SpeechWindow.SpeechFile": "Arquivo de fala",
   "SpeechWindow.Choose": "Escolher…",
   "SpeechWindow.IntoFolder": "Na pasta",

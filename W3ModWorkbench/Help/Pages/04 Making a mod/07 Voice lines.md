@@ -21,8 +21,8 @@ Each line becomes:
 | File | What it is |
 |---|---|
 | `ID.wem` | the sound, as the game keeps it |
-| `ID.raw` | its lip sync, in the format the Remastered's files use |
-| `ID.cr2w` | its lip sync, in older files' format |
+| `ID.raw` | its lip sync, in the format speech files have used since the next-gen update (version 163, unchanged in the Remastered's 164) |
+| `ID.cr2w` | its lip sync, in the format of files from before it (version 162) |
 | `ID.re` | with **Save lip syncs as .re, for editing in Blender**: its lip sync as REDkit keeps it, in place of the `.raw` or `.cr2w` (**Settings > Viewers** sets whether it's ticked) |
 | `ID.wav` | with **Also save each sound as .wav**: a copy to listen to or edit (**Settings > Viewers** sets whether it's ticked) |
 

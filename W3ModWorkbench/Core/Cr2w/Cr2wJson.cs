@@ -1027,27 +1027,10 @@ public static partial class Cr2wJson
             return node;
         }
 
-        /// <summary>
-        /// A compressed number: the first byte has the sign (0x80), whether more bytes follow (0x40) and the low six
-        /// bits; each byte after has seven more bits and 0x80 when another follows.
-        /// </summary>
+        /// <summary>A compressed number (<see cref="PackedInt"/>), the first byte's top bit its sign.</summary>
         private int Compressed(ref int pos, int end, out bool negative)
         {
-            Need(pos, 1, end);
-            int first = _d[pos++];
-            negative = (first & 0x80) != 0;
-            int value = first & 0x3F;
-            if ((first & 0x40) != 0)
-            {
-                int shift = 6, b;
-                do
-                {
-                    Need(pos, 1, end);
-                    b = _d[pos++];
-                    value |= (b & 0x7F) << shift;
-                    shift += 7;
-                } while ((b & 0x80) != 0 && shift < 32);
-            }
+            if (!PackedInt.TryRead(_d.AsSpan(0, Math.Min(end, _d.Length)), ref pos, out int value, out negative)) Need(pos, 1, end);
             return value;
         }
 
@@ -1113,21 +1096,8 @@ public static partial class Cr2wJson
 
         private string Text(ref int pos, int end)
         {
-            Need(pos, 1, end);
-            int first = _d[pos++];
-            bool narrow = (first & 0x80) != 0;
-            int length = first & 0x3F;
-            if ((first & 0x40) != 0)
-            {
-                int shift = 6, b;
-                do
-                {
-                    Need(pos, 1, end);
-                    b = _d[pos++];
-                    length |= (b & 0x7F) << shift;
-                    shift += 7;
-                } while ((b & 0x80) != 0 && shift < 32);
-            }
+            // the length's top bit says it's 8-bit text, else UTF-16
+            if (!PackedInt.TryRead(_d.AsSpan(0, Math.Min(end, _d.Length)), ref pos, out int length, out bool narrow)) Need(pos, 1, end);
             int bytes = narrow ? length : length * 2;
             Need(pos, bytes, end);
             pos += bytes;
@@ -1458,15 +1428,8 @@ public static partial class Cr2wJson
             }
         }
 
-        /// <summary>A compressed number: sign, more-follows and six bits in the first byte, then seven bits a byte.</summary>
-        private void Compressed(int value, bool negative)
-        {
-            int first = (negative ? 0x80 : 0) | (value & 0x3F);
-            if (value > 0x3F) first |= 0x40;
-            _out.WriteByte((byte)first);
-            for (int rest = value >> 6; rest > 0; rest >>= 7)
-                _out.WriteByte((byte)((rest & 0x7F) | (rest > 0x7F ? 0x80 : 0)));
-        }
+        /// <summary>A compressed number (<see cref="PackedInt"/>), the first byte's top bit its sign.</summary>
+        private void Compressed(int value, bool negative) => PackedInt.Write(_out, value, negative);
 
         /// <summary>Before 139, an array's count is followed by its element type's name and 0xFFFF.</summary>
         private void ArrayPad(string element)
@@ -1501,12 +1464,7 @@ public static partial class Cr2wJson
         {
             // 8-bit when every character fits, else UTF-16; the length's low six bits go in the first byte
             bool narrow = text.All(c => c <= 0xFF);
-            int length = text.Length;
-            int first = (narrow ? 0x80 : 0) | (length & 0x3F);
-            if (length > 0x3F) first |= 0x40;
-            _out.WriteByte((byte)first);
-            for (int rest = length >> 6; rest > 0; rest >>= 7)
-                _out.WriteByte((byte)((rest & 0x7F) | (rest > 0x7F ? 0x80 : 0)));
+            PackedInt.Write(_out, text.Length, narrow);
             _out.Write(narrow ? Encoding.Latin1.GetBytes(text) : Encoding.Unicode.GetBytes(text));
         }
 

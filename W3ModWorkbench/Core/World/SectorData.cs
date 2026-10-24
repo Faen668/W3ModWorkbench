@@ -40,17 +40,17 @@ public static class SectorData
         var objects = new List<SectorObject>();
         if (tail.Length < 8) return objects;
         int at = 4;
-        if (!Packed.Count(tail, ref at, out int numbers)) return objects;
+        if (!PackedInt.TryRead(tail, ref at, out int numbers, out _)) return objects;
         at += numbers * 8;
-        if (!Packed.Count(tail, ref at, out int resourceCount) || at + resourceCount * 32L > tail.Length) return objects;
+        if (!PackedInt.TryRead(tail, ref at, out int resourceCount, out _) || at + resourceCount * 32L > tail.Length) return objects;
         var resources = new ulong[resourceCount];
         for (int i = 0; i < resourceCount; i++) resources[i] = BitConverter.ToUInt64(tail, at + i * 32 + 24);
         at += resourceCount * 32;
-        if (!Packed.Count(tail, ref at, out int objectCount) || at + objectCount * 24L > tail.Length) return objects;
+        if (!PackedInt.TryRead(tail, ref at, out int objectCount, out _) || at + objectCount * 24L > tail.Length) return objects;
         var heads = new (byte Kind, long Offset)[objectCount];
         for (int i = 0; i < objectCount; i++) heads[i] = (tail[at + i * 24], BitConverter.ToInt64(tail, at + i * 24 + 4));
         at += objectCount * 24;
-        if (!Packed.Count(tail, ref at, out int blockLength) || at + (long)blockLength > tail.Length) return objects;
+        if (!PackedInt.TryRead(tail, ref at, out int blockLength, out _) || at + (long)blockLength > tail.Length) return objects;
         var ends = heads.Select(h => h.Offset).Append(blockLength).Distinct().Order().ToArray();
         foreach (var (kind, offset) in heads)
         {

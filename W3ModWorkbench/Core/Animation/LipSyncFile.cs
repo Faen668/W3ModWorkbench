@@ -5,8 +5,8 @@ using W3ModWorkbench.Localisation;
 namespace W3ModWorkbench.Core.Animation;
 
 /// <summary>
-/// A voice line's lip sync as the Remastered's speech files keep it (the "raw" form): the face's 148 controls over
-/// time, a value a frame for each, as the game decodes and writes them. Read and written whole: the frames a second
+/// A voice line's lip sync as speech files keep it since the next-gen update (version 163; the Remastered's 164 is
+/// the same), the "raw" form: the face's 148 controls over time, a value a frame for each, as the game decodes and writes them. Read and written whole: the frames a second
 /// and length, the neck and head bones (always still), a record for each control, the keys, the frame count and the
 /// time between frames. Written as the game's own are: a still control as one frame pointing at zeros (or its own two
 /// bytes), a moving one as a 32-bit float a frame, each block stored once however many controls share it. Checked by
@@ -60,19 +60,7 @@ public sealed class LipSyncFile
     {
         int at = 0;
         float Float() { float v = BinaryPrimitives.ReadSingleLittleEndian(raw.AsSpan(at)); at += 4; return v; }
-        int Packed()
-        {
-            int b = raw[at++], value = b & 0x3F, shift = 6;
-            bool more = (b & 0x40) != 0;
-            while (more)
-            {
-                b = raw[at++];
-                value |= (b & 0x7F) << shift;
-                shift += 7;
-                more = (b & 0x80) != 0;
-            }
-            return value;
-        }
+        int Packed() => PackedInt.Read(raw, ref at);
         Float(); // frames a second, worked out again on writing
         float duration = Float();
         int bones = Packed();
@@ -229,20 +217,7 @@ public sealed class LipSyncFile
         var o = new List<byte>();
         void F(float v) { var b = new byte[4]; BinaryPrimitives.WriteSingleLittleEndian(b, v); o.AddRange(b); }
         void I(int v) { var b = new byte[4]; BinaryPrimitives.WriteInt32LittleEndian(b, v); o.AddRange(b); }
-        void Packed(int v)
-        {
-            byte first = (byte)(v & 0x3F);
-            v >>= 6;
-            if (v > 0) first |= 0x40;
-            o.Add(first);
-            while (v > 0)
-            {
-                byte b = (byte)(v & 0x7F);
-                v >>= 7;
-                if (v > 0) b |= 0x80;
-                o.Add(b);
-            }
-        }
+        void Packed(int v) => PackedInt.Write(o, v);
         void Record(int compression, int frames, int address, float time)
         {
             F(time);

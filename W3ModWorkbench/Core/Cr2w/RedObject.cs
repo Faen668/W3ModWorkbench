@@ -298,19 +298,10 @@ internal sealed class RedReader
     /// </summary>
     private string LengthPrefixedString()
     {
-        int first = Byte();
-        bool narrow = (first & 0x80) != 0;
-        int length = first & 0x3F;
-        if ((first & 0x40) != 0)
-        {
-            int shift = 6, b;
-            do
-            {
-                b = Byte();
-                length |= (b & 0x7F) << shift;
-                shift += 7;
-            } while ((b & 0x80) != 0 && shift < 32);
-        }
+        int at = Position;
+        bool read = PackedInt.TryRead(_data, ref at, out int length, out bool narrow);
+        Position = at;
+        if (!read) Need(1);
         int bytes = narrow ? length : length * 2;
         Need(bytes);
         Position += bytes;

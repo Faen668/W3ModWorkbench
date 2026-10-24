@@ -3423,7 +3423,7 @@
   "SpeechWindow.MenuItem": "Реплики (.w3speech)…",
   "SpeechWindow.Intro": "Игра хранит реплики каждого языка в одном файле озвучки (enpc.w3speech для английского): звук и синхронизацию губ каждой реплики, которые ищутся по ID строки. Распакуйте его в папку или упакуйте папку в него. Build так же упаковывает папки speech\\en (и других языков) проекта.",
   "SpeechWindow.Unpack": "Распаковать файл озвучки",
-  "SpeechWindow.UnpackHint": "Каждая реплика становится ID.wem, а её липсинк — ID.raw (или ID.cr2w в старых файлах), с именами как в RedSpeech Tool, либо ID.re для правки в Blender.",
+  "SpeechWindow.UnpackHint": "Каждая реплика становится ID.wem, а её липсинк — ID.raw (или ID.cr2w в файлах до обновления next-gen), с именами как в RedSpeech Tool, либо ID.re для правки в Blender.",
   "SpeechWindow.SpeechFile": "Файл озвучки",
   "SpeechWindow.Choose": "Выбрать…",
   "SpeechWindow.IntoFolder": "В папку",

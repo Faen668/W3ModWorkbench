@@ -3423,7 +3423,7 @@
   "SpeechWindow.MenuItem": "Répliques (.w3speech)…",
   "SpeechWindow.Intro": "Le jeu garde les répliques de chaque langue dans un fichier de voix (enpc.w3speech pour l'anglais) : le son et la synchronisation labiale de chaque réplique, retrouvés par son ID de chaîne. Décompressez-en un dans un dossier, ou empaquetez un dossier en un. Build empaquette de même les dossiers speech\\en (et des autres langues) d'un projet.",
   "SpeechWindow.Unpack": "Décompresser un fichier de voix",
-  "SpeechWindow.UnpackHint": "Chaque réplique devient ID.wem, avec sa synchro labiale en ID.raw (ou ID.cr2w dans les anciens fichiers), nommée comme dans RedSpeech Tool, ou en ID.re pour la modifier dans Blender.",
+  "SpeechWindow.UnpackHint": "Chaque réplique devient ID.wem, avec sa synchro labiale en ID.raw (ou ID.cr2w dans les fichiers d'avant la mise à jour next-gen), nommée comme dans RedSpeech Tool, ou en ID.re pour la modifier dans Blender.",
   "SpeechWindow.SpeechFile": "Fichier de voix",
   "SpeechWindow.Choose": "Choisir…",
   "SpeechWindow.IntoFolder": "Dans le dossier",

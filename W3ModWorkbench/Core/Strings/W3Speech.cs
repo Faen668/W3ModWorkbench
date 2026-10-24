@@ -51,21 +51,12 @@ public sealed class W3Speech
     public static W3Speech Open(string path, W3Language language)
     {
         using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-        var head = new byte[16];
-        fs.ReadExactly(head, 0, 13);
+        var head = new byte[10 + PackedInt.MaxBytes];
+        int got = fs.ReadAtLeast(head, 13);
         if (BinaryPrimitives.ReadUInt32LittleEndian(head) != Magic) throw new InvalidDataException(L.T("W3Speech.IsntSpeechFile"));
         // after the version and two bytes of the language's key, the count, packed as the strings files pack lengths
-        int at = 10, count = head[at] & 0x3F, shift = 6;
-        bool more = (head[at++] & 0x40) != 0;
-        while (more)
-        {
-            int b = at < 13 ? head[at] : fs.ReadByte();
-            if (b < 0) throw new InvalidDataException(L.T("W3Speech.SpeechFileCutShort"));
-            at++;
-            count |= (b & 0x7F) << shift;
-            shift += 7;
-            more = (b & 0x80) != 0 && shift < 32;
-        }
+        int at = 10;
+        if (!PackedInt.TryRead(head.AsSpan(0, got), ref at, out int count, out _)) throw new InvalidDataException(L.T("W3Speech.SpeechFileCutShort"));
         if (count < 0 || count > 10_000_000) throw new InvalidDataException(L.T("W3Speech.SpeechFilesCountMakes"));
         fs.Position = at;
         var table = new byte[count * 40L];

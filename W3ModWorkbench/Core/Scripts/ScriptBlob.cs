@@ -285,20 +285,10 @@ internal sealed class BlobReader(byte[] data, int position)
 
     public int Vlq()
     {
-        int b = data[Position++];
-        bool negative = (b & 0x80) != 0;
-        int value = b & 0x3F;
-        if ((b & 0x40) != 0)
-        {
-            int shift = 6;
-            do
-            {
-                b = data[Position++];
-                value |= (b & 0x7F) << shift;
-                shift += 7;
-            } while ((b & 0x80) != 0);
-        }
-        return negative ? -value : value;
+        int at = Position;
+        int value = PackedInt.ReadSigned(data, ref at);
+        Position = at;
+        return value;
     }
 
     public string Str()

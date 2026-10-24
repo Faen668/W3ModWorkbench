@@ -3423,7 +3423,7 @@
   "SpeechWindow.MenuItem": "Líneas de voz (.w3speech)…",
   "SpeechWindow.Intro": "El juego guarda las líneas de voz de cada idioma en un archivo de voz (enpc.w3speech para inglés): el sonido y la sincronización labial de cada línea, localizados por su ID de cadena. Desempaqueta uno en una carpeta o empaqueta una carpeta en uno. Build empaqueta igual las carpetas speech\\en (y de otros idiomas) de un proyecto.",
   "SpeechWindow.Unpack": "Desempaquetar un archivo de voz",
-  "SpeechWindow.UnpackHint": "Cada línea pasa a ID.wem, con su sincronización labial como ID.raw (o ID.cr2w en archivos antiguos), con los nombres de RedSpeech Tool, o como ID.re para editarla en Blender.",
+  "SpeechWindow.UnpackHint": "Cada línea pasa a ID.wem, con su sincronización labial como ID.raw (o ID.cr2w en archivos anteriores a la actualización next-gen), con los nombres de RedSpeech Tool, o como ID.re para editarla en Blender.",
   "SpeechWindow.SpeechFile": "Archivo de voz",
   "SpeechWindow.Choose": "Elegir…",
   "SpeechWindow.IntoFolder": "En la carpeta",

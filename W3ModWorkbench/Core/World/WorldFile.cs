@@ -6,30 +6,6 @@ using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core.World;
 
-/// <summary>The engine's packed counts: six bits in the first byte (the top bit a sign), seven in each byte after while the one before says more follow.</summary>
-internal static class Packed
-{
-    public static bool Count(byte[] bytes, ref int at, out int value)
-    {
-        value = 0;
-        if (at >= bytes.Length) return false;
-        int first = bytes[at++];
-        value = first & 0x3F;
-        if ((first & 0x40) != 0)
-        {
-            int shift = 6, next;
-            do
-            {
-                if (at >= bytes.Length) return false;
-                next = bytes[at++];
-                value |= (next & 0x7F) << shift;
-                shift += 7;
-            } while ((next & 0x80) != 0 && shift < 32);
-        }
-        return true;
-    }
-}
-
 /// <summary>What a layer is to its world: its file, its short name, its GUID and what it's built as (outdoor, quest, interior…).</summary>
 public sealed record LayerInfo(string Path, string ShortName, Guid Guid, string BuildTag)
 {
@@ -310,7 +286,7 @@ public sealed class WorldFile
     private static List<int> Handles(byte[] tail, ref int at)
     {
         var list = new List<int>();
-        if (!Packed.Count(tail, ref at, out int count)) return list;
+        if (!PackedInt.TryRead(tail, ref at, out int count, out _)) return list;
         for (int i = 0; i < count && at + 4 <= tail.Length; i++, at += 4) list.Add(BitConverter.ToInt32(tail, at));
         return list;
     }

@@ -231,21 +231,7 @@ public static class MetadataStore
     }
 
     /// <summary>A count as CR2W packs one: six bits in the first byte, seven in each after, 0x40/0x80 for "more"; zero is written 0x80.</summary>
-    private static void WriteCount(BinaryWriter w, int value)
-    {
-        if (value == 0) { w.Write((byte)0x80); return; }
-        byte first = (byte)(value & 0x3F);
-        value >>= 6;
-        if (value != 0) first |= 0x40;
-        w.Write(first);
-        while (value != 0)
-        {
-            byte b = (byte)(value & 0x7F);
-            value >>= 7;
-            if (value != 0) b |= 0x80;
-            w.Write(b);
-        }
-    }
+    private static void WriteCount(BinaryWriter w, int value) => w.Write(PackedInt.CountBytes(value));
 
     /// <summary>The 64-bit FNV-1a hash of a path as the game looks it up: each character one byte, lowercase, with backslashes.</summary>
     public static ulong Fnv1a64(string text)

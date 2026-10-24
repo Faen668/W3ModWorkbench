@@ -142,21 +142,5 @@ public static class Bytecode
         return [.. list];
     }
 
-    private static int Vlq(byte[] data, ref int p)
-    {
-        int b = data[p++];
-        bool negative = (b & 0x80) != 0;
-        int value = b & 0x3F;
-        if ((b & 0x40) != 0)
-        {
-            int shift = 6;
-            do
-            {
-                b = data[p++];
-                value |= (b & 0x7F) << shift;
-                shift += 7;
-            } while ((b & 0x80) != 0);
-        }
-        return negative ? -value : value;
-    }
+    private static int Vlq(byte[] data, ref int p) => PackedInt.ReadSigned(data, ref p);
 }

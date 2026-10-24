@@ -91,20 +91,7 @@ public static class W3SpeechWriter
     /// A count packed as the speech and strings files pack it: six bits and a flag for more in the first byte (its top
     /// bit is a sign, never set here), then seven bits a byte, each with a flag for more.
     /// </summary>
-    private static byte[] CountBytes(int count)
-    {
-        var bytes = new List<byte> { (byte)(count & 0x3F) };
-        count >>= 6;
-        if (count > 0) bytes[0] |= 0x40;
-        while (count > 0)
-        {
-            byte b = (byte)(count & 0x7F);
-            count >>= 7;
-            if (count > 0) b |= 0x80;
-            bytes.Add(b);
-        }
-        return [.. bytes];
-    }
+    private static byte[] CountBytes(int count) => PackedInt.Bytes(count);
 
     /// <summary>
     /// The length in seconds the game saves with a sound: its "data" chunk's size over the bytes a second "fmt " gives,
