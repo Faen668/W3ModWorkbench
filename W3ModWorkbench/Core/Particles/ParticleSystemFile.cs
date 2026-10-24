@@ -191,6 +191,9 @@ public sealed class ParticleEmitter
     public required string Drawer { get; init; }
     public required int MaxParticles { get; init; }
     public required bool Showing { get; set; }
+
+    /// <summary>Whether its particles move with the effect (keepSimulationLocal), rather than staying where they were born.</summary>
+    public bool KeepLocal => Object["keepSimulationLocal"] is true;
     public required IReadOnlyList<ParticleModule> Modules { get; init; }
     /// <summary>Its birth rate (particles a second over the emitter's time) for each LOD, null for none (bursts only).</summary>
     public required IReadOnlyList<ParticleEvaluator?> BirthRates { get; init; }

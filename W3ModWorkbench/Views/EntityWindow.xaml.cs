@@ -8,6 +8,7 @@ using W3ModWorkbench.Core;
 using W3ModWorkbench.Core.Animation;
 using W3ModWorkbench.Core.Cr2w;
 using W3ModWorkbench.Core.Cutscenes;
+using W3ModWorkbench.Core.Effects;
 using W3ModWorkbench.Core.Entities;
 using W3ModWorkbench.Core.Meshes;
 using W3ModWorkbench.ViewModels;
@@ -79,6 +80,7 @@ public partial class EntityWindow : Window, IMessageHost
         {
             _meshLoad?.Cancel();
             Pause();
+            StopEffects();
         };
     }
 
@@ -127,7 +129,7 @@ public partial class EntityWindow : Window, IMessageHost
         NoIncludesText.Visibility = e.Includes.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         _ = LoadDependenciesAsync(e);
         AddListTabs(e);
-        EffectList.ItemsSource = e.Effects.Select(x => new PropertyRow(x, "effect", "", 0, null)).ToList();
+        ShowEffects(EntityEffects.Read(e.File, e.Template));
         FileList.ItemsSource = Files(e).Select(l => new CutsceneLinkItem(l)).ToList();
 
         var looks = new List<object> { L.T("EntityWindow.EntityAlone") };
@@ -203,6 +205,9 @@ public partial class EntityWindow : Window, IMessageHost
         });
         foreach (var (key, file) in files) _redkit[key] = file;
         _redkitTemplate = from.Redkit is { } redkit ? RedkitSource.Match(redkit, e.Template, e.File) : null;
+        // REDkit's copy keeps the effects as the editor made them, every particle system named
+        if (from.Redkit is { } source && _redkitTemplate is { } template && EntityEffects.Read(source, template, fromRedkit: true) is { Count: > 0 } effects)
+            ShowEffects(effects);
         SourceNoteBar.Show(from.Source, from.RedkitPath ?? origin, L.T("EntityWindow.Entity3"));
         if (files.Count == 0) return;
         ShowEntityAndTemplate(e);
@@ -703,6 +708,7 @@ public partial class EntityWindow : Window, IMessageHost
         AnimationBar.Visibility = PlayBar.Visibility = Visibility.Collapsed;
         _posing = null;
         _cloth = null;
+        _bones = null;
         var meshes = parts.Select(p => p.Mesh).ToList();
         if (!meshes.Any(m => m.BoneNames.Length > 0)) return;
         // the body's skeleton, which animations play on, is the moving or animated component's; a dangle component's
@@ -744,6 +750,7 @@ public partial class EntityWindow : Window, IMessageHost
         }, token).ContinueWith(t => t.IsCompletedSuccessfully ? t.Result : null, TaskScheduler.Default);
         if (posing is null || token.IsCancellationRequested) return;
         _posing = posing;
+        (_bones, _boneNames) = (posing.Rest, posing.Rig.Names);
         _cloth = ClothRig.For(posing.Meshes);
         if (_clip is null) ShowRestCloth();
         if (sets.Count == 0) return;
@@ -948,6 +955,8 @@ public partial class EntityWindow : Window, IMessageHost
         var model = new Matrix4x4[posing.Rig.Count];
         posing.Rig.ToModel(_pose, model);
         for (int i = 0; i < model.Length; i++) model[i] *= _placing;
+        // where the bones are now, for the effects on them
+        (_bones, _boneNames) = (model, posing.Rig.Names);
         var bones = posing.Meshes.Select((m, i) => Skinning.BoneMatrices(m, posing.Maps[i], posing.Rest, model)).ToList();
         // the cloth moves on with the animation, a step back past its end being a step on as it loops
         var cloth = _cloth?.StepTo(time, p => p < bones.Count ? bones[p] : null, clip.Duration);
@@ -1059,6 +1068,7 @@ public partial class EntityWindow : Window, IMessageHost
         _clip = null;
         _placing = Matrix4x4.Identity;
         _time = 0;
+        _bones = _posing?.Rest;
         View.Pose(null);
         ShowRestCloth();
         ScrubSlider.IsEnabled = PlayButton.IsEnabled = false;

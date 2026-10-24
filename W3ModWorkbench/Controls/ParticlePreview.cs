@@ -96,7 +96,7 @@ public sealed class ParticlePreview : FrameworkElement
     }
 
     /// <summary>A picture as premultiplied BGRA, at most 512 a side.</summary>
-    private static (int[] Pixels, int Width, int Height) Pixels(BitmapSource picture)
+    internal static (int[] Pixels, int Width, int Height) Pixels(BitmapSource picture)
     {
         BitmapSource source = picture;
         double scale = Math.Min(1, 512.0 / Math.Max(picture.PixelWidth, picture.PixelHeight));

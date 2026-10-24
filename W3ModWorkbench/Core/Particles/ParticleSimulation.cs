@@ -41,6 +41,16 @@ public sealed class ParticleSimulation
     /// <summary>The level of detail played: 0 is the closest.</summary>
     public int Lod { get; set; }
 
+    /// <summary>Whether the emitters birth particles; off, those alive live on and die out (an effect's part that has ended).</summary>
+    public bool Emitting { get; set; } = true;
+
+    /// <summary>
+    /// Where the effect is in the world (an entity's bone or slot, say). An emitter that doesn't keep its simulation local
+    /// leaves its particles where they were born, so they're placed in the world as they're born, and trail behind a moving
+    /// one; the rest stay in the effect's space, to be drawn where the effect is now.
+    /// </summary>
+    public Matrix4x4 Placement { get; set; } = Matrix4x4.Identity;
+
     /// <summary>How long the effect has played, in seconds.</summary>
     public float Time { get; private set; }
 
@@ -87,7 +97,7 @@ public sealed class ParticleSimulation
             float before = state.Time - emitter.Delay;
             state.Time += dt;
             float now = state.Time - emitter.Delay;
-            if (now < 0) continue;
+            if (now < 0 || !Emitting) continue;
             float duration = emitter.Duration > 0 ? emitter.Duration : 1;
             // the runs it makes: none after its last, when it has a number of them
             if (emitter.Loops > 0 && emitter.Duration > 0 && now >= emitter.Duration * emitter.Loops) continue;
@@ -115,7 +125,16 @@ public sealed class ParticleSimulation
                     if (runB < runA ? at >= runA || at < runB : at >= runA && at < runB) born += burst.Count;
                 }
             }
-            for (int n = 0; n < born && state.Live.Count < Math.Max(1, emitter.MaxParticles); n++) state.Live.Add(Spawn(emitter, run));
+            for (int n = 0; n < born && state.Live.Count < Math.Max(1, emitter.MaxParticles); n++)
+            {
+                var particle = Spawn(emitter, run);
+                if (!emitter.KeepLocal && !Placement.IsIdentity)
+                {
+                    particle.Position = Vector3.Transform(particle.Position, Placement);
+                    particle.Velocity = Vector3.TransformNormal(particle.Velocity, Placement);
+                }
+                state.Live.Add(particle);
+            }
         }
     }
 

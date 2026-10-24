@@ -124,6 +124,33 @@
                 </Setter.Value>
             </Setter>
         </Style>
+        <!-- the effects' rows: the picked one a wash of the accent behind ordinary text, as the app's grids have -->
+        <Style x:Key="WashItem" TargetType="ListBoxItem" BasedOn="{StaticResource {x:Type ListBoxItem}}">
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+            <Setter Property="Padding" Value="6,2" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Grid SnapsToDevicePixels="True" Background="Transparent" Margin="0,1">
+                            <Border x:Name="Hover" CornerRadius="4" Background="{DynamicResource SubtleFillColorTertiaryBrush}" Visibility="Collapsed" />
+                            <Border x:Name="Highlight" CornerRadius="4" Background="{DynamicResource AccentFillColorDefaultBrush}" Opacity="0" />
+                            <ContentPresenter Margin="{TemplateBinding Padding}" />
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Hover" Property="Visibility" Value="Visible" />
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Hover" Property="Visibility" Value="Collapsed" />
+                                <Setter TargetName="Highlight" Property="Opacity" Value="0.22" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
         <Style x:Key="PropertyList" TargetType="ListBox">
             <Setter Property="ItemContainerStyle" Value="{StaticResource CompactItem}" />
             <Setter Property="BorderThickness" Value="0" />
@@ -201,6 +228,48 @@
                                 <TextBlock Margin="8,0,0,0" Text="{l:T Common.Fit}" />
                             </StackPanel>
                         </Button>
+                        <!-- the entity's effects, switched on and off where they play: in the view -->
+                        <ToggleButton x:Name="EffectsButton" Padding="10,5" Margin="0,0,6,4" Visibility="Collapsed" ToolTip="{l:T EntityWindow.EffectsButtonTip}">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Style="{StaticResource IconText}" Text="&#xE945;" />
+                                <TextBlock x:Name="EffectsButtonText" Margin="8,0,0,0" Text="{l:T Common.Effects}" />
+                            </StackPanel>
+                        </ToggleButton>
+                        <Popup x:Name="EffectsPopup" PlacementTarget="{Binding ElementName=EffectsButton}" Placement="Bottom" AllowsTransparency="True"
+                               StaysOpen="False" PopupAnimation="Fade" IsOpen="{Binding IsChecked, ElementName=EffectsButton, Mode=TwoWay}">
+                            <Border Margin="0,4,12,12">
+                                <Border.Effect>
+                                    <DropShadowEffect BlurRadius="18" ShadowDepth="4" Direction="270" Opacity="0.35" />
+                                </Border.Effect>
+                                <Border x:Name="EffectsCard" Width="400" Padding="12,10" CornerRadius="8" BorderThickness="1"
+                                        Background="{DynamicResource SolidBackgroundFillColorBaseBrush}" BorderBrush="{DynamicResource SurfaceStrokeColorFlyoutBrush}"
+                                        TextElement.Foreground="{DynamicResource TextFillColorPrimaryBrush}">
+                                    <DockPanel>
+                                        <DockPanel DockPanel.Dock="Top" Margin="0,0,0,6">
+                                            <Button DockPanel.Dock="Right" Padding="10,3" Content="{l:T EntityWindow.EffectsAllOff}" Click="EffectsOff_Click"
+                                                    ToolTip="{l:T EntityWindow.EffectsAllOffTip}" />
+                                            <TextBlock Text="{l:T Common.Effects}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                        </DockPanel>
+                                        <TextBlock x:Name="EffectsPopupStatus" DockPanel.Dock="Bottom" Style="{StaticResource Small}" TextWrapping="Wrap" Margin="0,8,0,0" />
+                                        <ScrollViewer MaxHeight="380" VerticalScrollBarVisibility="Auto">
+                                            <ItemsControl x:Name="EffectSwitches">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate DataType="{x:Type local:EffectRow}">
+                                                        <CheckBox IsChecked="{Binding On, Mode=TwoWay}" MinWidth="0" Margin="0,2" VerticalContentAlignment="Top"
+                                                                  ToolTip="{l:T EntityWindow.EffectOnTip}">
+                                                            <StackPanel>
+                                                                <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                                                                <TextBlock Text="{Binding Summary}" Style="{StaticResource Small}" TextWrapping="Wrap" />
+                                                            </StackPanel>
+                                                        </CheckBox>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </ScrollViewer>
+                                    </DockPanel>
+                                </Border>
+                            </Border>
+                        </Popup>
                     </WrapPanel>
                     <local:MeshView x:Name="View" Grid.Row="1" Margin="1,0,1,1" PartClicked="View_PartClicked"
                                     ToolTip="{l:T EntityWindow.ClickPartPickComponent}" />
@@ -386,7 +455,56 @@
                             </Grid>
                         </TabItem>
                         <TabItem x:Name="EffectsTab" Header="{l:T Common.Effects}">
-                            <ListBox x:Name="EffectList" Style="{StaticResource PropertyList}" Margin="0,8,0,0" />
+                            <!-- the effects, each switched on to play it in the 3D view, and the picked one's parts -->
+                            <Grid Margin="0,8,0,0">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="3*" MinHeight="70" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="2*" MinHeight="50" />
+                                </Grid.RowDefinitions>
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource Small}" TextWrapping="Wrap" Text="{l:T EntityWindow.EffectsHint}" />
+                                    <DockPanel Margin="0,6,0,4">
+                                        <Button DockPanel.Dock="Right" Padding="10,3" Margin="8,0,0,0" Content="{l:T EntityWindow.EffectsAllOff}" Click="EffectsOff_Click"
+                                                ToolTip="{l:T EntityWindow.EffectsAllOffTip}" />
+                                        <TextBlock x:Name="EffectsStatus" Style="{StaticResource Small}" VerticalAlignment="Center" TextWrapping="Wrap" />
+                                    </DockPanel>
+                                </StackPanel>
+                                <ListBox x:Name="EffectList" Grid.Row="1" ItemContainerStyle="{StaticResource WashItem}" BorderThickness="0" Background="Transparent"
+                                         HorizontalContentAlignment="Stretch" ScrollViewer.HorizontalScrollBarVisibility="Disabled" SelectionChanged="EffectList_SelectionChanged">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type local:EffectRow}">
+                                            <DockPanel Margin="0,2">
+                                                <CheckBox DockPanel.Dock="Left" IsChecked="{Binding On, Mode=TwoWay}" MinWidth="0" Margin="0,0,4,0" VerticalAlignment="Top"
+                                                          ToolTip="{l:T EntityWindow.EffectOnTip}" />
+                                                <StackPanel VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                                                    <TextBlock Text="{Binding Summary}" Style="{StaticResource Small}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Summary}" />
+                                                </StackPanel>
+                                            </DockPanel>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                                <TextBlock x:Name="EffectPartsTitle" Grid.Row="2" Margin="0,10,0,4" FontWeight="SemiBold" Visibility="Collapsed" />
+                                <ListBox x:Name="EffectParts" Grid.Row="3" BorderThickness="0" Background="Transparent" Visibility="Collapsed"
+                                         ItemContainerStyle="{StaticResource WashItem}" HorizontalContentAlignment="Stretch" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type local:EffectPartRow}">
+                                            <Grid Opacity="{Binding Opacity}" ToolTip="{Binding Tip}">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="92" />
+                                                    <ColumnDefinition Width="80" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Text="{Binding Time}" FontFamily="Cascadia Mono, Consolas" FontSize="11.5" VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="1" Text="{Binding Kind}" VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="2" Text="{Binding Detail}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                            </Grid>
                         </TabItem>
                         <TabItem Header="{l:T Common.Files}">
                             <!-- a list with its own scrolling: an ItemsControl in a ScrollViewer here never settled on its layout -->

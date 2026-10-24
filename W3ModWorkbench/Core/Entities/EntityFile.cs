@@ -70,7 +70,11 @@ public sealed record EntityLook(List<EntityComponent> Components, List<EntityLin
 public sealed record EntityAppearance(string Name, string? VoiceTag, IReadOnlyList<string> Templates);
 
 /// <summary>A named place on the entity to put things, on a component and maybe a bone.</summary>
-public sealed record EntitySlot(string Name, string? Component, string? Bone);
+public sealed record EntitySlot(string Name, string? Component, string? Bone)
+{
+    /// <summary>Where it is on its bone or component.</summary>
+    public Matrix4x4 Transform { get; init; } = Matrix4x4.Identity;
+}
 
 /// <summary>
 /// An entity template (.w2ent): the object the game spawns, its components and how they hang together, its
@@ -215,7 +219,8 @@ public sealed class EntityFile
             Links = links,
             Includes = template.Array("includes").OfType<RedHandle>().Select(file.Import).OfType<Cr2wImport>().Select(i => i.Path).ToList(),
             Appearances = appearances,
-            Slots = template.Array("slots").OfType<RedObject>().Select(s => new EntitySlot(s["name"] as string ?? "", Name(s["componentName"]), Name(s["boneName"]))).ToList(),
+            Slots = template.Array("slots").OfType<RedObject>()
+                .Select(s => new EntitySlot(s["name"] as string ?? "", Name(s["componentName"]), Name(s["boneName"])) { Transform = Transform(s.Bytes("transform")) }).ToList(),
             Effects = template.Array("cookedEffects").OfType<RedObject>().Select(e => e["name"] as string).OfType<string>()
                 .Concat(template.Array("effects").OfType<RedHandle>().Select(file.Object).OfType<RedObject>().Select(e => e["name"] as string).OfType<string>())
                 .Distinct().ToList(),

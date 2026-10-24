@@ -3,7 +3,7 @@ title: Entities
 icon: E77B
 order: 6
 summary: See a character, creature or object whole, in each of its looks, playing its animations, with every component it's made of.
-keywords: entity w2ent npc character appearance components animation dye colours inventory voicetags template
+keywords: entity w2ent npc character appearance components animation dye colours inventory voicetags template effects fx particles smoke fire glow cookedeffects
 windows: EntityWindow
 ---
 An **entity** (`.w2ent`) is something the game spawns: an NPC, a horse, a door, a chest. It's made of **components** (meshes, a skeleton, sounds, triggers…), has **appearances** (the different looks an NPC can have), and often builds on other entity templates it **includes**.
@@ -28,6 +28,18 @@ When the entity has a skeleton, the bar under the view plays its animations. Pic
 - {{Space}} plays and pauses; drag the bar to any moment; the stop button stands it as it was made.
 - The frame rate box sets how smoothly it's drawn (lower is lighter on your computer), and the speed box plays it from 10% to 200%.
 
+## Effects
+
+An entity's effects are what it plays in the game: a place of power's swirling smoke, a monster's sparks, a torch's flames. **Effects** on the view's toolbar lists them; tick one to play it in the view. A looped effect keeps going; a one-off plays again after a moment. The button says how many are playing, and **All off** stops them.
+
+![A place of power with its default and ready effects playing](entity-effects.jpg)
+
+- The particles go where the effect puts them: on a component, a slot or a bone. On a character they follow the animation, and sparks and smoke that the game leaves behind trail as it moves.
+- They play at the animation's speed, whether the animation plays or not.
+- The **Effects** tab has the same list, and under it the parts of the one you pick: when each starts and ends, what it is, and where it goes. Parts the view doesn't play (sounds, lights, material changes, screen effects such as blur) are dimmed.
+
+> note: The game's particle systems are cooked, which leaves out how they move. The view plays REDkit's copy of each one when you have REDkit installed (see [[Particle systems]]); without it, cooked systems are listed under the view as not played.
+
 ## Components
 
 On the right, the components are drawn as REDkit's entity editor lays them out, with a line from each to what it's attached to. Each is marked **I** (included from another template), **A** (from the appearance) or **O** (overridden here). Click one to see every property it has under **Component**. Click a mesh component and its mesh glows in the 3D view.
@@ -41,7 +53,8 @@ On the right, the components are drawn as REDkit's entity editor lays them out, 
 | **Template** | its class, the templates it includes, and every file it depends on |
 | **Appearances** | each look, with the templates it uses |
 | **Colors** | how an appearance recolours a part, and its dyes |
-| **Effects**, **Slots**, **AI**, **Inventory**, **Voicetags**, **Animation**, **Gameplay**, **Animation Slots**, **Dismemberment** | REDkit's tabs, each a list with the properties of the one you pick |
+| **Effects** | the effects, to play, and the parts of the one you pick |
+| **Slots**, **AI**, **Inventory**, **Voicetags**, **Animation**, **Gameplay**, **Animation Slots**, **Dismemberment** | REDkit's tabs, each a list with the properties of the one you pick |
 | **Files** | everything it refers to; click one to open it |
 
 > tip: A dyeable piece of armour opens undyed. Pick a dye under **Appearance** to see it coloured the way the game colours it.

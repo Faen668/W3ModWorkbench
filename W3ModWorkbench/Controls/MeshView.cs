@@ -29,7 +29,7 @@ namespace W3ModWorkbench;
 /// creases and wrinkles, a little specular its sheen, and hair is blended by its texture's alpha.
 /// </para>
 /// </summary>
-public sealed class MeshView : Border
+public sealed partial class MeshView : Border
 {
     // one graphics device and set of shaders for every view
     private static IEffectsManager? _effects;
@@ -162,6 +162,7 @@ public sealed class MeshView : Border
         _viewport.Items.Add(_debug);
         _viewport.Items.Add(_skeleton);
         _viewport.Items.Add(_marks);
+        _viewport.Items.Add(_particles);
         Child = _viewport;
         // the view is drawn at a size set here, not the control's, so a drag that resizes it every frame (a splitter)
         // doesn't make Direct3D new surfaces for each size: those go only now and then, and dozens a second ran a

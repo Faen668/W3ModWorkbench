@@ -149,14 +149,94 @@ public static class W3Shading
         try
         {
             var mesh = effects[DefaultRenderTechniqueNames.Mesh];
-            if (mesh is null || mesh.ShaderPassNames.Contains(PassName)) return;
-            AddPass(mesh, DefaultPassNames.Default, PassName, "main");
-            AddPass(mesh, DefaultPassNames.OITPass, TransparentPassName, "mainOIT");
+            if (mesh is not null && !mesh.ShaderPassNames.Contains(PassName))
+            {
+                AddPass(mesh, DefaultPassNames.Default, PassName, "main");
+                AddPass(mesh, DefaultPassNames.OITPass, TransparentPassName, "mainOIT");
+            }
         }
         catch (Exception ex)
         {
             Problem = ex.Message;
         }
+        InstallParticles(effects);
+    }
+
+    /// <summary>What's said about the particle shader if it couldn't be compiled or added, in which case effects aren't drawn.</summary>
+    public static string? ParticleProblem { get; private set; }
+
+    // the techniques whose billboards are already the particles'
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<IRenderTechnique, object> ParticlesIn = [];
+
+    /// <summary>
+    /// Makes Helix's instanced billboards the view's particles (nothing else in the app draws instanced billboards): our
+    /// own shaders (see W3Particle.hlsl), blended as premultiplied alpha, tested against the depth but not writing it,
+    /// and drawn from both sides.
+    /// </summary>
+    private static void InstallParticles(IEffectsManager effects)
+    {
+        try
+        {
+            var billboards = effects[DefaultRenderTechniqueNames.BillboardInstancing];
+            if (billboards is null || ParticlesIn.TryGetValue(billboards, out _)) return;
+            var standard = billboards.Description.PassDescriptions?.FirstOrDefault(p => p.Name == DefaultPassNames.Default)
+                ?? throw new InvalidOperationException(L.T("W3Shading.HelixsMeshTechniqueHas", DefaultPassNames.Default));
+            var blend = new SharpDX.Direct3D11.BlendStateDescription { AlphaToCoverageEnable = false, IndependentBlendEnable = false };
+            blend.RenderTarget[0] = new SharpDX.Direct3D11.RenderTargetBlendDescription
+            {
+                IsBlendEnabled = true,
+                SourceBlend = SharpDX.Direct3D11.BlendOption.One,
+                DestinationBlend = SharpDX.Direct3D11.BlendOption.InverseSourceAlpha,
+                BlendOperation = SharpDX.Direct3D11.BlendOperation.Add,
+                SourceAlphaBlend = SharpDX.Direct3D11.BlendOption.One,
+                DestinationAlphaBlend = SharpDX.Direct3D11.BlendOption.InverseSourceAlpha,
+                AlphaBlendOperation = SharpDX.Direct3D11.BlendOperation.Add,
+                RenderTargetWriteMask = SharpDX.Direct3D11.ColorWriteMaskFlags.All,
+            };
+            var depth = new SharpDX.Direct3D11.DepthStencilStateDescription
+            {
+                IsDepthEnabled = true,
+                DepthWriteMask = SharpDX.Direct3D11.DepthWriteMask.Zero,
+                DepthComparison = SharpDX.Direct3D11.Comparison.LessEqual,
+                IsStencilEnabled = false,
+            };
+            var raster = new SharpDX.Direct3D11.RasterizerStateDescription
+            {
+                FillMode = SharpDX.Direct3D11.FillMode.Solid,
+                CullMode = SharpDX.Direct3D11.CullMode.None,
+                IsDepthClipEnabled = true,
+            };
+            var pass = new ShaderPassDescription(DefaultPassNames.Default)
+            {
+                ShaderList =
+                [
+                    new HelixToolkit.SharpDX.Shaders.ShaderDescription("vsW3Particle", ShaderStage.Vertex, new ShaderReflector(), CompileParticle("vsParticle", "vs_5_0")),
+                    new HelixToolkit.SharpDX.Shaders.ShaderDescription("gsW3Particle", ShaderStage.Geometry, new ShaderReflector(), CompileParticle("gsParticle", "gs_5_0")),
+                    new HelixToolkit.SharpDX.Shaders.ShaderDescription("psW3Particle", ShaderStage.Pixel, new ShaderReflector(), CompileParticle("psParticle", "ps_5_0")),
+                ],
+                BlendStateDescription = blend,
+                DepthStencilStateDescription = depth,
+                RasterStateDescription = raster,
+                Topology = standard.Topology,
+                InputLayoutDescription = standard.InputLayoutDescription,
+            };
+            billboards.RemovePass(DefaultPassNames.Default);
+            billboards.AddPass(pass);
+            ParticlesIn.AddOrUpdate(billboards, true);
+            ParticleProblem = null;
+        }
+        catch (Exception ex)
+        {
+            ParticleProblem = ex.Message;
+        }
+    }
+
+    private static byte[] CompileParticle(string entry, string profile)
+    {
+        using var result = ShaderBytecode.Compile(Read("W3Particle.hlsl"), entry, profile, ShaderFlags.OptimizationLevel3, EffectFlags.None,
+            null, new Includes(), "W3Particle.hlsl");
+        if (result.HasErrors || result.Bytecode is null) throw new InvalidOperationException(L.T("W3Shading.ViewsShaderDidntCompile", result.Message));
+        return result.Bytecode.Data;
     }
 
     /// <summary>A pass like one of Helix's, with the view's pixel shader in place of its own.</summary>

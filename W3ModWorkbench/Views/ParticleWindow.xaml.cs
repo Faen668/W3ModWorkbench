@@ -203,7 +203,7 @@ public partial class ParticleWindow : Window, IMessageHost
     /// Reads a material's files: a shader graph from REDkit's own copy when it has one, as the game's cooked graphs leave
     /// out the parameters and blocks that say which texture and how many atlas frames; the rest as the game has them.
     /// </summary>
-    private static Func<string, byte[]?> Shaders(ResourceLocator locator) => path =>
+    internal static Func<string, byte[]?> Shaders(ResourceLocator locator) => path =>
         path.EndsWith(".w2mg", StringComparison.OrdinalIgnoreCase) && RedkitSource.Read(path) is { } redkit ? redkit.File.Data : locator.ReadFile(path);
 
     private Task<BitmapSource?> Texture(string path)
