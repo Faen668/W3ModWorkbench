@@ -223,6 +223,25 @@ public static class W3Shading
             billboards.RemovePass(DefaultPassNames.Default);
             billboards.AddPass(pass);
             ParticlesIn.AddOrUpdate(billboards, true);
+
+            // mesh particles: Helix's instanced meshes with the particle mesh pixel shader, blended and tested the same way
+            var meshes = effects[DefaultRenderTechniqueNames.InstancingMesh];
+            if (meshes is not null && !meshes.ShaderPassNames.Contains(ParticleMeshPassName))
+            {
+                var like = meshes.Description.PassDescriptions?.FirstOrDefault(p => p.Name == DefaultPassNames.Default)
+                    ?? throw new InvalidOperationException(L.T("W3Shading.HelixsMeshTechniqueHas", DefaultPassNames.Default));
+                var pixel = new HelixToolkit.SharpDX.Shaders.ShaderDescription("psW3ParticleMesh", ShaderStage.Pixel, new ShaderReflector(),
+                    CompileFile("W3ParticleMesh.hlsl", "main", "ps_5_0"));
+                meshes.AddPass(new ShaderPassDescription(ParticleMeshPassName)
+                {
+                    ShaderList = [.. (like.ShaderList ?? []).Select(s => s.ShaderType == ShaderStage.Pixel ? pixel : s)],
+                    BlendStateDescription = blend,
+                    DepthStencilStateDescription = depth,
+                    RasterStateDescription = raster,
+                    Topology = like.Topology,
+                    InputLayoutDescription = like.InputLayoutDescription,
+                });
+            }
             ParticleProblem = null;
         }
         catch (Exception ex)
@@ -231,10 +250,15 @@ public static class W3Shading
         }
     }
 
-    private static byte[] CompileParticle(string entry, string profile)
+    /// <summary>The pass mesh particles are drawn with, in Helix's instanced mesh technique (see <see cref="ParticleMeshMaterialCore"/>).</summary>
+    public const string ParticleMeshPassName = "W3ParticleMesh";
+
+    private static byte[] CompileParticle(string entry, string profile) => CompileFile("W3Particle.hlsl", entry, profile);
+
+    private static byte[] CompileFile(string file, string entry, string profile)
     {
-        using var result = ShaderBytecode.Compile(Read("W3Particle.hlsl"), entry, profile, ShaderFlags.OptimizationLevel3, EffectFlags.None,
-            null, new Includes(), "W3Particle.hlsl");
+        using var result = ShaderBytecode.Compile(Read(file), entry, profile, ShaderFlags.OptimizationLevel3, EffectFlags.None,
+            null, new Includes(), file);
         if (result.HasErrors || result.Bytecode is null) throw new InvalidOperationException(L.T("W3Shading.ViewsShaderDidntCompile", result.Message));
         return result.Bytecode.Data;
     }
@@ -286,6 +310,13 @@ public static class W3Shading
 
         public void Close(Stream stream) => stream.Dispose();
     }
+}
+
+/// <summary>A mesh particle's material: its texture, drawn by the view's particle mesh pass (see W3ParticleMesh.hlsl).</summary>
+public sealed class ParticleMeshMaterialCore : PhongMaterialCore
+{
+    public override MaterialVariable CreateMaterialVariables(IEffectsManager manager, IRenderTechnique technique) =>
+        new PhongMaterialVariables(manager, technique, this, W3Shading.ParticleMeshPassName);
 }
 
 /// <summary>A Phong material drawn with the view's own passes, with what the game's material says beside its textures.</summary>

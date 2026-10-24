@@ -8,6 +8,9 @@ public struct Particle
     public Vector3 Position, Velocity;
     public float Age, Life, Rotation, RotationRate, Frame, StartFrame, FrameSpeed;
     public Vector2 BaseSize, Size;
+
+    /// <summary>For particles drawn as meshes: their size on each axis, and how far they're turned about each (in turns) and how fast.</summary>
+    public Vector3 BaseSize3D, Size3D, Rotation3D, RotationRate3D;
     public Vector4 BaseColor, Color, Random;
 
     public readonly float LifeFraction => Life > 0 ? Math.Clamp(Age / Life, 0, 1) : 1;
@@ -144,7 +147,7 @@ public sealed class ParticleSimulation
     private Particle Spawn(ParticleEmitter e, float run)
     {
         var r = Random4();
-        var p = new Particle { Random = r, Life = 1, BaseSize = new Vector2(0.1f), BaseColor = Vector4.One };
+        var p = new Particle { Random = r, Life = 1, BaseSize = new Vector2(0.1f), BaseSize3D = new Vector3(0.1f), BaseColor = Vector4.One };
         foreach (var m in e.Modules.Where(m => m.Enabled && m.IsInitializer))
         {
             var mr = Random4();
@@ -192,6 +195,21 @@ public sealed class ParticleSimulation
                 case "CParticleInitializerSize":
                     var size = m["size"]?.Value(run, mr) ?? new Vector4(0.1f);
                     p.BaseSize = new Vector2(size.X, size.Y);
+                    // a mesh with a flat size is scaled evenly, by its width
+                    p.BaseSize3D = new Vector3(size.X);
+                    break;
+                case "CParticleInitializerSize3D":
+                    var size3 = m["size"]?.Value(run, mr) ?? new Vector4(0.1f);
+                    p.BaseSize = new Vector2(size3.X, size3.Y);
+                    p.BaseSize3D = new Vector3(size3.X, size3.Y, size3.Z);
+                    break;
+                case "CParticleInitializerRotation3D":
+                    var turn = m["rotation"]?.Value(run, mr) ?? Vector4.Zero;
+                    p.Rotation3D = new Vector3(turn.X, turn.Y, turn.Z);
+                    break;
+                case "CParticleInitializerRotationRate3D":
+                    var rate = m["rotationRate"]?.Value(run, mr) ?? Vector4.Zero;
+                    p.RotationRate3D = new Vector3(rate.X, rate.Y, rate.Z);
                     break;
                 case "CParticleInitializerRotation":
                     p.Rotation = m["rotation"]?.Float(run, mr.X) ?? 0;
@@ -214,6 +232,7 @@ public sealed class ParticleSimulation
             p.FrameSpeed = animation["animationSpeed"]?.Float(run, (float)_random.NextDouble()) ?? 0;
         }
         p.Size = p.BaseSize;
+        p.Size3D = p.BaseSize3D;
         p.Color = p.BaseColor;
         p.Frame = p.StartFrame;
         return p;
@@ -250,15 +269,29 @@ public sealed class ParticleSimulation
             }
             float t = p.LifeFraction;
             var size = p.BaseSize;
+            var size3 = p.BaseSize3D;
             var color = p.BaseColor;
             var velocityScale = Vector3.One;
             foreach (var m in modificators)
                 switch (m.ClassName)
                 {
                     case "CParticleModificatorSizeOverLife":
-                    case "CParticleModificatorSize3DOverLife":
                         var s = m["size"]?.Value(t, p.Random) ?? Vector4.One;
                         size *= new Vector2(s.X, s.Y);
+                        size3 *= s.X;
+                        break;
+                    case "CParticleModificatorSize3DOverLife":
+                        var s3 = m["size"]?.Value(t, p.Random) ?? Vector4.One;
+                        size *= new Vector2(s3.X, s3.Y);
+                        size3 *= new Vector3(s3.X, s3.Y, s3.Z);
+                        break;
+                    case "CParticleModificatorRotation3DOverLife":
+                        var r3 = m["rotation"]?.Value(t, p.Random) ?? Vector4.Zero;
+                        p.Rotation3D = new Vector3(r3.X, r3.Y, r3.Z);
+                        break;
+                    case "CParticleModificatorRotationRate3DOverLife":
+                        var rr3 = m["rotationRate"]?.Value(t, p.Random) ?? Vector4.Zero;
+                        p.RotationRate3D = new Vector3(rr3.X, rr3.Y, rr3.Z);
                         break;
                     case "CParticleModificatorAlphaOverLife":
                         float alpha = m["alpha"]?.Float(t, p.Random.X) ?? 1;
@@ -292,7 +325,9 @@ public sealed class ParticleSimulation
                 }
             p.Position += p.Velocity * velocityScale * dt;
             p.Rotation += p.RotationRate * dt;
+            p.Rotation3D += p.RotationRate3D * dt;
             p.Size = size;
+            p.Size3D = size3;
             p.Color = color;
             p.Frame = p.StartFrame + p.FrameSpeed * p.Age;
             live[i] = p;

@@ -170,7 +170,7 @@ public partial class EntityWindow
         float step = (float)Math.Min(now - _effectsLast, 0.1);
         _effectsLast = now;
         player.Advance(step * _speed);
-        View.ShowParticles(player.Batches());
+        View.ShowParticles(player.Batches(), player.MeshBatches());
         if (now - _effectsStatusAt > 0.5)
         {
             _effectsStatusAt = now;
@@ -226,13 +226,17 @@ public partial class EntityWindow
         }
         else if (s?.ClassName == "CFXSpawnerComponent") // loc-ignore
         {
-            var at = ComponentPlace(s.Component ?? part.GroupComponent);
+            // effects name a slot or a bone there too (a monster's hits spawn at "blood_point"), when there's no component of that name
+            string? name = s.Component ?? part.GroupComponent;
+            var at = name is not null && !HasComponent(name) ? SlotPlace(name) ?? BonePlace(name) ?? ComponentPlace(name) : ComponentPlace(name);
             if (s.ParentSlot is { } slot) at = SlotPlace(slot) ?? BonePlace(slot) ?? at;
             places.Add(offset * at);
         }
         if (places.Count == 0) places.Add(offset * ComponentPlace(part.GroupComponent));
         return places;
     }
+
+    private bool HasComponent(string name) => _look?.Components.Any(c => c.Name.Equals(name, StringComparison.OrdinalIgnoreCase)) == true;
 
     private Matrix4x4 ComponentPlace(string? name) =>
         name is not null && _look?.Components.FirstOrDefault(c => c.Name.Equals(name, StringComparison.OrdinalIgnoreCase)) is { } component

@@ -2,6 +2,7 @@ using System.IO;
 using System.Numerics;
 using W3ModWorkbench.Core.Cr2w;
 using W3ModWorkbench.Core.Effects;
+using W3ModWorkbench.Core.Meshes;
 using W3ModWorkbench.Core.Particles;
 
 namespace W3ModWorkbench;
@@ -42,6 +43,7 @@ public sealed class EffectPlayer
     private readonly List<Run> _runs = [];
     private readonly Dictionary<string, Task<ParticleSystemFile?>> _systems = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, Task<(byte[] Pixels, int Width, int Height)?>> _textures = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, Task<List<MeshChunk>?>> _meshes = new(StringComparer.OrdinalIgnoreCase);
 
     /// <param name="where">Where a part goes on the entity now, in the game's space: one place for each its spawner names.</param>
     public EffectPlayer(ResourceLocator locator, Func<EffectPart, IReadOnlyList<Matrix4x4>> where)
@@ -61,7 +63,7 @@ public sealed class EffectPlayer
 
     /// <summary>The drawers of the playing effects' emitters that aren't drawn yet (meshes, trails…), by class.</summary>
     public IEnumerable<string> NotDrawn => _runs.SelectMany(r => r.Parts).Select(p => p.System).OfType<ParticleSystemFile>()
-        .SelectMany(s => s.Emitters).Where(e => !e.DrawnAsSprites).Select(e => e.Drawer).Distinct();
+        .SelectMany(s => s.Emitters).Where(e => !e.DrawnAsSprites && !e.DrawnAsMeshes).Select(e => e.Drawer).Distinct();
 
     /// <summary>How many particles there are now.</summary>
     public int Count => _runs.Sum(r => r.Parts.Sum(p => p.Simulations.Sum(s => s.Count)));
@@ -179,6 +181,113 @@ public sealed class EffectPlayer
         return [.. batches.Values.Select(b => b.Batch)];
     }
 
+    /// <summary>
+    /// The particles drawn as meshes there are now, in batches by mesh and texture: each particle takes one of its
+    /// emitter's meshes, sized on each axis, turned by its 3D rotation (or the way it moves, or not at all, as the
+    /// emitter says), coloured as a sprite is, its texture scrolled on as its material scrolls.
+    /// </summary>
+    public List<MeshParticleBatch> MeshBatches()
+    {
+        var batches = new Dictionary<string, (MeshParticleBatch Batch, List<MeshParticle> Particles)>(StringComparer.OrdinalIgnoreCase);
+        int total = 0;
+        foreach (var run in _runs)
+            foreach (var part in run.Parts)
+            {
+                if (part.System is not { } system) continue;
+                foreach (var simulation in part.Simulations)
+                    for (int e = 0; e < system.Emitters.Count; e++)
+                    {
+                        var emitter = system.Emitters[e];
+                        var particles = simulation.Particles(e);
+                        if (particles.Count == 0 || !emitter.DrawnAsMeshes) continue;
+                        var picture = emitter.Texture is { } texture ? TextureNow(texture) : null;
+                        var place = emitter.KeepLocal ? simulation.Placement : Matrix4x4.Identity;
+                        var tint = emitter.Tint;
+                        var (columns, rows) = emitter.Atlas;
+                        columns = Math.Max(1, columns);
+                        rows = Math.Max(1, rows);
+                        int frames = columns * rows;
+                        foreach (var p in particles)
+                        {
+                            if (total >= MaxSprites) break;
+                            string meshPath = emitter.Meshes[Math.Clamp((int)(p.Random.X * emitter.Meshes.Count), 0, emitter.Meshes.Count - 1)];
+                            if (MeshNow(meshPath) is not { Count: > 0 } chunks) continue;
+                            float alpha = Math.Clamp(p.Color.W, 0, 1) * tint.A / 255f;
+                            if (alpha <= 0.002f) continue;
+                            string key = meshPath + "|" + (picture is null ? "" : emitter.Texture);
+                            if (!batches.TryGetValue(key, out var batch))
+                            {
+                                var list = new List<MeshParticle>();
+                                var made = picture;
+                                batch = (new MeshParticleBatch(key, chunks, () => made, list), list);
+                                batches[key] = batch;
+                            }
+                            var rgb = new Vector3(p.Color.X * tint.R / 255f, p.Color.Y * tint.G / 255f, p.Color.Z * tint.B / 255f) * alpha;
+                            int frame = ((int)MathF.Floor(p.Frame) % frames + frames) % frames;
+                            var scroll = emitter.ScrollSpeed * p.Age;
+                            var size = new Vector3(MathF.Abs(p.Size3D.X), MathF.Abs(p.Size3D.Y), MathF.Abs(p.Size3D.Z));
+                            batch.Particles.Add(new MeshParticle(
+                                Matrix4x4.CreateScale(size) * MeshTurn(emitter.MeshOrientation, p) * Matrix4x4.CreateTranslation(p.Position) * place,
+                                new Vector4(rgb, emitter.Additive ? 0 : alpha),
+                                new Vector4(1f / columns, 1f / rows, frame % columns / (float)columns + scroll.X, frame / columns / (float)rows + scroll.Y)));
+                            total++;
+                        }
+                    }
+            }
+        return [.. batches.Values.Select(b => b.Batch)];
+    }
+
+    /// <summary>
+    /// How a mesh particle is turned: not at all, along the way it moves (the mesh's Y, its forward, towards its
+    /// velocity), or by its 3D rotation, in turns about X, Y and Z.
+    /// </summary>
+    private static Matrix4x4 MeshTurn(string orientation, Particle p)
+    {
+        if (orientation == "MPOM_NoRotation") return Matrix4x4.Identity; // loc-ignore
+        if (orientation == "MPOM_MovementDirection") // loc-ignore
+        {
+            float speed = p.Velocity.Length();
+            if (speed < 1e-4f) return Matrix4x4.Identity;
+            var to = p.Velocity / speed;
+            float dot = Math.Clamp(Vector3.Dot(Vector3.UnitY, to), -1, 1);
+            var axis = Vector3.Cross(Vector3.UnitY, to);
+            return axis.LengthSquared() < 1e-8f
+                ? dot > 0 ? Matrix4x4.Identity : Matrix4x4.CreateRotationZ(MathF.PI)
+                : Matrix4x4.CreateFromAxisAngle(Vector3.Normalize(axis), MathF.Acos(dot));
+        }
+        return Matrix4x4.CreateRotationX(p.Rotation3D.X * MathF.Tau) * Matrix4x4.CreateRotationY(p.Rotation3D.Y * MathF.Tau) * Matrix4x4.CreateRotationZ(p.Rotation3D.Z * MathF.Tau);
+    }
+
+    /// <summary>A mesh's top level of detail, read once in the background.</summary>
+    private Task<List<MeshChunk>?> MeshAsync(string path)
+    {
+        lock (_meshes)
+        {
+            if (!_meshes.TryGetValue(path, out var task))
+                _meshes[path] = task = Task.Run<List<MeshChunk>?>(() =>
+                {
+                    try
+                    {
+                        if (_locator.ReadFile(path) is not { } data) return null;
+                        var archive = _locator.Find(path)?.Archive;
+                        var mesh = MeshFile.Read(data, n => _locator.ReadBuffer(path, n, archive));
+                        return [.. mesh.Chunks.Where(c => c.InLod(0))];
+                    }
+                    catch (Exception ex) when (ex is InvalidDataException or IOException or IndexOutOfRangeException or ArgumentException)
+                    {
+                        return null;
+                    }
+                });
+            return task;
+        }
+    }
+
+    private List<MeshChunk>? MeshNow(string path)
+    {
+        var task = MeshAsync(path);
+        return task.IsCompletedSuccessfully ? task.Result : null;
+    }
+
     /// <summary>A particle system, read once: REDkit's copy when the game's emitters are cooked and there is one.</summary>
     private async Task SystemAsync(PartRun part)
     {
@@ -189,8 +298,9 @@ public sealed class EffectPlayer
         var system = await task;
         if (system is null) return;
         part.System = system;
-        // the textures read ahead, so they're there by the time the particles are
+        // the textures and meshes read ahead, so they're there by the time the particles are
         foreach (var texture in system.Emitters.Select(e => e.Texture).OfType<string>()) _ = TextureAsync(texture);
+        foreach (var mesh in system.Emitters.Where(e => e.DrawnAsMeshes).SelectMany(e => e.Meshes)) _ = MeshAsync(mesh);
     }
 
     private ParticleSystemFile? ReadSystem(string path)

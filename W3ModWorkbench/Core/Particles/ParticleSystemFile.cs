@@ -190,6 +190,14 @@ public sealed class ParticleEmitter
     public required System.Windows.Media.Color Tint { get; init; }
     public required string Drawer { get; init; }
 
+    /// <summary>For particles drawn as meshes: the meshes (each particle takes one), how they're turned (by their 3D rotation, the way they move, or not at all) and how fast their texture scrolls.</summary>
+    public IReadOnlyList<string> Meshes { get; init; } = [];
+    public string MeshOrientation { get; init; } = "";
+    public Vector2 ScrollSpeed { get; init; }
+
+    /// <summary>Whether its particles are meshes the 3D view can draw.</summary>
+    public bool DrawnAsMeshes => Drawer == "CParticleDrawerMesh" && Meshes.Count > 0; // loc-ignore
+
     /// <summary>
     /// Whether its particles are drawn as sprites facing the camera (billboards, and close enough, motion-blurred and
     /// sphere-aligned ones), which the previews draw; meshes, trails, beams, screen effects and quads laid in the
@@ -301,7 +309,11 @@ public sealed class ParticleSystemFile
             ? blend.Contains("Add", StringComparison.OrdinalIgnoreCase)
             : Regex.IsMatch(Path.GetFileName(graph), "add|glow|fire|spark", RegexOptions.IgnoreCase));
 
-        var drawer = e["particleDrawer"] is RedHandle dh ? file.Object(dh)?.ClassName ?? "" : "";
+        var drawerObject = e["particleDrawer"] is RedHandle dh ? file.Object(dh) : null;
+        var drawer = drawerObject?.ClassName ?? "";
+        // a scrolling material (a mesh wrapped in moving flames): its first speed, in texture widths a second
+        var speed = parameters.FirstOrDefault(p => p.Value is Vector4 && Regex.IsMatch(p.Name, "speed", RegexOptions.IgnoreCase))?.Value is Vector4 sv
+            ? new Vector2(sv.X, sv.Y) : Vector2.Zero;
         var editor = e.Struct("editorColor");
         return new ParticleEmitter
         {
@@ -317,6 +329,9 @@ public sealed class ParticleSystemFile
             Additive = additive,
             Tint = tint,
             Drawer = drawer,
+            Meshes = drawerObject?.Array("meshes").OfType<RedHandle>().Select(file.PathOf).OfType<string>().Where(m => m.Length > 0).ToList() ?? [],
+            MeshOrientation = drawerObject?["orientationMode"]?.ToString() ?? "",
+            ScrollSpeed = speed,
             MaxParticles = (int)e.Integer("maxParticles", 100),
             Showing = e["isShowing"] is not false && e["isEnabled"] is not false,
             Modules = modules,
