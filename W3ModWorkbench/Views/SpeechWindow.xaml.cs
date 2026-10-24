@@ -21,6 +21,7 @@ public partial class SpeechWindow : Window, IMessageHost
     {
         InitializeComponent();
         WavCheck.IsChecked = App.Settings.SpeechUnpackWav;
+        ReCheck.IsChecked = App.Settings.SpeechUnpackRe;
         foreach (var language in W3Strings.Languages) LanguageBox.Items.Add(language.Handle);
         LanguageBox.SelectedItem = "en";
         if (file is not null) Take(file);
@@ -103,15 +104,17 @@ public partial class SpeechWindow : Window, IMessageHost
     {
         string path = Clean(UnpackFileBox), folder = Clean(UnpackFolderBox);
         if (folder.Length == 0 || SpeechFolder.LanguageOf(path) is not { } language) return;
-        bool wav = WavCheck.IsChecked == true;
+        bool wav = WavCheck.IsChecked == true, re = ReCheck.IsChecked == true;
         App.Settings.SpeechUnpackWav = wav;
+        App.Settings.SpeechUnpackRe = re;
         App.Settings.Save();
         await RunAsync(L.T("SpeechWindow.Unpacking"), progress =>
         {
             var speech = W3Speech.Open(path, language);
-            var (lines, noWav) = SpeechFolder.Unpack(speech, folder, wav, progress, _running!.Token);
+            var (lines, noWav, noRe) = SpeechFolder.Unpack(speech, folder, wav, re, progress, _running!.Token);
             var result = new List<string> { L.T("SpeechWindow.Unpacked", L.T("Count.VoiceLine", lines), folder) };
             if (noWav.Count > 0) result.Add(L.T("SpeechWindow.NoWav", string.Join(", ", noWav.Take(20)) + (noWav.Count > 20 ? ", …" : "")));
+            if (noRe.Count > 0) result.Add(L.T("SpeechWindow.NoRe", string.Join(", ", noRe.Take(20)) + (noRe.Count > 20 ? ", …" : "")));
             return result;
         });
     }
