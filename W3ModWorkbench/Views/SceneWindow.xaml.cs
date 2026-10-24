@@ -1051,29 +1051,39 @@ public partial class SceneWindow : Window, IMessageHost
         if (time >= _sectionEnd) StopSection(finished: true);
     }
 
+    // how long a voice line takes to be heard once it's started: about half the output's 120 ms of buffers
+    private const double VoiceLead = 0.06;
+
     private async Task SpeakSectionAsync(SceneSectionTimeline timeline, double from, CancellationToken token)
     {
         try
         {
             var speech = await SpeechAsync();
             // the line under the playhead too, so a pause mid-line goes on from there
-            foreach (var line in timeline.Elements.Where(e => e.Kind == SceneElementKind.Line && e.Start + e.Duration > from + 0.02 && e.StringId is not null))
+            var lines = timeline.Elements.Where(e => e.Kind == SceneElementKind.Line && e.Start + e.Duration > from + 0.02 && e.StringId is not null).ToList();
+            Task<byte[]?> Decode(SceneTimelineElement line) => Task.Run(() =>
             {
-                // decoded ahead, played when the playhead gets there
-                byte[]? wav = await Task.Run(() =>
-                {
-                    uint id = line.StringId!.Value;
-                    if (speech.FirstOrDefault(s => s.Has(id))?.Sound(id) is not { } riff) return null;
-                    var (samples, channels) = WwiseOpus.Decode(riff);
-                    return WwiseOpus.ToWav(samples, channels);
-                }, token);
-                double wait = line.Start - (_sectionFrom + _sectionClock.Elapsed.TotalSeconds);
+                uint id = line.StringId!.Value;
+                if (speech.FirstOrDefault(s => s.Has(id))?.Sound(id) is not { } riff) return null;
+                var (samples, channels) = WwiseOpus.Decode(riff);
+                return WwiseOpus.ToWav(samples, channels);
+            }, token);
+            // each line decoded while the one before it waits or plays, so it's ready when its time comes
+            var next = lines.Count > 0 ? Decode(lines[0]) : null;
+            for (int i = 0; i < lines.Count; i++)
+            {
+                var line = lines[i];
+                byte[]? wav = await next!;
+                next = i + 1 < lines.Count ? Decode(lines[i + 1]) : null;
+                // started a little ahead, by the time the sound takes to get through the output's buffer, so it's
+                // heard on the playhead rather than just behind it
+                double wait = line.Start - VoiceLead - (_sectionFrom + _sectionClock.Elapsed.TotalSeconds);
                 if (wait > 0) await Task.Delay(TimeSpan.FromSeconds(wait), token);
                 if (token.IsCancellationRequested) return;
                 if (wav is null) continue;
                 var reader = new NAudio.Wave.WaveFileReader(new MemoryStream(wav));
-                double into = _sectionFrom + _sectionClock.Elapsed.TotalSeconds - line.Start;
-                if (into > 0.05)
+                double into = _sectionFrom + _sectionClock.Elapsed.TotalSeconds + VoiceLead - line.Start;
+                if (into > 0.02)
                 {
                     if (into >= reader.TotalTime.TotalSeconds) { reader.Dispose(); continue; }
                     reader.CurrentTime = TimeSpan.FromSeconds(into);

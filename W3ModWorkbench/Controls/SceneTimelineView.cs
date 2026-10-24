@@ -60,6 +60,7 @@ public sealed class SceneTimelineView : FrameworkElement
 
     public SceneTimelineView()
     {
+        AddVisualChild(_playheadLayer);
         SetResourceReference(TextBrushProperty, "TextFillColorPrimaryBrush");
         SetResourceReference(LineBrushProperty, "CardStrokeColorDefaultBrush");
         SetResourceReference(StripeBrushProperty, "SubtleFillColorSecondaryBrush");
@@ -74,7 +75,30 @@ public sealed class SceneTimelineView : FrameworkElement
     public double? Playhead
     {
         get => _playhead;
-        set { _playhead = value; InvalidateVisual(); }
+        set
+        {
+            if (_playhead == value) return;
+            _playhead = value;
+            // only the playhead's own layer is drawn again: the whole timeline drawn for every frame played (every
+            // track, box and label) held a scene's playing down to half its frame rate
+            DrawPlayhead();
+        }
+    }
+
+    // the playhead, on a layer of its own over the timeline
+    private readonly DrawingVisual _playheadLayer = new();
+
+    protected override int VisualChildrenCount => 1;
+
+    protected override Visual GetVisualChild(int index) => index == 0 ? _playheadLayer : throw new ArgumentOutOfRangeException(nameof(index));
+
+    private void DrawPlayhead()
+    {
+        using var dc = _playheadLayer.RenderOpen();
+        if (_timeline is null || _playhead is not { } at) return;
+        double x = Math.Round(LabelWidth + Math.Clamp(at, 0, Duration) * Scale(ActualWidth)) + 0.5;
+        double total = RulerHeight + _tracks.Sum(t => t.Height) + GroupCount() * 20;
+        dc.DrawLine(new Pen(AccentBrush, 2), new Point(x, 0), new Point(x, total));
     }
 
     public SceneSectionTimeline? Timeline => _timeline;
@@ -255,12 +279,7 @@ public sealed class SceneTimelineView : FrameworkElement
             top += height;
         }
 
-        if (_playhead is { } at)
-        {
-            double x = Math.Round(X(Math.Clamp(at, 0, Duration))) + 0.5;
-            var pen = new Pen(AccentBrush, 2);
-            dc.DrawLine(pen, new Point(x, 0), new Point(x, total));
-        }
+        DrawPlayhead();
     }
 
     /// <summary>An item's colour and label: a line in its speaker's colour with its words, an event by what it does.</summary>

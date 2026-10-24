@@ -78,7 +78,13 @@ public sealed class CutsceneTimeline : FrameworkElement
     public double? Playhead
     {
         get => _playhead;
-        set { _playhead = value; InvalidateVisual(); }
+        set
+        {
+            if (_playhead == value) return;
+            _playhead = value;
+            // only the playhead's layer is drawn again, not every lane and event for every frame played
+            DrawPlayhead();
+        }
     }
     private double? _playhead;
 
@@ -88,6 +94,7 @@ public sealed class CutsceneTimeline : FrameworkElement
 
     public CutsceneTimeline()
     {
+        AddVisualChild(_playheadLayer);
         SetResourceReference(TextBrushProperty, "TextFillColorPrimaryBrush");
         SetResourceReference(LineBrushProperty, "CardStrokeColorDefaultBrush");
         SetResourceReference(StripeBrushProperty, "SubtleFillColorSecondaryBrush");
@@ -267,22 +274,34 @@ public sealed class CutsceneTimeline : FrameworkElement
             top += height;
         }
 
-        if (_playhead is { } playhead)
+        DrawPlayhead();
+    }
+
+    // the playhead, on a layer of its own over the timeline
+    private readonly DrawingVisual _playheadLayer = new();
+
+    protected override int VisualChildrenCount => 1;
+
+    protected override Visual GetVisualChild(int index) => index == 0 ? _playheadLayer : throw new ArgumentOutOfRangeException(nameof(index));
+
+    private void DrawPlayhead()
+    {
+        using var dc = _playheadLayer.RenderOpen();
+        if (_cutscene is not { } c || _playhead is not { } playhead) return;
+        double x = Math.Round(LabelWidth + Math.Clamp(playhead, 0, c.Duration) * Scale(ActualWidth)) + 0.5;
+        double bottom = RulerHeight + _lanes.Sum(l => l.Height);
+        var pen = new Pen(AccentBrush, 1.5);
+        if (pen.CanFreeze) pen.Freeze(); // the accent brush follows the system's, so it may not freeze
+        dc.DrawLine(pen, new Point(x, RulerHeight - 8), new Point(x, bottom));
+        var knob = new StreamGeometry();
+        using (var g = knob.Open())
         {
-            double x = Math.Round(X(Math.Clamp(playhead, 0, c.Duration))) + 0.5;
-            var pen = new Pen(AccentBrush, 1.5);
-            if (pen.CanFreeze) pen.Freeze(); // the accent brush follows the system's, so it may not freeze
-            dc.DrawLine(pen, new Point(x, RulerHeight - 8), new Point(x, top));
-            var knob = new StreamGeometry();
-            using (var g = knob.Open())
-            {
-                g.BeginFigure(new Point(x - 5, RulerHeight - 10), true, true);
-                g.LineTo(new Point(x + 5, RulerHeight - 10), true, false);
-                g.LineTo(new Point(x, RulerHeight - 3), true, false);
-            }
-            knob.Freeze();
-            dc.DrawGeometry(AccentBrush, null, knob);
+            g.BeginFigure(new Point(x - 5, RulerHeight - 10), true, true);
+            g.LineTo(new Point(x + 5, RulerHeight - 10), true, false);
+            g.LineTo(new Point(x, RulerHeight - 3), true, false);
         }
+        knob.Freeze();
+        dc.DrawGeometry(AccentBrush, null, knob);
     }
 
     /// <summary>The time at a point across the timeline.</summary>

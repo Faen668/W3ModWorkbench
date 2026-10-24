@@ -869,12 +869,55 @@ public static class SceneStage
                 return;
             }
             found.AddRange(file.Imports.Where(i => i.ClassName == "CSkeletalAnimationSet").Select(i => i.Path));
+            // and those the expansions add to it as the game loads it
+            if (DlcAnimationSets(locator).TryGetValue(path, out var added)) found.AddRange(added);
             foreach (var include in file.Imports.Where(i => i.ClassName == "CEntityTemplate")) Walk(include.Path, depth + 1);
         }
         Walk(template, 0);
         return found.Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(p => Path.GetFileName(p).Contains("dialog", StringComparison.OrdinalIgnoreCase) ? 0 : 1).ToList();
     }
+
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<ResourceLocator, Dictionary<string, List<string>>> DlcSets = [];
+
+    /// <summary>
+    /// The animation sets the game's expansions (and DLC mods) add to entity templates as the game loads them, by the
+    /// template: each .reddlc's entity template mounters (CR4EntityTemplateParamDLCMounter) name base templates (man_base,
+    /// npc_base_m, man_big_base…) and the animation sets (CAnimAnimsetsParam) put on them. Blood and Wine's dialog
+    /// animations come this way: its scenes play animations that only these sets have. Read once for each locator.
+    /// </summary>
+    public static Dictionary<string, List<string>> DlcAnimationSets(ResourceLocator locator) => DlcSets.GetValue(locator, l =>
+    {
+        var byTemplate = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+        foreach (string path in l.AllPaths(".reddlc"))
+        {
+            Cr2wFile file;
+            try
+            {
+                if (l.ReadFile(path) is not { } data) continue;
+                file = Cr2wFile.Read(data);
+            }
+            catch (InvalidDataException)
+            {
+                continue;
+            }
+            foreach (var mounter in file.Exports.Where(x => x.ClassName == "CR4EntityTemplateParamDLCMounter").Select(x => file.Object(x.Index)))
+            {
+                var sets = mounter.Array("entityTemplateParams").OfType<RedHandle>()
+                    .Select(h => h.Export is int e ? file.Object(e) : null).OfType<RedObject>()
+                    .Where(p => p.ClassName == "CAnimAnimsetsParam")
+                    .SelectMany(p => p.Array("animationSets").OfType<RedHandle>().Select(h => file.Import(h)?.Path).OfType<string>())
+                    .ToList();
+                if (sets.Count == 0) continue;
+                foreach (string template in mounter.Array("entityTemplatePaths").OfType<string>())
+                {
+                    if (!byTemplate.TryGetValue(template, out var list)) byTemplate[template] = list = [];
+                    list.AddRange(sets);
+                }
+            }
+        }
+        return byTemplate;
+    });
 
     /// <summary>
     /// A standing idle in some animation sets, for an actor whose sets haven't the idle a scene asks for: from the dialog
