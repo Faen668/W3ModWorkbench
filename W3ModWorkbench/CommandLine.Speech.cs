@@ -1,6 +1,7 @@
 using System.IO;
 using System.Text;
 using W3ModWorkbench.Core.Animation;
+using W3ModWorkbench.Core.Sounds;
 using W3ModWorkbench.Core.Strings;
 
 namespace W3ModWorkbench;
@@ -13,7 +14,7 @@ namespace W3ModWorkbench;
 /// </summary>
 public static partial class CommandLine
 {
-    private static readonly string[] SpeechCommands = ["--speech-unpack", "--speech-pack", "--lipsync", "--strings-to-csv", "--csv-to-strings"];
+    private static readonly string[] SpeechCommands = ["--speech-unpack", "--speech-pack", "--lipsync", "--strings-to-csv", "--csv-to-strings", "--wav-to-wem"];
 
     /// <summary>The options the voice line and strings commands take, read the same way for each.</summary>
     private sealed class SpeechOptions
@@ -21,6 +22,7 @@ public static partial class CommandLine
         public List<string> Paths { get; } = [];
         public string? Out, Language, To, Layout;
         public bool Wav, Re, Keep, Recursive, Overwrite;
+        public int Kbps = App.Settings.SpeechKbps;
     }
 
     private static SpeechOptions ReadSpeechOptions(string[] args)
@@ -41,6 +43,7 @@ public static partial class CommandLine
                 case "--keep": o.Keep = true; break;
                 case "--recursive" or "-r": o.Recursive = true; break;
                 case "--overwrite": o.Overwrite = true; break;
+                case "--kbps": o.Kbps = int.TryParse(Next(), out int k) && k is >= 6 and <= 256 ? k : throw new ArgumentException("--kbps is the bitrate a channel in kbit/s, 6 to 256 (the game's voice lines are near 64)."); break;
                 default:
                     if (a.StartsWith("--", StringComparison.Ordinal)) throw new ArgumentException($"{a} isn't an option of {args[0]}. Run --help voice for its options.");
                     o.Paths.Add(a);
@@ -101,7 +104,7 @@ public static partial class CommandLine
                         foreach (string note in notes) output.WriteLine($"note    {note}");
                         if (lines.Count == 0) throw new ArgumentException("there are no ID.wem voice lines in it.");
                         var startFrom = o.Keep && File.Exists(file) ? W3Speech.Open(file, language) : null;
-                        int total = SpeechFolder.Pack(lines, language, file, startFrom);
+                        int total = SpeechFolder.Pack(lines, language, file, startFrom, kbps: o.Kbps);
                         Ok($"{file}  ({total} voice lines{(startFrom is null ? "" : $", {lines.Count} from the folder")})");
                     }
                     catch (Exception ex) when (ex is ArgumentException or IOException or InvalidDataException or UnauthorizedAccessException or EndOfStreamException)
@@ -110,6 +113,40 @@ public static partial class CommandLine
                     }
                 }
                 break;
+
+            case "--wav-to-wem":
+            {
+                var inputs = new List<(string File, string? Root)>();
+                foreach (string path in o.Paths)
+                    if (File.Exists(path)) inputs.Add((Path.GetFullPath(path), null));
+                    else if (Directory.Exists(path))
+                        inputs.AddRange(Directory.EnumerateFiles(path, "*.wav", o.Recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly)
+                            .Order(StringComparer.OrdinalIgnoreCase).Select(f => (Path.GetFullPath(f), (string?)Path.GetFullPath(path))));
+                if (inputs.Count == 0)
+                {
+                    output.WriteLine("No .wav files were found there.");
+                    return 1;
+                }
+                foreach (var (file, root) in inputs)
+                {
+                    string below = root is null ? "." : Path.GetRelativePath(root, Path.GetDirectoryName(file)!);
+                    string folder = o.Out is null ? Path.GetDirectoryName(file)! : below == "." ? o.Out : Path.Combine(o.Out, below);
+                    string wem = Path.Combine(folder, Path.GetFileNameWithoutExtension(file) + ".wem");
+                    if (File.Exists(wem) && !o.Overwrite) { output.WriteLine($"skipped {file}: {wem} is there already (--overwrite replaces it)"); continue; }
+                    try
+                    {
+                        byte[] made = WemOpus.FromWav(File.ReadAllBytes(file), o.Kbps);
+                        Directory.CreateDirectory(folder);
+                        File.WriteAllBytes(wem, made);
+                        Ok($"{wem}  ({made.Length / 1024.0:0.#} KB)");
+                    }
+                    catch (Exception ex) when (ex is IOException or InvalidDataException or NotSupportedException or UnauthorizedAccessException)
+                    {
+                        Fail(file, ex.Message);
+                    }
+                }
+                break;
+            }
 
             case "--lipsync":
             {
@@ -225,9 +262,14 @@ public static partial class CommandLine
               --re                           Save lip syncs as ID.re (REDkit's, for editing in Blender)
               --language <xx>                When the file's name doesn't say it (enpc.w3speech is English)
           --speech-pack <folder…>            Pack each folder of ID.wem (with ID.raw, ID.cr2w or ID.re) into a speech file;
-                                             <language>pc.w3speech beside its speech folder, or --out <file>
+                                             <language>pc.w3speech beside its speech folder, or --out <file>. An ID.wav
+                                             with no ID.wem is made one, as the game's voice lines are
               --keep                         Keep the lines already in that speech file the folder hasn't got
+              --kbps <n>                     The bitrate a channel a .wav is made at (64 unless Settings says otherwise)
               --language <xx>                When the folder's name isn't a language (speech\en is English)
+          --wav-to-wem <files or folders…>   Make each .wav a .wem as the game's voice lines are (Wwise Opus, 48 kHz; mono,
+                                             stereo or 5.1); beside each one, or under --out <folder>. -r, --overwrite
+                                             and --kbps as above
           --lipsync <files or folders…> --to re|raw
                                              Convert lip syncs (.raw, .cr2w, .re) to REDkit's .re or the game's raw form;
                                              beside each one, or under --out <folder>. -r looks in subfolders,

@@ -197,7 +197,7 @@ public partial class SpeechWindow : Window, IMessageHost
                 return [.. result, .. notes];
             }
             var startFrom = keep ? W3Speech.Open(file, language) : null;
-            int total = SpeechFolder.Pack(lines, language, file, startFrom, progress, _running!.Token);
+            int total = SpeechFolder.Pack(lines, language, file, startFrom, progress, _running!.Token, App.Settings.SpeechKbps);
             result.Add(startFrom is null ? L.T("SpeechWindow.Packed", L.T("Count.VoiceLine", total), file)
                 : L.T("SpeechWindow.PackedWith", L.T("Count.VoiceLine", total), file, L.T("Count.VoiceLine", lines.Count)));
             return [.. result, .. notes];

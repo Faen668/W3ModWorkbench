@@ -27,6 +27,7 @@ W3 Mod Workbench is an unofficial fan-made tool, not affiliated with, endorsed b
 - **Aelto**: his decompiler project, [tw3-cahirb](https://github.com/Aelto/tw3-cahirb), filled real gaps in this one.
 - **AvalonEdit** by the SharpDevelop team: the code editor.
 - **ww2ogg**, **NVorbis** and **vgmstream**: playing the game's sounds.
+- **Concentus**, the Opus reference library in C#: playing the game's voice lines, and making voice lines from WAV recordings.
 
 Their licences are in `THIRD-PARTY-NOTICES.md` beside the app, and under the **ⓘ** button. Everything else (the bundle, cache and script readers and writers, the decompiler, the viewers) is written for this app, checked against the game's and REDkit's own files. Nothing of REDkit's is shipped with it.
 

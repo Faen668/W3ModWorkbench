@@ -3,7 +3,7 @@ title: Voice lines
 icon: E720
 order: 7
 summary: Unpack the game's speech files into sounds and lip syncs, and pack your own voice lines into one.
-keywords: voice speech w3speech enpc wem lipsync lip sync raw cr2w re hdf5 blender redkit face dialogue vo pack unpack redspeech convert command line batch
+keywords: voice speech w3speech enpc wem wav record recording opus bitrate lipsync lip sync raw cr2w re hdf5 blender redkit face dialogue vo pack unpack redspeech convert command line batch
 windows: SpeechWindow
 ---
 The game keeps each language's voice lines in one **speech file**: `enpc.w3speech` for English, `depc.w3speech` for German, and so on. Each line is a sound (a Wwise `.wem`) and its lip sync, found by the line's string ID, the same number its words have in the strings files.
@@ -30,10 +30,20 @@ The files are named as nikich340's [RedSpeech Tool](https://www.nexusmods.com/wi
 
 ## Packing
 
-Choose a folder of `ID.wem` files, each with its lip sync beside it (`.raw`, `.cr2w` or `.re`). Anything after the ID is ignored, so `2115490012_hello there.wem` is line 2115490012. The language comes from the folder's name (`speech\de` is German) or the list, and the speech file goes beside the `speech` folder.
+Choose a folder of `ID.wem` files (or `ID.wav`, see below), each with its lip sync beside it (`.raw`, `.cr2w` or `.re`). Anything after the ID is ignored, so `2115490012_hello there.wem` is line 2115490012. The language comes from the folder's name (`speech\de` is German) or the list, and the speech file goes beside the `speech` folder.
 
 - **Keep the lines already in the speech file** adds your lines to a speech file that's already there, and replaces the ones with the same ID.
-- A `.wav` without a `.wem` is left out, with a note: the game only plays `.wem`. RedSpeech Tool turns WAV into WEM, and makes lip sync from a recording.
+- A `.wav` without a `.wem` is your recording, and is made a `.wem` as it's packed (below). A `.wav` beside its `.wem` is a copy to listen to, and the `.wem` is used.
+
+## Your own recordings
+
+Save each line as `ID.wav` in the folder and pack it, or Build: each one is made a `.wem` the way the game's voice lines are made (Wwise Opus at 48 kHz, 20 ms frames), so the game plays it as one of its own.
+
+- Mono, stereo and 5.1 recordings, at any sample rate, as 8, 16, 24 or 32-bit PCM or as 32 or 64-bit float: what Audacity, Reaper and most recorders save. The game's lines are mono.
+- **Settings > Viewers** sets the bitrate, 64 kbit/s a channel unless you change it, which is close to the game's own lines.
+- To change a line you unpacked, edit its `.wav` and delete its `.wem`.
+- Lip sync from a recording isn't made here: [RedSpeech Tool](https://www.nexusmods.com/witcher3/mods/14750) by nikich340 makes it, and its `.raw` or `.re` goes beside the `.wav`.
+
 
 ## Editing a lip sync in Blender
 
@@ -68,14 +78,17 @@ Each of these works without the window, for a script or a whole folder at once:
 W3ModWorkbench.exe --speech-unpack "D:\My Mod\content\enpc.w3speech" --re
 W3ModWorkbench.exe --speech-pack "D:\My Mod\workspace\speech\en" --keep
 W3ModWorkbench.exe --lipsync "D:\My Mod\workspace\speech" -r --to raw
+W3ModWorkbench.exe --wav-to-wem "D:\My Mod\recordings" --out "D:\My Mod\workspace\speech\en"
 ```
 
-`--speech-unpack` takes `--wav`, `--re` and `--out`; `--speech-pack` takes `--keep` and `--out`; `--lipsync` takes `--to re` or `--to raw`, `-r` for subfolders, `--out` and `--overwrite`. `--help voice` lists them all. The exit code is 0 when every file was done and 1 when some weren't.
+`--speech-unpack` takes `--wav`, `--re` and `--out`; `--speech-pack` takes `--keep`, `--kbps` and `--out`; `--wav-to-wem` makes each `.wav` a `.wem` beside it or under `--out`, with `-r`, `--overwrite` and `--kbps`; `--lipsync` takes `--to re` or `--to raw`, `-r` for subfolders, `--out` and `--overwrite`. `--help voice` lists them all. The exit code is 0 when every file was done and 1 when some weren't.
 
 ## How the file is laid out
 
 A speech file has a table of every line, then each line's sound and lip sync one after another. The table is sorted by each line's ID mixed with the language's number, and the game finds a line by halving it, so a line out of order can't be found at all. Any change means writing the whole file again: the game's own English file is 4.2 GB.
 
 > note: A `.re` is an HDF5 file, read and written by our own code. REDkit's plugin, run on Geralt's head from REDkit, opens ours and sets every one of the 145 shape keys at every frame to the game's own values (between 0 and 1, as above). A `.re` made from each of 3,236 of the game's lines and 1,145 older mod lines reads back to the same lip sync, every control within 0.0005 at every frame, and REDkit's own `.re` files read and write back with every value the same.
+
+> note: A `.wem` made from a `.wav` is laid out as the game's: the writer gives back every one of the game's 64,509 voice sounds without markers byte for byte from its own packets, and each sound is encoded with the game's settings (every packet one 20 ms CELT frame at full bandwidth, the same look-ahead and packet count). The encoding is Opus's own, from the Concentus library the app already uses to play the game's voice lines.
 
 > note: The writer was checked by writing the game's own `enpc.w3speech` (64,718 lines) back byte for byte, and mods' speech files the same way.

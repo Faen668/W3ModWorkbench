@@ -230,7 +230,7 @@ public static class ModPacker
                 string name = $"{language.Handle}pc.w3speech";
                 var top = caches.FirstOrDefault(c => c.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
                 progress?.Report(L.T("ModPacker.WritingSpeech", name, L.T("Count.VoiceLine", lines.Count)));
-                int total = SpeechFolder.Pack(lines, language, Path.Combine(content, name), top is null ? null : W3Speech.Open(top.FullName, language), cancel: cancel);
+                int total = SpeechFolder.Pack(lines, language, Path.Combine(content, name), top is null ? null : W3Speech.Open(top.FullName, language), cancel: cancel, kbps: App.Settings.SpeechKbps);
                 packedSpeech.Add(name);
                 made.Add(top is null ? L.T("ModPacker.VoiceLinesIn", L.T("Count.VoiceLine", total), name)
                     : L.T("ModPacker.VoiceLinesInWith", L.T("Count.VoiceLine", total), name, L.T("Count.VoiceLine", lines.Count)));

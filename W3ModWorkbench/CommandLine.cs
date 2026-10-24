@@ -281,7 +281,7 @@ public static partial class CommandLine
                                                as the engine would after loading them (under --out, or over themselves with --overwrite)
               --edit      <files or folders…>  Make edits to CR2W or JSON files; they're written over themselves, or under --out
               --recipe    <recipe file>        Run a recipe saved in the CR2W and JSON window (a .w3recipe.json file)
-              --speech-unpack, --speech-pack, --lipsync, --strings-to-csv, --csv-to-strings
+              --speech-unpack, --speech-pack, --wav-to-wem, --lipsync, --strings-to-csv, --csv-to-strings
                                                Voice lines, lip syncs and strings (see: --help voice)
               --help [topic], -h, /?           This help, or one topic of it
 

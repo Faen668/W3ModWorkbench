@@ -126,7 +126,7 @@
                         <TextBlock Text="{l:T SoundWindow.Subtitle}" FontWeight="SemiBold" VerticalAlignment="Center" />
                         <TextBlock x:Name="SpeakerText" Style="{StaticResource Small}" Margin="10,0,0,0" VerticalAlignment="Center" />
                     </DockPanel>
-                    <!-- making voice lines is RedSpeech Tool's job (nikich340's), so it's pointed to rather than done here -->
+                    <!-- lip sync made from a recording is RedSpeech Tool's (nikich340's), so it's pointed to rather than done here -->
                     <TextBlock DockPanel.Dock="Bottom" Style="{StaticResource Small}" TextWrapping="Wrap" Margin="0,8,0,0">
                         <Run Text="{l:T SoundWindow.RedSpeechNote}" />
                         <Hyperlink Click="RedSpeech_Click" Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}" ToolTip="{x:Static local:SoundWindow.RedSpeechUrl}"><Run Text="{l:T SoundWindow.RedSpeechLink}" /></Hyperlink>

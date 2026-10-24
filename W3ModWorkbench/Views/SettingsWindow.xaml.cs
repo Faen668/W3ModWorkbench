@@ -35,6 +35,7 @@ public partial class SettingsWindow : Window, IMessageHost
 
     private static readonly double[] FontSizes = [10, 11, 12, 13, 14, 15, 16, 18, 20, 22, 24];
     private static readonly int[] TabWidths = [2, 3, 4, 6, 8];
+    private static readonly int[] SpeechKbpsChoices = [32, 48, 64, 80, 96, 128];
 
     /// <summary>The sections: their English name (what <see cref="ShowPage"/> takes), the key of the name shown, icon and page.</summary>
     private readonly List<(string Name, string Key, string Icon, FrameworkElement Page)> _pages;
@@ -157,6 +158,8 @@ public partial class SettingsWindow : Window, IMessageHost
         SpeechUnpackWavCheck.IsChecked = settings.SpeechUnpackWav;
         SpeechUnpackReCheck.IsChecked = settings.SpeechUnpackRe;
         (settings.StringsCsvRedkit ? StringsCsvRedkit : StringsCsvRadish).IsChecked = true;
+        SpeechKbpsBox.ItemsSource = SpeechKbpsChoices.Select(k => L.T("Settings.Viewers.SpeechKbpsItem", k)).ToList();
+        SpeechKbpsBox.SelectedIndex = Nearest(SpeechKbpsChoices.Select(k => (double)k).ToArray(), settings.SpeechKbps);
         RedkitPropsStatus.Text = FileSafety.RedkitInstalled ? "" : L.T("Settings.Viewers.RedkitMissing");
         RedkitPropsStatus.Visibility = RedkitPropsStatus.Text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
         (settings.TextureDetail switch { 512 => Detail512, 2048 => Detail2048, 0 => DetailFull, _ => Detail1024 }).IsChecked = true;
@@ -697,6 +700,7 @@ public partial class SettingsWindow : Window, IMessageHost
         _settings.SpeechUnpackWav = SpeechUnpackWavCheck.IsChecked == true;
         _settings.SpeechUnpackRe = SpeechUnpackReCheck.IsChecked == true;
         _settings.StringsCsvRedkit = StringsCsvRedkit.IsChecked == true;
+        if (SpeechKbpsBox.SelectedIndex >= 0) _settings.SpeechKbps = SpeechKbpsChoices[SpeechKbpsBox.SelectedIndex];
         Core.Animation.ClothRig.Enabled = _settings.SimulateCloth;
         _settings.TextureDetail = Detail512.IsChecked == true ? 512 : Detail2048.IsChecked == true ? 2048 : DetailFull.IsChecked == true ? 0 : 1024;
         _settings.Save();

@@ -87,7 +87,7 @@ The Asset Browser's **EAB category** and **EAB tags** filters and columns, and t
 
 ## Concentus
 
-The scene viewer decodes the game's voice lines, which are Opus inside Wwise files, with Concentus, a C# port of the Opus reference decoder.
+The app decodes the game's voice lines, which are Opus inside Wwise files, with Concentus, a C# port of the Opus reference library, and encodes voice lines made from WAV recordings with its Opus encoder and Speex resampler.
 
 - Project: https://github.com/lostromb/concentus
 - Licence: BSD 3-Clause

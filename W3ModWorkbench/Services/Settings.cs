@@ -182,6 +182,9 @@ public sealed class Settings
     /// <summary>Whether strings are exported as REDkit's CSV (every language a column) rather than the radish layout most mod tools read.</summary>
     public bool StringsCsvRedkit { get; set; }
 
+    /// <summary>The bitrate a channel, in kbit/s, a voice line's .wav is made a .wem at (the game's own are near 64).</summary>
+    public int SpeechKbps { get; set; } = Core.Sounds.WemOpus.DefaultKbpsPerChannel;
+
     /// <summary>Whether the entity viewer shows what it's drawing (triangles, frame rate…) over the view.</summary>
     public bool ShowEntityInfo { get; set; } = true;
 
