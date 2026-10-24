@@ -3,7 +3,7 @@ title: Voice lines
 icon: E720
 order: 7
 summary: Unpack the game's speech files into sounds and lip syncs, and pack your own voice lines into one.
-keywords: voice speech w3speech enpc wem lipsync lip sync raw cr2w re hdf5 blender redkit face dialogue vo pack unpack redspeech
+keywords: voice speech w3speech enpc wem lipsync lip sync raw cr2w re hdf5 blender redkit face dialogue vo pack unpack redspeech convert command line batch
 windows: SpeechWindow
 ---
 The game keeps each language's voice lines in one **speech file**: `enpc.w3speech` for English, `depc.w3speech` for German, and so on. Each line is a sound (a Wwise `.wem`) and its lip sync, found by the line's string ID, the same number its words have in the strings files.
@@ -43,6 +43,10 @@ A `.re` file is the format REDkit's Blender plugin opens and saves: every frame 
 - A control in a `.re` that the face hasn't got is left out, with a note saying which.
 - A control that stays where it is is kept as one value, as the game keeps it, so a lip sync packed from a `.re` can be smaller than the one it came from. Moving controls are kept frame by frame.
 
+## Converting lip syncs
+
+**Convert lip syncs** turns lip sync files from one form to another without unpacking a speech file: `.raw`, `.cr2w` or `.re` files, or a folder of them (its subfolders too), to **.re (Blender)** or **.raw (the game's)**. Each is written beside the one it's made from; one already in that form is passed over, and so is one whose result is there already unless **Replace files there already** is ticked. Drop lip sync files on the window to fill it in.
+
 ## In a project
 
 You don't need to pack by hand. Put your lines in your workspace as `speech\en\ID.wem` (and `ID.raw`), and **Build** packs each language's folder into its speech file in the mod. A speech file at the top of the workspace gives the lines the folder hasn't got.
@@ -53,6 +57,18 @@ My Mod\workspace\
   speech\en\2115490012.raw     (or .re)
   speech\de\2115490012.wem
 ```
+
+## On the command line
+
+Each of these works without the window, for a script or a whole folder at once:
+
+```text
+W3ModWorkbench.exe --speech-unpack "D:\My Mod\content\enpc.w3speech" --re
+W3ModWorkbench.exe --speech-pack "D:\My Mod\workspace\speech\en" --keep
+W3ModWorkbench.exe --lipsync "D:\My Mod\workspace\speech" -r --to raw
+```
+
+`--speech-unpack` takes `--wav`, `--re` and `--out`; `--speech-pack` takes `--keep` and `--out`; `--lipsync` takes `--to re` or `--to raw`, `-r` for subfolders, `--out` and `--overwrite`. `--help voice` lists them all. The exit code is 0 when every file was done and 1 when some weren't.
 
 ## How the file is laid out
 

@@ -179,6 +179,9 @@ public sealed class Settings
     /// <summary>Whether unpacking a speech file saves lip syncs as .re (REDkit's, for Blender) rather than as the game keeps them.</summary>
     public bool SpeechUnpackRe { get; set; }
 
+    /// <summary>Whether strings are exported as REDkit's CSV (every language a column) rather than the radish layout most mod tools read.</summary>
+    public bool StringsCsvRedkit { get; set; }
+
     /// <summary>Whether the entity viewer shows what it's drawing (triangles, frame rate…) over the view.</summary>
     public bool ShowEntityInfo { get; set; } = true;
 

@@ -4,7 +4,7 @@
         xmlns:l="clr-namespace:W3ModWorkbench.Localisation"
         xmlns:local="clr-namespace:W3ModWorkbench"
         Title="{l:T SpeechWindow.Title}" Icon="pack://application:,,,/W3ModWorkbench;component/Assets/app.ico"
-        Width="1100" Height="720" MinWidth="900" MinHeight="600"
+        Width="1100" Height="840" MinWidth="900" MinHeight="780"
         WindowStartupLocation="CenterOwner" AllowDrop="True" DragOver="Window_DragOver" Drop="Window_Drop">
     <Window.Resources>
         <Style x:Key="Card" TargetType="Border">
@@ -39,6 +39,7 @@
     <Grid>
         <Grid Margin="14,12,14,12">
             <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
@@ -130,8 +131,42 @@
                 </Grid>
             </Border>
 
+            <!-- converting lip syncs -->
+            <Border Grid.Row="2" Grid.ColumnSpan="3" Style="{StaticResource Card}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <TextBlock Grid.ColumnSpan="4" Text="{l:T SpeechWindow.Convert}" Style="{StaticResource Heading}" />
+                    <TextBlock Grid.Row="1" Grid.ColumnSpan="4" Style="{StaticResource Note}" Text="{l:T SpeechWindow.ConvertHint}" />
+                    <TextBlock Grid.Row="2" Style="{StaticResource Label}" Text="{l:T SpeechWindow.LipSyncs}" />
+                    <TextBox x:Name="ConvertPathBox" Grid.Row="2" Grid.Column="1" Style="{StaticResource PathBox}" TextChanged="ConvertPath_Changed" />
+                    <Button Grid.Row="2" Grid.Column="2" Margin="8,0,0,0" Padding="12,5" Click="ChooseConvertFiles_Click" Content="{l:T SpeechWindow.ChooseFiles}" />
+                    <Button Grid.Row="2" Grid.Column="3" Margin="8,0,0,0" Padding="12,5" Click="ChooseConvertFolder_Click" Content="{l:T SpeechWindow.ChooseFolderButton}" />
+                    <TextBlock Grid.Row="3" Margin="0,10,10,0" Style="{StaticResource Label}" Text="{l:T SpeechWindow.ConvertTo}" />
+                    <DockPanel Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="3" Margin="0,10,0,0" LastChildFill="False">
+                        <RadioButton x:Name="ToReRadio" DockPanel.Dock="Left" GroupName="ConvertTo" VerticalAlignment="Center" Content="{l:T SpeechWindow.ToRe}" />
+                        <RadioButton x:Name="ToRawRadio" DockPanel.Dock="Left" GroupName="ConvertTo" VerticalAlignment="Center" Margin="16,0,0,0" Content="{l:T SpeechWindow.ToRaw}" />
+                        <CheckBox x:Name="ConvertOverwriteCheck" DockPanel.Dock="Left" Margin="32,0,0,0" VerticalAlignment="Center">
+                            <TextBlock TextWrapping="Wrap" Text="{l:T SpeechWindow.ConvertOverwrite}" />
+                        </CheckBox>
+                        <Button x:Name="ConvertButton" DockPanel.Dock="Right" Margin="12,0,0,0" Padding="16,6" Style="{DynamicResource AccentButtonStyle}" Click="Convert_Click"
+                                Content="{l:T SpeechWindow.ConvertButton}" IsEnabled="False" />
+                    </DockPanel>
+                </Grid>
+            </Border>
+
             <!-- what happened -->
-            <Border Grid.Row="2" Grid.ColumnSpan="3" Style="{StaticResource Card}" Margin="0" MinHeight="120">
+            <Border Grid.Row="3" Grid.ColumnSpan="3" Style="{StaticResource Card}" Margin="0" MinHeight="120">
                 <DockPanel>
                     <DockPanel DockPanel.Dock="Top">
                         <ProgressBar x:Name="Progress" DockPanel.Dock="Right" Width="180" Height="4" VerticalAlignment="Center" Visibility="Collapsed" />

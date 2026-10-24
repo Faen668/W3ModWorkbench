@@ -240,7 +240,7 @@ public partial class StringsWindow : Window, IMessageHost
         }
         else
         {
-            var csv = W3Strings.FromCsv(File.ReadAllText(path, Encoding.UTF8));
+            var csv = W3Strings.FromCsv(File.ReadAllText(path, Encoding.UTF8), W3Strings.LanguageFromName(path) ?? App.GameLanguage);
             (language, strings) = (csv.Language ?? W3Strings.LanguageFromName(path), csv.Strings);
             notes.AddRange(csv.Problems.Take(3).Select(p => L.T("StringsWindow.LineSkipped", p.Line, p.Message)));
             if (csv.Problems.Count > 3) notes.Add(L.T("StringsWindow.MoreLines", csv.Problems.Count - 3));
@@ -315,7 +315,7 @@ public partial class StringsWindow : Window, IMessageHost
             }
             else
             {
-                var csv = W3Strings.FromCsv(File.ReadAllText(path, Encoding.UTF8));
+                var csv = W3Strings.FromCsv(File.ReadAllText(path, Encoding.UTF8), StringsLanguage);
                 (language, old, skipped) = (csv.Language ?? W3Strings.LanguageFromName(path), csv.Strings, csv.Problems.Count);
             }
         }
@@ -707,22 +707,31 @@ public partial class StringsWindow : Window, IMessageHost
         var dialog = new SaveFileDialog
         {
             Title = L.T("StringsWindow.ExportStringsCSV"),
-            Filter = L.T("StringsWindow.StringsCSVCsvCsv"),
+            Filter = L.T("StringsWindow.CsvLayouts"),
+            FilterIndex = App.Settings.StringsCsvRedkit ? 2 : 1,
             FileName = $"{StringsLanguage.Handle}.csv",
             InitialDirectory = Path.GetDirectoryName(_path ?? _sourcePath) ?? "",
         };
         if (dialog.ShowDialog(this) != true) return;
+        // the layout picked is the one offered next time, as Settings > Viewers sets it
+        bool redkit = dialog.FilterIndex == 2;
+        App.Settings.StringsCsvRedkit = redkit;
+        App.Settings.Save();
+        int keysLeftOut = 0;
         try
         {
             FileSafety.CheckWrite(dialog.FileName);
-            File.WriteAllText(dialog.FileName, W3Strings.ToCsv(new W3StringsFile(StringsLanguage, _version, strings)), new UTF8Encoding(false));
+            var file = new W3StringsFile(StringsLanguage, _version, strings);
+            File.WriteAllText(dialog.FileName, redkit ? RedkitStringsCsv.Write([file], out keysLeftOut) : W3Strings.ToCsv(file), new UTF8Encoding(false));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             _ = ShowMessage(L.T("StringsWindow.CSVCouldNotSaved"), ex.Message, MessageKind.Error);
             return;
         }
-        _ = Message.Show(null, L.T("StringsWindow.Exported", Path.GetFileName(dialog.FileName)), MessageKind.Info, autoClose: true);
+        if (keysLeftOut > 0)
+            _ = Message.Show(L.T("StringsWindow.Exported", Path.GetFileName(dialog.FileName)), L.T("StringsWindow.RedkitKeysLeftOut", L.T("Count.String", keysLeftOut)), MessageKind.Info);
+        else _ = Message.Show(null, L.T("StringsWindow.Exported", Path.GetFileName(dialog.FileName)), MessageKind.Info, autoClose: true);
     }
 
     // ---------------------------------------------------------------- window

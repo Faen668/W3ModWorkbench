@@ -277,10 +277,19 @@ public static class W3Strings
 
     /// <summary>
     /// Reads a strings CSV. Lines starting with ; are comments, apart from the ;meta line naming the language.
-    /// Lines that can't be read are skipped and listed in the problems.
+    /// Lines that can't be read are skipped and listed in the problems. A CSV in REDkit's layout
+    /// (<see cref="RedkitStringsCsv"/>) is read too: its <paramref name="prefer"/> column when it has one, else the
+    /// first language with text.
     /// </summary>
-    public static (W3Language? Language, List<W3String> Strings, List<CsvProblem> Problems) FromCsv(string csv)
+    public static (W3Language? Language, List<W3String> Strings, List<CsvProblem> Problems) FromCsv(string csv, W3Language? prefer = null)
     {
+        if (RedkitStringsCsv.Is(csv))
+        {
+            var (languages, redkitProblems) = RedkitStringsCsv.Read(csv);
+            var chosen = languages.FirstOrDefault(p => prefer is not null && p.Key.Handle == prefer.Handle && p.Value.Count > 0);
+            if (chosen.Key is null) chosen = languages.FirstOrDefault(p => p.Value.Count > 0);
+            return (chosen.Key, chosen.Value ?? [], redkitProblems);
+        }
         W3Language? language = null;
         var strings = new List<W3String>();
         var problems = new List<CsvProblem>();

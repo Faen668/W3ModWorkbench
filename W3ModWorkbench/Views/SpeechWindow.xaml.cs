@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using Microsoft.Win32;
 using W3ModWorkbench.Core;
+using W3ModWorkbench.Core.Animation;
 using W3ModWorkbench.Core.Strings;
 using W3ModWorkbench.Localisation;
 
@@ -22,6 +23,7 @@ public partial class SpeechWindow : Window, IMessageHost
         InitializeComponent();
         WavCheck.IsChecked = App.Settings.SpeechUnpackWav;
         ReCheck.IsChecked = App.Settings.SpeechUnpackRe;
+        ToReRadio.IsChecked = true;
         foreach (var language in W3Strings.Languages) LanguageBox.Items.Add(language.Handle);
         LanguageBox.SelectedItem = "en";
         if (file is not null) Take(file);
@@ -36,22 +38,25 @@ public partial class SpeechWindow : Window, IMessageHost
 
     public Task ShowMessage(string? title, string message, MessageKind kind) => Message.Show(title, message, kind, primary: L.T("Common.OK"));
 
-    /// <summary>A dropped or given path: a speech file goes to unpacking, a folder to packing.</summary>
+    /// <summary>A dropped or given path: a speech file goes to unpacking, a folder to packing, lip sync files to converting.</summary>
     private void Take(string path)
     {
         if (Directory.Exists(path)) PackFolderBox.Text = path;
+        else if (LipSyncConverter.Extensions.Contains(Path.GetExtension(path).ToLowerInvariant())) ConvertPathBox.Text = path;
         else UnpackFileBox.Text = path;
     }
 
     private void Window_DragOver(object sender, DragEventArgs e)
     {
-        e.Effects = e.Data.GetData(DataFormats.FileDrop) is string[] { Length: 1 } ? DragDropEffects.Copy : DragDropEffects.None;
+        e.Effects = e.Data.GetData(DataFormats.FileDrop) is string[] { Length: > 0 } ? DragDropEffects.Copy : DragDropEffects.None;
         e.Handled = true;
     }
 
     private void Window_Drop(object sender, DragEventArgs e)
     {
-        if (e.Data.GetData(DataFormats.FileDrop) is string[] { Length: 1 } paths) Take(paths[0]);
+        if (e.Data.GetData(DataFormats.FileDrop) is not string[] paths) return;
+        if (paths.Length == 1) Take(paths[0]);
+        else if (paths.All(p => LipSyncConverter.Extensions.Contains(Path.GetExtension(p).ToLowerInvariant()))) ConvertPathBox.Text = string.Join("; ", paths);
     }
 
     private static string Clean(TextBox box) => box.Text.Trim().Trim('"');
@@ -199,13 +204,61 @@ public partial class SpeechWindow : Window, IMessageHost
         });
     }
 
+    // ---------------------------------------------------------------- converting lip syncs
+
+    /// <summary>The files and folders the convert box names, separated by semicolons.</summary>
+    private List<string> ConvertPaths() =>
+        [.. ConvertPathBox.Text.Split(';').Select(p => p.Trim().Trim('"')).Where(p => p.Length > 0)];
+
+    private void ChooseConvertFiles_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new OpenFileDialog { Title = L.T("SpeechWindow.ChooseLipSyncs"), Filter = L.T("SpeechWindow.LipSyncFilter"), Multiselect = true };
+        if (dialog.ShowDialog(this) == true) ConvertPathBox.Text = string.Join("; ", dialog.FileNames);
+    }
+
+    private void ChooseConvertFolder_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new OpenFolderDialog { Title = L.T("SpeechWindow.ChooseFolder") };
+        if (dialog.ShowDialog(this) == true) ConvertPathBox.Text = dialog.FolderName;
+    }
+
+    private void ConvertPath_Changed(object sender, TextChangedEventArgs e) => UpdateConvert();
+
+    private void UpdateConvert()
+    {
+        var paths = ConvertPaths();
+        ConvertButton.IsEnabled = _running is null && paths.Count > 0 && paths.All(p => File.Exists(p) || Directory.Exists(p));
+    }
+
+    private async void Convert_Click(object sender, RoutedEventArgs e)
+    {
+        var paths = ConvertPaths();
+        var format = ToRawRadio.IsChecked == true ? LipSyncFormat.Raw : LipSyncFormat.Re;
+        bool overwrite = ConvertOverwriteCheck.IsChecked == true;
+        await RunAsync(L.T("SpeechWindow.Converting"), progress =>
+        {
+            // a folder's subfolders too, as a project keeps a language a folder
+            var inputs = LipSyncConverter.Inputs(paths, recursive: true);
+            if (inputs.Count == 0) return [L.T("SpeechWindow.NoLipSyncs")];
+            var results = LipSyncConverter.Convert(inputs, format, null, overwrite, progress, _running!.Token);
+            var lines = new List<string>
+            {
+                L.T("SpeechWindow.Converted", L.T("Count.LipSync", results.Count(r => r.Output is not null)), LipSyncConverter.Extension(format),
+                    results.Count(r => r.Ok && r.Output is null), results.Count(r => !r.Ok)),
+            };
+            foreach (var r in results.Where(r => !r.Ok || r.Note is not null).Take(30))
+                lines.Add($"{Path.GetFileName(r.Input)}: {r.Error ?? r.Note}");
+            return lines;
+        });
+    }
+
     // ---------------------------------------------------------------- running
 
     /// <summary>Runs one job in the background with its progress shown, then lists what it says (or why it failed).</summary>
     private async Task RunAsync(string busy, Func<IProgress<(int Done, int Total)>, List<string>> job)
     {
         _running = new CancellationTokenSource();
-        UnpackButton.IsEnabled = PackButton.IsEnabled = false;
+        UnpackButton.IsEnabled = PackButton.IsEnabled = ConvertButton.IsEnabled = false;
         Progress.Visibility = Visibility.Visible;
         Progress.Value = 0;
         ResultsText.Text = busy;
@@ -232,6 +285,7 @@ public partial class SpeechWindow : Window, IMessageHost
             Progress.Visibility = Visibility.Collapsed;
             UnpackButton.IsEnabled = File.Exists(Clean(UnpackFileBox)) && SpeechFolder.LanguageOf(Clean(UnpackFileBox)) is not null;
             UpdatePack();
+            UpdateConvert();
         }
     }
 }

@@ -7,8 +7,9 @@ using W3ModWorkbench.Core.Cr2w;
 namespace W3ModWorkbench;
 
 /// <summary>
-/// The tool run from a command line or a script, with no window: converting CR2W files to JSON and back, and bulk
-/// edits. Anything else on the command line opens the window as usual.
+/// The tool run from a command line or a script, with no window: converting CR2W files to JSON and back, bulk
+/// edits, and voice lines, lip syncs and strings (CommandLine.Speech.cs). Anything else on the command line opens the
+/// window as usual.
 /// <code>
 /// W3ModWorkbench.exe --to-json   &lt;files or folders…&gt; [--out folder] [--recursive] [--overwrite]
 /// W3ModWorkbench.exe --from-json &lt;files or folders…&gt; [--out folder] [--recursive] [--overwrite] [--as-164]
@@ -19,14 +20,16 @@ namespace W3ModWorkbench;
 ///          --only-class &lt;name&gt; after an edit: that edit only to objects of the class
 /// W3ModWorkbench.exe --recipe    &lt;recipe file&gt; [--check]
 ///   any of them: --match &lt;regex&gt;, --skip &lt;regex&gt; for the files taken from folders
-/// W3ModWorkbench.exe --help [topic]   (-h, /?; topics: commands, options, filter, edits, recipes, examples)
+/// W3ModWorkbench.exe --speech-unpack &lt;files&gt; | --speech-pack &lt;folders&gt; | --lipsync &lt;files or folders&gt; --to re|raw
+/// W3ModWorkbench.exe --strings-to-csv &lt;files&gt; [--layout radish|redkit] | --csv-to-strings &lt;files&gt;
+/// W3ModWorkbench.exe --help [topic]   (-h, /?; topics: commands, options, filter, edits, recipes, voice, examples)
 /// </code>
 /// </summary>
-public static class CommandLine
+public static partial class CommandLine
 {
     private static readonly string[] Commands = ["--to-json", "--from-json", "--resave-164", "--edit", "--recipe", "--help", "-h", "/?", "-?", "--help-json"];
 
-    public static bool Handles(string[] args) => args.Length > 0 && Commands.Contains(args[0], StringComparer.OrdinalIgnoreCase);
+    public static bool Handles(string[] args) => args.Length > 0 && (Commands.Contains(args[0], StringComparer.OrdinalIgnoreCase) || SpeechCommands.Contains(args[0], StringComparer.OrdinalIgnoreCase));
 
     [DllImport("kernel32.dll")]
     private static extern bool AttachConsole(int processId);
@@ -56,6 +59,7 @@ public static class CommandLine
         {
             string command = args[0].ToLowerInvariant();
             if (command is "--help" or "-h" or "/?" or "-?" or "--help-json") return Help(output, args.Length > 1 ? args[1] : null);
+            if (SpeechCommands.Contains(command)) return RunSpeech(command, args, output);
 
             var paths = new List<string>();
             var edits = new List<Cr2wBulkEdit>();
@@ -261,8 +265,9 @@ public static class CommandLine
 
     // loc-ignore-start
     private const string Title = """
-        W3 Mod Workbench: CR2W files (.env, .w2mi, .w2ent…) to JSON and back, and the same edit to many at once.
-        --help <topic> shows one part: commands, options, filter, edits, recipes, examples.
+        W3 Mod Workbench: CR2W files (.env, .w2mi, .w2ent…) to JSON and back, the same edit to many at once, and voice
+        lines, lip syncs and strings.
+        --help <topic> shows one part: commands, options, filter, edits, recipes, voice, examples.
 
         """;
 
@@ -276,6 +281,8 @@ public static class CommandLine
                                                as the engine would after loading them (under --out, or over themselves with --overwrite)
               --edit      <files or folders…>  Make edits to CR2W or JSON files; they're written over themselves, or under --out
               --recipe    <recipe file>        Run a recipe saved in the CR2W and JSON window (a .w3recipe.json file)
+              --speech-unpack, --speech-pack, --lipsync, --strings-to-csv, --csv-to-strings
+                                               Voice lines, lip syncs and strings (see: --help voice)
               --help [topic], -h, /?           This help, or one topic of it
 
             """),
@@ -321,6 +328,7 @@ public static class CommandLine
               --recipe <file> runs one; --check tries a recipe of edits first; --match and --skip replace its filter.
 
             """),
+        ("voice", VoiceHelp),
         ("examples", """
             Examples
               W3ModWorkbench.exe --to-json "D:\envs" -r --out "D:\envs json"
@@ -328,6 +336,9 @@ public static class CommandLine
               W3ModWorkbench.exe --edit "D:\mymod\envs" -r --copy "D:\envs\my_look.env" envParams.m_toneMapping
               W3ModWorkbench.exe --edit "D:\mymod\envs" -r --scale envParams.m_globalFog.fogDensity 0.8 --fields value
               W3ModWorkbench.exe --recipe "%AppData%\W3ModWorkbench\recipes\Night fog.w3recipe.json" --check
+              W3ModWorkbench.exe --speech-unpack "D:\mymod\content\enpc.w3speech" --re
+              W3ModWorkbench.exe --lipsync "D:\mymod\workspace\speech" -r --to raw
+              W3ModWorkbench.exe --strings-to-csv en.w3strings de.w3strings --layout redkit --out "D:\redkit\strings.csv"
             """),
     ];
     // loc-ignore-end

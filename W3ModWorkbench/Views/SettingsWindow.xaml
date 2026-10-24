@@ -724,10 +724,24 @@
                             <TextBlock Style="{StaticResource SectionTitle}" Text="{l:T Settings.Viewers.SoundUpgrade}" />
                             <CheckBox x:Name="SoundUpgradeReplaceCheck" Content="{l:T Settings.Viewers.SoundUpgradeReplace}" Margin="0,4,0,0" />
                             <TextBlock Style="{StaticResource Hint}" Text="{l:T Settings.Viewers.SoundUpgradeReplaceHint}" />
-                            <CheckBox x:Name="SpeechUnpackWavCheck" Content="{l:T Settings.Viewers.SpeechUnpackWav}" Margin="0,10,0,0" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource SectionTitle}" Text="{l:T Settings.Viewers.VoiceAndStrings}" />
+                            <CheckBox x:Name="SpeechUnpackWavCheck" Content="{l:T Settings.Viewers.SpeechUnpackWav}" Margin="0,4,0,0" />
                             <TextBlock Style="{StaticResource Hint}" Text="{l:T Settings.Viewers.SpeechUnpackWavHint}" />
                             <CheckBox x:Name="SpeechUnpackReCheck" Content="{l:T Settings.Viewers.SpeechUnpackRe}" Margin="0,10,0,0" />
                             <TextBlock Style="{StaticResource Hint}" Text="{l:T Settings.Viewers.SpeechUnpackReHint}" />
+                            <TextBlock Margin="0,10,0,0" Text="{l:T Settings.Viewers.StringsCsvLayout}" />
+                            <Border Style="{StaticResource SegmentRow}" Margin="0,4,0,0">
+                                <StackPanel Orientation="Horizontal">
+                                    <RadioButton x:Name="StringsCsvRadish" GroupName="StringsCsvLayout" Style="{StaticResource Segment}" Content="{l:T Settings.Viewers.StringsCsvRadish}" />
+                                    <RadioButton x:Name="StringsCsvRedkit" GroupName="StringsCsvLayout" Style="{StaticResource Segment}" Content="{l:T Settings.Viewers.StringsCsvRedkit}" />
+                                </StackPanel>
+                            </Border>
+                            <TextBlock Style="{StaticResource Hint}" Text="{l:T Settings.Viewers.StringsCsvLayoutHint}" />
                         </StackPanel>
                     </Border>
                 </StackPanel>
