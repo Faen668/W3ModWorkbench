@@ -80,6 +80,12 @@ public sealed class MeshMaterial
     /// <summary>The flags the material's object has in its file, which a copy of it keeps (cooked files mark theirs).</summary>
     public int ExportFlags { get; init; }
 
+    /// <summary>
+    /// Whether it's drawn masked (cut out by its graph's mask, the diffuse's alpha in pbr_std): an instance's enableMask
+    /// where its graph lets it (canOverrideMasked), else the graph's own isMasked.
+    /// </summary>
+    public bool Masked { get; init; }
+
     /// <summary>The mesh points straight at a shader graph, which has nothing of its own to change: changes make a new instance of it.</summary>
     public bool IsGraph => Source.EndsWith(".w2mg", StringComparison.OrdinalIgnoreCase);
 
@@ -157,6 +163,7 @@ public sealed class MeshMaterial
             {
                 Source = InMesh, Bases = bases, Own = own, Inherited = inherited,
                 InlineExport = inline.Export?.Index, BasePath = basePath, BaseClass = baseClass, ExportFlags = FlagsOf(file, inline),
+                Masked = MaskedOf(file, inline, readFile, 0, null),
             };
         }
         return FromFile(file.Import(handle)?.Path ?? "", readFile);
@@ -177,6 +184,7 @@ public sealed class MeshMaterial
             {
                 Source = path, Bases = bases, Own = own, Inherited = inherited,
                 BasePath = basePath, BaseClass = baseClass, ExportFlags = FlagsOf(file, instance),
+                Masked = MaskedOf(file, instance, readFile, 0, null),
             };
         }
         if (file?.First("CMaterialGraph") is not null)
@@ -184,6 +192,7 @@ public sealed class MeshMaterial
             {
                 Source = path, Bases = bases, Inherited = GraphParameters(file, Path.GetFileName(path)),
                 BasePath = path, BaseClass = "CMaterialGraph", ExportFlags = file.Exports.Count > 0 ? ExportFlagsOf(file, 0) : 0,
+                Masked = file.First("CMaterialGraph")!["isMasked"] is true,
             };
         return new MeshMaterial { Source = path, Bases = bases };
     }
@@ -199,6 +208,26 @@ public sealed class MeshMaterial
         {
             return null;
         }
+    }
+
+    /// <summary>
+    /// Whether an instance draws masked: the nearest instance down its chain that sets enableMask decides, where the
+    /// graph at the end can be overridden; else the graph's isMasked.
+    /// </summary>
+    private static bool MaskedOf(Cr2wFile file, RedObject instance, Func<string, byte[]?> readFile, int depth, bool? chosen)
+    {
+        if (chosen is null && instance["enableMask"] is bool set) chosen = set;
+        if (depth > 8 || instance["baseMaterial"] is not RedHandle handle) return chosen ?? false;
+        if (file.Object(handle) is { ClassName: "CMaterialInstance" } inlineBase && !ReferenceEquals(inlineBase, instance))
+            return MaskedOf(file, inlineBase, readFile, depth + 1, chosen);
+        var next = ReadMaterial(file.Import(handle)?.Path ?? "", readFile);
+        if (next?.First("CMaterialInstance") is { } baseInstance) return MaskedOf(next, baseInstance, readFile, depth + 1, chosen);
+        if (next?.First("CMaterialGraph") is { } graph)
+        {
+            bool masked = graph["isMasked"] is true;
+            return graph["canOverrideMasked"] is true && chosen is { } c ? c : masked;
+        }
+        return chosen ?? false;
     }
 
     private static (string? Path, string? Class) BaseOf(Cr2wFile file, RedObject instance) =>

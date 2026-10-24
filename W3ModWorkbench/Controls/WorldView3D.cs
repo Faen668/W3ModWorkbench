@@ -2187,7 +2187,8 @@ float4 StripePS(StripeOut i) : SV_Target
         c.PixelShader.SetShaderResources(10, null, null, null);
         c.PixelShader.SetShaderResource(16, null);
         // keep drawing while the eye adapts, the day runs or the weather changes
-        Animating = _playing || _hasWater || !FakeDayCycle || !WeatherPaused || !InstantAdaptation || _lighting?.PreviousWeather is not null;
+        Animating = _playing || _hasWater || !FakeDayCycle || !WeatherPaused || !InstantAdaptation || _lighting?.PreviousWeather is not null
+            || _held.Count > 0 || CameraEasing;
     }
 
     /// <summary>The environment's two balance maps (colour lookup pictures, 8 x 8 tiles of 64 x 64), or null for none.</summary>
@@ -2243,10 +2244,35 @@ float4 StripePS(StripeOut i) : SV_Target
 
     // ---- moving ----
 
-    /// <summary>Moves the camera by the keys held, never below the ground.</summary>
+    // the camera's motion eased as REDkit's is: its velocity follows the keys held, reaching them within about a tenth
+    // of a second and coming to rest as smoothly; looking round and the wheel's steps are spread over the next few frames
+    private Vector3 _velocity;
+    private Vector2 _lookPending;
+    private Vector3 _stepPending;
+    private const float MoveEase = 12, LookEase = 30, StepEase = 14;
+
+    private bool CameraEasing => _velocity.LengthSquared() > 1e-6f || _lookPending.LengthSquared() > 1e-8f || _stepPending.LengthSquared() > 1e-6f;
+
+    /// <summary>Moves the camera by the keys held, never below the ground, eased in and out.</summary>
     private void Fly(float seconds)
     {
-        if (_held.Count == 0) return;
+        seconds = MathF.Min(seconds, 1 / 20f);
+        if (!CameraEasing && _held.Count == 0) return;
+        if (_lookPending != Vector2.Zero)
+        {
+            var look = _lookPending * (1 - MathF.Exp(-LookEase * seconds));
+            if (_lookPending.LengthSquared() < 1e-8f) look = _lookPending;
+            _lookPending -= look;
+            _yaw += look.X;
+            _pitch = Math.Clamp(_pitch + look.Y, -1.5f, 1.5f);
+        }
+        if (_stepPending != Vector3.Zero)
+        {
+            var step = _stepPending * (1 - MathF.Exp(-StepEase * seconds));
+            if (_stepPending.LengthSquared() < 1e-6f) step = _stepPending;
+            _stepPending -= step;
+            _eye += step;
+        }
         float speed = _speed * SpeedUnit * (_held.Contains(Key.LeftShift) || _held.Contains(Key.RightShift) ? 5 : 1)
             * (_held.Contains(Key.LeftCtrl) || _held.Contains(Key.RightCtrl) ? 0.25f : 1);
         var forward = Forward();
@@ -2258,13 +2284,14 @@ float4 StripePS(StripeOut i) : SV_Target
         if (_held.Contains(Key.A) || _held.Contains(Key.Left)) move -= right;
         if (_held.Contains(Key.E) || _held.Contains(Key.Space)) move += Vector3.UnitZ;
         if (_held.Contains(Key.Q) || _held.Contains(Key.C)) move -= Vector3.UnitZ;
-        if (move == Vector3.Zero) return;
-        // never more than a 60th of a second's worth at once (after the view sat idle the first frame's time was up to a
-        // tenth of a second, a jump of a metre or more when tapping a key), and slower near the ground: a tenth of the
-        // speed at the ground rising to all of it 10 m up, so the camera can be placed finely among the plants
+        // slower near the ground: a tenth of the speed at the ground rising to all of it 10 m up, so the camera can be
+        // placed finely among the plants
         float above = MathF.Max(0, _eye.Z - GroundAt(new Vector2(_eye.X, _eye.Y)));
         speed *= Math.Clamp(above / 10, 0.1f, 1);
-        _eye += Vector3.Normalize(move) * speed * MathF.Min(seconds, 1 / 60f);
+        var wanted = move == Vector3.Zero ? Vector3.Zero : Vector3.Normalize(move) * speed;
+        _velocity += (wanted - _velocity) * (1 - MathF.Exp(-MoveEase * seconds));
+        if (move == Vector3.Zero && _velocity.LengthSquared() < 1e-6f) _velocity = Vector3.Zero;
+        _eye += _velocity * seconds;
         KeepAboveGround();
         Moved();
     }
@@ -2289,6 +2316,7 @@ float4 StripePS(StripeOut i) : SV_Target
         var m = System.Text.RegularExpressions.Regex.Match(text, @"\[\[\s*([-\d.eE+]+)\s+([-\d.eE+]+)\s+([-\d.eE+]+)(?:\s+[-\d.eE+]+)?\s*\|\s*([-\d.eE+]+)\s+([-\d.eE+]+)");
         if (!m.Success) return false;
         float F(int i) => float.Parse(m.Groups[i].Value, System.Globalization.CultureInfo.InvariantCulture);
+        _velocity = Vector3.Zero; _lookPending = Vector2.Zero; _stepPending = Vector3.Zero;
         _eye = new Vector3(F(1), F(2), F(3));
         // REDkit keeps turning its angles past a full turn as the mouse goes round (a pitch of -3993.81 is -33.81)
         static float Wrapped(float degrees) => degrees - 360 * MathF.Round(degrees / 360);
@@ -2349,9 +2377,8 @@ float4 StripePS(StripeOut i) : SV_Target
         var at = e.GetPosition(this);
         var moved = at - _lastMouse;
         _lastMouse = at;
-        _yaw += (float)moved.X * 0.0045f;
-        _pitch = Math.Clamp(_pitch - (float)moved.Y * 0.0045f, -1.5f, 1.5f);
-        Moved();
+        _lookPending += new Vector2((float)moved.X * 0.0045f, -(float)moved.Y * 0.0045f);
+        Animating = true;
     }
 
     protected override void OnMouseUp(MouseButtonEventArgs e)
@@ -2375,8 +2402,8 @@ float4 StripePS(StripeOut i) : SV_Target
         else
         {
             float above = MathF.Max(0, _eye.Z - GroundAt(new Vector2(_eye.X, _eye.Y)));
-            _eye += Forward() * notches * _speed * Math.Clamp(above * 0.1f, 0.05f, 5);
-            KeepAboveGround();
+            _stepPending += Forward() * notches * _speed * Math.Clamp(above * 0.1f, 0.05f, 5);
+            Animating = true;
         }
         Moved();
         e.Handled = true;

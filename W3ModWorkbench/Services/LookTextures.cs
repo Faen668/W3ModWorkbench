@@ -297,6 +297,9 @@ public static class LookTextures
             c.Emissive = new(LinearF(glow.R / 255f) * multiplier, LinearF(glow.G / 255f) * multiplier, LinearF(glow.B / 255f) * multiplier, c.Emissive.W);
             c.Glow.X = 2;
         }
+        // a masked material (its instance's enableMask, or its graph's isMasked) cut out by the diffuse's alpha, at the
+        // 0.33 the game's compiled masked material shaders discard below (467 of them; none cut higher but the dithered)
+        if (material.Masked && c.Kind.Y <= 0) c.Kind.Y = 0.33f;
         return new MaterialLook { Kind = kind, Normal = normal, Mask = mask, Detail1 = detail1, Detail2 = detail2, Shift = shift, Blick = blick, Emissive = emissive, Constants = c };
     }
 
