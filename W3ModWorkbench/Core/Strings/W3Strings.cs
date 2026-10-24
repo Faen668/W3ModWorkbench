@@ -43,7 +43,7 @@ public static class W3Strings
     public const uint DefaultVersion = 162;
 
     /// <summary>
-    /// The languages the game knows, in the order they're usually listed. Five have no key at all; their files
+    /// The languages the game knows (its content0 has strings in each), in the order they're usually listed. Seven have no key; their files
     /// can't be told apart by content, so the file name decides.
     /// </summary>
     public static readonly IReadOnlyList<W3Language> Languages =
@@ -61,9 +61,11 @@ public static class W3Strings
         new("zh", 0x18632176, 0x16875467),
         new("ar", 0, 0),
         new("br", 0, 0),
+        new("cn", 0, 0),
         new("esmx", 0, 0),
         new("kr", 0, 0),
         new("tr", 0, 0),
+        new("ua", 0, 0),
     ];
 
     public static W3Language? Language(string handle) =>

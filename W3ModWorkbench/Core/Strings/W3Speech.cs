@@ -25,6 +25,15 @@ public sealed class W3Speech
         _lipSyncs = lipSyncs;
     }
 
+    /// <summary>The file's version (164 for the Remastered's).</summary>
+    public uint Version { get; private init; }
+
+    /// <summary>The language it was opened as.</summary>
+    public W3Language Language { get; private init; } = W3Strings.Languages[0];
+
+    /// <summary>Every line in the file's order (sorted by the stored, mixed ID), lines without a sound included.</summary>
+    public IReadOnlyList<uint> Order { get; private init; } = [];
+
     public int Count => _sounds.Count;
 
     public bool Has(uint stringId) => _sounds.ContainsKey(stringId);
@@ -63,16 +72,35 @@ public sealed class W3Speech
         fs.ReadExactly(table);
         var sounds = new Dictionary<uint, (long, long)>(count);
         var lipSyncs = new Dictionary<uint, (long, long)>(count);
+        var order = new List<uint>(count);
         for (int i = 0; i < count; i++)
         {
             var entry = table.AsSpan(i * 40, 40);
             uint id = BinaryPrimitives.ReadUInt32LittleEndian(entry) ^ language.Magic;
+            order.Add(id);
             long offset = BinaryPrimitives.ReadInt64LittleEndian(entry[8..]), size = BinaryPrimitives.ReadInt64LittleEndian(entry[16..]);
             if (offset > 0 && size > 4 && size < 64 << 20) sounds.TryAdd(id, (offset, size));
             long lipOffset = BinaryPrimitives.ReadInt64LittleEndian(entry[24..]), lipSize = BinaryPrimitives.ReadInt64LittleEndian(entry[32..]);
             if (lipOffset > 0 && lipSize > 16 && lipSize < 16 << 20) lipSyncs.TryAdd(id, (lipOffset, lipSize));
         }
-        return new W3Speech(path, sounds, lipSyncs);
+        return new W3Speech(path, sounds, lipSyncs) { Version = BinaryPrimitives.ReadUInt32LittleEndian(head.AsSpan(4)), Language = language, Order = order };
+    }
+
+    /// <summary>
+    /// A line's sound as the file keeps it: the Wwise RIFF file, the length in seconds saved with it and the number
+    /// after that (1 in the game's file), or null when this file hasn't got it.
+    /// </summary>
+    public SpeechVoice? Voice(uint stringId)
+    {
+        if (!_sounds.TryGetValue(stringId, out var at)) return null;
+        using var fs = new FileStream(Path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        fs.Position = at.Offset;
+        var data = new byte[at.Size];
+        fs.ReadExactly(data);
+        int length = BinaryPrimitives.ReadInt32LittleEndian(data);
+        if (length <= 0 || length + 12 != data.Length) throw new InvalidDataException(L.T("W3Speech.VoiceEntryOdd", stringId));
+        return new(data.AsSpan(4, length).ToArray(), BinaryPrimitives.ReadSingleLittleEndian(data.AsSpan(4 + length)),
+            BinaryPrimitives.ReadUInt32LittleEndian(data.AsSpan(8 + length)));
     }
 
     /// <summary>A line's sound as a Wwise RIFF file, or null when this file hasn't got it.</summary>

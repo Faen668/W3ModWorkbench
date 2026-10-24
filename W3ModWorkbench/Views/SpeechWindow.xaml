@@ -1,0 +1,146 @@
+<Window x:Class="W3ModWorkbench.SpeechWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:l="clr-namespace:W3ModWorkbench.Localisation"
+        xmlns:local="clr-namespace:W3ModWorkbench"
+        Title="{l:T SpeechWindow.Title}" Icon="pack://application:,,,/W3ModWorkbench;component/Assets/app.ico"
+        Width="1100" Height="720" MinWidth="900" MinHeight="600"
+        WindowStartupLocation="CenterOwner" AllowDrop="True" DragOver="Window_DragOver" Drop="Window_Drop">
+    <Window.Resources>
+        <Style x:Key="Card" TargetType="Border">
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="14,12" />
+            <Setter Property="Margin" Value="0,0,0,10" />
+            <Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}" />
+            <Setter Property="Background" Value="{DynamicResource CardBackgroundFillColorDefaultBrush}" />
+        </Style>
+        <Style x:Key="Heading" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+        <Style x:Key="Note" TargetType="TextBlock">
+            <Setter Property="Opacity" Value="0.65" />
+            <Setter Property="Margin" Value="0,2,0,8" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+        <Style x:Key="Label" TargetType="TextBlock">
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Margin" Value="0,0,10,0" />
+            <Setter Property="Opacity" Value="0.8" />
+        </Style>
+        <Style x:Key="PathBox" TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+            <Setter Property="FontFamily" Value="Cascadia Mono, Consolas" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Padding" Value="8,5" />
+        </Style>
+    </Window.Resources>
+
+    <Grid>
+        <Grid Margin="14,12,14,12">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="10" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Grid.ColumnSpan="3" Margin="0,0,0,10">
+                <TextBlock Text="{l:T SpeechWindow.Title}" FontSize="16" FontWeight="SemiBold" />
+                <TextBlock Opacity="0.65" Margin="0,2,0,0" TextWrapping="Wrap" Text="{l:T SpeechWindow.Intro}" />
+            </StackPanel>
+
+            <!-- unpacking a speech file -->
+            <Border Grid.Row="1" Style="{StaticResource Card}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <TextBlock Grid.ColumnSpan="3" Text="{l:T SpeechWindow.Unpack}" Style="{StaticResource Heading}" />
+                    <TextBlock Grid.Row="1" Grid.ColumnSpan="3" Style="{StaticResource Note}" Text="{l:T SpeechWindow.UnpackHint}" />
+                    <TextBlock Grid.Row="2" Style="{StaticResource Label}" Text="{l:T SpeechWindow.SpeechFile}" />
+                    <TextBox x:Name="UnpackFileBox" Grid.Row="2" Grid.Column="1" Style="{StaticResource PathBox}" TextChanged="UnpackFile_Changed" />
+                    <Button Grid.Row="2" Grid.Column="2" Margin="8,0,0,0" Padding="12,5" Click="ChooseUnpackFile_Click" Content="{l:T SpeechWindow.Choose}" />
+                    <TextBlock x:Name="UnpackInfo" Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="2" Margin="0,6,0,0" TextWrapping="Wrap" Opacity="0.8" />
+                    <TextBlock Grid.Row="4" Margin="0,8,10,0" Style="{StaticResource Label}" Text="{l:T SpeechWindow.IntoFolder}" />
+                    <TextBox x:Name="UnpackFolderBox" Grid.Row="4" Grid.Column="1" Margin="0,8,0,0" Style="{StaticResource PathBox}" />
+                    <Button Grid.Row="4" Grid.Column="2" Margin="8,8,0,0" Padding="12,5" Click="ChooseUnpackFolder_Click" Content="{l:T SpeechWindow.Choose}" />
+                    <StackPanel Grid.Row="5" Grid.Column="1" Grid.ColumnSpan="2" Margin="0,10,0,0">
+                        <CheckBox x:Name="WavCheck">
+                            <TextBlock TextWrapping="Wrap" Text="{l:T SpeechWindow.AlsoWav}" />
+                        </CheckBox>
+                        <Button x:Name="UnpackButton" HorizontalAlignment="Right" Margin="0,10,0,0" Padding="16,6" Style="{DynamicResource AccentButtonStyle}" Click="Unpack_Click"
+                                Content="{l:T SpeechWindow.UnpackButton}" IsEnabled="False" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- packing a folder -->
+            <Border Grid.Row="1" Grid.Column="2" Style="{StaticResource Card}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <TextBlock Grid.ColumnSpan="3" Text="{l:T SpeechWindow.Pack}" Style="{StaticResource Heading}" />
+                    <TextBlock Grid.Row="1" Grid.ColumnSpan="3" Style="{StaticResource Note}" Text="{l:T SpeechWindow.PackHint}" />
+                    <TextBlock Grid.Row="2" Style="{StaticResource Label}" Text="{l:T SpeechWindow.Folder}" />
+                    <TextBox x:Name="PackFolderBox" Grid.Row="2" Grid.Column="1" Style="{StaticResource PathBox}" TextChanged="PackFolder_Changed" />
+                    <Button Grid.Row="2" Grid.Column="2" Margin="8,0,0,0" Padding="12,5" Click="ChoosePackFolder_Click" Content="{l:T SpeechWindow.Choose}" />
+                    <TextBlock x:Name="PackInfo" Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="2" Margin="0,6,0,0" TextWrapping="Wrap" Opacity="0.8" />
+                    <TextBlock Grid.Row="4" Margin="0,8,10,0" Style="{StaticResource Label}" Text="{l:T SpeechWindow.Language}" />
+                    <ComboBox x:Name="LanguageBox" Grid.Row="4" Grid.Column="1" Margin="0,8,0,0" Width="120" HorizontalAlignment="Left" SelectionChanged="Language_Changed" />
+                    <TextBlock Grid.Row="5" Margin="0,8,10,0" Style="{StaticResource Label}" Text="{l:T SpeechWindow.SpeechFile}" />
+                    <TextBox x:Name="PackFileBox" Grid.Row="5" Grid.Column="1" Margin="0,8,0,0" Style="{StaticResource PathBox}" TextChanged="PackFile_Changed" />
+                    <Button Grid.Row="5" Grid.Column="2" Margin="8,8,0,0" Padding="12,5" Click="ChoosePackFile_Click" Content="{l:T SpeechWindow.Choose}" />
+                    <StackPanel Grid.Row="6" Grid.Column="1" Grid.ColumnSpan="2" Margin="0,10,0,0">
+                        <CheckBox x:Name="KeepCheck" IsEnabled="False">
+                            <TextBlock TextWrapping="Wrap" Text="{l:T SpeechWindow.KeepExisting}" />
+                        </CheckBox>
+                        <Button x:Name="PackButton" HorizontalAlignment="Right" Margin="0,10,0,0" Padding="16,6" Style="{DynamicResource AccentButtonStyle}" Click="Pack_Click"
+                                Content="{l:T SpeechWindow.PackButton}" IsEnabled="False" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- what happened -->
+            <Border Grid.Row="2" Grid.ColumnSpan="3" Style="{StaticResource Card}" Margin="0" MinHeight="120">
+                <DockPanel>
+                    <DockPanel DockPanel.Dock="Top">
+                        <ProgressBar x:Name="Progress" DockPanel.Dock="Right" Width="180" Height="4" VerticalAlignment="Center" Visibility="Collapsed" />
+                        <TextBlock Text="{l:T SpeechWindow.Results}" Style="{StaticResource Heading}" />
+                    </DockPanel>
+                    <ScrollViewer Margin="0,8,0,0" VerticalScrollBarVisibility="Auto">
+                        <TextBlock x:Name="ResultsText" TextWrapping="Wrap" Opacity="0.85" Text="{l:T SpeechWindow.NothingYet}" />
+                    </ScrollViewer>
+                </DockPanel>
+            </Border>
+        </Grid>
+
+        <local:MessageCard x:Name="Message" IsModal="True" />
+    </Grid>
+</Window>
