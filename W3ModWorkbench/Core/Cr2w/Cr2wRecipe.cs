@@ -182,17 +182,10 @@ public sealed class Cr2wRecipe
 
     // ---------------------------------------------------------------- running
 
-    /// <summary>
-    /// The files a bulk edit works on: CR2W files and converted JSON files alike, the JSON ones from folders only when
-    /// there isn't the same file found as CR2W.
-    /// </summary>
-    public static List<(string File, string Root)> EditInputs(IReadOnlyCollection<string> paths, bool recursive)
-    {
-        var inputs = Cr2wJsonBatch.Inputs(paths, fromJson: false, recursive);
-        var seen = inputs.Select(i => i.File).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        inputs.AddRange(Cr2wJsonBatch.Inputs(paths.Where(Directory.Exists), fromJson: true, recursive).Where(j => seen.Add(j.File)));
-        return inputs;
-    }
+    /// <summary>The files a bulk edit works on: CR2W files and converted JSON files alike, in one look through the folders.</summary>
+    public static List<(string File, string Root)> EditInputs(IReadOnlyCollection<string> paths, bool recursive,
+        IProgress<Cr2wJsonProgress>? progress = null, CancellationToken token = default) =>
+        Cr2wJsonBatch.Inputs(paths, Cr2wInputKind.Both, recursive, progress, token);
 
     /// <summary>The edits to make, with the copies' source files read now.</summary>
     public List<Cr2wBulkEdit> MakeEdits() => [.. Edits.Select(e => e.ToEdit())];
@@ -208,10 +201,10 @@ public sealed class Cr2wRecipe
         {
             if (Edits.Count == 0) throw new InvalidDataException(L.T("Cr2wRecipe.NoEdits"));
             var edits = MakeEdits();
-            var inputs = EditInputs(Inputs, Recursive);
+            var inputs = EditInputs(Inputs, Recursive, progress, token);
             return inputs.Count == 0 ? null : Cr2wJsonBatch.BulkEdit(inputs, edits, output, progress, token, dryRun);
         }
-        var files = Cr2wJsonBatch.Inputs(Inputs, fromJson: Kind == Cr2wRecipeKind.FromJson, Recursive);
+        var files = Cr2wJsonBatch.Inputs(Inputs, fromJson: Kind == Cr2wRecipeKind.FromJson, Recursive, progress, token);
         if (files.Count == 0) return null;
         return Kind switch
         {

@@ -43,9 +43,12 @@ public static class CommandLine
     {
         // a windowed program has no console of its own: write to the one it was started from, if any, unless the
         // output is being read already (attaching would send it to the console instead)
-        if (!OutputRedirected()) AttachConsole(-1);
-        else Console.OutputEncoding = new System.Text.UTF8Encoding(false);
+        bool redirected = OutputRedirected();
+        bool console = !redirected && AttachConsole(-1);
+        if (redirected) Console.OutputEncoding = new System.Text.UTF8Encoding(false);
         var output = Console.Out;
+        // in a terminal, a line that keeps saying how far it is; a script reading the output gets only the results
+        var progress = console ? new ConsoleProgress(output) : null;
         output.WriteLine();
         try
         {
@@ -120,7 +123,9 @@ public static class CommandLine
                 var recipe = Cr2wRecipe.Load(Path.GetFullPath(paths[0]));
                 if (check && recipe.Kind != Cr2wRecipeKind.Edit) throw new ArgumentException("--check goes with a recipe of edits: converting has nothing to try first.");
                 output.WriteLine(recipe.Name);
-                return Report(output, recipe.Run(dryRun: check), check,
+                var ran = recipe.Run(progress, dryRun: check);
+                progress?.Clear();
+                return Report(output, ran, check,
                     recipe.Kind == Cr2wRecipeKind.FromJson ? NoJson : recipe.Kind == Cr2wRecipeKind.Edit ? NoEditable : NoCr2w);
             }
             if (paths.Count == 0) throw new ArgumentException("Give the files or folders to work on. Run --help-json for the options.");
@@ -129,14 +134,16 @@ public static class CommandLine
             if (command == "--edit" && edits.Count == 0) throw new ArgumentException("--edit needs an edit: --copy, --set, --remove, --scale or --offset.");
 
             // an edit takes converted JSON files from folders too, as the window does
-            var inputs = command == "--edit" ? Cr2wRecipe.EditInputs(paths, recursive) : Cr2wJsonBatch.Inputs(paths, fromJson: command == "--from-json", recursive);
+            var inputs = command == "--edit" ? Cr2wRecipe.EditInputs(paths, recursive, progress)
+                : Cr2wJsonBatch.Inputs(paths, fromJson: command == "--from-json", recursive, progress);
             var results = inputs.Count == 0 ? null : command switch
             {
-                "--to-json" => Cr2wJsonBatch.ToJson(inputs, outputFolder, overwrite),
-                "--from-json" => Cr2wJsonBatch.FromJson(inputs, outputFolder, overwrite, asLatest: asLatest),
-                "--resave-164" => Cr2wJsonBatch.ResaveAsLatest(inputs, outputFolder, overwrite),
-                _ => Cr2wJsonBatch.BulkEdit(inputs, edits, outputFolder, dryRun: check),
+                "--to-json" => Cr2wJsonBatch.ToJson(inputs, outputFolder, overwrite, progress),
+                "--from-json" => Cr2wJsonBatch.FromJson(inputs, outputFolder, overwrite, progress, asLatest: asLatest),
+                "--resave-164" => Cr2wJsonBatch.ResaveAsLatest(inputs, outputFolder, overwrite, progress),
+                _ => Cr2wJsonBatch.BulkEdit(inputs, edits, outputFolder, progress, dryRun: check),
             };
+            progress?.Clear();
             return Report(output, results, check, command == "--from-json" ? NoJson : command == "--edit" ? NoEditable : NoCr2w);
         }
         catch (Exception ex) when (ex is ArgumentException or FormatException or IOException or InvalidDataException or UnauthorizedAccessException)
@@ -153,6 +160,38 @@ public static class CommandLine
     private const string NoJson = "No converted JSON files were found there.";
     private const string NoCr2w = "No CR2W files were found there.";
     private const string NoEditable = "No CR2W or converted JSON files were found there.";
+
+    /// <summary>How far a command is, as one line in the terminal written over each time (it comes ten times a second at most).</summary>
+    private sealed class ConsoleProgress(TextWriter output) : IProgress<Cr2wJsonProgress>
+    {
+        private readonly object _lock = new();
+        private int _width;
+
+        public void Report(Cr2wJsonProgress p)
+        {
+            string line = p.Stage switch // loc-ignore-start
+            {
+                Cr2wJsonStage.Finding => $"Finding files: {p.Done:N0} so far",
+                Cr2wJsonStage.Checking => $"Looking at each file: {p.Done:N0} of {p.Total:N0}",
+                _ => $"{p.Done:N0} of {p.Total:N0}  {Path.GetFileName(p.Current)}",
+            }; // loc-ignore-end
+            lock (_lock)
+            {
+                output.Write("\r" + line.PadRight(_width));
+                _width = line.Length;
+            }
+        }
+
+        /// <summary>Clears the line, for the results to be written from the start of it.</summary>
+        public void Clear()
+        {
+            lock (_lock)
+            {
+                if (_width > 0) output.Write("\r" + new string(' ', _width) + "\r");
+                _width = 0;
+            }
+        }
+    }
 
     /// <summary>Writes what happened to each file and the totals; the exit code is 0 when every file was done.</summary>
     private static int Report(TextWriter output, List<Cr2wJsonResult>? results, bool check, string noneFound)

@@ -228,7 +228,7 @@ public partial class Cr2wJsonWindow : Window, IMessageHost
         await RunAsync(ConvertButton, ConvertStopButton, ConvertProgress, ConvertStatus, ConvertResults, dryRun: false,
             resave ? L.T("Cr2wJsonWindow.Resaving") : fromJson ? L.T("Cr2wJsonWindow.ConvertingBack") : L.T("Cr2wJsonWindow.Converting"), (progress, token) =>
             {
-                var inputs = Cr2wJsonBatch.Inputs(paths, fromJson, recursive);
+                var inputs = Cr2wJsonBatch.Inputs(paths, fromJson, recursive, progress, token);
                 return inputs.Count == 0 ? null
                     : resave ? Cr2wJsonBatch.ResaveAsLatest(inputs, output, overwrite, progress, token)
                     : fromJson ? Cr2wJsonBatch.FromJson(inputs, output, overwrite, progress, token, asLatest)
@@ -267,12 +267,21 @@ public partial class Cr2wJsonWindow : Window, IMessageHost
         bar.IsIndeterminate = true;
         status.Text = $"{doing}…";
         results.ItemsSource = null;
+        // finding the files in the folders (no total yet), checking each one's kind, then the work itself
         var progress = new Progress<Cr2wJsonProgress>(p =>
         {
-            bar.IsIndeterminate = false;
-            bar.Maximum = p.Total;
-            bar.Value = p.Done;
-            status.Text = L.T("Cr2wJsonWindow.Of", doing, p.Done, p.Total, Path.GetFileName(p.Current));
+            bar.IsIndeterminate = p.Stage == Cr2wJsonStage.Finding;
+            if (p.Stage != Cr2wJsonStage.Finding)
+            {
+                bar.Maximum = p.Total;
+                bar.Value = p.Done;
+            }
+            status.Text = p.Stage switch
+            {
+                Cr2wJsonStage.Finding => L.T("Cr2wJsonWindow.FindingFiles", p.Done, Path.GetDirectoryName(p.Current) ?? ""),
+                Cr2wJsonStage.Checking => L.T("Cr2wJsonWindow.CheckingFiles", p.Done, p.Total, Path.GetFileName(p.Current)),
+                _ => L.T("Cr2wJsonWindow.Of", doing, p.Done, p.Total, Path.GetFileName(p.Current)),
+            };
         });
         var clock = System.Diagnostics.Stopwatch.StartNew();
         try
@@ -357,9 +366,19 @@ public partial class Cr2wJsonWindow : Window, IMessageHost
     /// <summary>Shows the source file's properties (or the first file to edit's) to pick the path from.</summary>
     private async void Choose_Click(object sender, RoutedEventArgs e)
     {
-        string? file = Kind == BulkEditKind.Copy && SourceBox.Text.Trim() is { Length: > 0 } source ? source
-            : _bulkInputs.Select(r => r.Path).Select(p => File.Exists(p) ? p : Cr2wJsonBatch.Inputs([p], false, true).Select(i => i.File).FirstOrDefault()
-                ?? Cr2wJsonBatch.Inputs([p], true, true).Select(i => i.File).FirstOrDefault()).FirstOrDefault(p => p is not null);
+        string? file = Kind == BulkEditKind.Copy && SourceBox.Text.Trim() is { Length: > 0 } source ? source : null;
+        if (file is null && _bulkInputs.Count > 0)
+        {
+            // the first file to edit: a folder's first CR2W or converted file, found in the background (r4data is big)
+            PickerTitle.Text = L.T("Cr2wJsonWindow.FindingFileToRead");
+            PickerTree.ItemsSource = null;
+            PickerPanel.Visibility = Visibility.Visible;
+            var paths = _bulkInputs.Select(r => r.Path).ToList();
+            bool recursive = BulkRecursiveCheck.IsChecked == true;
+            file = await Task.Run(() => paths.Select(p => File.Exists(p) ? p : Directory.Exists(p) ? Cr2wJsonBatch.FirstInput(p, Cr2wInputKind.Both, recursive) : null)
+                .FirstOrDefault(p => p is not null));
+            if (file is null) PickerPanel.Visibility = Visibility.Collapsed;
+        }
         if (file is null)
         {
             await ShowMessage(L.T("Cr2wJsonWindow.NoFileChoose"), Kind == BulkEditKind.Copy ? L.T("Cr2wJsonWindow.ChooseFileCopyFirst") : L.T("Cr2wJsonWindow.AddFileEditFirst"), MessageKind.Info);
@@ -558,7 +577,7 @@ public partial class Cr2wJsonWindow : Window, IMessageHost
         await RunAsync(ApplyButton, BulkStopButton, BulkProgress, BulkStatus, BulkResults, dryRun, dryRun ? L.T("Cr2wJsonWindow.Checking") : L.T("Cr2wJsonWindow.Editing"), (progress, token) =>
         {
             // CR2W files and converted JSON files alike
-            var inputs = Cr2wRecipe.EditInputs(paths, recursive);
+            var inputs = Cr2wRecipe.EditInputs(paths, recursive, progress, token);
             return inputs.Count == 0 ? null : Cr2wJsonBatch.BulkEdit(inputs, edits, output, progress, token, dryRun);
         }, L.T("Cr2wJsonWindow.NoCR2WConvertedJson"));
     }

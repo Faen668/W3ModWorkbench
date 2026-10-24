@@ -13,7 +13,24 @@ public sealed record Cr2wJsonResult(string Input, string? Output, string? Error,
     public bool Ok => Error is null;
 }
 
-public sealed record Cr2wJsonProgress(int Done, int Total, string Current);
+/// <summary>Which part of a batch is under way: finding the files in the folders, checking which are the right kind, or the work.</summary>
+public enum Cr2wJsonStage
+{
+    Working,
+    Finding,
+    Checking,
+}
+
+/// <summary>How far a batch is: files done of the total (for Finding, files found so far with no total), and the file it's on.</summary>
+public sealed record Cr2wJsonProgress(int Done, int Total, string Current, Cr2wJsonStage Stage = Cr2wJsonStage.Working);
+
+/// <summary>Which files a folder gives a batch: CR2W files, converted JSON files, or both (for bulk edits).</summary>
+public enum Cr2wInputKind
+{
+    Cr2w,
+    Json,
+    Both,
+}
 
 /// <summary>
 /// Converting and bulk editing many files at once, for the CR2W ⇄ JSON window and the command line. A CR2W file
@@ -26,27 +43,108 @@ public static class Cr2wJsonBatch
 
     /// <summary>The files to work on: the files given, and the files in the folders given (with their subfolders when <paramref name="recursive"/>).</summary>
     /// <param name="fromJson">Look for converted JSON files in folders, rather than CR2W ones.</param>
-    public static List<(string File, string Root)> Inputs(IEnumerable<string> paths, bool fromJson, bool recursive)
+    public static List<(string File, string Root)> Inputs(IEnumerable<string> paths, bool fromJson, bool recursive,
+        IProgress<Cr2wJsonProgress>? progress = null, CancellationToken token = default) =>
+        Inputs(paths, fromJson ? Cr2wInputKind.Json : Cr2wInputKind.Cr2w, recursive, progress, token);
+
+    /// <summary>
+    /// The files to work on: the files given, as they are, and the files of the kind asked for in the folders given.
+    /// A big folder (REDkit's r4data has over 200,000 files) takes a while, so it's said as it goes: the files found,
+    /// then each checked, many at once. Files whose extension says they can't be CR2W (pictures, sounds, text) are
+    /// passed over without being opened.
+    /// </summary>
+    public static List<(string File, string Root)> Inputs(IEnumerable<string> paths, Cr2wInputKind kind, bool recursive,
+        IProgress<Cr2wJsonProgress>? progress = null, CancellationToken token = default)
     {
-        var result = new List<(string, string)>();
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (string given in paths)
+        var given = new List<(string File, string Root)>();
+        var found = new List<(string File, string Root)>();
+        var report = new Throttled(progress);
+        var options = new EnumerationOptions { RecurseSubdirectories = recursive, IgnoreInaccessible = true, AttributesToSkip = FileAttributes.System };
+        foreach (string entry in paths)
         {
-            string path = Path.GetFullPath(given);
+            string path = Path.GetFullPath(entry);
             if (File.Exists(path))
             {
-                if (seen.Add(path)) result.Add((path, Path.GetDirectoryName(path)!));
+                given.Add((path, Path.GetDirectoryName(path)!));
                 continue;
             }
             if (!Directory.Exists(path)) continue;
-            var option = recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
-            foreach (string file in Directory.EnumerateFiles(path, "*", option).Order(StringComparer.OrdinalIgnoreCase))
+            var inFolder = new List<string>();
+            foreach (string file in Directory.EnumerateFiles(path, "*", options))
             {
-                bool wanted = fromJson ? IsConvertedJson(file) : !file.EndsWith(Suffix, StringComparison.OrdinalIgnoreCase) && IsCr2w(file);
-                if (wanted && seen.Add(file)) result.Add((file, path));
+                token.ThrowIfCancellationRequested();
+                if (MightBe(file, kind)) inFolder.Add(file);
+                report.Maybe(() => new Cr2wJsonProgress(found.Count + inFolder.Count, 0, file, Cr2wJsonStage.Finding));
             }
+            inFolder.Sort(StringComparer.OrdinalIgnoreCase);
+            found.AddRange(inFolder.Select(f => (f, path)));
         }
+
+        // each file's first bytes, many at once; the order found is kept
+        var wanted = new bool[found.Count];
+        int done = 0;
+        Parallel.For(0, found.Count, new ParallelOptions { CancellationToken = token, MaxDegreeOfParallelism = Math.Max(2, Environment.ProcessorCount) }, i =>
+        {
+            string file = found[i].File;
+            wanted[i] = file.EndsWith(Suffix, StringComparison.OrdinalIgnoreCase) ? IsConvertedJson(file) : IsCr2w(file);
+            int now = Interlocked.Increment(ref done);
+            report.Maybe(() => new Cr2wJsonProgress(now, found.Count, file, Cr2wJsonStage.Checking), now == found.Count);
+        });
+
+        var result = new List<(string, string)>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var input in given)
+            if (seen.Add(input.File)) result.Add(input);
+        for (int i = 0; i < found.Count; i++)
+            if (wanted[i] && seen.Add(found[i].File)) result.Add(found[i]);
         return result;
+    }
+
+    /// <summary>The first file in a folder a batch of this kind would take, without looking through the rest.</summary>
+    public static string? FirstInput(string folder, Cr2wInputKind kind, bool recursive)
+    {
+        var options = new EnumerationOptions { RecurseSubdirectories = recursive, IgnoreInaccessible = true, AttributesToSkip = FileAttributes.System };
+        return Directory.EnumerateFiles(folder, "*", options)
+            .FirstOrDefault(f => MightBe(f, kind) && (f.EndsWith(Suffix, StringComparison.OrdinalIgnoreCase) ? IsConvertedJson(f) : IsCr2w(f)));
+    }
+
+    /// <summary>Whether a file in a folder is worth opening for this kind of batch: by its name alone.</summary>
+    private static bool MightBe(string file, Cr2wInputKind kind)
+    {
+        bool json = file.EndsWith(Suffix, StringComparison.OrdinalIgnoreCase);
+        return kind switch
+        {
+            Cr2wInputKind.Json => json,
+            Cr2wInputKind.Cr2w => !json && !NeverCr2w.Contains(Path.GetExtension(file)),
+            _ => json || !NeverCr2w.Contains(Path.GetExtension(file)),
+        };
+    }
+
+    /// <summary>Extensions of files that are never CR2W: pictures, sounds, video, text and source, models, programs.</summary>
+    private static readonly HashSet<string> NeverCr2w = new(StringComparer.OrdinalIgnoreCase) // loc-ignore-start
+    {
+        ".dds", ".tga", ".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff", ".psd", ".exr", ".hdr",
+        ".wem", ".bnk", ".wav", ".ogg", ".mp3", ".opus", ".pck", ".usm", ".bik", ".mp4", ".avi",
+        ".txt", ".xml", ".csv", ".ini", ".ws", ".log", ".md", ".html", ".htm", ".yml", ".yaml", ".lua", ".py", ".bat", ".cmd",
+        ".fbx", ".obj", ".nif", ".re", ".apb", ".apx", ".max", ".ma", ".mb", ".blend", ".gltf", ".glb",
+        ".exe", ".dll", ".pdb", ".zip", ".7z", ".rar", ".swf", ".ttf", ".otf", ".fnt",
+    }; // loc-ignore-end
+
+    /// <summary>
+    /// Passes progress on at most about ten times a second, plus the last: a scan of 200,000 files would otherwise
+    /// queue as many updates for the window.
+    /// </summary>
+    private sealed class Throttled(IProgress<Cr2wJsonProgress>? progress)
+    {
+        private long _next;
+
+        public void Maybe(Func<Cr2wJsonProgress> make, bool last = false)
+        {
+            if (progress is null) return;
+            long now = Environment.TickCount64, next = Interlocked.Read(ref _next);
+            if (!last && (now < next || Interlocked.CompareExchange(ref _next, now + 100, next) != next)) return;
+            progress.Report(make());
+        }
     }
 
     private static readonly HashSet<string> Cr2wExtensions = new(StringComparer.OrdinalIgnoreCase)
@@ -272,6 +370,7 @@ public static class Cr2wJsonBatch
         CancellationToken token, Func<string, string, Cr2wJsonResult> work)
     {
         var results = new Cr2wJsonResult[inputs.Count];
+        var report = new Throttled(progress);
         int done = 0;
         try
         {
@@ -284,7 +383,8 @@ public static class Cr2wJsonBatch
                 {
                     results[i] = new Cr2wJsonResult(file, null, ex.Message);
                 }
-                progress?.Report(new Cr2wJsonProgress(Interlocked.Increment(ref done), inputs.Count, file));
+                int now = Interlocked.Increment(ref done);
+                report.Maybe(() => new Cr2wJsonProgress(now, inputs.Count, file), now == inputs.Count);
             });
         }
         catch (OperationCanceledException) { }
