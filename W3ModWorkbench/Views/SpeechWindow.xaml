@@ -83,6 +83,9 @@
                         <CheckBox x:Name="WavCheck">
                             <TextBlock TextWrapping="Wrap" Text="{l:T SpeechWindow.AlsoWav}" />
                         </CheckBox>
+                        <CheckBox x:Name="ReCheck" Margin="0,6,0,0">
+                            <TextBlock TextWrapping="Wrap" Text="{l:T SpeechWindow.LipSyncsAsRe}" />
+                        </CheckBox>
                         <Button x:Name="UnpackButton" HorizontalAlignment="Right" Margin="0,10,0,0" Padding="16,6" Style="{DynamicResource AccentButtonStyle}" Click="Unpack_Click"
                                 Content="{l:T SpeechWindow.UnpackButton}" IsEnabled="False" />
                     </StackPanel>

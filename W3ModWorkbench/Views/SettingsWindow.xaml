@@ -726,6 +726,8 @@
                             <TextBlock Style="{StaticResource Hint}" Text="{l:T Settings.Viewers.SoundUpgradeReplaceHint}" />
                             <CheckBox x:Name="SpeechUnpackWavCheck" Content="{l:T Settings.Viewers.SpeechUnpackWav}" Margin="0,10,0,0" />
                             <TextBlock Style="{StaticResource Hint}" Text="{l:T Settings.Viewers.SpeechUnpackWavHint}" />
+                            <CheckBox x:Name="SpeechUnpackReCheck" Content="{l:T Settings.Viewers.SpeechUnpackRe}" Margin="0,10,0,0" />
+                            <TextBlock Style="{StaticResource Hint}" Text="{l:T Settings.Viewers.SpeechUnpackReHint}" />
                         </StackPanel>
                     </Border>
                 </StackPanel>

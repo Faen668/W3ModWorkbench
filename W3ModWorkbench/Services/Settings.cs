@@ -176,6 +176,9 @@ public sealed class Settings
     /// <summary>Whether unpacking a speech file saves each voice line as a .wav as well as its .wem.</summary>
     public bool SpeechUnpackWav { get; set; }
 
+    /// <summary>Whether unpacking a speech file saves lip syncs as .re (REDkit's, for Blender) rather than as the game keeps them.</summary>
+    public bool SpeechUnpackRe { get; set; }
+
     /// <summary>Whether the entity viewer shows what it's drawing (triangles, frame rate…) over the view.</summary>
     public bool ShowEntityInfo { get; set; } = true;
 

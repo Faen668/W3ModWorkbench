@@ -1,5 +1,6 @@
-using System.Buffers.Binary;
 using System.IO;
+using W3ModWorkbench.Core.Animation;
+using W3ModWorkbench.Core.Hdf5;
 using W3ModWorkbench.Core.Sounds;
 using W3ModWorkbench.Localisation;
 
@@ -12,20 +13,23 @@ public sealed record SpeechFolderLine(uint StringId, string? Wem, string? LipSyn
 /// Voice lines as loose files and back: a speech file unpacked into a folder, and a folder packed into a speech file.
 /// The files are named as RedSpeech Tool names them, so a folder from either opens in the other: the string ID first
 /// (anything after it is left for people to read), <c>.wem</c> for the sound, <c>.raw</c> for the lip sync as the
-/// Remastered keeps it and <c>.cr2w</c> for one as older files keep it.
+/// Remastered keeps it and <c>.cr2w</c> for one as older files keep it. A lip sync can also be a <c>.re</c>, as REDkit's
+/// Blender plugin edits them, which is made the game's own when packed.
 /// </summary>
 public static class SpeechFolder
 {
     /// <summary>
     /// Unpacks every line of <paramref name="speech"/> into <paramref name="folder"/>: <c>ID.wem</c>, and its lip sync as
-    /// <c>ID.raw</c> or <c>ID.cr2w</c> (whichever it is), and with <paramref name="wav"/> each sound as <c>ID.wav</c> too.
-    /// Returns how many lines, and the lines whose sound couldn't be made a WAV.
+    /// <c>ID.raw</c> or <c>ID.cr2w</c> (whichever it is), or with <paramref name="re"/> as <c>ID.re</c> for Blender, and with
+    /// <paramref name="wav"/> each sound as <c>ID.wav</c> too. Returns how many lines, the lines whose sound couldn't be
+    /// made a WAV, and those whose lip sync couldn't be made a <c>.re</c> (kept as they were).
     /// </summary>
-    public static (int Lines, List<uint> NoWav) Unpack(W3Speech speech, string folder, bool wav,
+    public static (int Lines, List<uint> NoWav, List<uint> NoRe) Unpack(W3Speech speech, string folder, bool wav, bool re = false,
         IProgress<(int Done, int Total)>? progress = null, CancellationToken cancel = default)
     {
         Directory.CreateDirectory(folder);
         var noWav = new List<uint>();
+        var noRe = new List<uint>();
         var order = speech.Order;
         for (int i = 0; i < order.Count; i++)
         {
@@ -46,18 +50,27 @@ public static class SpeechFolder
                         noWav.Add(id);
                     }
             }
-            if (speech.LipSync(id) is { } lipSync)
-                File.WriteAllBytes(Path.Combine(folder, $"{id}{(IsCr2w(lipSync) ? ".cr2w" : ".raw")}"), lipSync);
+            if (speech.LipSync(id) is not { } lipSync) continue;
+            if (re)
+                try
+                {
+                    File.WriteAllBytes(Path.Combine(folder, $"{id}.re"), Hdf5Writer.Write(LipSyncRe.ToRe(LipSyncFile.ReadAny(lipSync))));
+                    continue;
+                }
+                catch (Exception ex) when (ex is InvalidDataException or EndOfStreamException or ArgumentException or IndexOutOfRangeException)
+                {
+                    noRe.Add(id);
+                }
+            File.WriteAllBytes(Path.Combine(folder, $"{id}{(LipSyncFile.IsCr2w(lipSync) ? ".cr2w" : ".raw")}"), lipSync);
         }
         progress?.Report((order.Count, order.Count));
-        return (order.Count, noWav);
+        return (order.Count, noWav, noRe);
     }
-
-    private static bool IsCr2w(byte[] data) => data.Length >= 4 && BinaryPrimitives.ReadUInt32LittleEndian(data) == 0x57325243; // "CR2W"
 
     /// <summary>
     /// The voice lines a folder holds, by the string ID each file's name starts with: <c>.wem</c> sounds, and lip syncs
-    /// as <c>.raw</c>, <c>.cr2w</c> or a name that's only the ID. Notes say what was left out and why.
+    /// as <c>.raw</c>, <c>.cr2w</c>, <c>.re</c> or a name that's only the ID. Notes say what was left out and why, and which
+    /// <c>.re</c> files have controls the face hasn't got.
     /// </summary>
     public static (List<SpeechFolderLine> Lines, List<string> Notes) Read(string folder)
     {
@@ -72,13 +85,13 @@ public static class SpeechFolder
             while (digits < name.Length && char.IsAsciiDigit(name[digits])) digits++;
             if (digits == 0 || !uint.TryParse(name.AsSpan(0, digits), out uint id))
             {
-                if (ext is ".wem" or ".raw" or ".cr2w") notes.Add(L.T("SpeechFolder.NoId", name));
+                if (ext is ".wem" or ".raw" or ".cr2w" or ".re") notes.Add(L.T("SpeechFolder.NoId", name));
                 continue;
             }
             var into = ext switch
             {
                 ".wem" => wems,
-                ".raw" or ".cr2w" => lipSyncs,
+                ".raw" or ".cr2w" or ".re" => lipSyncs,
                 "" when digits == name.Length => lipSyncs,
                 _ => null,
             };
@@ -86,6 +99,18 @@ public static class SpeechFolder
             if (into is null) continue;
             if (!into.TryAdd(id, file)) notes.Add(L.T("SpeechFolder.TwoFiles", id, Path.GetFileName(into[id]), name));
         }
+        // a .re is checked now, so one that won't pack is said before anything is written
+        foreach (var (id, file) in lipSyncs.Where(p => IsRe(p.Value)).ToList())
+            try
+            {
+                var (_, unknown) = LipSyncRe.FromRe(Hdf5Reader.Read(File.ReadAllBytes(file)));
+                if (unknown.Count > 0) notes.Add(L.T("SpeechFolder.ReUnknownControls", Path.GetFileName(file), string.Join(", ", unknown.Take(8)) + (unknown.Count > 8 ? ", …" : "")));
+            }
+            catch (Exception ex) when (ex is InvalidDataException or EndOfStreamException or ArgumentException or IndexOutOfRangeException or KeyNotFoundException)
+            {
+                notes.Add(L.T("SpeechFolder.ReNotRead", Path.GetFileName(file), ex.Message));
+                lipSyncs.Remove(id);
+            }
         // a .wav beside its line's .wem is a copy to listen to; one without is a sound still to be made a .wem
         wavs.ExceptWith(wems.Keys);
         if (wavs.Count > 0) notes.Add(L.T("SpeechFolder.WavsLeft", L.T("Count.File", wavs.Count)));
@@ -108,7 +133,7 @@ public static class SpeechFolder
         foreach (var line in lines)
             all[line.StringId] = new SpeechLine(line.StringId,
                 () => line.Wem is null ? null : Voice(File.ReadAllBytes(line.Wem)),
-                () => line.LipSync is null ? null : File.ReadAllBytes(line.LipSync));
+                () => line.LipSync is null ? null : LipSync(line.LipSync));
         string temp = output + ".writing";
         try
         {
@@ -122,6 +147,12 @@ public static class SpeechFolder
         }
         return all.Count;
     }
+
+    /// <summary>A lip sync file as a speech file keeps it: a <c>.re</c> made the game's own, any other as it is.</summary>
+    public static byte[] LipSync(string file) =>
+        IsRe(file) ? LipSyncRe.FromRe(Hdf5Reader.Read(File.ReadAllBytes(file))).LipSync.Write() : File.ReadAllBytes(file);
+
+    private static bool IsRe(string file) => Path.GetExtension(file).Equals(".re", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>A .wem as a speech file keeps it, with the length in seconds and the 1 the game's lines have.</summary>
     public static SpeechVoice Voice(byte[] wem) => new(wem, W3SpeechWriter.Duration(wem), W3SpeechWriter.Compression);
