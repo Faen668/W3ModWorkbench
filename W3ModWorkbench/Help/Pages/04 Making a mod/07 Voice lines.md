@@ -42,6 +42,8 @@ A `.re` file is the format REDkit's Blender plugin opens and saves: every frame 
 - The game keeps 148 controls for a face; REDkit's own `.re` files keep the first 145. Ours keep all 148, the last three moving the head a little, and Blender passes over any it hasn't got.
 - A control in a `.re` that the face hasn't got is left out, with a note saying which.
 - A control that stays where it is is kept as one value, as the game keeps it, so a lip sync packed from a `.re` can be smaller than the one it came from. Moving controls are kept frame by frame.
+- REDkit's Blender plugin was made for Blender 4 (Python 3.11). On Blender 5 its **Import .re mimic animation** stops with an error about `fcurves`, for REDkit's own files too, so use Blender 4.x for lip syncs.
+- Blender keeps a shape key between its **Range Min** and **Max**, 0 and 1 unless you change them. The game's lines dip a little below 0 now and then (the jaw most of all), and those dips come back as 0. Set **Range Min** to -1 on the face's shape keys before importing to keep them.
 
 ## Converting lip syncs
 
@@ -74,6 +76,6 @@ W3ModWorkbench.exe --lipsync "D:\My Mod\workspace\speech" -r --to raw
 
 A speech file has a table of every line, then each line's sound and lip sync one after another. The table is sorted by each line's ID mixed with the language's number, and the game finds a line by halving it, so a line out of order can't be found at all. Any change means writing the whole file again: the game's own English file is 4.2 GB.
 
-> note: A `.re` is an HDF5 file, read and written by our own code. A `.re` made from each of 3,236 of the game's lines and 1,145 older mod lines reads back to the same lip sync, every control within 0.0005 at every frame, and REDkit's own `.re` files read and write back with every value the same.
+> note: A `.re` is an HDF5 file, read and written by our own code. REDkit's plugin, run on Geralt's head from REDkit, opens ours and sets every one of the 145 shape keys at every frame to the game's own values (between 0 and 1, as above). A `.re` made from each of 3,236 of the game's lines and 1,145 older mod lines reads back to the same lip sync, every control within 0.0005 at every frame, and REDkit's own `.re` files read and write back with every value the same.
 
 > note: The writer was checked by writing the game's own `enpc.w3speech` (64,718 lines) back byte for byte, and mods' speech files the same way.
