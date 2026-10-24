@@ -463,11 +463,19 @@ public partial class CutsceneWindow : Window, IMessageHost
         ScrubSlider.SmallChange = 1 / 30.0;
         ScrubSlider.LargeChange = 1;
         ScrubSlider.IsEnabled = PlayButton.IsEnabled = StartButton.IsEnabled = true;
-        CameraToggle.IsEnabled = p.Camera?.Rig is not null;
+        bool hasCamera = p.Camera?.Rig is not null;
+        CameraToggle.IsEnabled = hasCamera;
         CameraBox.ItemsSource = p.Cameras.Where(c => c.Rig is not null).Select(c => c.Name).ToList();
         CameraBox.SelectedItem = p.Camera?.Name;
         CameraBox.IsEnabled = p.Cameras.Count(c => c.Rig is not null) > 1;
-        if (!CameraToggle.IsEnabled) CameraToggle.ToolTip = L.T("CutsceneWindow.CutsceneHasNoCamera");
+        // not the button's IsEnabled, which reads false while the play controls round it wait for the actors
+        if (!hasCamera)
+        {
+            CameraToggle.ToolTip = L.T("CutsceneWindow.CutsceneHasNoCamera");
+            CameraToggle.IsChecked = false;
+        }
+        // through the camera from the start, as the game shows it, when there's one to look through
+        ApplyCameraMode();
         SetTime(0);
         if (prepared is null)
         {

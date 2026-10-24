@@ -230,7 +230,7 @@
                         <TextBlock x:Name="TimeText" DockPanel.Dock="Left" Width="116" Margin="10,0,6,0" VerticalAlignment="Center"
                                    FontFamily="Cascadia Mono, Consolas" FontSize="12.5" Text="{l:T CutsceneWindow.S}" />
                         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-                            <ToggleButton x:Name="CameraToggle" Padding="12,5" Margin="10,0,0,0" IsEnabled="False" Click="CameraToggle_Click"
+                            <ToggleButton x:Name="CameraToggle" Padding="12,5" Margin="10,0,0,0" IsChecked="True" IsEnabled="False" Click="CameraToggle_Click"
                                           ToolTip="{l:T CutsceneWindow.SeeThroughCutscenesCamera}">
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock Style="{StaticResource IconText}" Text="&#xE722;" />

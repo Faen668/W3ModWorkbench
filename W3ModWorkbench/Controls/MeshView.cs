@@ -1034,6 +1034,7 @@ public sealed partial class MeshView : Border
     private void RebuildFloor()
     {
         _floor.Children.Clear();
+        _floorLines = [];
         if (!_showFloor || _parts.Count == 0) return;
         Point3D min, max;
         double size;
@@ -1065,6 +1066,44 @@ public sealed partial class MeshView : Border
         }
         AddLines(_floor, minor, Color.FromRgb(72, 72, 82), 0.6);
         AddLines(_floor, major, Color.FromRgb(112, 112, 126), 1);
+        _floorLines = [.. _floor.Children.OfType<LineGeometryModel3D>().Zip(new[] { minor, major }.Where(l => l.Count > 0))];
+        ClipFloor();
+    }
+
+    // the floor's lines as laid out, each kept with what draws it, to be cut to what's in front of the camera
+    private List<(LineGeometryModel3D Model, List<(Vector3 A, Vector3 B)> Lines)> _floorLines = [];
+
+    /// <summary>
+    /// Cuts the floor's lines off just in front of the camera. A line drawn with an end behind the camera is put in the
+    /// wrong place, and wildly so as the camera moves the least bit: a camera low over a wide grid (a cutscene's) saw
+    /// the lines running towards it jump about every frame.
+    /// </summary>
+    private void ClipFloor()
+    {
+        if (_floorLines.Count == 0) return;
+        var look = _camera.LookDirection;
+        look.Normalize();
+        var (eye, forward) = (new Vector3((float)_camera.Position.X, (float)_camera.Position.Y, (float)_camera.Position.Z), new Vector3((float)look.X, (float)look.Y, (float)look.Z));
+        // a little past the near plane, so what's kept is drawn
+        float near = (float)_camera.NearPlaneDistance * 1.5f;
+        foreach (var (model, lines) in _floorLines)
+        {
+            var positions = new Vector3Collection(lines.Count * 2);
+            var indices = new IntCollection(lines.Count * 2);
+            foreach (var (a, b) in lines)
+            {
+                float da = Vector3.Dot(a - eye, forward), db = Vector3.Dot(b - eye, forward);
+                if (da < near && db < near) continue;
+                var (from, to) = (a, b);
+                if (da < near) from = a + (b - a) * ((near - da) / (db - da));
+                else if (db < near) to = a + (b - a) * ((near - da) / (db - da));
+                indices.Add(positions.Count);
+                positions.Add(from);
+                indices.Add(positions.Count);
+                positions.Add(to);
+            }
+            model.Geometry = new HxLines { Positions = positions, Indices = indices };
+        }
     }
 
     /// <summary>A chunk's vertex colours, blended across each triangle from its corners; white for a chunk without them.</summary>
@@ -1386,6 +1425,7 @@ public sealed partial class MeshView : Border
             // the game's angle is up the height, as the view's is
             _camera.FieldOfView = Math.Min(170, through.FieldOfView);
             _headlight.Direction = LightFrom(through.Forward);
+            ClipFloor();
             return;
         }
         double yaw = _yaw * Math.PI / 180, pitch = _pitch * Math.PI / 180;
@@ -1396,6 +1436,7 @@ public sealed partial class MeshView : Border
         _camera.UpDirection = new Vector3D(0, 1, 0);
         _camera.FieldOfView = Upright(FieldOfView);
         _headlight.Direction = LightFrom(direction);
+        ClipFloor();
     }
 
     private readonly System.Windows.Threading.DispatcherTimer _resizeSettled;

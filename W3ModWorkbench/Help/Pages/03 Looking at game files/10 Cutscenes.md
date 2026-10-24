@@ -16,7 +16,7 @@ Press **Load preview** over the view to load the actors (until then the events, 
 
 - **Play** ({{Space}}), {{Home}} to go back to the start, the loop button ({{L}}), or drag the bar. Clicking the timeline's ruler moves there too.
 - Drag the view to turn, right-drag to move, the wheel to come closer; double-click to see everyone.
-- **Through the camera** ({{C}}) shows it as the cutscene's camera sees it, in a 16:9 picture. **Aspect ratio** offers 21:9, 2.39:1 and 4:3 too, and **Camera** picks one of several.
+- It starts **Through the camera**, as the cutscene's camera sees it, in a 16:9 picture; press the button or {{C}} to look round freely instead. **Aspect ratio** offers 21:9, 2.39:1 and 4:3 too, and **Camera** picks one of several.
 - Each actor is put together from their entity, in their appearance, with their face moving and their lips synced to their lines. Geralt wears the gear he starts the game in.
 
 It plays with its sound: its music and effects, and each line's voice (in English). The music button and the microphone button ({{V}}) turn each on and off; {{M}} both. **Save sound…** in **Dialogs** saves them as WAV files.
