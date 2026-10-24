@@ -106,7 +106,7 @@ public sealed class SoundPlayer : IDisposable
             _output.Init(_source);
             _output.PlaybackStopped += (_, _) => { if (_source.Frame >= Stereo.Length / 2) Ended?.Invoke(this, EventArgs.Empty); };
         }
-        _output.Play();
+        SoundOut.Play(_output);
     }
 
     public void Pause() => _output?.Pause();

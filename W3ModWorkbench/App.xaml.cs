@@ -18,12 +18,19 @@ public partial class App : Application
     /// <param name="preset">The name of a <see cref="ThemePreset"/>.</param>
     public static void ApplyTheme(string theme, string preset) => Themes.Apply(theme, preset);
 
+    /// <summary>
+    /// Set by a test program before the app starts (before its dispatcher runs): the app is set up as usual (theme,
+    /// language, settings) but opens no main window and plays no sound, so nothing shows or sounds on the desktop while
+    /// the test program opens what it tests off-screen. Its own arguments aren't read as the app's command line.
+    /// </summary>
+    public static bool Headless { get; set; }
+
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
         Core.Animation.ClothRig.Enabled = Settings.SimulateCloth;
         // run from a script (--to-json, --from-json, --edit): do the work and exit, with no window
-        if (CommandLine.Handles(e.Args))
+        if (!Headless && CommandLine.Handles(e.Args))
         {
             Core.Scripts.GameScripts.GameFolder = Settings.GameFolder;
             Core.GameDocuments.Override = Settings.GameDocumentsFolder;
@@ -31,7 +38,7 @@ public partial class App : Application
             return;
         }
         // a link to a game file, from a web page (w3modworkbench://asset?path=…): the copy already running shows it, when there is one
-        if (e.Args is [var arg] && AppLinks.Parse(arg) is not null && AppLinks.SendToRunning(arg))
+        if (!Headless && e.Args is [var arg] && AppLinks.Parse(arg) is not null && AppLinks.SendToRunning(arg))
         {
             Shutdown(0);
             return;
@@ -85,6 +92,7 @@ public partial class App : Application
                 reporting = false;
             }
         };
+        if (Headless) return;
         var main = new MainWindow(e.Args);
         main.Show();
         AppLinks.Listen(link => Dispatcher.InvokeAsync(() => main.OpenLink(link)));

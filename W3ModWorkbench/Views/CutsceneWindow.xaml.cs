@@ -332,7 +332,7 @@ public partial class CutsceneWindow : Window, IMessageHost
         {
             _output = new NAudio.Wave.WaveOutEvent { DesiredLatency = 120 };
             _output.Init(mixer);
-            _output.Play();
+            SoundOut.Play(_output);
         }
         catch (NAudio.MmException)
         {

@@ -1132,6 +1132,7 @@ public sealed partial class MeshView : Border
         AddLines(_floor, minor, Color.FromRgb(72, 72, 82), 0.6);
         AddLines(_floor, major, Color.FromRgb(112, 112, 126), 1);
         _floorLines = [.. _floor.Children.OfType<LineGeometryModel3D>().Zip(new[] { minor, major }.Where(l => l.Count > 0))];
+        _clippedFor = null;
         ClipFloor();
     }
 
@@ -1150,26 +1151,38 @@ public sealed partial class MeshView : Border
         look.Normalize();
         var (eye, forward) = (new Vector3((float)_camera.Position.X, (float)_camera.Position.Y, (float)_camera.Position.Z), new Vector3((float)look.X, (float)look.Y, (float)look.Z));
         // a little past the near plane, so what's kept is drawn
-        float near = (float)_camera.NearPlaneDistance * 1.5f;
+        float near = (float)_camera.NearPlaneDistance * 1.5f, far = (float)_camera.FarPlaneDistance;
+        // only when the camera moved: this runs with every camera update, every frame of a scene played through its camera
+        if (_clippedFor == (eye, forward, near, far)) return;
+        _clippedFor = (eye, forward, near, far);
+        // a line wholly behind the camera is put past the far plane, where the card cuts it away whole
+        var gone = eye + forward * (far * 2);
         foreach (var (model, lines) in _floorLines)
         {
-            var positions = new Vector3Collection(lines.Count * 2);
-            var indices = new IntCollection(lines.Count * 2);
-            foreach (var (a, b) in lines)
+            // the line buffer the floor was made with, its points moved in place and sent to the card again: a new
+            // buffer for each frame made Helix build and upload one every frame, which slowed scenes down badly
+            if (model.Geometry is not HxLines { Positions: { } positions } geometry || positions.Count != lines.Count * 2) continue;
+            bool changed = false;
+            for (int i = 0; i < lines.Count; i++)
             {
+                var (a, b) = lines[i];
                 float da = Vector3.Dot(a - eye, forward), db = Vector3.Dot(b - eye, forward);
-                if (da < near && db < near) continue;
                 var (from, to) = (a, b);
-                if (da < near) from = a + (b - a) * ((near - da) / (db - da));
+                if (da < near && db < near) (from, to) = (gone, gone + forward);
+                else if (da < near) from = a + (b - a) * ((near - da) / (db - da));
                 else if (db < near) to = a + (b - a) * ((near - da) / (db - da));
-                indices.Add(positions.Count);
-                positions.Add(from);
-                indices.Add(positions.Count);
-                positions.Add(to);
+                if (positions[i * 2] != from || positions[i * 2 + 1] != to)
+                {
+                    (positions[i * 2], positions[i * 2 + 1]) = (from, to);
+                    changed = true;
+                }
             }
-            model.Geometry = new HxLines { Positions = positions, Indices = indices };
+            if (changed) geometry.UpdateVertices();
         }
     }
+
+    // where the camera was when the floor was last cut to it
+    private (Vector3 Eye, Vector3 Forward, float Near, float Far)? _clippedFor;
 
     /// <summary>A chunk's vertex colours, blended across each triangle from its corners; white for a chunk without them.</summary>
     private static Color4Collection VertexColorsOf(MeshChunk chunk)

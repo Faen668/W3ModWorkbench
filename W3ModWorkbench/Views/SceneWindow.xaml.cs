@@ -773,7 +773,7 @@ public partial class SceneWindow : Window, IMessageHost
         {
             _trackOutput = new NAudio.Wave.WaveOutEvent { DesiredLatency = 120 };
             _trackOutput.Init(buffer);
-            _trackOutput.Play();
+            SoundOut.Play(_trackOutput);
         }
         catch (NAudio.MmException)
         {
@@ -1082,7 +1082,7 @@ public partial class SceneWindow : Window, IMessageHost
                 _sectionVoice = new NAudio.Wave.WaveOutEvent { DesiredLatency = 120 };
                 _sectionVoice.Init(reader);
                 _sectionVoice.PlaybackStopped += (_, _) => reader.Dispose();
-                _sectionVoice.Play();
+                SoundOut.Play(_sectionVoice);
                 MarkSaying(line.StringId);
             }
         }
