@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Controls;
 using W3ModWorkbench.Core.Effects;
 using W3ModWorkbench.Core.Entities;
+using W3ModWorkbench.Core.Particles;
 using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench;
@@ -191,6 +192,8 @@ public partial class EntityWindow
         var player = _effectPlayer;
         var lines = new List<string> { L.T("EntityWindow.EffectsPlaying", player?.Playing.Count() ?? 0, _effects.Count) };
         if (player?.Any == true) lines.Add(L.T("Count.Particle", player.Count) + (player.Count >= EffectPlayer.MaxSprites ? L.T("EntityWindow.ParticlesCapped") : ""));
+        if (player?.NotDrawn.ToList() is { Count: > 0 } notDrawn)
+            lines.Add(L.T("EntityWindow.ParticlesNotDrawn", string.Join(", ", notDrawn.Select(ParticleSystemFile.ModuleTitle))));
         if (player?.Missing.ToList() is { Count: > 0 } missing) lines.Add(L.T("EntityWindow.ParticlesMissing", string.Join(", ", missing.Select(System.IO.Path.GetFileName))));
         return string.Join("  ·  ", lines);
     }

@@ -201,7 +201,8 @@ public sealed class ParticlePreview : FrameworkElement
             // every particle, furthest first, so the ones laid over the rest cover what's behind
             var all = new List<(int Emitter, Particle Particle, float Depth)>();
             for (int e = 0; e < _system.Emitters.Count; e++)
-                foreach (var p in _simulation.Particles(e))
+                if (_system.Emitters[e].DrawnAsSprites)
+                    foreach (var p in _simulation.Particles(e))
                     all.Add((e, p, Vector3.Dot(p.Position - _eye, _forward)));
             all.Sort((a, b) => b.Depth.CompareTo(a.Depth));
             foreach (var (e, p, _) in all) DrawParticle(_system.Emitters[e], _textures.TryGetValue(e, out var t) ? t : null, p, width, height);

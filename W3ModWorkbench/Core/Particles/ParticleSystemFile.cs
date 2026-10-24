@@ -189,6 +189,13 @@ public sealed class ParticleEmitter
     public required bool Additive { get; init; }
     public required System.Windows.Media.Color Tint { get; init; }
     public required string Drawer { get; init; }
+
+    /// <summary>
+    /// Whether its particles are drawn as sprites facing the camera (billboards, and close enough, motion-blurred and
+    /// sphere-aligned ones), which the previews draw; meshes, trails, beams, screen effects and quads laid in the
+    /// emitter's plane aren't drawn yet, rather than drawn as the wrong shape.
+    /// </summary>
+    public bool DrawnAsSprites => Drawer is "" or "CParticleDrawerBillboard" or "CParticleDrawerMotionBlur" or "CParticleDrawerSphereAligned"; // loc-ignore
     public required int MaxParticles { get; init; }
     public required bool Showing { get; set; }
 

@@ -110,6 +110,8 @@ public partial class ParticleWindow : Window, IMessageHost
                 L.T("ParticleWindow.AtMost", emitter.MaxParticles),
                 emitter.Additive ? L.T("ParticleWindow.Adds") : L.T("ParticleWindow.Covers"),
                 emitter.Cooked ? L.T("ParticleWindow.Cooked") : "",
+                // meshes, trails and the like aren't drawn by the preview yet, rather than drawn as the wrong shape
+                emitter.DrawnAsSprites ? "" : L.T("ParticleWindow.CardNotDrawn"),
             }.Where(s => s.Length > 0));
         }
     }

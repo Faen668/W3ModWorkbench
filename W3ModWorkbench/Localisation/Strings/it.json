@@ -1902,6 +1902,8 @@
   "EntityWindow.EffectsPlaying": "{playing:N0} di {total:N0} in riproduzione",
   "EntityWindow.ParticlesCapped": " (il massimo disegnato insieme)",
   "EntityWindow.ParticlesMissing": "non riprodotti (non trovati, o cotti senza copia di REDkit): {names}",
+  "EntityWindow.ParticlesNotDrawn": "non ancora disegnati: emettitori {kinds}",
+  "ParticleWindow.CardNotDrawn": "non ancora disegnato nell'anteprima",
 
   "FactsWindow.QuestFacts": "Fact delle missioni",
   "FactsWindow.EveryFactScriptsSet": "Ogni fact che gli script impostano o leggono con FactsAdd, FactsQuerySum e gli altri, e dove",

@@ -1910,6 +1910,7 @@
   "EntityWindow.EffectsPlaying": "{playing:N0} of {total:N0} playing",
   "EntityWindow.ParticlesCapped": " (the most drawn at once)",
   "EntityWindow.ParticlesMissing": "not played (not found, or cooked with no REDkit copy): {names}",
+  "EntityWindow.ParticlesNotDrawn": "not drawn yet: {kinds} emitters",
 
   "FactsWindow.QuestFacts": "Quest facts",
   "FactsWindow.EveryFactScriptsSet": "Every fact the scripts set or read with FactsAdd, FactsQuerySum and the rest, and where",
@@ -5774,6 +5775,7 @@
   "ParticleWindow.MouseHint": "drag to turn, right-drag to move, wheel to zoom",
   "ParticleWindow.PlayedFromRedkit": "modules and curves from REDkit's copy (the game's is cooked)",
   "ParticleWindow.CookedNoRedkit": "{count} emitters cooked: their modules can't be shown without REDkit's copy",
+  "ParticleWindow.CardNotDrawn": "not drawn in the preview yet",
   "ParticleWindow.Info": "{path}   ·   {source}   ·   CR2W {version}   ·   {emitters}, {modules} modules   ·   prewarmed {prewarm:0.#} s   ·   {note}",
 
   "ParticleWindow.From": "From",

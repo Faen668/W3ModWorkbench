@@ -37,6 +37,7 @@ An entity's effects are what it plays in the game: a place of power's swirling s
 - The particles go where the effect puts them: on a component, a slot or a bone. On a character they follow the animation, and sparks and smoke that the game leaves behind trail as it moves.
 - They play at the animation's speed, whether the animation plays or not.
 - The **Effects** tab has the same list, and under it the parts of the one you pick: when each starts and ends, what it is, and where it goes. Parts the view doesn't play (sounds, lights, material changes, screen effects such as blur) are dimmed.
+- Particles drawn as sprites play; emitters drawn as meshes (a place of power's fire as it's used), trails or beams aren't drawn yet, and the line under **Effects** names them.
 
 > note: The game's particle systems are cooked, which leaves out how they move. The view plays REDkit's copy of each one when you have REDkit installed (see [[Particle systems]]); without it, cooked systems are listed under the view as not played.
 

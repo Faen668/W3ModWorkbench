@@ -59,6 +59,10 @@ public sealed class EffectPlayer
     public IEnumerable<string> Missing => _runs.SelectMany(r => r.Parts).Where(p => p.System is null && _systems.TryGetValue(p.Part.ParticleSystem!, out var t) && t.IsCompleted)
         .Select(p => p.Part.ParticleSystem!).Distinct(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>The drawers of the playing effects' emitters that aren't drawn yet (meshes, trails…), by class.</summary>
+    public IEnumerable<string> NotDrawn => _runs.SelectMany(r => r.Parts).Select(p => p.System).OfType<ParticleSystemFile>()
+        .SelectMany(s => s.Emitters).Where(e => !e.DrawnAsSprites).Select(e => e.Drawer).Distinct();
+
     /// <summary>How many particles there are now.</summary>
     public int Count => _runs.Sum(r => r.Parts.Sum(p => p.Simulations.Sum(s => s.Count)));
 
@@ -137,7 +141,7 @@ public sealed class EffectPlayer
                     {
                         var emitter = system.Emitters[e];
                         var particles = simulation.Particles(e);
-                        if (particles.Count == 0) continue;
+                        if (particles.Count == 0 || !emitter.DrawnAsSprites) continue;
                         // a texture not read yet is drawn as the soft spot, under the spot's key, until it is
                         var picture = emitter.Texture is { } texture ? TextureNow(texture) : null;
                         string key = picture is null ? "" : emitter.Texture!;

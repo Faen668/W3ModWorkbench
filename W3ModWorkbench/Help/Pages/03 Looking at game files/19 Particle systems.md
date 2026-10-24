@@ -25,7 +25,7 @@ Shaders that add light (fire, sparks, glow) are added to what's behind; the rest
 
 ## Emitters and modules
 
-The bottom right has a box for each emitter, in its own colour, as REDkit lays them out: its texture, how it's drawn (billboard, motion blur, mesh…), how many particles it has at most, whether it adds light, and its modules.
+The bottom right has a box for each emitter, in its own colour, as REDkit lays them out: its texture, how it's drawn (billboard, motion blur, mesh…), how many particles it has at most, whether it adds light, and its modules. The preview draws particles as sprites facing you (billboards, motion blur, sphere-aligned); an emitter drawn as meshes, trails, beams, quads in the emitter's plane or on the screen says **not drawn in the preview yet**, and is left out rather than drawn as the wrong shape.
 
 - Untick an emitter's box to hide it, or a module to switch it off. The preview starts again without it, so you can see what each part does.
 - Click a module to see it. Click an emitter's name to see the emitter.

@@ -1902,6 +1902,8 @@
   "EntityWindow.EffectsPlaying": "воспроизводится {playing:N0} из {total:N0}",
   "EntityWindow.ParticlesCapped": " (больше одновременно не рисуется)",
   "EntityWindow.ParticlesMissing": "не воспроизведены (не найдены или запечены без копии REDkit): {names}",
+  "EntityWindow.ParticlesNotDrawn": "пока не рисуются: эмиттеры типа {kinds}",
+  "ParticleWindow.CardNotDrawn": "пока не рисуется в предпросмотре",
 
   "FactsWindow.QuestFacts": "Факты квестов",
   "FactsWindow.EveryFactScriptsSet": "Все факты, которые скрипты задают или читают через FactsAdd, FactsQuerySum и прочие, и где",
