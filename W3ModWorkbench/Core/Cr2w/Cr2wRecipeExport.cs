@@ -43,6 +43,8 @@ public static class Cr2wRecipeExport
         var args = new List<string>();
         if (!string.IsNullOrWhiteSpace(recipe.Output)) args.AddRange(["--out", recipe.Output]);
         if (recipe.Recursive) args.Add("--recursive");
+        if (!string.IsNullOrWhiteSpace(recipe.Only)) args.AddRange(["--match", recipe.Only]);
+        if (!string.IsNullOrWhiteSpace(recipe.Skip)) args.AddRange(["--skip", recipe.Skip]);
         if (recipe.Overwrite && recipe.Kind != Cr2wRecipeKind.Edit) args.Add("--overwrite");
         if (recipe.AsLatest && recipe.Kind == Cr2wRecipeKind.FromJson) args.Add("--as-164");
         return args;

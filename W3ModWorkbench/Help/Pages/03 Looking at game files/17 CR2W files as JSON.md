@@ -3,7 +3,7 @@ title: CR2W files as JSON
 icon: E943
 order: 18
 summary: Turn game resources into JSON to read or edit, back again byte for byte, and change hundreds at once.
-keywords: cr2w json convert env w2mi w2ent bulk edit command line python resave 164 base64 embedded recipe recipes saved script batch bat automate again
+keywords: cr2w json convert env w2mi w2ent bulk edit command line python resave 164 base64 embedded recipe recipes saved script batch bat automate again regex regular expression filter pattern match skip only extension help progress
 windows: Cr2wJsonWindow, JsonWindow
 ---
 Most of the game's resources are **CR2W** files: environments (`.env`), materials (`.w2mi`), entities (`.w2ent`), quests, scenes and the rest. The app turns them into **JSON** you can read, edit by hand or change with a script, and turns the JSON back into the same file, byte for byte.
@@ -34,13 +34,26 @@ The JSON editor colours and folds as you type, has an **Outline** ({{Ctrl+Shift+
 
 **Tools > CR2W and JSON** opens the converter. Add files or folders (or drop them on it) and choose a direction:
 
-![The converter](cr2w-json.jpg)
+![The converter, taking a folder's .env files and leaving out its backup folder](cr2w-json.jpg)
 
 - **CR2W to JSON** writes `name.env.json` beside each `name.env`.
 - **JSON back to CR2W** writes `name.env` from each `name.env.json`.
 - **Resave as version 164** saves REDkit's older source files in the format the engine saves today, which other tools read more easily.
 
 Save **beside each file** or **into a folder**. Every file is checked as it's converted: its JSON must turn back into exactly the same bytes, or it isn't written.
+
+A big folder (REDkit's `r4data` has over 220,000 files) shows its progress as it goes: the files found, then each one checked, then the work. **Stop** works at every step.
+
+### Only some of a folder's files
+
+**Only files matching** and **Skip files matching** take a folder's files by their path below it, on both the **Convert** and **Bulk edit** tabs. Each is a regular expression, with `/` between folders and capital letters ignored. Files you add one by one are always taken.
+
+- `\.w2scene$` (or `.*w2scene`): only scenes.
+- `\.(env|w2mi)$`: environments and materials.
+- `^quests/`: only what's in the `quests` folder.
+- `(^|/)thumbnails/` in **Skip**: everything but REDkit's thumbnails.
+
+> tip: A narrow pattern on a big folder is quick too: files it leaves out are never opened.
 
 ## Changing many files at once
 
@@ -85,8 +98,9 @@ W3ModWorkbench.exe --edit "D:\mymod\envs" -r --copy "D:\my_look.env" envParams.m
 W3ModWorkbench.exe --edit "D:\mymod\envs" -r --scale envParams.m_globalFog 0.8 --fields value
 ```
 
-`--help-json` lists every option. In a batch file use `start /wait "" W3ModWorkbench.exe …` so it waits for the app to finish.
+`--help` (or `-h`, `/?`) lists every command and option; `--help filter`, `--help edits`, `--help recipes` and the like show one part. In a terminal it shows its progress as it goes. In a batch file use `start /wait "" W3ModWorkbench.exe …` so it waits for the app to finish.
 
+- `--match <regex>` and `--skip <regex>` are the file filter: `--match "\.w2scene$"` converts only scenes.
 - `--check` with `--edit` tries the edits and says what would change, saving nothing.
 - `--only-class <name>` after an edit makes that edit only to objects of that class (`--class` before the edits sets it for all of them).
 - `--recipe <file>` runs a saved recipe, `--check` too.

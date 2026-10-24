@@ -18,11 +18,13 @@ namespace W3ModWorkbench;
 ///          --scale &lt;path&gt; &lt;factor&gt;   --offset &lt;path&gt; &lt;amount&gt;   (--fields a,b after a scale or offset)
 ///          --only-class &lt;name&gt; after an edit: that edit only to objects of the class
 /// W3ModWorkbench.exe --recipe    &lt;recipe file&gt; [--check]
+///   any of them: --match &lt;regex&gt;, --skip &lt;regex&gt; for the files taken from folders
+/// W3ModWorkbench.exe --help [topic]   (-h, /?; topics: commands, options, filter, edits, recipes, examples)
 /// </code>
 /// </summary>
 public static class CommandLine
 {
-    private static readonly string[] Commands = ["--to-json", "--from-json", "--resave-164", "--edit", "--recipe", "--help-json"];
+    private static readonly string[] Commands = ["--to-json", "--from-json", "--resave-164", "--edit", "--recipe", "--help", "-h", "/?", "-?", "--help-json"];
 
     public static bool Handles(string[] args) => args.Length > 0 && Commands.Contains(args[0], StringComparer.OrdinalIgnoreCase);
 
@@ -53,11 +55,11 @@ public static class CommandLine
         try
         {
             string command = args[0].ToLowerInvariant();
-            if (command == "--help-json") { output.WriteLine(Usage); return 0; }
+            if (command is "--help" or "-h" or "/?" or "-?" or "--help-json") return Help(output, args.Length > 1 ? args[1] : null);
 
             var paths = new List<string>();
             var edits = new List<Cr2wBulkEdit>();
-            string? outputFolder = null, className = null;
+            string? outputFolder = null, className = null, match = null, skip = null;
             bool recursive = false, overwrite = false, asLatest = false, check = false;
             for (int i = 1; i < args.Length; i++)
             {
@@ -71,6 +73,8 @@ public static class CommandLine
                     case "--as-164": asLatest = true; break;
                     case "--class": className = Next(); break;
                     case "--check": check = true; break;
+                    case "--match": match = Next(); break;
+                    case "--skip": skip = Next(); break;
                     case "--only-class":
                     {
                         string only = Next();
@@ -111,31 +115,35 @@ public static class CommandLine
                         break;
                     }
                     default:
-                        if (a.StartsWith("--", StringComparison.Ordinal)) throw new ArgumentException($"{a} isn't an option. Run --help-json for the options.");
+                        if (a.StartsWith("--", StringComparison.Ordinal)) throw new ArgumentException($"{a} isn't an option. Run --help for the options.");
                         paths.Add(a);
                         break;
                 }
             }
+            var filter = Cr2wFileFilter.Make(match, skip);
             if (check && command is not ("--edit" or "--recipe")) throw new ArgumentException("--check goes with --edit or --recipe: converting has nothing to try first.");
             if (command == "--recipe")
             {
                 if (paths.Count != 1) throw new ArgumentException("--recipe takes one recipe file.");
                 var recipe = Cr2wRecipe.Load(Path.GetFullPath(paths[0]));
                 if (check && recipe.Kind != Cr2wRecipeKind.Edit) throw new ArgumentException("--check goes with a recipe of edits: converting has nothing to try first.");
+                // a filter given here takes the place of the recipe's own
+                if (match is not null) recipe.Only = match;
+                if (skip is not null) recipe.Skip = skip;
                 output.WriteLine(recipe.Name);
                 var ran = recipe.Run(progress, dryRun: check);
                 progress?.Clear();
                 return Report(output, ran, check,
                     recipe.Kind == Cr2wRecipeKind.FromJson ? NoJson : recipe.Kind == Cr2wRecipeKind.Edit ? NoEditable : NoCr2w);
             }
-            if (paths.Count == 0) throw new ArgumentException("Give the files or folders to work on. Run --help-json for the options.");
+            if (paths.Count == 0) throw new ArgumentException("Give the files or folders to work on. Run --help for the options.");
             if (className is not null)
                 edits = [.. edits.Select(e => e.ClassName.Length > 0 ? e : With(e, className: className))];
             if (command == "--edit" && edits.Count == 0) throw new ArgumentException("--edit needs an edit: --copy, --set, --remove, --scale or --offset.");
 
             // an edit takes converted JSON files from folders too, as the window does
-            var inputs = command == "--edit" ? Cr2wRecipe.EditInputs(paths, recursive, progress)
-                : Cr2wJsonBatch.Inputs(paths, fromJson: command == "--from-json", recursive, progress);
+            var inputs = command == "--edit" ? Cr2wRecipe.EditInputs(paths, recursive, progress, filter: filter)
+                : Cr2wJsonBatch.Inputs(paths, fromJson: command == "--from-json", recursive, progress, filter: filter);
             var results = inputs.Count == 0 ? null : command switch
             {
                 "--to-json" => Cr2wJsonBatch.ToJson(inputs, outputFolder, overwrite, progress),
@@ -232,37 +240,95 @@ public static class CommandLine
         catch (System.Text.Json.JsonException) { return JsonValue.Create(text); }
     }
 
-    private const string Usage = """
-        W3 Mod Workbench: CR2W files (.env, .w2mi, .w2ent…) to JSON and back
+    /// <summary>Writes the help: all of it, or one topic of it. An unknown topic lists the topics.</summary>
+    private static int Help(TextWriter output, string? topic)
+    {
+        if (topic is null)
+        {
+            output.WriteLine(Title);
+            foreach (var (_, text) in Topics) output.WriteLine(text);
+            return 0;
+        }
+        var found = Topics.Where(t => t.Name.StartsWith(topic.TrimStart('-', '/').ToLowerInvariant(), StringComparison.Ordinal)).ToList();
+        if (found.Count == 0)
+        {
+            output.WriteLine($"There's no help topic \"{topic}\". The topics are: {string.Join(", ", Topics.Select(t => t.Name))}.");
+            return 2;
+        }
+        foreach (var (_, text) in found) output.WriteLine(text);
+        return 0;
+    }
 
-          --to-json   <files or folders…>  Write name.env.json beside each CR2W file (or under --out)
-          --from-json <files or folders…>  Write name.env back from each name.env.json (or under --out)
-          --resave-164 <files or folders…> Save older CR2W files (REDkit's go back to version 120) as version 164,
-                                           as the engine would after loading them (under --out, or over themselves with --overwrite)
-          --edit      <files or folders…>  Make edits to CR2W or JSON files; they're written over themselves, or under --out
-          --recipe    <recipe file>        Run a recipe saved in the CR2W and JSON window (a .w3recipe.json file)
+    // loc-ignore-start
+    private const string Title = """
+        W3 Mod Workbench: CR2W files (.env, .w2mi, .w2ent…) to JSON and back, and the same edit to many at once.
+        --help <topic> shows one part: commands, options, filter, edits, recipes, examples.
 
-        Options
-          --out <folder>     Write the results under this folder, keeping the folders they were in
-          --recursive, -r    Look in subfolders of the folders given
-          --overwrite        Replace files that are there already (to and from JSON, and resaving)
-          --as-164           With --from-json: write files of older versions as version 164
-          --class <name>     Edit only objects of this class (CEnvironmentDefinition)
-          --check            With --edit or --recipe: try the edits and say what would change, saving nothing
-
-        Edits, made in order; a path is property names from an object down, with [n] for an item of a list
-          --copy <source> <path>     The source file's value at the path, into every file
-          --set <path> <json>        A value: 1.5, true, "text", or a JSON object or list
-          --remove <path>            Remove the property, so the game uses its default
-          --scale <path> <factor>    Multiply the numbers under the path...
-          --offset <path> <amount>   ...or add to them
-          --fields <a,b>             After --scale or --offset: only numbers in these properties (value, X, Y, Z)
-          --only-class <name>        After an edit: make that edit only to objects of this class
-
-        Examples
-          W3ModWorkbench.exe --to-json "D:\envs" -r --out "D:\envs json"
-          W3ModWorkbench.exe --edit "D:\mymod\envs" -r --copy "D:\envs\my_look.env" envParams.m_toneMapping
-          W3ModWorkbench.exe --edit "D:\mymod\envs" -r --scale envParams.m_globalFog.fogDensity 0.8 --fields value
-          W3ModWorkbench.exe --recipe "%AppData%\W3ModWorkbench\recipes\Night fog.w3recipe.json" --check
         """;
+
+    private static readonly (string Name, string Text)[] Topics =
+    [
+        ("commands", """
+            Commands
+              --to-json   <files or folders…>  Write name.env.json beside each CR2W file (or under --out)
+              --from-json <files or folders…>  Write name.env back from each name.env.json (or under --out)
+              --resave-164 <files or folders…> Save older CR2W files (REDkit's go back to version 120) as version 164,
+                                               as the engine would after loading them (under --out, or over themselves with --overwrite)
+              --edit      <files or folders…>  Make edits to CR2W or JSON files; they're written over themselves, or under --out
+              --recipe    <recipe file>        Run a recipe saved in the CR2W and JSON window (a .w3recipe.json file)
+              --help [topic], -h, /?           This help, or one topic of it
+
+            """),
+        ("options", """
+            Options
+              --out <folder>     Write the results under this folder, keeping the folders they were in
+              --recursive, -r    Look in subfolders of the folders given
+              --overwrite        Replace files that are there already (to and from JSON, and resaving)
+              --as-164           With --from-json: write files of older versions as version 164
+              --class <name>     Edit only objects of this class (CEnvironmentDefinition)
+              --check            With --edit or --recipe: try the edits and say what would change, saving nothing
+              --match <regex>    Only the files in folders whose path matches (see: --help filter)
+              --skip <regex>     Not the files in folders whose path matches
+
+            """),
+        ("filter", """
+            Choosing files in folders with --match and --skip
+              Each is a regular expression, tested against a file's path below the folder given, with / between
+              folders (quests/main_quests/q101.w2scene). It matches anywhere in the path unless anchored with ^ or $,
+              and ignores case. Files given one by one are always taken. With --recipe, they replace the recipe's own.
+                --match "\.w2scene$"            only scenes
+                --match ".*w2scene"             the same, written the other way
+                --match "^quests/"              only what's in the quests folder
+                --skip "(^|/)thumbnails/"       not REDkit's thumbnails
+                --match "\.(env|w2mi)$"         environments and materials
+
+            """),
+        ("edits", """
+            Edits, made in order; a path is property names from an object down, with [n] for an item of a list
+              --copy <source> <path>     The source file's value at the path, into every file
+              --set <path> <json>        A value: 1.5, true, "text", or a JSON object or list
+              --remove <path>            Remove the property, so the game uses its default
+              --scale <path> <factor>    Multiply the numbers under the path...
+              --offset <path> <amount>   ...or add to them
+              --fields <a,b>             After --scale or --offset: only numbers in these properties (value, X, Y, Z)
+              --only-class <name>        After an edit: make that edit only to objects of this class
+
+            """),
+        ("recipes", """
+            Recipes
+              A recipe is a form from the CR2W and JSON window saved to run again (Save as recipe; the Recipes tab).
+              They're kept in %AppData%\W3ModWorkbench\recipes, or the folder set in Settings > General.
+              --recipe <file> runs one; --check tries a recipe of edits first; --match and --skip replace its filter.
+
+            """),
+        ("examples", """
+            Examples
+              W3ModWorkbench.exe --to-json "D:\envs" -r --out "D:\envs json"
+              W3ModWorkbench.exe --to-json "F:\REDkit\r4data" -r --match "\.w2scene$" --out "D:\scenes json"
+              W3ModWorkbench.exe --edit "D:\mymod\envs" -r --copy "D:\envs\my_look.env" envParams.m_toneMapping
+              W3ModWorkbench.exe --edit "D:\mymod\envs" -r --scale envParams.m_globalFog.fogDensity 0.8 --fields value
+              W3ModWorkbench.exe --recipe "%AppData%\W3ModWorkbench\recipes\Night fog.w3recipe.json" --check
+            """),
+    ];
+    // loc-ignore-end
 }

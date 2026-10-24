@@ -189,6 +189,20 @@
                                         <Button Style="{StaticResource Small}" Content="{l:T Cr2wJsonWindow.Clear}" Click="ConvertClear_Click" />
                                     </StackPanel>
                                 </StackPanel>
+                                <!-- which files the folders give: regular expressions on each file's path below its folder -->
+                                <StackPanel DockPanel.Dock="Bottom" Margin="0,10,0,0">
+                                    <WrapPanel>
+                                        <TextBlock Text="{l:T Cr2wJsonWindow.FilterOnly}" VerticalAlignment="Center" Opacity="0.8" Margin="0,0,8,6" />
+                                        <TextBox x:Name="ConvertOnlyBox" Style="{StaticResource Mono}" Width="260" Margin="0,0,18,6" TextChanged="Filter_TextChanged"
+                                                 ToolTip="{l:T Cr2wJsonWindow.FilterOnlyTip}" />
+                                        <TextBlock Text="{l:T Cr2wJsonWindow.FilterSkip}" VerticalAlignment="Center" Opacity="0.8" Margin="0,0,8,6" />
+                                        <TextBox x:Name="ConvertSkipBox" Style="{StaticResource Mono}" Width="260" Margin="0,0,0,6" TextChanged="Filter_TextChanged"
+                                                 ToolTip="{l:T Cr2wJsonWindow.FilterSkipTip}" />
+                                    </WrapPanel>
+                                    <TextBlock Style="{StaticResource Note}" Margin="0" Text="{l:T Cr2wJsonWindow.FilterHint}" />
+                                    <TextBlock x:Name="ConvertFilterError" TextWrapping="Wrap" Margin="0,4,0,0" Visibility="Collapsed"
+                                               Foreground="{DynamicResource SystemFillColorCautionBrush}" />
+                                </StackPanel>
                                 <ListBox x:Name="ConvertList" Height="110" SelectionMode="Extended" ItemTemplate="{StaticResource InputRow}" KeyDown="InputList_KeyDown" />
                             </DockPanel>
                         </Border>
@@ -269,6 +283,19 @@
                                             <Button Style="{StaticResource Small}" Content="{l:T Cr2wJsonWindow.Clear}" Click="BulkClear_Click" />
                                             <CheckBox x:Name="BulkRecursiveCheck" Content="{l:T Cr2wJsonWindow.LookSubfolders}" IsChecked="True" MinWidth="0" Margin="10,0,0,0" />
                                         </StackPanel>
+                                    </StackPanel>
+                                    <StackPanel DockPanel.Dock="Bottom" Margin="0,10,0,0">
+                                        <WrapPanel>
+                                            <TextBlock Text="{l:T Cr2wJsonWindow.FilterOnly}" VerticalAlignment="Center" Opacity="0.8" Margin="0,0,8,6" />
+                                            <TextBox x:Name="BulkOnlyBox" Style="{StaticResource Mono}" Width="260" Margin="0,0,18,6" TextChanged="Filter_TextChanged"
+                                                     ToolTip="{l:T Cr2wJsonWindow.FilterOnlyTip}" />
+                                            <TextBlock Text="{l:T Cr2wJsonWindow.FilterSkip}" VerticalAlignment="Center" Opacity="0.8" Margin="0,0,8,6" />
+                                            <TextBox x:Name="BulkSkipBox" Style="{StaticResource Mono}" Width="260" Margin="0,0,0,6" TextChanged="Filter_TextChanged"
+                                                     ToolTip="{l:T Cr2wJsonWindow.FilterSkipTip}" />
+                                        </WrapPanel>
+                                        <TextBlock Style="{StaticResource Note}" Margin="0" Text="{l:T Cr2wJsonWindow.FilterHint}" />
+                                        <TextBlock x:Name="BulkFilterError" TextWrapping="Wrap" Margin="0,4,0,0" Visibility="Collapsed"
+                                                   Foreground="{DynamicResource SystemFillColorCautionBrush}" />
                                     </StackPanel>
                                     <ListBox x:Name="BulkList" Height="90" SelectionMode="Extended" ItemTemplate="{StaticResource InputRow}" KeyDown="InputList_KeyDown" />
                                 </DockPanel>

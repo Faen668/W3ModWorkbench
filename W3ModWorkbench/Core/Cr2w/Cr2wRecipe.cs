@@ -78,6 +78,10 @@ public sealed class Cr2wRecipe
     public bool Recursive { get; set; } = true;
     public bool Overwrite { get; set; }
 
+    /// <summary>Regular expressions for the files taken from folders, by their path below the folder (see <see cref="Cr2wFileFilter"/>); null for every file.</summary>
+    public string? Only { get; set; }
+    public string? Skip { get; set; }
+
     /// <summary>For <see cref="Cr2wRecipeKind.FromJson"/>: write files of older versions as version 164.</summary>
     public bool AsLatest { get; set; }
 
@@ -184,8 +188,8 @@ public sealed class Cr2wRecipe
 
     /// <summary>The files a bulk edit works on: CR2W files and converted JSON files alike, in one look through the folders.</summary>
     public static List<(string File, string Root)> EditInputs(IReadOnlyCollection<string> paths, bool recursive,
-        IProgress<Cr2wJsonProgress>? progress = null, CancellationToken token = default) =>
-        Cr2wJsonBatch.Inputs(paths, Cr2wInputKind.Both, recursive, progress, token);
+        IProgress<Cr2wJsonProgress>? progress = null, CancellationToken token = default, Cr2wFileFilter? filter = null) =>
+        Cr2wJsonBatch.Inputs(paths, Cr2wInputKind.Both, recursive, progress, token, filter);
 
     /// <summary>The edits to make, with the copies' source files read now.</summary>
     public List<Cr2wBulkEdit> MakeEdits() => [.. Edits.Select(e => e.ToEdit())];
@@ -201,10 +205,10 @@ public sealed class Cr2wRecipe
         {
             if (Edits.Count == 0) throw new InvalidDataException(L.T("Cr2wRecipe.NoEdits"));
             var edits = MakeEdits();
-            var inputs = EditInputs(Inputs, Recursive, progress, token);
+            var inputs = EditInputs(Inputs, Recursive, progress, token, Cr2wFileFilter.Make(Only, Skip));
             return inputs.Count == 0 ? null : Cr2wJsonBatch.BulkEdit(inputs, edits, output, progress, token, dryRun);
         }
-        var files = Cr2wJsonBatch.Inputs(Inputs, fromJson: Kind == Cr2wRecipeKind.FromJson, Recursive, progress, token);
+        var files = Cr2wJsonBatch.Inputs(Inputs, fromJson: Kind == Cr2wRecipeKind.FromJson, Recursive, progress, token, Cr2wFileFilter.Make(Only, Skip));
         if (files.Count == 0) return null;
         return Kind switch
         {

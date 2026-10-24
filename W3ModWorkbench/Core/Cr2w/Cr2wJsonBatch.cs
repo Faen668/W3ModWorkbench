@@ -2,6 +2,7 @@ using System.IO;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 using W3ModWorkbench.Core.Projects;
 using W3ModWorkbench.Localisation;
 
@@ -33,6 +34,43 @@ public enum Cr2wInputKind
 }
 
 /// <summary>
+/// Which files in a folder a batch takes, by their path below the folder (folders separated by <c>/</c>): those
+/// <see cref="Only"/> matches, when it's given, and <see cref="Skip"/> doesn't. Regular expressions, case-insensitive,
+/// matching anywhere in the path unless anchored: <c>\.w2scene$</c>, <c>.*w2scene</c>, <c>^quests/</c>.
+/// Files given one by one are always taken.
+/// </summary>
+public sealed class Cr2wFileFilter
+{
+    public Regex? Only { get; }
+    public Regex? Skip { get; }
+
+    private Cr2wFileFilter(Regex? only, Regex? skip) => (Only, Skip) = (only, skip);
+
+    /// <summary>The filter for the two patterns, or null when both are empty. A pattern that isn't a regular expression throws, saying why.</summary>
+    public static Cr2wFileFilter? Make(string? only, string? skip)
+    {
+        var a = Pattern(only);
+        var b = Pattern(skip);
+        return a is null && b is null ? null : new Cr2wFileFilter(a, b);
+    }
+
+    private static Regex? Pattern(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return null;
+        try { return new Regex(text.Trim(), RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1)); }
+        catch (ArgumentException ex) { throw new ArgumentException(L.T("Cr2wFileFilter.BadPattern", text.Trim(), ex.Message), ex); }
+    }
+
+    /// <summary>Whether a file found in a folder is taken: by its path below that folder.</summary>
+    public bool Takes(string folder, string file)
+    {
+        string relative = Path.GetRelativePath(folder, file).Replace('\\', '/');
+        try { return (Only?.IsMatch(relative) ?? true) && !(Skip?.IsMatch(relative) ?? false); }
+        catch (RegexMatchTimeoutException) { return false; }
+    }
+}
+
+/// <summary>
 /// Converting and bulk editing many files at once, for the CR2W ⇄ JSON window and the command line. A CR2W file
 /// <c>name.env</c> becomes <c>name.env.json</c> beside it or under an output folder (keeping the folders it was in
 /// below the folder that was given), and back. Nothing is ever written over the game's own files.
@@ -44,17 +82,17 @@ public static class Cr2wJsonBatch
     /// <summary>The files to work on: the files given, and the files in the folders given (with their subfolders when <paramref name="recursive"/>).</summary>
     /// <param name="fromJson">Look for converted JSON files in folders, rather than CR2W ones.</param>
     public static List<(string File, string Root)> Inputs(IEnumerable<string> paths, bool fromJson, bool recursive,
-        IProgress<Cr2wJsonProgress>? progress = null, CancellationToken token = default) =>
-        Inputs(paths, fromJson ? Cr2wInputKind.Json : Cr2wInputKind.Cr2w, recursive, progress, token);
+        IProgress<Cr2wJsonProgress>? progress = null, CancellationToken token = default, Cr2wFileFilter? filter = null) =>
+        Inputs(paths, fromJson ? Cr2wInputKind.Json : Cr2wInputKind.Cr2w, recursive, progress, token, filter);
 
     /// <summary>
     /// The files to work on: the files given, as they are, and the files of the kind asked for in the folders given.
     /// A big folder (REDkit's r4data has over 200,000 files) takes a while, so it's said as it goes: the files found,
     /// then each checked, many at once. Files whose extension says they can't be CR2W (pictures, sounds, text) are
-    /// passed over without being opened.
+    /// passed over without being opened, as are those the <paramref name="filter"/> leaves out.
     /// </summary>
     public static List<(string File, string Root)> Inputs(IEnumerable<string> paths, Cr2wInputKind kind, bool recursive,
-        IProgress<Cr2wJsonProgress>? progress = null, CancellationToken token = default)
+        IProgress<Cr2wJsonProgress>? progress = null, CancellationToken token = default, Cr2wFileFilter? filter = null)
     {
         var given = new List<(string File, string Root)>();
         var found = new List<(string File, string Root)>();
@@ -73,7 +111,7 @@ public static class Cr2wJsonBatch
             foreach (string file in Directory.EnumerateFiles(path, "*", options))
             {
                 token.ThrowIfCancellationRequested();
-                if (MightBe(file, kind)) inFolder.Add(file);
+                if (MightBe(file, kind) && (filter?.Takes(path, file) ?? true)) inFolder.Add(file);
                 report.Maybe(() => new Cr2wJsonProgress(found.Count + inFolder.Count, 0, file, Cr2wJsonStage.Finding));
             }
             inFolder.Sort(StringComparer.OrdinalIgnoreCase);
@@ -101,11 +139,12 @@ public static class Cr2wJsonBatch
     }
 
     /// <summary>The first file in a folder a batch of this kind would take, without looking through the rest.</summary>
-    public static string? FirstInput(string folder, Cr2wInputKind kind, bool recursive)
+    public static string? FirstInput(string folder, Cr2wInputKind kind, bool recursive, Cr2wFileFilter? filter = null)
     {
         var options = new EnumerationOptions { RecurseSubdirectories = recursive, IgnoreInaccessible = true, AttributesToSkip = FileAttributes.System };
         return Directory.EnumerateFiles(folder, "*", options)
-            .FirstOrDefault(f => MightBe(f, kind) && (f.EndsWith(Suffix, StringComparison.OrdinalIgnoreCase) ? IsConvertedJson(f) : IsCr2w(f)));
+            .FirstOrDefault(f => MightBe(f, kind) && (filter?.Takes(folder, f) ?? true)
+                && (f.EndsWith(Suffix, StringComparison.OrdinalIgnoreCase) ? IsConvertedJson(f) : IsCr2w(f)));
     }
 
     /// <summary>Whether a file in a folder is worth opening for this kind of batch: by its name alone.</summary>

@@ -223,12 +223,13 @@ public partial class Cr2wJsonWindow : Window, IMessageHost
         string? output = OutputFolder(ConvertFolderRadio, ConvertOutputBox);
         if (output == "") return;
         bool recursive = ConvertRecursiveCheck.IsChecked == true, overwrite = OverwriteCheck.IsChecked == true;
+        if (!TryFilter(ConvertOnlyBox, ConvertSkipBox, out var filter)) return;
         var paths = _convertInputs.Select(r => r.Path).ToList();
 
         await RunAsync(ConvertButton, ConvertStopButton, ConvertProgress, ConvertStatus, ConvertResults, dryRun: false,
             resave ? L.T("Cr2wJsonWindow.Resaving") : fromJson ? L.T("Cr2wJsonWindow.ConvertingBack") : L.T("Cr2wJsonWindow.Converting"), (progress, token) =>
             {
-                var inputs = Cr2wJsonBatch.Inputs(paths, fromJson, recursive, progress, token);
+                var inputs = Cr2wJsonBatch.Inputs(paths, fromJson, recursive, progress, token, filter);
                 return inputs.Count == 0 ? null
                     : resave ? Cr2wJsonBatch.ResaveAsLatest(inputs, output, overwrite, progress, token)
                     : fromJson ? Cr2wJsonBatch.FromJson(inputs, output, overwrite, progress, token, asLatest)
@@ -304,9 +305,9 @@ public partial class Cr2wJsonWindow : Window, IMessageHost
         {
             status.Text = L.T("Cr2wJsonWindow.Stopped2");
         }
-        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or FormatException)
+        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or FormatException or ArgumentException)
         {
-            // a recipe whose copy source has gone, say
+            // a recipe whose copy source has gone, say, or whose file pattern isn't a regular expression
             status.Text = ex.Message;
         }
         finally
@@ -375,7 +376,10 @@ public partial class Cr2wJsonWindow : Window, IMessageHost
             PickerPanel.Visibility = Visibility.Visible;
             var paths = _bulkInputs.Select(r => r.Path).ToList();
             bool recursive = BulkRecursiveCheck.IsChecked == true;
-            file = await Task.Run(() => paths.Select(p => File.Exists(p) ? p : Directory.Exists(p) ? Cr2wJsonBatch.FirstInput(p, Cr2wInputKind.Both, recursive) : null)
+            Cr2wFileFilter? filter = null;
+            try { filter = Cr2wFileFilter.Make(BulkOnlyBox.Text, BulkSkipBox.Text); }
+            catch (ArgumentException) { } // said under the boxes; every file is a choice meanwhile
+            file = await Task.Run(() => paths.Select(p => File.Exists(p) ? p : Directory.Exists(p) ? Cr2wJsonBatch.FirstInput(p, Cr2wInputKind.Both, recursive, filter) : null)
                 .FirstOrDefault(p => p is not null));
             if (file is null) PickerPanel.Visibility = Visibility.Collapsed;
         }
@@ -573,14 +577,54 @@ public partial class Cr2wJsonWindow : Window, IMessageHost
                 MessageKind.Question, primary: L.T("Cr2wJsonWindow.SaveOverThem"), secondary: L.T("Common.Cancel")))
             return;
         bool recursive = BulkRecursiveCheck.IsChecked == true;
+        if (!TryFilter(BulkOnlyBox, BulkSkipBox, out var filter)) return;
         var paths = _bulkInputs.Select(r => r.Path).ToList();
         await RunAsync(ApplyButton, BulkStopButton, BulkProgress, BulkStatus, BulkResults, dryRun, dryRun ? L.T("Cr2wJsonWindow.Checking") : L.T("Cr2wJsonWindow.Editing"), (progress, token) =>
         {
             // CR2W files and converted JSON files alike
-            var inputs = Cr2wRecipe.EditInputs(paths, recursive, progress, token);
+            var inputs = Cr2wRecipe.EditInputs(paths, recursive, progress, token, filter);
             return inputs.Count == 0 ? null : Cr2wJsonBatch.BulkEdit(inputs, edits, output, progress, token, dryRun);
         }, L.T("Cr2wJsonWindow.NoCR2WConvertedJson"));
     }
+
+    // ---------------------------------------------------------------- file filter
+
+    /// <summary>Says under the boxes, as they're typed in, when a pattern isn't a regular expression.</summary>
+    private void Filter_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        bool convert = sender == ConvertOnlyBox || sender == ConvertSkipBox;
+        var (only, skip, error) = convert ? (ConvertOnlyBox, ConvertSkipBox, ConvertFilterError) : (BulkOnlyBox, BulkSkipBox, BulkFilterError);
+        if (error is null || only is null || skip is null) return; // while the window is being built
+        try
+        {
+            Cr2wFileFilter.Make(only.Text, skip.Text);
+            error.Visibility = Visibility.Collapsed;
+        }
+        catch (ArgumentException ex)
+        {
+            error.Text = ex.Message;
+            error.Visibility = Visibility.Visible;
+        }
+    }
+
+    /// <summary>The filter the two boxes give (null for every file), or false, said in a message, when a pattern is no good.</summary>
+    private bool TryFilter(TextBox only, TextBox skip, out Cr2wFileFilter? filter)
+    {
+        try
+        {
+            filter = Cr2wFileFilter.Make(only.Text, skip.Text);
+            return true;
+        }
+        catch (ArgumentException ex)
+        {
+            filter = null;
+            _ = ShowMessage(L.T("Cr2wJsonWindow.FilterCantUse"), ex.Message, MessageKind.Warning);
+            return false;
+        }
+    }
+
+    /// <summary>A box's pattern for a recipe: null when it's empty.</summary>
+    private static string? Pattern(TextBox box) => string.IsNullOrWhiteSpace(box.Text) ? null : box.Text.Trim();
 
     // ---------------------------------------------------------------- recipes
 
@@ -631,6 +675,8 @@ public partial class Cr2wJsonWindow : Window, IMessageHost
         var rows = new List<(string Label, string Value)> { (Label("Cr2wJsonWindow.StepWhat"), KindName(recipe.Kind)) };
         for (int i = 0; i < recipe.Inputs.Count; i++) rows.Add((i == 0 ? Label("Cr2wJsonWindow.StepFiles") : "", recipe.Inputs[i]));
         if (recipe.Recursive) rows.Add(("", L.T("Cr2wJsonWindow.StepSubfolders")));
+        if (!string.IsNullOrWhiteSpace(recipe.Only)) rows.Add((Label("Cr2wJsonWindow.StepMatch"), recipe.Only));
+        if (!string.IsNullOrWhiteSpace(recipe.Skip)) rows.Add((Label("Cr2wJsonWindow.StepSkip"), recipe.Skip));
         rows.Add((Label("Cr2wJsonWindow.StepSaveTo"), !string.IsNullOrWhiteSpace(recipe.Output) ? recipe.Output
             : recipe.Kind == Cr2wRecipeKind.Edit ? L.T("Cr2wJsonWindow.StepOverFiles") : L.T("Cr2wJsonWindow.StepBeside")));
         var options = new List<string>();
@@ -752,6 +798,8 @@ public partial class Cr2wJsonWindow : Window, IMessageHost
             Kind = kind,
             Inputs = inputs,
             Recursive = ConvertRecursiveCheck.IsChecked == true,
+            Only = Pattern(ConvertOnlyBox),
+            Skip = Pattern(ConvertSkipBox),
             Overwrite = OverwriteCheck.IsChecked == true,
             AsLatest = kind == Cr2wRecipeKind.FromJson && AsLatestCheck.IsChecked == true,
             Output = output,
@@ -789,6 +837,8 @@ public partial class Cr2wJsonWindow : Window, IMessageHost
             Kind = Cr2wRecipeKind.Edit,
             Inputs = inputs,
             Recursive = BulkRecursiveCheck.IsChecked == true,
+            Only = Pattern(BulkOnlyBox),
+            Skip = Pattern(BulkSkipBox),
             Output = output,
             Edits = edits,
         });
@@ -873,6 +923,8 @@ public partial class Cr2wJsonWindow : Window, IMessageHost
             (recipe.Kind switch { Cr2wRecipeKind.FromJson => FromJsonRadio, Cr2wRecipeKind.Resave => ResaveRadio, _ => ToJsonRadio }).IsChecked = true;
             AsLatestCheck.IsChecked = recipe.AsLatest;
             ConvertRecursiveCheck.IsChecked = recipe.Recursive;
+            ConvertOnlyBox.Text = recipe.Only ?? "";
+            ConvertSkipBox.Text = recipe.Skip ?? "";
             OverwriteCheck.IsChecked = recipe.Overwrite;
             SetOutput(ConvertFolderRadio, ConvertBesideRadio, ConvertOutputBox, recipe.Output);
             Tabs.SelectedIndex = 0;
@@ -893,6 +945,8 @@ public partial class Cr2wJsonWindow : Window, IMessageHost
         _edits.Clear();
         foreach (var row in rows) _edits.Add(row);
         BulkRecursiveCheck.IsChecked = recipe.Recursive;
+        BulkOnlyBox.Text = recipe.Only ?? "";
+        BulkSkipBox.Text = recipe.Skip ?? "";
         SetOutput(BulkFolderRadio, BulkInPlaceRadio, BulkOutputBox, recipe.Output);
         Tabs.SelectedIndex = 1;
         if (failed.Count > 0)
