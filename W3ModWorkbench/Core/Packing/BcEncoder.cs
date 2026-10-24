@@ -63,7 +63,13 @@ public static class BcEncoder
             float r = px[i * 3] - mr, g = px[i * 3 + 1] - mg, b = px[i * 3 + 2] - mb;
             crr += r * r; crg += r * g; crb += r * b; cgg += g * g; cgb += g * b; cbb += b * b;
         }
-        float ar = 1, ag = 1, ab = 1;
+        // started from the covariance's column for the channel that varies most, which always leans along the main axis.
+        // Started from grey (1, 1, 1), a block whose red and blue go opposite ways (brown leather beside blue cloth) has
+        // its axis square to it: the iteration found noise, and the block came out a flat wrong colour
+        float ar, ag, ab;
+        if (crr >= cgg && crr >= cbb) (ar, ag, ab) = (crr, crg, crb);
+        else if (cgg >= cbb) (ar, ag, ab) = (crg, cgg, cgb);
+        else (ar, ag, ab) = (crb, cgb, cbb);
         for (int k = 0; k < 8; k++)
         {
             float nr = crr * ar + crg * ag + crb * ab, ng = crg * ar + cgg * ag + cgb * ab, nb = crb * ar + cgb * ag + cbb * ab;
@@ -83,15 +89,19 @@ public static class BcEncoder
         e0[0] = mr + ar * hi / n2; e0[1] = mg + ag * hi / n2; e0[2] = mb + ab * hi / n2;
         e1[0] = mr + ar * lo / n2; e1[1] = mg + ag * lo / n2; e1[2] = mb + ab * lo / n2;
 
+        // the end colours refined while that brings the block closer; a refinement can also throw them far off (a
+        // nearly flat block, where the picks barely say anything), each channel clamped on its own, and the block came
+        // out a flat wrong colour, green or orange in brown leather. So the closest pair tried is the one kept.
         Span<int> picks = stackalloc int[16];
-        ushort c0 = 0, c1 = 0;
-        for (int pass = 0; pass < 3; pass++)
+        ushort c0 = Pack565(e0), c1 = Pack565(e1);
+        float best = Pick(px, c0, c1, picks);
+        for (int pass = 0; pass < 2 && Refine(px, picks, e0, e1); pass++)
         {
-            c0 = Pack565(e0); c1 = Pack565(e1);
-            Pick(px, c0, c1, picks);
-            if (pass == 2 || !Refine(px, picks, e0, e1)) break;
+            ushort r0 = Pack565(e0), r1 = Pack565(e1);
+            float error = Pick(px, r0, r1, picks);
+            if (error >= best) break;
+            (c0, c1, best) = (r0, r1, error);
         }
-        c0 = Pack565(e0); c1 = Pack565(e1);
         if (c0 < c1) (c0, c1) = (c1, c0);
         uint bits = 0;
         if (c0 != c1)
@@ -117,9 +127,13 @@ public static class BcEncoder
         rgb[0] = (r << 3) | (r >> 2); rgb[1] = (g << 2) | (g >> 4); rgb[2] = (b << 3) | (b >> 2);
     }
 
-    /// <summary>Each pixel's nearest of the four colours c0, c1, 2/3 c0 + 1/3 c1, 1/3 c0 + 2/3 c1 (BC1's index order).</summary>
-    private static void Pick(ReadOnlySpan<float> px, ushort c0, ushort c1, Span<int> picks)
+    /// <summary>
+    /// Each pixel's nearest of the four colours c0, c1, 2/3 c0 + 1/3 c1, 1/3 c0 + 2/3 c1 (BC1's index order), and how far
+    /// the block is from them in all.
+    /// </summary>
+    private static float Pick(ReadOnlySpan<float> px, ushort c0, ushort c1, Span<int> picks)
     {
+        float total = 0;
         Span<float> pal = stackalloc float[12];
         Unpack565(c0, pal);
         Unpack565(c1, pal[3..]);
@@ -139,7 +153,9 @@ public static class BcEncoder
                 if (d < bestD) { bestD = d; best = p; }
             }
             picks[i] = best;
+            total += bestD;
         }
+        return total;
     }
 
     /// <summary>The end colours that best give the picks' weights, by least squares. False when they can't be solved.</summary>

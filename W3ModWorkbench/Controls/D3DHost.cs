@@ -90,7 +90,27 @@ public abstract class D3DHost : FrameworkElement, IDisposable
         _hooked = on;
         if (on) CompositionTarget.Rendering += OnFrame;
         else CompositionTarget.Rendering -= OnFrame;
+        if (on) FrameStats.EnabledChanged += ShowStats;
+        else FrameStats.EnabledChanged -= ShowStats;
+        ShowStats();
         _dirty = true;
+    }
+
+    // the frame rate panel, when Settings has it on: its frames noted as they're drawn, the panel redrawn twice a second
+    private readonly FrameStats _stats = new();
+    private System.Windows.Threading.DispatcherTimer? _statsTimer;
+
+    private void ShowStats()
+    {
+        bool show = _hooked && FrameStats.Enabled;
+        if (show && _statsTimer is null)
+        {
+            _statsTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
+            _statsTimer.Tick += (_, _) => InvalidateVisual();
+        }
+        if (show) _statsTimer!.Start();
+        else _statsTimer?.Stop();
+        InvalidateVisual();
     }
 
     /// <summary>Ask for a frame to be drawn.</summary>
@@ -360,6 +380,7 @@ public abstract class D3DHost : FrameworkElement, IDisposable
         }
         finally { _image.Unlock(); }
         LastFrameMilliseconds = clock.Elapsed.TotalMilliseconds;
+        if (FrameStats.Enabled) _stats.Frame(LastFrameMilliseconds);
     }
 
     /// <summary>Copies what's been drawn so far into <see cref="SceneTexture"/>.</summary>
@@ -380,6 +401,7 @@ public abstract class D3DHost : FrameworkElement, IDisposable
     {
         dc.DrawRectangle(BackBrush, null, new Rect(RenderSize));
         dc.DrawImage(_image, new Rect(RenderSize));
+        if (_hooked && FrameStats.Enabled) _stats.Draw(dc, this);
     }
 
     protected override void OnRenderSizeChanged(SizeChangedInfo sizeInfo)

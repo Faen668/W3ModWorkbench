@@ -140,6 +140,20 @@ public sealed class FolderNode : INotifyPropertyChanged
         }
     }
 
+    /// <summary>This folder and every folder under it.</summary>
+    public IEnumerable<FolderNode> Folders()
+    {
+        var stack = new Stack<FolderNode>();
+        stack.Push(this);
+        while (stack.Count > 0)
+        {
+            var node = stack.Pop();
+            yield return node;
+            for (int i = node.Children.Count - 1; i >= 0; i--)
+                stack.Push(node.Children[i]);
+        }
+    }
+
     public static FolderNode Build(IArchive archive, Action<EntryItem, bool> checkedChanged)
     {
         var root = new FolderNode(archive.Owner, archive, null);

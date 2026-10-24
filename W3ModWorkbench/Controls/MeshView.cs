@@ -163,7 +163,10 @@ public sealed partial class MeshView : Border
         _viewport.Items.Add(_skeleton);
         _viewport.Items.Add(_marks);
         _viewport.Items.Add(_particles);
-        Child = _viewport;
+        // the frame rate panel over the picture's corner, when Settings has it on
+        Child = new Grid { Children = { _viewport, _statsPanel } };
+        Loaded += (_, _) => HookStats(true);
+        Unloaded += (_, _) => HookStats(false);
         // the view is drawn at a size set here, not the control's, so a drag that resizes it every frame (a splitter)
         // doesn't make Direct3D new surfaces for each size: those go only now and then, and dozens a second ran a
         // scene's graphics memory out (an out-of-memory error, or a white window). Meanwhile its picture is stretched
@@ -185,6 +188,68 @@ public sealed partial class MeshView : Border
             RecoverDevice();
         };
         DeviceRecovered += (_, _) => _viewport.InvalidateRender();
+    }
+
+    // ---------------------------------------------------------------- the frame rate panel
+
+    private readonly FrameStats _stats = new();
+    private readonly TextBlock _statsText = new() { FontFamily = FrameStats.Font, FontSize = 11.5, Foreground = FrameStats.Ink };
+    private readonly System.Windows.Controls.Border _statsPanel = new()
+    {
+        Background = FrameStats.Plate, CornerRadius = new CornerRadius(4), Padding = new Thickness(8, 4, 8, 4), Margin = new Thickness(8),
+        HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top, IsHitTestVisible = false, Visibility = Visibility.Collapsed,
+    };
+    private System.Windows.Threading.DispatcherTimer? _statsTimer;
+    private bool _statsHooked;
+
+    /// <summary>Counts the frames Helix draws, and shows the panel while the view is on screen and Settings has it on.</summary>
+    private void HookStats(bool on)
+    {
+        if (on == _statsHooked) return;
+        _statsHooked = on;
+        _statsPanel.Child ??= _statsText;
+        if (on) FrameStats.EnabledChanged += ShowStats;
+        else FrameStats.EnabledChanged -= ShowStats;
+        FollowRenderHost();
+        ShowStats();
+    }
+
+    private HelixToolkit.SharpDX.IRenderHost? _countedHost;
+
+    /// <summary>Counts the frames of the view's renderer: there may be none yet when the view is loaded, and a recovered device brings a new one.</summary>
+    private void FollowRenderHost()
+    {
+        var host = _statsHooked ? _viewport.RenderHost : null;
+        if (ReferenceEquals(host, _countedHost)) return;
+        if (_countedHost is not null) _countedHost.Rendered -= NoteFrame;
+        _countedHost = host;
+        if (host is not null) host.Rendered += NoteFrame;
+    }
+
+    private void NoteFrame(object? sender, EventArgs e)
+    {
+        if (FrameStats.Enabled) _stats.Frame();
+    }
+
+    private void ShowStats()
+    {
+        bool show = _statsHooked && FrameStats.Enabled;
+        _statsPanel.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+        if (show && _statsTimer is null)
+        {
+            _statsTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
+            _statsTimer.Tick += (_, _) =>
+            {
+                FollowRenderHost();
+                _statsText.Text = _stats.Text();
+            };
+        }
+        if (show)
+        {
+            _statsText.Text = _stats.Text();
+            _statsTimer!.Start();
+        }
+        else _statsTimer?.Stop();
     }
 
     private static readonly DependencyProperty ThemeBackgroundProperty = DependencyProperty.Register(nameof(ThemeBackgroundProperty), typeof(Brush), typeof(MeshView),

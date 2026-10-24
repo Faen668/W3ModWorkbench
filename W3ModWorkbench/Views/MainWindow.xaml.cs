@@ -72,6 +72,7 @@ public partial class MainWindow : Window, IMessageHost
         _previewTimer.Tick += (_, _) => { _previewTimer.Stop(); _ = UpdatePreviewAsync(); };
         ApplyView();
         ApplyPreviewPane();
+        SubfoldersToggle.IsChecked = _settings.ListSubfolderFiles;
         UpdateRecentList();
         // started by a link to a game file: the tool starts as it would, then shows the file in the Asset Browser
         var link = args is [var arg] ? AppLinks.Parse(arg) : null;
@@ -520,13 +521,28 @@ public partial class MainWindow : Window, IMessageHost
     public async Task ReloadProjectAsync()
     {
         if (ProjectWorkspace.Current is not { } project || ProjectNode is not { } old) return;
-        bool selected = old.IsSelected;
+        // the folders open and the one picked, by their paths, to open and pick them again in the new tree
+        var open = new HashSet<string>(old.Folders().Where(f => f.IsExpanded).Select(f => f.FullPath), StringComparer.OrdinalIgnoreCase);
+        var picked = old.Folders().FirstOrDefault(f => f.IsSelected);
+        var highlighted = Highlighted().Select(i => i.Entry).OfType<LooseScriptEntry>().Select(l => l.FullPath).ToList();
         var node = await Task.Run(() => FolderNode.Build(ScriptFolder.OpenProject(project), OnEntryChecked));
-        node.IsExpanded = true;
         int index = _roots.IndexOf(old);
         if (index < 0) return; // closed while it was being read
+        foreach (var folder in node.Folders().Where(f => !f.IsBundle && open.Contains(f.FullPath))) folder.IsExpanded = true;
+        node.IsExpanded = true;
         _roots[index] = node;
-        if (selected) node.IsSelected = true;
+        if (picked is not null)
+        {
+            // the folder picked, or the nearest one above it that's still there (a folder whose last file went is gone)
+            var again = picked.IsBundle ? node : null;
+            for (string? path = picked.IsBundle ? null : picked.FullPath; again is null && path is not null; path = Path.GetDirectoryName(path) is { Length: > 0 } up ? up : null)
+                again = node.Folders().FirstOrDefault(f => !f.IsBundle && f.FullPath.Equals(path, StringComparison.OrdinalIgnoreCase));
+            (again ?? node).IsSelected = true;
+        }
+        // once the folder picked again has filled the list
+        var highlight = _reloadHighlight ?? highlighted;
+        _reloadHighlight = null;
+        _ = Dispatcher.InvokeAsync(() => Highlight(highlight), System.Windows.Threading.DispatcherPriority.Background);
         W3ModWorkbench.Core.Scripts.Navigation.ScriptWorkspace.Reindex(node.Archive);
         UpdateProjectUi();
         AfterBundlesClosed();
@@ -742,6 +758,10 @@ public partial class MainWindow : Window, IMessageHost
         }
         foreach (var item in new[] { TreeProjectPropertiesItem, TreeAddFilesItem, TreeNewMeshItem, TreeRefreshItem, TreeRevealItem })
             item.Visibility = project ? Visibility.Visible : Visibility.Collapsed;
+        TreePasteItem.Visibility = project && PasteFolder() is not null ? Visibility.Visible : Visibility.Collapsed;
+        TreePasteItem.IsEnabled = ClipboardFiles().Count > 0;
+        bool writable = DiskFolder(FolderTree.SelectedItem as FolderNode) is not null;
+        TreeToJsonItem.Visibility = TreeFromJsonItem.Visibility = writable ? Visibility.Visible : Visibility.Collapsed;
         TreeProjectSeparator.Visibility = project || loose ? Visibility.Visible : Visibility.Collapsed;
         TreeCloseItem.Header = project ? L.T("MainWindow.CloseProject") : loose ? L.T("MainWindow.CloseScripts") : root is { IsGroup: true } ? L.T("MainWindow.CloseMod") : L.T("MainWindow.CloseBundle");
     }
@@ -1033,9 +1053,11 @@ public partial class MainWindow : Window, IMessageHost
 
     private void RefreshView()
     {
+        // a folder's own files only, when that's the view, until there's a search: that looks in every folder under it
+        bool own = !_settings.ListSubfolderFiles && SearchBox.Text.Trim().Length == 0;
         List<EntryItem> scope = FolderTree.SelectedItem is FolderNode node
-            ? [.. node.AllFiles()]
-            : [.. _roots.SelectMany(r => r.AllFiles())];
+            ? own ? [.. node.Files] : [.. node.AllFiles()]
+            : own ? [.. _roots.SelectMany(r => r.Files)] : [.. _roots.SelectMany(r => r.AllFiles())];
         var result = FileFilterResult.Apply(scope, SearchBox.Text, _typeFilter, _classFilter);
         FillChoices(result);
 
@@ -1469,6 +1491,7 @@ public partial class MainWindow : Window, IMessageHost
         GridMakeModItem.Visibility = Highlighted() is [var one] && MakeModSource(one) is not null ? Visibility.Visible : Visibility.Collapsed;
         GridRemoveFromProjectItem.Visibility = project is not null && loose.Any(l => project.Include.Any(s => project.Resolve(s).Equals(l.FullPath, StringComparison.OrdinalIgnoreCase)))
             ? Visibility.Visible : Visibility.Collapsed;
+        UpdateProjectFileMenu();
     }
 
     /// <summary>
@@ -1586,10 +1609,14 @@ public partial class MainWindow : Window, IMessageHost
     }
 
     private void View_Click(object sender, RoutedEventArgs e) =>
-        ShowViewMenu(ViewButton, _settings.FileView, _settings.ShowFilePreview, SetView, TogglePreviewPane);
+        ShowViewMenu(ViewButton, _settings.FileView, _settings.ShowFilePreview, SetView, TogglePreviewPane, _settings.ListSubfolderFiles, ToggleSubfolders);
 
-    /// <summary>The View menu, here and in the asset browser: the files as a list or as thumbnails, and the preview pane on or off.</summary>
-    internal static void ShowViewMenu(UIElement button, string current, bool preview, Action<string> setView, Action togglePreview)
+    /// <summary>
+    /// The View menu, here and in the asset browser: the files as a list or as thumbnails, the preview pane on or off,
+    /// and here whether a folder lists the files in its subfolders too.
+    /// </summary>
+    internal static void ShowViewMenu(UIElement button, string current, bool preview, Action<string> setView, Action togglePreview,
+        bool subfolders = false, Action? toggleSubfolders = null)
     {
         var menu = new ContextMenu { PlacementTarget = button, Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom };
         void Choice(string header, string view)
@@ -1606,6 +1633,12 @@ public partial class MainWindow : Window, IMessageHost
         var pane = new MenuItem { Header = L.T("MainWindow.PreviewPane"), InputGestureText = L.T("MainWindow.AltP"), IsCheckable = true, IsChecked = preview };
         pane.Click += (_, _) => togglePreview();
         menu.Items.Add(pane);
+        if (toggleSubfolders is not null)
+        {
+            var below = new MenuItem { Header = L.T("ProjectFiles.IncludeSubfolders"), IsCheckable = true, IsChecked = subfolders, ToolTip = L.T("ProjectFiles.SubfoldersTip") };
+            below.Click += (_, _) => toggleSubfolders();
+            menu.Items.Add(below);
+        }
         menu.IsOpen = true;
     }
 
@@ -2026,7 +2059,34 @@ public partial class MainWindow : Window, IMessageHost
         }
         else if (FilesFocused && ctrl && e.Key == Key.C)
         {
-            CopyHighlightedPaths();
+            // a project's files go on the clipboard as files, for pasting here or in Explorer, with their paths as text
+            if (ProjectFiles(Highlighted()).Count > 0) ClipFiles(cut: false);
+            else CopyHighlightedPaths();
+            e.Handled = true;
+        }
+        else if (FilesFocused && ctrl && e.Key == Key.X)
+        {
+            ClipFiles(cut: true);
+            e.Handled = true;
+        }
+        else if ((FilesFocused || FolderTree.IsKeyboardFocusWithin) && ctrl && e.Key == Key.V)
+        {
+            _ = PasteAsync();
+            e.Handled = true;
+        }
+        else if (FilesFocused && e.Key == Key.Delete && Keyboard.Modifiers == ModifierKeys.None)
+        {
+            _ = DeleteHighlightedAsync();
+            e.Handled = true;
+        }
+        else if (FilesFocused && e.Key == Key.F2 && Keyboard.Modifiers == ModifierKeys.None)
+        {
+            _ = RenameHighlightedAsync();
+            e.Handled = true;
+        }
+        else if (e.Key == Key.F5 && Keyboard.Modifiers == ModifierKeys.None && ProjectNode is not null && !NameBox.IsKeyboardFocusWithin)
+        {
+            _ = ReloadProjectAsync();
             e.Handled = true;
         }
         else if (FilesFocused && Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && e.Key == Key.C)
@@ -2138,6 +2198,7 @@ public partial class MainWindow : Window, IMessageHost
         OutputBox.Text = _settings.OutputFolder;
         KeepStructureCheck.IsChecked = _settings.KeepStructure;
         OpenWhenDoneCheck.IsChecked = _settings.OpenWhenDone;
+        ApplySubfolders();
         return true;
     }
 

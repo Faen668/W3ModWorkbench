@@ -73,6 +73,8 @@ public partial class SettingsWindow : Window, IMessageHost
         ProjectsBox.TextChanged += (_, _) => UpdateProjectsStatus();
         UpdateProjectsStatus();
         ReopenProjectCheck.IsChecked = settings.ReopenLastProject;
+        SubfolderFilesCheck.IsChecked = settings.ListSubfolderFiles;
+        AskDeleteCheck.IsChecked = settings.AskBeforeDelete;
         UpdateRecentStatus();
         OutputBox.Text = settings.OutputFolder;
         KeepStructureCheck.IsChecked = settings.KeepStructure;
@@ -149,6 +151,7 @@ public partial class SettingsWindow : Window, IMessageHost
         RedkitPropsCheck.IsChecked = settings.PreferRedkitProperties;
         SimulateClothCheck.IsChecked = settings.SimulateCloth;
         (settings.Antialiasing switch { 0 => AntialiasOff, 4 => Antialias4, _ => Antialias2 }).IsChecked = true;
+        FrameStatsCheck.IsChecked = settings.ShowFrameStats;
         (settings.MeshExportAllLods ? ExportLodAll : ExportLodShown).IsChecked = true;
         ExportTexturesCheck.IsChecked = settings.MeshExportTextures;
         (settings.MeshImportFillLods ? ImportFillLods : ImportKeepLods).IsChecked = true;
@@ -654,6 +657,8 @@ public partial class SettingsWindow : Window, IMessageHost
         _settings.ThemePreset = _preset;
         _settings.ProjectsFolder = ProjectsBox.Text.Trim();
         _settings.ReopenLastProject = ReopenProjectCheck.IsChecked == true;
+        _settings.ListSubfolderFiles = SubfolderFilesCheck.IsChecked == true;
+        _settings.AskBeforeDelete = AskDeleteCheck.IsChecked == true;
         _settings.OutputFolder = OutputBox.Text.Trim();
         _settings.KeepStructure = KeepStructureCheck.IsChecked == true;
         _settings.OpenWhenDone = OpenWhenDoneCheck.IsChecked == true;
@@ -703,7 +708,12 @@ public partial class SettingsWindow : Window, IMessageHost
         if (SpeechKbpsBox.SelectedIndex >= 0) _settings.SpeechKbps = SpeechKbpsChoices[SpeechKbpsBox.SelectedIndex];
         Core.Animation.ClothRig.Enabled = _settings.SimulateCloth;
         _settings.TextureDetail = Detail512.IsChecked == true ? 512 : Detail2048.IsChecked == true ? 2048 : DetailFull.IsChecked == true ? 0 : 1024;
+        // the 3D views open follow at once
+        bool frameStats = FrameStatsCheck.IsChecked == true;
+        bool frameStatsChanged = frameStats != _settings.ShowFrameStats;
+        _settings.ShowFrameStats = frameStats;
         _settings.Save();
+        if (frameStatsChanged) FrameStats.RaiseEnabledChanged();
         Loc.Instance.Apply(Loc.Resolve(_settings.AppLanguage));
         PreviewWindow.ApplySettings();
         EditorLook.ApplyAll();

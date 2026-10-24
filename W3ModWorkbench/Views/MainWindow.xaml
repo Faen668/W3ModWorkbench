@@ -129,6 +129,11 @@
                         <TextBlock Style="{StaticResource IconText}" Text="&#xE70D;" FontSize="9" Margin="8,2,0,0" />
                     </StackPanel>
                 </Button>
+                <!-- a folder's own files, or every file under it: the View menu's choice, a click away -->
+                <ToggleButton x:Name="SubfoldersToggle" Margin="6,0,0,0" Padding="10,6" Click="SubfoldersToggle_Click"
+                              Visibility="{Binding Visibility, ElementName=BrowserPanel}" ToolTip="{l:T ProjectFiles.SubfoldersTip}">
+                    <TextBlock Style="{StaticResource IconText}" Text="&#xE8B7;" />
+                </ToggleButton>
             </StackPanel>
 
             <Button x:Name="AboutButton" DockPanel.Dock="Right" Margin="6,0,0,0" Padding="10,6" Click="About_Click"
@@ -211,11 +216,25 @@
                                 <MenuItem x:Name="TreeNewMeshItem" Header="{l:T MainWindow.NewMeshFromGltf}" Click="TreeNewMesh_Click" Visibility="Collapsed" ToolTip="{l:T MainWindow.NewMeshFromGltfTip}">
                                     <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE8B5;" /></MenuItem.Icon>
                                 </MenuItem>
-                                <MenuItem x:Name="TreeRefreshItem" Header="{l:T MainWindow.RefreshProject}" Click="ProjectRefresh_Click" Visibility="Collapsed" />
+                                <MenuItem x:Name="TreePasteItem" Header="{l:T ProjectFiles.Paste}" InputGestureText="Ctrl+V" Click="FilesPaste_Click" Visibility="Collapsed">
+                                    <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE77F;" /></MenuItem.Icon>
+                                </MenuItem>
+                                <MenuItem x:Name="TreeRefreshItem" Header="{l:T MainWindow.RefreshProject}" InputGestureText="F5" Click="ProjectRefresh_Click" Visibility="Collapsed"
+                                          ToolTip="{l:T ProjectFiles.RefreshTip}">
+                                    <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE72C;" /></MenuItem.Icon>
+                                </MenuItem>
                                 <MenuItem x:Name="TreeRevealItem" Header="{l:T MainWindow.OpenProjectFolder}" Click="ProjectReveal_Click" Visibility="Collapsed" />
                                 <Separator x:Name="TreeProjectSeparator" Visibility="Collapsed" />
                                 <MenuItem x:Name="TreeRevealArchiveItem" Header="{l:T Common.ShowExplorer}" Click="TreeReveal_Click">
                                     <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE838;" /></MenuItem.Icon>
+                                </MenuItem>
+                                <MenuItem x:Name="TreeToJsonItem" Header="{l:T FolderJson.ToJson}" Click="TreeToJson_Click" Visibility="Collapsed"
+                                          ToolTip="{l:T FolderJson.ToJsonTip}">
+                                    <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE943;" /></MenuItem.Icon>
+                                </MenuItem>
+                                <MenuItem x:Name="TreeFromJsonItem" Header="{l:T FolderJson.FromJson}" Click="TreeFromJson_Click" Visibility="Collapsed"
+                                          ToolTip="{l:T FolderJson.FromJsonTip}">
+                                    <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE7A7;" /></MenuItem.Icon>
                                 </MenuItem>
                                 <MenuItem Header="{l:T MainWindow.ExtractFolder}" Click="TreeExtract_Click">
                                     <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE896;" /></MenuItem.Icon>
@@ -236,6 +255,16 @@
 
                 <!-- the list, and under it what narrows it: class, file type and search -->
                 <DockPanel Grid.Column="2">
+                <!-- a name for a file being renamed, over the list -->
+                <Border x:Name="NameBar" DockPanel.Dock="Top" Style="{StaticResource Card}" Margin="0,0,0,6" Padding="10,8" Visibility="Collapsed">
+                    <StackPanel>
+                        <TextBlock x:Name="NameLabel" TextWrapping="Wrap" Margin="0,0,0,6" />
+                        <TextBox x:Name="NameBox" PreviewKeyDown="NameBox_PreviewKeyDown" LostKeyboardFocus="NameBox_LostKeyboardFocus" />
+                        <TextBlock x:Name="NameProblem" Visibility="Collapsed" Margin="0,6,0,0" TextWrapping="Wrap"
+                                   Foreground="{DynamicResource SystemFillColorCriticalBrush}" />
+                        <TextBlock Margin="0,6,0,0" Opacity="0.6" FontSize="11" Text="{l:T PreviewWindow.EnterAcceptEscCancel}" />
+                    </StackPanel>
+                </Border>
                 <!-- search, then file type, then class: kept low, so the list keeps the room -->
                 <Border x:Name="FilterBar" DockPanel.Dock="Bottom" Style="{StaticResource Card}" Margin="0,6,0,0" Padding="6,4">
                   <DockPanel LastChildFill="True">
@@ -336,6 +365,29 @@
                                 </MenuItem>
                                 <MenuItem x:Name="GridRemoveFromProjectItem" Header="{l:T MainWindow.RemoveProject}" Click="GridRemoveFromProject_Click" Visibility="Collapsed">
                                     <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE738;" /></MenuItem.Icon>
+                                </MenuItem>
+                                <!-- the project's own files, as Explorer handles them -->
+                                <Separator x:Name="GridFileSeparator" Visibility="Collapsed" />
+                                <MenuItem x:Name="GridCutItem" Header="{l:T ProjectFiles.Cut}" InputGestureText="Ctrl+X" Click="FilesCut_Click" Visibility="Collapsed">
+                                    <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE8C6;" /></MenuItem.Icon>
+                                </MenuItem>
+                                <MenuItem x:Name="GridCopyFilesItem" Header="{l:T ProjectFiles.CopyFiles}" InputGestureText="Ctrl+C" Click="FilesCopy_Click" Visibility="Collapsed"
+                                          ToolTip="{l:T ProjectFiles.CopyFilesTip}">
+                                    <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE8C8;" /></MenuItem.Icon>
+                                </MenuItem>
+                                <MenuItem x:Name="GridPasteItem" Header="{l:T ProjectFiles.Paste}" InputGestureText="Ctrl+V" Click="FilesPaste_Click" Visibility="Collapsed">
+                                    <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE77F;" /></MenuItem.Icon>
+                                </MenuItem>
+                                <MenuItem x:Name="GridDuplicateItem" Header="{l:T ProjectFiles.Duplicate}" Click="FilesDuplicate_Click" Visibility="Collapsed"
+                                          ToolTip="{l:T ProjectFiles.DuplicateTip}">
+                                    <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE8A5;" /></MenuItem.Icon>
+                                </MenuItem>
+                                <MenuItem x:Name="GridRenameItem" Header="{l:T PreviewWindow.Rename2}" InputGestureText="F2" Click="FilesRename_Click" Visibility="Collapsed">
+                                    <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE8AC;" /></MenuItem.Icon>
+                                </MenuItem>
+                                <MenuItem x:Name="GridDeleteItem" Header="{l:T PreviewWindow.Delete2}" InputGestureText="Del" Click="FilesDelete_Click" Visibility="Collapsed"
+                                          ToolTip="{l:T PreviewWindow.MovesRecycleBin}">
+                                    <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE74D;" /></MenuItem.Icon>
                                 </MenuItem>
                                 <MenuItem x:Name="GridExternalItem" Header="{l:T MainWindow.OpenExternalEditor}" Click="GridExternal_Click">
                                     <MenuItem.Icon><TextBlock Style="{StaticResource IconText}" Text="&#xE8A7;" /></MenuItem.Icon>

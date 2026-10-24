@@ -136,6 +136,12 @@ public sealed class Settings
     /// <summary>How the main window lists files: Details, or Small, Medium or Large thumbnails.</summary>
     public string FileView { get; set; } = "Details";
 
+    /// <summary>Whether a folder picked in the main window lists every file under it, or only its own (as Explorer does).</summary>
+    public bool ListSubfolderFiles { get; set; } = true;
+
+    /// <summary>Whether Delete in the file list asks before it sends a project's files to the Recycle Bin.</summary>
+    public bool AskBeforeDelete { get; set; } = true;
+
     /// <summary>Show the preview pane beside the file list, and how wide it is.</summary>
     public bool ShowFilePreview { get; set; } = true;
     public double FilePreviewWidth { get; set; } = 380;
@@ -144,6 +150,9 @@ public sealed class Settings
     public string AssetFileView { get; set; } = "Details";
     public bool ShowAssetPreview { get; set; }
     public double AssetPreviewWidth { get; set; } = 380;
+
+    /// <summary>Whether every 3D view shows its frame rate and frame times in a corner, for seeing how fast it draws.</summary>
+    public bool ShowFrameStats { get; set; }
 
     /// <summary>Whether the mesh viewer draws a floor grid under the mesh, and shows what it's drawing over the view.</summary>
     public bool ShowMeshFloor { get; set; } = true;

@@ -880,16 +880,22 @@ public partial class PreviewWindow
     }
 
     /// <summary>Closes the tabs of files at or under a path before it's renamed or deleted; false when one has changes and the answer was to keep them.</summary>
-    private async Task<bool> CloseTabsUnderAsync(string path, bool renaming)
+    private Task<bool> CloseTabsUnderAsync(string path, bool renaming) => CloseTabsUnderAsync([path], renaming, BenchMessage);
+
+    /// <summary>
+    /// Closes the tabs, in every window, of files at or under some paths before they're renamed, moved or deleted, asking
+    /// on <paramref name="message"/> about unsaved changes; false when one has changes and the answer was to keep them.
+    /// </summary>
+    internal static async Task<bool> CloseTabsUnderAsync(IReadOnlyCollection<string> paths, bool renaming, MessageCard message)
     {
-        string full = Path.GetFullPath(path);
+        var full = paths.Select(Path.GetFullPath).ToList();
         bool Under(PreviewDocument d) => d.Item.DiskPath is { } disk
-            && (disk.Equals(full, StringComparison.OrdinalIgnoreCase) || disk.StartsWith(full + "\\", StringComparison.OrdinalIgnoreCase));
+            && full.Any(f => disk.Equals(f, StringComparison.OrdinalIgnoreCase) || disk.StartsWith(f + "\\", StringComparison.OrdinalIgnoreCase));
         var docs = AllOpenDocuments().Where(Under).ToList();
         var unsaved = docs.Where(d => d.IsDirty).ToList();
         if (unsaved.Count > 0)
         {
-            var choice = await BenchMessage.Ask(L.T("PreviewWindow.SaveChangesFirst", Names(unsaved)),
+            var choice = await message.Ask(L.T("PreviewWindow.SaveChangesFirst", Names(unsaved)),
                 (unsaved.Count == 1 ? L.T("PreviewWindow.ItsTabIsClosed") : L.T("PreviewWindow.TheirTabsAreClosed"))
                 + L.T(renaming ? "PreviewWindow.BeforeRenamed" : "PreviewWindow.BeforeDeleted", docs.Count),
                 MessageKind.Question, L.T("Common.Save"), L.T("Common.DontSave"));
@@ -903,7 +909,7 @@ public partial class PreviewWindow
         return true;
     }
 
-    private static string? NameProblem(string name) =>
+    internal static string? NameProblem(string name) =>
         name.Length == 0 ? L.T("PreviewWindow.TypeName")
         : name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 ? L.T("PreviewWindow.NameCantHave")
         : name.Trim() != name || name.EndsWith('.') ? L.T("PreviewWindow.NameCantStartEnd")

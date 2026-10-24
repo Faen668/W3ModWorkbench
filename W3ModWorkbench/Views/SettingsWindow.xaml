@@ -193,6 +193,10 @@
                             </Grid>
                             <TextBlock x:Name="ProjectsStatus" Style="{StaticResource Hint}" />
                             <CheckBox x:Name="ReopenProjectCheck" Content="{l:T Settings.General.ReopenProject}" Margin="0,14,0,0" />
+                            <CheckBox x:Name="SubfolderFilesCheck" Content="{l:T Settings.General.SubfolderFiles}" Margin="0,8,0,0" />
+                            <TextBlock Style="{StaticResource Hint}" Text="{l:T Settings.General.SubfolderFilesHint}" />
+                            <CheckBox x:Name="AskDeleteCheck" Content="{l:T Settings.General.AskDelete}" Margin="0,8,0,0" />
+                            <TextBlock Style="{StaticResource Hint}" Text="{l:T Settings.General.AskDeleteHint}" />
                             <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
                                 <Button x:Name="ClearRecentButton" Padding="12,5" Click="ClearRecent_Click">
                                     <StackPanel Orientation="Horizontal">
@@ -657,6 +661,8 @@
                             </Border>
                             <TextBlock Style="{StaticResource Hint}"
                                        Text="{l:T Settings.Viewers.AntialiasingHint}" />
+                            <CheckBox x:Name="FrameStatsCheck" Content="{l:T Settings.Viewers.FrameStats}" Margin="0,12,0,0" />
+                            <TextBlock Style="{StaticResource Hint}" Text="{l:T Settings.Viewers.FrameStatsHint}" />
                         </StackPanel>
                     </Border>
 

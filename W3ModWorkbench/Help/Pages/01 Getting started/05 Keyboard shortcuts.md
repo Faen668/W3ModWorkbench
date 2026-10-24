@@ -31,7 +31,10 @@ keywords: keys hotkeys shortcuts keyboard
 | {{Enter}} | open the highlighted file |
 | {{Alt+P}} | the preview pane on or off |
 | {{Ctrl+A}} | highlight every file |
-| {{Ctrl+C}} / {{Ctrl+Shift+C}} | copy the highlighted files' paths / names |
+| {{Ctrl+C}} / {{Ctrl+Shift+C}} | copy the highlighted files' paths / names (a project's own files are copied as files, with their paths) |
+| {{Ctrl+X}} / {{Ctrl+V}} | cut a project's files / paste into the project folder picked in the tree |
+| {{F2}} / {{Del}} | rename a project's file / send it to the Recycle Bin |
+| {{F5}} | read the project's files from disk again |
 | {{Ctrl+D}} | compare the two highlighted files |
 | {{Ctrl+Shift+D}} | other copies of the highlighted file |
 | {{Shift+Alt+R}} | show in Explorer |

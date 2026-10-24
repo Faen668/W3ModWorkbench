@@ -40,6 +40,8 @@ The JSON editor colours and folds as you type, has an **Outline** ({{Ctrl+Shift+
 - **JSON back to CR2W** writes `name.env` from each `name.env.json`.
 - **Resave as version 164** saves REDkit's older source files in the format the engine saves today, which other tools read more easily.
 
+For a whole folder of your own, right-click it in the main window's tree: **Convert to JSON** and **Convert JSON back** do the same for every file in it and its subfolders, beside each one, keeping the originals. Files already there are asked about once: replace them, or leave them as they are. It's offered on your project's folders and on folders you opened from disk, not on the game's or installed mods'.
+
 Save **beside each file** or **into a folder**. Every file is checked as it's converted: its JSON must turn back into exactly the same bytes, or it isn't written.
 
 A big folder (REDkit's `r4data` has over 220,000 files) shows its progress as it goes: the files found, then each one checked, then the work. **Stop** works at every step.
