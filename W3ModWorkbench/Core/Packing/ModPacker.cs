@@ -1,4 +1,5 @@
 using System.IO;
+using W3ModWorkbench.Core.Strings;
 using W3ModWorkbench.Localisation;
 
 namespace W3ModWorkbench.Core.Packing;
@@ -16,8 +17,10 @@ public sealed record PackResult(IReadOnlyList<string> Made, IReadOnlyList<string
 /// <c>.tga</c>, <c>.bmp</c>, or a <c>.png</c>/<c>.jpg</c> standing in for a texture the workspace or the game has) made
 /// into the <c>.xbm</c> of its name; their mip levels go in <c>texture.cache</c> (<see cref="TextureCooker"/>);</item>
 /// <item>sounds (<c>.wem</c>, <c>.bnk</c>) go in <c>soundspc.cache</c>, where the game looks for them;</item>
-/// <item>caches made some other way (a <c>collision.cache</c>, say) and speech files (<c>enpc.w3speech</c>, made with
-/// RedSpeech Tool) at the top of the workspace go in as they are; loose voice lines (<c>speech\…\.wem</c>) are left out.</item>
+/// <item>caches made some other way (a <c>collision.cache</c>, say) at the top of the workspace go in as they are;</item>
+/// <item>voice lines (<c>speech\en\ID.wem</c>, with lip syncs as <c>ID.raw</c> or <c>ID.cr2w</c>) go in the language's
+/// speech file (<c>enpc.w3speech</c>), with the lines of a speech file at the workspace's top kept unless the folder
+/// has them too.</item>
 /// </list>
 /// A cooked file (one copied from the game) goes in as it is.
 /// </summary>
@@ -55,16 +58,17 @@ public static class ModPacker
         var byPath = all.ToDictionary(s => s.GamePath, StringComparer.OrdinalIgnoreCase);
 
         // sounds, and pictures that are textures
+        var speechFolders = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
         var sounds = new List<BundleWriter.Source>();
         var pictures = new Dictionary<string, BundleWriter.Source>(StringComparer.OrdinalIgnoreCase);
         var rest = new List<BundleWriter.Source>();
         foreach (var file in BundleWriter.InFolderOrder(all))
         {
             string ext = Path.GetExtension(file.GamePath);
-            if (file.GamePath.StartsWith(@"speech\", StringComparison.OrdinalIgnoreCase) && ext.Equals(".wem", StringComparison.OrdinalIgnoreCase))
+            if (file.GamePath.StartsWith(@"speech\", StringComparison.OrdinalIgnoreCase))
             {
-                // a voice line: the game reads them only from a .w3speech file, which this tool doesn't make
-                notes.Add(L.T("ModPacker.VoiceLineLeftOut", file.GamePath));
+                // a voice line or its lip sync: the game reads them only from a speech file, packed below
+                speechFolders.Add(Path.GetDirectoryName(file.GamePath) ?? "");
                 continue;
             }
             if (SoundCacheWriter.IsSound(file.GamePath)) { sounds.Add(file); continue; }
@@ -209,8 +213,31 @@ public static class ModPacker
                 made.Add(L.T("ModPacker.SoundsIn", L.T("Count.Sound", named.Count), SoundCacheWriter.FileName));
             }
 
+            // voice lines, each language's folder into its speech file, with a speech file at the workspace's top under them
+            var packedSpeech = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (string folder in speechFolders)
+            {
+                cancel.ThrowIfCancellationRequested();
+                string handle = Path.GetFileName(folder);
+                if (folder.Count(c => c == '\\') != 1 || W3Strings.Language(handle) is not { } language)
+                {
+                    notes.Add(L.T("ModPacker.SpeechFolderLeftOut", folder));
+                    continue;
+                }
+                var (lines, folderNotes) = SpeechFolder.Read(Path.Combine(root, folder));
+                notes.AddRange(folderNotes.Select(n => $"{folder}: {n}"));
+                if (lines.Count == 0) continue;
+                string name = $"{language.Handle}pc.w3speech";
+                var top = caches.FirstOrDefault(c => c.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+                progress?.Report(L.T("ModPacker.WritingSpeech", name, L.T("Count.VoiceLine", lines.Count)));
+                int total = SpeechFolder.Pack(lines, language, Path.Combine(content, name), top is null ? null : W3Speech.Open(top.FullName, language), cancel: cancel);
+                packedSpeech.Add(name);
+                made.Add(top is null ? L.T("ModPacker.VoiceLinesIn", L.T("Count.VoiceLine", total), name)
+                    : L.T("ModPacker.VoiceLinesInWith", L.T("Count.VoiceLine", total), name, L.T("Count.VoiceLine", lines.Count)));
+            }
+
             // caches made elsewhere (a collision cache, say) at the workspace's top go in as they are, beside the bundles
-            foreach (var file in caches)
+            foreach (var file in caches.Where(c => !packedSpeech.Contains(c.Name)))
             {
                 string to = Path.Combine(content, file.Name);
                 if (File.Exists(to))

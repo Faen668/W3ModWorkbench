@@ -173,6 +173,9 @@ public sealed class Settings
     /// <summary>Whether Upgrade sounds to v150 replaces the cache or bank (keeping the original as .bak) rather than saving a new file.</summary>
     public bool SoundUpgradeReplace { get; set; } = true;
 
+    /// <summary>Whether unpacking a speech file saves each voice line as a .wav as well as its .wem.</summary>
+    public bool SpeechUnpackWav { get; set; }
+
     /// <summary>Whether the entity viewer shows what it's drawing (triangles, frame rate…) over the view.</summary>
     public bool ShowEntityInfo { get; set; } = true;
 
