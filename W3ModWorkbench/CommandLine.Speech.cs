@@ -14,14 +14,15 @@ namespace W3ModWorkbench;
 /// </summary>
 public static partial class CommandLine
 {
-    private static readonly string[] SpeechCommands = ["--speech-unpack", "--speech-pack", "--lipsync", "--strings-to-csv", "--csv-to-strings", "--wav-to-wem"];
+    private static readonly string[] SpeechCommands = ["--speech-unpack", "--speech-pack", "--lipsync", "--strings-to-csv", "--csv-to-strings", "--wav-to-wem", "--lipsync-from-audio", "--learn-lipsync"];
 
     /// <summary>The options the voice line and strings commands take, read the same way for each.</summary>
     private sealed class SpeechOptions
     {
         public List<string> Paths { get; } = [];
         public string? Out, Language, To, Layout;
-        public bool Wav, Re, Keep, Recursive, Overwrite;
+        public bool Wav, Re, Keep, Recursive, Overwrite, MakeLipSync;
+        public string? Game = Core.GameLocator.Resolve(null);
         public int Kbps = App.Settings.SpeechKbps;
     }
 
@@ -41,6 +42,8 @@ public static partial class CommandLine
                 case "--wav": o.Wav = true; break;
                 case "--re": o.Re = true; break;
                 case "--keep": o.Keep = true; break;
+                case "--make-lipsync": o.MakeLipSync = true; break;
+                case "--game": o.Game = Next(); break;
                 case "--recursive" or "-r": o.Recursive = true; break;
                 case "--overwrite": o.Overwrite = true; break;
                 case "--kbps": o.Kbps = int.TryParse(Next(), out int k) && k is >= 6 and <= 256 ? k : throw new ArgumentException("--kbps is the bitrate a channel in kbit/s, 6 to 256 (the game's voice lines are near 64)."); break;
@@ -50,8 +53,38 @@ public static partial class CommandLine
                     break;
             }
         }
-        if (o.Paths.Count == 0) throw new ArgumentException($"{args[0]} needs the files or folders to work on. Run --help voice for its options.");
+        if (o.Paths.Count == 0 && args[0] != "--learn-lipsync") throw new ArgumentException($"{args[0]} needs the files or folders to work on. Run --help voice for its options.");
         return o;
+    }
+
+    /// <summary>The lip sync model learnt here, learning it from the game first (printing how far it's got) when there's none yet.</summary>
+    private static LipSyncModel LipSyncModelFor(SpeechOptions o, TextWriter output)
+    {
+        if (LipSyncModel.Load(LipSyncModel.DefaultPath) is { } saved) return saved;
+        if (string.IsNullOrEmpty(o.Game) || !Directory.Exists(o.Game))
+            throw new ArgumentException("Lip sync is learnt from the game's voice lines, and the game wasn't found: give its folder with --game, or set it in Settings.");
+        output.WriteLine("Learning lip sync from the game's voice lines (once; about ten minutes)...");
+        output.Flush();
+        // each stage as it comes, flushed, so a script reading the output sees how far it's got
+        string last = "";
+        var gate = new object();
+        var progress = new LineProgress<LipSyncTrainingProgress>(p =>
+        {
+            lock (gate)
+            {
+                if (p.Stage == last) return;
+                last = p.Stage;
+                output.WriteLine($"  {p.Stage}");
+                output.Flush();
+            }
+        });
+        return LipSyncTrainer.Learn(o.Game, progress);
+    }
+
+    /// <summary>Progress reported as it happens, on the thread that reports it (Progress&lt;T&gt; posts it on later, after the result is written).</summary>
+    private sealed class LineProgress<T>(Action<T> report) : IProgress<T>
+    {
+        public void Report(T value) => report(value);
     }
 
     private static W3Language LanguageOption(string handle) =>
@@ -104,8 +137,9 @@ public static partial class CommandLine
                         foreach (string note in notes) output.WriteLine($"note    {note}");
                         if (lines.Count == 0) throw new ArgumentException("there are no ID.wem voice lines in it.");
                         var startFrom = o.Keep && File.Exists(file) ? W3Speech.Open(file, language) : null;
-                        int total = SpeechFolder.Pack(lines, language, file, startFrom, kbps: o.Kbps);
-                        Ok($"{file}  ({total} voice lines{(startFrom is null ? "" : $", {lines.Count} from the folder")})");
+                        var model = o.MakeLipSync && lines.Any(l => l.LipSync is null) ? LipSyncModelFor(o, output) : null;
+                        var (total, madeLips) = SpeechFolder.Pack(lines, language, file, startFrom, model, kbps: o.Kbps);
+                        Ok($"{file}  ({total} voice lines{(startFrom is null ? "" : $", {lines.Count} from the folder")}{(madeLips > 0 ? $", {madeLips} lip syncs made from their sound" : "")})");
                     }
                     catch (Exception ex) when (ex is ArgumentException or IOException or InvalidDataException or UnauthorizedAccessException or EndOfStreamException)
                     {
@@ -113,6 +147,58 @@ public static partial class CommandLine
                     }
                 }
                 break;
+
+            case "--learn-lipsync":
+            {
+                if (File.Exists(LipSyncModel.DefaultPath)) File.Delete(LipSyncModel.DefaultPath);
+                var model = LipSyncModelFor(o, output);
+                Ok($"{LipSyncModel.DefaultPath}  ({model.Info.Describe()})");
+                break;
+            }
+
+            case "--lipsync-from-audio":
+            {
+                var inputs = new List<(string File, string? Root)>();
+                foreach (string path in o.Paths)
+                    if (File.Exists(path)) inputs.Add((Path.GetFullPath(path), null));
+                    else if (Directory.Exists(path))
+                        inputs.AddRange(Directory.EnumerateFiles(path, "*", o.Recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly)
+                            .Where(f => Path.GetExtension(f).ToLowerInvariant() is ".wav" or ".wem").Order(StringComparer.OrdinalIgnoreCase)
+                            .Select(f => (Path.GetFullPath(f), (string?)Path.GetFullPath(path))));
+                if (inputs.Count == 0)
+                {
+                    output.WriteLine("No .wav or .wem sounds were found there.");
+                    return 1;
+                }
+                var model = LipSyncModelFor(o, output);
+                foreach (var (file, root) in inputs)
+                {
+                    string below = root is null ? "." : Path.GetRelativePath(root, Path.GetDirectoryName(file)!);
+                    string folder = o.Out is null ? Path.GetDirectoryName(file)! : below == "." ? o.Out : Path.Combine(o.Out, below);
+                    string target = Path.Combine(folder, Path.GetFileNameWithoutExtension(file) + (o.To == "re" ? ".re" : ".raw"));
+                    if (File.Exists(target) && !o.Overwrite) { output.WriteLine($"skipped {file}: {target} is there already (--overwrite replaces it)"); continue; }
+                    try
+                    {
+                        byte[] data = File.ReadAllBytes(file);
+                        (short[] samples, int channels) sound;
+                        if (Path.GetExtension(file).Equals(".wav", StringComparison.OrdinalIgnoreCase))
+                        {
+                            var wav = WavFile.Read(data).Resampled(WemOpus.SampleRate);
+                            sound = (wav.Samples, wav.Channels);
+                        }
+                        else sound = WwiseOpus.Decode(data);
+                        var lip = model.Make(sound.samples, sound.channels);
+                        Directory.CreateDirectory(folder);
+                        File.WriteAllBytes(target, LipSyncConverter.Write(lip, o.To == "re" ? LipSyncFormat.Re : LipSyncFormat.Raw));
+                        Ok($"{target}  ({lip.Duration:0.0} s)");
+                    }
+                    catch (Exception ex) when (ex is IOException or InvalidDataException or NotSupportedException or UnauthorizedAccessException)
+                    {
+                        Fail(file, ex.Message);
+                    }
+                }
+                break;
+            }
 
             case "--wav-to-wem":
             {
@@ -267,6 +353,13 @@ public static partial class CommandLine
               --keep                         Keep the lines already in that speech file the folder hasn't got
               --kbps <n>                     The bitrate a channel a .wav is made at (64 unless Settings says otherwise)
               --language <xx>                When the folder's name isn't a language (speech\en is English)
+          --lipsync-from-audio <files or folders…> [--to re]
+                                             A lip sync made from each .wav or .wem, as the game's own lines taught it;
+                                             ID.raw beside each (or ID.re with --to re), or under --out <folder>
+          --learn-lipsync                    Learn lip sync again from the game's voice lines (a few minutes); it's
+                                             learnt the first time it's needed anyway. --game <folder> when Settings
+                                             hasn't the game's folder
+              --make-lipsync                 With --speech-pack: make a lip sync for each line that has none
           --wav-to-wem <files or folders…>   Make each .wav a .wem as the game's voice lines are (Wwise Opus, 48 kHz; mono,
                                              stereo or 5.1); beside each one, or under --out <folder>. -r, --overwrite
                                              and --kbps as above

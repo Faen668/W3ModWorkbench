@@ -230,7 +230,18 @@ public static class ModPacker
                 string name = $"{language.Handle}pc.w3speech";
                 var top = caches.FirstOrDefault(c => c.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
                 progress?.Report(L.T("ModPacker.WritingSpeech", name, L.T("Count.VoiceLine", lines.Count)));
-                int total = SpeechFolder.Pack(lines, language, Path.Combine(content, name), top is null ? null : W3Speech.Open(top.FullName, language), cancel: cancel, kbps: App.Settings.SpeechKbps);
+                // a lip sync for each line that has none, from the model learnt from the game (learnt now, the first time)
+                Animation.LipSyncModel? lipModel = null;
+                if (App.Settings.SpeechMakeLipSyncs && lines.Any(l => l.LipSync is null))
+                {
+                    string? gameFolder = GameLocator.Resolve(null);
+                    if (File.Exists(Animation.LipSyncModel.DefaultPath) || gameFolder is not null)
+                        lipModel = Animation.LipSyncTrainer.LoadOrLearn(gameFolder,
+                            progress is null ? null : new Progress<Animation.LipSyncTrainingProgress>(p => progress.Report(L.T("ModPacker.LearningLipSync", p.Stage))), cancel);
+                    else notes.Add(L.T("ModPacker.NoLipSyncWithoutGame", folder));
+                }
+                var (total, madeLips) = SpeechFolder.Pack(lines, language, Path.Combine(content, name), top is null ? null : W3Speech.Open(top.FullName, language), lipModel, cancel: cancel, kbps: App.Settings.SpeechKbps);
+                if (madeLips > 0) made.Add(L.T("ModPacker.LipSyncsMade", L.T("Count.LipSync", madeLips), name));
                 packedSpeech.Add(name);
                 made.Add(top is null ? L.T("ModPacker.VoiceLinesIn", L.T("Count.VoiceLine", total), name)
                     : L.T("ModPacker.VoiceLinesInWith", L.T("Count.VoiceLine", total), name, L.T("Count.VoiceLine", lines.Count)));

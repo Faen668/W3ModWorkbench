@@ -3,7 +3,7 @@ title: Voice lines
 icon: E720
 order: 7
 summary: Unpack the game's speech files into sounds and lip syncs, and pack your own voice lines into one.
-keywords: voice speech w3speech enpc wem wav record recording opus bitrate lipsync lip sync raw cr2w re hdf5 blender redkit face dialogue vo pack unpack redspeech convert command line batch
+keywords: voice speech w3speech enpc wem wav record recording opus bitrate lipsync generate make automatic learn lip sync raw cr2w re hdf5 blender redkit face dialogue vo pack unpack redspeech convert command line batch
 windows: SpeechWindow
 ---
 The game keeps each language's voice lines in one **speech file**: `enpc.w3speech` for English, `depc.w3speech` for German, and so on. Each line is a sound (a Wwise `.wem`) and its lip sync, found by the line's string ID, the same number its words have in the strings files.
@@ -42,10 +42,21 @@ Save each line as `ID.wav` in the folder and pack it, or Build: each one is made
 - Mono, stereo and 5.1 recordings, at any sample rate, as 8, 16, 24 or 32-bit PCM or as 32 or 64-bit float: what Audacity, Reaper and most recorders save. The game's lines are mono.
 - **Settings > Viewers** sets the bitrate, 64 kbit/s a channel unless you change it, which is close to the game's own lines.
 - To change a line you unpacked, edit its `.wav` and delete its `.wem`.
-- Lip sync from a recording isn't made here: [RedSpeech Tool](https://www.nexusmods.com/witcher3/mods/14750) by nikich340 makes it, and its `.raw` or `.re` goes beside the `.wav`.
+- A line with no lip sync gets one made from its recording (below).
 
 
-## Editing a lip sync in Blender
+## Lip sync made from a recording
+
+With **Make a lip sync for each line that has none, from its sound** ticked, packing gives every line that has a `.wav` or `.wem` but no lip sync one made from its sound, and so does Build (**Settings > Viewers** sets whether it's on).
+
+It's made the way your game's own lines teach it. The first time it's needed, the app listens to your game's voice lines, 10,000 of them, each with the lip sync CDPR made for it, and learns how the jaw, lips, tongue and cheeks move with the sound. That takes about ten minutes, once; **Learn again** does it again. What it learns is kept on this computer, in your settings folder, and nothing of the game's is copied anywhere.
+
+- It hears the sound, not the words, so it works for any language, though it has learnt from the languages your game has voice lines in.
+- It moves the mouth, as the game's lip syncs do; the brows and eyes are left to the scene.
+- The line under the box says how close it came to the game's own lip syncs on lines it hadn't heard. Edit a made lip sync in Blender as any other: unpack it as `.re` (above).
+- A lip sync already beside a line is always used as it is.
+
+
 
 A `.re` file is the format REDkit's Blender plugin opens and saves: every frame of the face's controls (the jaw, the lips, the brows, the eyes and the rest), each as a curve you can edit. Unpack with **Save lip syncs as .re** ticked, edit the line's `ID.re` in Blender, save it over itself and pack the folder, or Build. A `.re` is turned into the game's own lip sync as it's packed; nothing else needs doing.
 
@@ -79,9 +90,10 @@ W3ModWorkbench.exe --speech-unpack "D:\My Mod\content\enpc.w3speech" --re
 W3ModWorkbench.exe --speech-pack "D:\My Mod\workspace\speech\en" --keep
 W3ModWorkbench.exe --lipsync "D:\My Mod\workspace\speech" -r --to raw
 W3ModWorkbench.exe --wav-to-wem "D:\My Mod\recordings" --out "D:\My Mod\workspace\speech\en"
+W3ModWorkbench.exe --lipsync-from-audio "D:\My Mod\workspace\speech\en" --to re
 ```
 
-`--speech-unpack` takes `--wav`, `--re` and `--out`; `--speech-pack` takes `--keep`, `--kbps` and `--out`; `--wav-to-wem` makes each `.wav` a `.wem` beside it or under `--out`, with `-r`, `--overwrite` and `--kbps`; `--lipsync` takes `--to re` or `--to raw`, `-r` for subfolders, `--out` and `--overwrite`. `--help voice` lists them all. The exit code is 0 when every file was done and 1 when some weren't.
+`--speech-unpack` takes `--wav`, `--re` and `--out`; `--speech-pack` takes `--keep`, `--kbps` and `--out`; `--wav-to-wem` makes each `.wav` a `.wem` beside it or under `--out`, with `-r`, `--overwrite` and `--kbps`; `--lipsync-from-audio` makes a lip sync for each `.wav` or `.wem` (`--to re` for Blender), `--speech-pack --make-lipsync` fills in the lines that have none, and `--learn-lipsync` learns again (`--game <folder>` when Settings hasn't the game's folder); `--lipsync` takes `--to re` or `--to raw`, `-r` for subfolders, `--out` and `--overwrite`. `--help voice` lists them all. The exit code is 0 when every file was done and 1 when some weren't.
 
 ## How the file is laid out
 

@@ -163,6 +163,7 @@ public partial class SettingsWindow : Window, IMessageHost
         (settings.StringsCsvRedkit ? StringsCsvRedkit : StringsCsvRadish).IsChecked = true;
         SpeechKbpsBox.ItemsSource = SpeechKbpsChoices.Select(k => L.T("Settings.Viewers.SpeechKbpsItem", k)).ToList();
         SpeechKbpsBox.SelectedIndex = Nearest(SpeechKbpsChoices.Select(k => (double)k).ToArray(), settings.SpeechKbps);
+        SpeechMakeLipSyncsCheck.IsChecked = settings.SpeechMakeLipSyncs;
         RedkitPropsStatus.Text = FileSafety.RedkitInstalled ? "" : L.T("Settings.Viewers.RedkitMissing");
         RedkitPropsStatus.Visibility = RedkitPropsStatus.Text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
         (settings.TextureDetail switch { 512 => Detail512, 2048 => Detail2048, 0 => DetailFull, _ => Detail1024 }).IsChecked = true;
@@ -706,6 +707,7 @@ public partial class SettingsWindow : Window, IMessageHost
         _settings.SpeechUnpackRe = SpeechUnpackReCheck.IsChecked == true;
         _settings.StringsCsvRedkit = StringsCsvRedkit.IsChecked == true;
         if (SpeechKbpsBox.SelectedIndex >= 0) _settings.SpeechKbps = SpeechKbpsChoices[SpeechKbpsBox.SelectedIndex];
+        _settings.SpeechMakeLipSyncs = SpeechMakeLipSyncsCheck.IsChecked == true;
         Core.Animation.ClothRig.Enabled = _settings.SimulateCloth;
         _settings.TextureDetail = Detail512.IsChecked == true ? 512 : Detail2048.IsChecked == true ? 2048 : DetailFull.IsChecked == true ? 0 : 1024;
         // the 3D views open follow at once

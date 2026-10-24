@@ -4,7 +4,7 @@
         xmlns:l="clr-namespace:W3ModWorkbench.Localisation"
         xmlns:local="clr-namespace:W3ModWorkbench"
         Title="{l:T SpeechWindow.Title}" Icon="pack://application:,,,/W3ModWorkbench;component/Assets/app.ico"
-        Width="1100" Height="840" MinWidth="900" MinHeight="780"
+        Width="1100" Height="880" MinWidth="900" MinHeight="820"
         WindowStartupLocation="CenterOwner" AllowDrop="True" DragOver="Window_DragOver" Drop="Window_Drop">
     <Window.Resources>
         <Style x:Key="Card" TargetType="Border">
@@ -125,6 +125,13 @@
                         <CheckBox x:Name="KeepCheck" IsEnabled="False">
                             <TextBlock TextWrapping="Wrap" Text="{l:T SpeechWindow.KeepExisting}" />
                         </CheckBox>
+                        <CheckBox x:Name="MakeLipSyncCheck" Margin="0,6,0,0">
+                            <TextBlock TextWrapping="Wrap" Text="{l:T SpeechWindow.MakeLipSyncs}" />
+                        </CheckBox>
+                        <TextBlock x:Name="LipSyncModelLine" Margin="28,2,0,0" TextWrapping="Wrap" Opacity="0.65">
+                            <Run x:Name="LipSyncModelText" />
+                            <Hyperlink x:Name="LearnAgainLink" Click="LearnAgain_Click" Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}"><Run x:Name="LearnLinkText" Text="{l:T SpeechWindow.LearnAgain}" /></Hyperlink>
+                        </TextBlock>
                         <Button x:Name="PackButton" HorizontalAlignment="Right" Margin="0,10,0,0" Padding="16,6" Style="{DynamicResource AccentButtonStyle}" Click="Pack_Click"
                                 Content="{l:T SpeechWindow.PackButton}" IsEnabled="False" />
                     </StackPanel>

@@ -142,18 +142,42 @@ public static class SpeechFolder
     /// a .wem at <paramref name="kbps"/> a channel first, several at once.
     /// </summary>
     public static int Pack(IReadOnlyList<SpeechFolderLine> lines, W3Language language, string output, W3Speech? startFrom = null,
-        IProgress<(int Done, int Total)>? progress = null, CancellationToken cancel = default, int kbps = WemOpus.DefaultKbpsPerChannel)
+        IProgress<(int Done, int Total)>? progress = null, CancellationToken cancel = default, int kbps = WemOpus.DefaultKbpsPerChannel) =>
+        Pack(lines, language, output, startFrom, null, progress, cancel, kbps).Lines;
+
+    /// <summary>
+    /// <see cref="Pack(IReadOnlyList{SpeechFolderLine}, W3Language, string, W3Speech?, IProgress{ValueTuple{int, int}}?, CancellationToken, int)"/>,
+    /// and with <paramref name="lipSyncs"/> each line with no lip sync gets one made from its sound. Returns how many
+    /// lines the speech file has and how many lip syncs were made.
+    /// </summary>
+    public static (int Lines, int LipSyncsMade) Pack(IReadOnlyList<SpeechFolderLine> lines, W3Language language, string output, W3Speech? startFrom,
+        LipSyncModel? lipSyncs, IProgress<(int Done, int Total)>? progress = null, CancellationToken cancel = default, int kbps = WemOpus.DefaultKbpsPerChannel)
     {
         var made = new System.Collections.Concurrent.ConcurrentDictionary<uint, byte[]>();
-        Parallel.ForEach(lines.Where(l => l.Wem is null && l.Wav is not null), new ParallelOptions { CancellationToken = cancel },
+        var madeLipSyncs = new System.Collections.Concurrent.ConcurrentDictionary<uint, byte[]>();
+        var parallel = new ParallelOptions { CancellationToken = cancel };
+        Parallel.ForEach(lines.Where(l => l.Wem is null && l.Wav is not null), parallel,
             l => made[l.StringId] = WemOpus.FromWav(File.ReadAllBytes(l.Wav!), kbps, cancel));
+        if (lipSyncs is not null)
+            Parallel.ForEach(lines.Where(l => l.LipSync is null && (l.Wem is not null || l.Wav is not null)), parallel, l =>
+            {
+                // from the recording when there's one, else from the sound the line has
+                (short[] samples, int channels) sound;
+                if (l.Wav is not null)
+                {
+                    var wav = WavFile.Read(File.ReadAllBytes(l.Wav)).Resampled(WemOpus.SampleRate);
+                    sound = (wav.Samples, wav.Channels);
+                }
+                else sound = WwiseOpus.Decode(File.ReadAllBytes(l.Wem!));
+                madeLipSyncs[l.StringId] = lipSyncs.Make(sound.samples, sound.channels).Write();
+            });
         var all = new Dictionary<uint, SpeechLine>();
         if (startFrom is not null)
             foreach (uint id in startFrom.Order) all[id] = new SpeechLine(id, () => startFrom.Voice(id), () => startFrom.LipSync(id));
         foreach (var line in lines)
             all[line.StringId] = new SpeechLine(line.StringId,
                 () => line.Wem is not null ? Voice(File.ReadAllBytes(line.Wem)) : made.TryGetValue(line.StringId, out var wem) ? Voice(wem) : null,
-                () => line.LipSync is null ? null : LipSync(line.LipSync));
+                () => line.LipSync is not null ? LipSync(line.LipSync) : madeLipSyncs.GetValueOrDefault(line.StringId));
         string temp = output + ".writing";
         try
         {
@@ -165,7 +189,7 @@ public static class SpeechFolder
         {
             if (File.Exists(temp)) File.Delete(temp);
         }
-        return all.Count;
+        return (all.Count, madeLipSyncs.Count);
     }
 
     /// <summary>A lip sync file as a speech file keeps it: a <c>.re</c> made the game's own, any other as it is.</summary>

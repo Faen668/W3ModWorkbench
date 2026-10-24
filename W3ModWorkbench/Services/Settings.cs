@@ -194,6 +194,9 @@ public sealed class Settings
     /// <summary>The bitrate a channel, in kbit/s, a voice line's .wav is made a .wem at (the game's own are near 64).</summary>
     public int SpeechKbps { get; set; } = Core.Sounds.WemOpus.DefaultKbpsPerChannel;
 
+    /// <summary>Whether packing voice lines (and Build) makes a lip sync from its sound for each line that has none.</summary>
+    public bool SpeechMakeLipSyncs { get; set; } = true;
+
     /// <summary>Whether the entity viewer shows what it's drawing (triangles, frame rate…) over the view.</summary>
     public bool ShowEntityInfo { get; set; } = true;
 

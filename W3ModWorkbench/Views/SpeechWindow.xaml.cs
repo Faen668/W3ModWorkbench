@@ -24,6 +24,8 @@ public partial class SpeechWindow : Window, IMessageHost
         WavCheck.IsChecked = App.Settings.SpeechUnpackWav;
         ReCheck.IsChecked = App.Settings.SpeechUnpackRe;
         ToReRadio.IsChecked = true;
+        MakeLipSyncCheck.IsChecked = App.Settings.SpeechMakeLipSyncs;
+        ShowLipSyncModel();
         foreach (var language in W3Strings.Languages) LanguageBox.Items.Add(language.Handle);
         LanguageBox.SelectedItem = "en";
         if (file is not null) Take(file);
@@ -186,7 +188,10 @@ public partial class SpeechWindow : Window, IMessageHost
     {
         string folder = Clean(PackFolderBox), file = Clean(PackFileBox);
         if (LanguageBox.SelectedItem is not string handle || W3Strings.Language(handle) is not { } language) return;
-        bool keep = KeepCheck.IsChecked == true;
+        bool keep = KeepCheck.IsChecked == true, makeLipSyncs = MakeLipSyncCheck.IsChecked == true;
+        App.Settings.SpeechMakeLipSyncs = makeLipSyncs;
+        App.Settings.Save();
+        var learning = LearningProgress();
         await RunAsync(L.T("SpeechWindow.Packing"), progress =>
         {
             var (lines, notes) = SpeechFolder.Read(folder);
@@ -196,12 +201,51 @@ public partial class SpeechWindow : Window, IMessageHost
                 result.Add(L.T("SpeechWindow.NoLines"));
                 return [.. result, .. notes];
             }
+            // a lip sync for each line that has none, from the model learnt here (learnt now, the first time)
+            var model = makeLipSyncs && lines.Any(l => l.LipSync is null) ? LipSyncTrainer.LoadOrLearn(GameFolder(), learning, _running!.Token) : null;
             var startFrom = keep ? W3Speech.Open(file, language) : null;
-            int total = SpeechFolder.Pack(lines, language, file, startFrom, progress, _running!.Token, App.Settings.SpeechKbps);
+            var (total, madeLips) = SpeechFolder.Pack(lines, language, file, startFrom, model, progress, _running!.Token, App.Settings.SpeechKbps);
             result.Add(startFrom is null ? L.T("SpeechWindow.Packed", L.T("Count.VoiceLine", total), file)
                 : L.T("SpeechWindow.PackedWith", L.T("Count.VoiceLine", total), file, L.T("Count.VoiceLine", lines.Count)));
+            if (madeLips > 0) result.Add(L.T("SpeechWindow.LipSyncsMade", L.T("Count.LipSync", madeLips)));
             return [.. result, .. notes];
         });
+        ShowLipSyncModel();
+    }
+
+    // ---------------------------------------------------------------- lip sync from a recording
+
+    /// <summary>The game folder the lip sync model learns from: the one Settings has, or the one found installed.</summary>
+    private static string? GameFolder() => GameLocator.Resolve(null);
+
+    /// <summary>What's been learnt (or that nothing has yet), under the box for making lip syncs.</summary>
+    private void ShowLipSyncModel()
+    {
+        var model = LipSyncModel.Load(LipSyncModel.DefaultPath);
+        LipSyncModelText.Text = model is null ? L.T("SpeechWindow.NotLearnt") + " " : model.Info.Short() + " ";
+        LipSyncModelLine.ToolTip = model?.Info.Describe();
+        LearnLinkText.Text = L.T(model is null ? "SpeechWindow.LearnNow" : "SpeechWindow.LearnAgain");
+        LearnAgainLink.IsEnabled = _running is null;
+    }
+
+    /// <summary>Learning's progress shown in the results card and the progress bar.</summary>
+    private Progress<LipSyncTrainingProgress> LearningProgress() => new(p =>
+    {
+        Progress.Maximum = 1;
+        Progress.Value = p.Done;
+        ResultsText.Text = L.T("SpeechWindow.LearningFromGame") + "\n" + p.Stage;
+    });
+
+    private async void LearnAgain_Click(object sender, RoutedEventArgs e)
+    {
+        if (_running is not null) return;
+        var learning = LearningProgress();
+        await RunAsync(L.T("SpeechWindow.LearningFromGame"), _ =>
+        {
+            var model = LipSyncTrainer.Learn(GameFolder(), learning, _running!.Token);
+            return [L.T("SpeechWindow.Learnt", model.Info.Describe())];
+        });
+        ShowLipSyncModel();
     }
 
     // ---------------------------------------------------------------- converting lip syncs
@@ -273,7 +317,7 @@ public partial class SpeechWindow : Window, IMessageHost
             var lines = await Task.Run(() => job(progress));
             ResultsText.Text = string.Join("\n", lines);
         }
-        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or EndOfStreamException)
+        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or EndOfStreamException or NotSupportedException)
         {
             ResultsText.Text = "";
             await ShowMessage(L.T("SpeechWindow.Failed"), ex.Message, MessageKind.Error);
