@@ -24,6 +24,7 @@ The game's own minimap, with each place as a dot coloured by its chance: yellow 
 - **World** picks the world shown. Each says how many of its places can give what's picked.
 - **Player level** sets the level the chances are for. Tables and items can be limited to player levels, so some only turn up later; the status line says how many places give it only at other levels.
 - **Containers**, **Herbs**, **Beehives**, **Monsters** and **Other** (clues, stashes, nests) choose which places are shown. A monster's place is where it spawns, with the chance of the item at each kill; its drops are rolled again every time, so it has no **Rolled here**.
+- **Rolled here** shows or hides what the game's roll gives each exact spot (the diamonds, and the column of that name).
 - **Installed mods** reads the installed mods' copies of layers and templates too, as the game does with them installed.
 - **Export** saves every place, in every world, as a CSV file with its position, chance and respawn time.
 

@@ -100,6 +100,7 @@ public partial class LootLocatorWindow : Window, IMessageHost
         LevelBox.ItemsSource = Enumerable.Range(1, MaxLevel).ToList();
         LevelBox.SelectedItem = Math.Clamp(App.Settings.LootPlayerLevel, 1, MaxLevel);
         ModsCheck.IsChecked = App.Settings.LootWithMods;
+        PredictedCheck.IsChecked = App.Settings.LootShowPredicted;
         PredictedColumn.Visibility = App.Settings.LootShowPredicted ? Visibility.Visible : Visibility.Collapsed;
         LegendPredicted.Visibility = PredictedColumn.Visibility;
         LegendList.ItemsSource = Bands.Select(b => new LegendRow(Frozen(new SolidColorBrush(b.Color)), b.Text())).ToList();
@@ -357,6 +358,15 @@ public partial class LootLocatorWindow : Window, IMessageHost
         App.Settings.LootWithMods = ModsCheck.IsChecked == true;
         App.Settings.Save();
         await LoadAsync();
+    }
+
+    private void PredictedCheck_Click(object sender, RoutedEventArgs e)
+    {
+        App.Settings.LootShowPredicted = PredictedCheck.IsChecked == true;
+        App.Settings.Save();
+        PredictedColumn.Visibility = App.Settings.LootShowPredicted ? Visibility.Visible : Visibility.Collapsed;
+        LegendPredicted.Visibility = PredictedColumn.Visibility;
+        if (_selected is { } row) _ = ShowAsync(row);
     }
 
     private bool KindShown(LootKind kind) => kind switch

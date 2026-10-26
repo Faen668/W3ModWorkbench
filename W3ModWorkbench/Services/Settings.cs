@@ -212,6 +212,9 @@ public sealed class Settings
     /// <summary>Whether the Bestiary also lists the creatures the game's bestiary has no entry for (animals, people…).</summary>
     public bool BestiaryShowUnlisted { get; set; }
 
+    /// <summary>Whether the Merchant Finder reads the installed mods' copies of layers, communities and templates, as the game does with them installed.</summary>
+    public bool MerchantWithMods { get; set; }
+
     /// <summary>Whether the entity viewer shows what it's drawing (triangles, frame rate…) over the view.</summary>
     public bool ShowEntityInfo { get; set; } = true;
 

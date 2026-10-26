@@ -164,6 +164,8 @@
                                       ToolTip="{l:T LootLocator.MonstersTip}" />
                             <CheckBox x:Name="OtherCheck" Content="{l:T LootLocator.Other}" IsChecked="True" MinWidth="0" Margin="0,0,12,4" VerticalAlignment="Center" Click="Filter_Click"
                                       ToolTip="{l:T LootLocator.OtherTip}" />
+                            <CheckBox x:Name="PredictedCheck" Content="{l:T LootLocator.Predicted}" MinWidth="0" Margin="0,0,12,4" VerticalAlignment="Center" Click="PredictedCheck_Click"
+                                      ToolTip="{l:T LootLocator.PredictedTip}" />
                             <CheckBox x:Name="ModsCheck" Content="{l:T LootLocator.WithMods}" MinWidth="0" Margin="0,0,12,4" VerticalAlignment="Center" Click="ModsCheck_Click"
                                       ToolTip="{l:T LootLocator.WithModsTip}" />
                             <Button Margin="0,0,8,4" Padding="10,3" Click="Fit_Click" ToolTip="{l:T LootLocator.FitTip}">

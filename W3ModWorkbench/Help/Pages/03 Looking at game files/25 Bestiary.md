@@ -35,5 +35,3 @@ Below the map:
 - **Drops** lists what the kind picked drops, each item with its chance at the player level set in the [[Loot Locator]]. Double-click an item to open it in the Loot Locator, already looked for, at a level it drops at and in the world shown here.
 
 ![Bruxae: their page and what one drops](bestiary-drops.jpg)
-
-**Settings > Viewers > Bestiary** sets whether creatures outside the bestiary are listed, and whether installed mods are read.

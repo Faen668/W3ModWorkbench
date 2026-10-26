@@ -1701,6 +1701,7 @@ public partial class MainWindow : Window, IMessageHost
         Add(L.T("ItemEditor.MenuItem"), "", () => ItemEditorWindow.Open(this));
         Add(L.T("LootLocator.MenuItem"), "", () => LootLocatorWindow.Open(this));
         Add(L.T("Bestiary.MenuItem"), "", () => BestiaryWindow.Open(this));
+        Add(L.T("Merchant.MenuItem"), "", () => MerchantFinderWindow.Open(this));
         Add(L.T("ComparePick.MenuItem"), "", () => ComparePickWindow.Open(this));
         menu.Items.Add(new Separator());
         Add(L.T("MainWindow.ConsoleCommands"), "", () => ConsoleCommandsWindow.Open(this));
