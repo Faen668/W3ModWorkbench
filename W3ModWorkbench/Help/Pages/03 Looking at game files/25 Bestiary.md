@@ -32,7 +32,7 @@ Below the map:
 
 - **Places** lists each place: its area, the kind spawned there, its level, how many it spawns in all (**Spawn limit**) and how many at a time (**At once**). Click one, or a dot on the map, to ring it and draw its area.
 - **Kinds** lists each kind of the creature (a nest boss, an underwater drowner, a stronger later one) with its level, how many places spawn it and its abilities.
-- **Drops** lists what the kind picked drops, each item with its chance at the player level set in the [[Loot Locator]]. Double-click an item to find where else it can be found.
+- **Drops** lists what the kind picked drops, each item with its chance at the player level set in the [[Loot Locator]]. Double-click an item to open it in the Loot Locator, already looked for, at a level it drops at and in the world shown here.
 
 ![Bruxae: their page and what one drops](bestiary-drops.jpg)
 

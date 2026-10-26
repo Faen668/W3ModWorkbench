@@ -413,7 +413,7 @@ public partial class BestiaryWindow : Window, IMessageHost
 
     private void DropGrid_MouseDoubleClick(object sender, MouseButtonEventArgs e)
     {
-        if (DropGrid.SelectedItem is BestiaryDropRow row) LootLocatorWindow.OpenItem(this, row.Name);
+        if (DropGrid.SelectedItem is BestiaryDropRow row) LootLocatorWindow.OpenItem(this, row.Name, _shownWorld);
     }
 
     // ---------------------------------------------------------------- the map

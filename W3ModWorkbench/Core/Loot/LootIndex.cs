@@ -22,8 +22,8 @@ public sealed record LootParamInfo(string Name, IReadOnlyList<LootTableRef> Tabl
 /// <summary>An item a template always holds, from its CInventoryDefinition: a named item, or a random one of a category.</summary>
 public sealed record LootFixedItem(string Item, string Category, uint Min, uint Max, float? Probability, bool Random, bool Lootable);
 
-/// <summary>What kind of place loot is in, for filtering.</summary>
-public enum LootKind { Container, Herb, Beehive, Other }
+/// <summary>What kind of place loot is in, for filtering: a monster's is an encounter that spawns it, its drops rolled at each kill.</summary>
+public enum LootKind { Container, Herb, Beehive, Other, Monster }
 
 /// <summary>
 /// One placed entity that holds loot: where it is, the template it's made from, its loot params (the tables it rolls)
@@ -35,6 +35,7 @@ public sealed record LootSpot(string World, string Layer, string ClassName, stri
     public LootKind Kind => ClassName switch
     {
         "W3Herb" => LootKind.Herb,
+        "CEncounter" => LootKind.Monster,
         "CBeehiveEntity" or "W3BeehiveStandingEntity" => LootKind.Beehive,
         _ when ClassName.Contains("Container", StringComparison.OrdinalIgnoreCase) || ClassName.Contains("Stash", StringComparison.OrdinalIgnoreCase) => LootKind.Container,
         _ => LootKind.Other,

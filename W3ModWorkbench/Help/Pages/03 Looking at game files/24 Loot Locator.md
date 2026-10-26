@@ -6,7 +6,7 @@ summary: Where an item or a loot table can be found in the game's worlds, and ho
 keywords: loot locator loot table loot tables where to find item find items containers chests herbs beehives chance odds drop rate respawn player level map spawn points CR4LootParam def_loot_containers xml
 windows: LootLocatorWindow
 ---
-**Tools > Loot Locator…** shows where in the game's worlds an item or a loot table can be found, and how likely, on the game's own map: every container, herb and beehive that can give it.
+**Tools > Loot Locator…** shows where in the game's worlds an item or a loot table can be found, and how likely, on the game's own map: every container, herb and beehive that can give it, and every place that spawns a creature that drops it.
 
 ![Where bottled water can be found in Velen, coloured by its chance](loot-locator.jpg)
 
@@ -23,7 +23,7 @@ The game's own minimap, with each place as a dot coloured by its chance: yellow 
 
 - **World** picks the world shown. Each says how many of its places can give what's picked.
 - **Player level** sets the level the chances are for. Tables and items can be limited to player levels, so some only turn up later; the status line says how many places give it only at other levels.
-- **Containers**, **Herbs**, **Beehives** and **Other** (clues, stashes, nests) choose which places are shown.
+- **Containers**, **Herbs**, **Beehives**, **Monsters** and **Other** (clues, stashes, nests) choose which places are shown. A monster's place is where it spawns, with the chance of the item at each kill; its drops are rolled again every time, so it has no **Rolled here**.
 - **Installed mods** reads the installed mods' copies of layers and templates too, as the game does with them installed.
 - **Export** saves every place, in every world, as a CSV file with its position, chance and respawn time.
 

@@ -124,16 +124,20 @@ public partial class LootLocatorWindow : Window, IMessageHost
         _open.Show();
     }
 
-    /// <summary>Opens the window on an item (by its name in the files): at once when it's read, else once it is.</summary>
-    public static void OpenItem(Window owner, string item)
+    /// <summary>
+    /// Opens the window on an item (by its name in the files), as if looked for: its name in the search box, a player
+    /// level it can be found at, and the world asked for when it's found there. At once when the window is read, else once it is.
+    /// </summary>
+    public static void OpenItem(Window owner, string item, string? world = null)
     {
         Open(owner);
         if (_open is not { } window) return;
+        window._preferWorld = world;
         if (window._loading) window._pendingItem = item;
-        else window.Select(item, false);
+        else window.Select(item, false, true);
     }
 
-    private string? _pendingItem;
+    private string? _pendingItem, _preferWorld;
 
     public Task ShowMessage(string? title, string message, MessageKind kind) => Message.Show(title, message, kind, primary: L.T("Common.OK"));
 
@@ -166,7 +170,7 @@ public partial class LootLocatorWindow : Window, IMessageHost
                 _names = strings.All.GroupBy(s => s.KeyHash).ToDictionary(g => g.Key, g => g.First().Text);
             }
             var db = _db;
-            (_index, _roll) = await Task.Run(() => (LootIndex.Build(locator, progress, CancellationToken.None), LootRoll.FromDatabase(db)));
+            (_index, _roll) = await Task.Run(() => (WithMonsters(LootIndex.Build(locator, progress, CancellationToken.None), locator, game, progress), LootRoll.FromDatabase(db)));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
         {
@@ -183,10 +187,22 @@ public partial class LootLocatorWindow : Window, IMessageHost
         if (_pendingItem is { } pending)
         {
             _pendingItem = null;
-            Select(pending, false);
+            Select(pending, false, true);
         }
         else if (_selected is { } again) Select(again.Key, again.IsTable);
         else ItemSearch.Focus();
+    }
+
+    /// <summary>
+    /// The places with the monsters added: every encounter that spawns a creature with drops is a place of its own, its
+    /// loot the creature's, rolled again at each kill.
+    /// </summary>
+    private static LootIndex WithMonsters(LootIndex index, ResourceLocator locator, string game, IProgress<string> progress)
+    {
+        var bestiary = Core.Bestiary.BestiaryIndex.Build(locator, Core.Scripts.ScriptCorpus.GameScriptsFolder(game), progress, CancellationToken.None);
+        var monsters = bestiary.Places.Where(p => bestiary.Creatures.TryGetValue(p.Template, out var c) && c.Loot is { Params.Count: > 0 })
+            .Select(p => bestiary.Creatures[p.Template].Loot! with { World = p.World, Layer = p.Layer, ClassName = "CEncounter", Name = "", Position = p.Position });
+        return new LootIndex { Spots = [.. index.Spots, .. monsters], Worlds = index.Worlds, Problems = index.Problems };
     }
 
     /// <summary>The places by setup (the same loot whatever the place), and which setups can give each item and use each table.</summary>
@@ -272,15 +288,25 @@ public partial class LootLocatorWindow : Window, IMessageHost
         if (sender is ListBox { SelectedItem: LootFoundRow row } && row != _selected) _ = ShowAsync(row);
     }
 
-    /// <summary>Picks an item or a table in its list, switching to it and clearing a search that hides it.</summary>
-    private void Select(string key, bool table)
+    /// <summary>
+    /// Picks an item or a table in its list, switching to it and clearing a search that hides it; <paramref name="find"/>
+    /// fills the search box with its name instead, and moves the player level to one it can be found at.
+    /// </summary>
+    private void Select(string key, bool table, bool find = false)
     {
         var rows = table ? _tableRows : _itemRows;
         if (rows.FirstOrDefault(r => r.Key.Equals(key, StringComparison.OrdinalIgnoreCase)) is not { } row) return;
         ModeTabs.SelectedItem = table ? TablesTab : ItemsTab;
         var list = table ? TableList : ItemList;
         var search = table ? TableSearch : ItemSearch;
-        if (list.ItemsSource is not IEnumerable<LootFoundRow> shown || !shown.Contains(row))
+        if (find)
+        {
+            search.Text = row.Title;
+            _searchTimer.Stop();
+            Filter();
+            if (!table && LowestLevel(row.Key) is { } lowest && Level < lowest) LevelBox.SelectedItem = (int)lowest;
+        }
+        else if (list.ItemsSource is not IEnumerable<LootFoundRow> shown || !shown.Contains(row))
         {
             search.Text = "";
             if (table && row.Count == 0) UnusedCheck.IsChecked = true;
@@ -290,6 +316,23 @@ public partial class LootLocatorWindow : Window, IMessageHost
         list.SelectedItem = row;
         list.ScrollIntoView(row);
         _ = ShowAsync(row);
+    }
+
+    /// <summary>The lowest player level an item can be found at: the lowest of its tables' and its own level limits where a place can give it.</summary>
+    private uint? LowestLevel(string item)
+    {
+        if (_roll is not { } roll || !_itemSetups.TryGetValue(item, out var keys)) return null;
+        uint? lowest = null;
+        foreach (string table in keys.SelectMany(k => _setups[k].Tables).Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            if (!roll.Tables.TryGetValue(table, out var def)) continue;
+            foreach (var i in def.Items.Where(i => i.Name.Equals(item, StringComparison.OrdinalIgnoreCase) && (i.Chance == -1f || i.Chance > 0)))
+            {
+                uint at = Math.Max(1, Math.Max(def.LevelMin, i.LevelMin));
+                if (lowest is null || at < lowest) lowest = at;
+            }
+        }
+        return lowest;
     }
 
     // ---------------------------------------------------------------- what was picked
@@ -321,6 +364,7 @@ public partial class LootLocatorWindow : Window, IMessageHost
         LootKind.Container => ContainersCheck.IsChecked == true,
         LootKind.Herb => HerbsCheck.IsChecked == true,
         LootKind.Beehive => BeehivesCheck.IsChecked == true,
+        LootKind.Monster => MonstersCheck.IsChecked == true,
         _ => OtherCheck.IsChecked == true,
     };
 
@@ -350,8 +394,9 @@ public partial class LootLocatorWindow : Window, IMessageHost
                 var rolled = roll.Roll(s, level, LootRoll.Seed(s.Position));
                 var hit = rolled.FirstOrDefault(i => table ? i.Table.Equals(name, StringComparison.OrdinalIgnoreCase) : i.Item.Equals(name, StringComparison.OrdinalIgnoreCase));
                 // a seed of 0 is no seed: the game rolls that spot at random each time, so nothing is fixed there
-                bool? given = predicted && LootRoll.Seed(s.Position) != 0 ? hit is not null : null;
-                return new LootPlaceRow(s, Humanise(s.Title), AreaOf(s), chance, given, hit is { Table.Length: > 0 } ? hit.Respawn : RespawnOf(s, name, table));
+                // a monster's drops are rolled at each kill, where it falls: nothing is fixed at its encounter
+                bool? given = predicted && s.Kind != LootKind.Monster && LootRoll.Seed(s.Position) != 0 ? hit is not null : null;
+                return new LootPlaceRow(s, Humanise(s.Title), AreaOf(s), chance, given, s.Kind == LootKind.Monster ? null : hit is { Table.Length: > 0 } ? hit.Respawn : RespawnOf(s, name, table));
             }).ToList();
         });
         if (version != _version) return;
@@ -362,13 +407,15 @@ public partial class LootLocatorWindow : Window, IMessageHost
         int elsewhere = rows.Count - possible.Count;
         StatusText.Text = L.T("LootLocator.Found", possible.Count, level, possible.Select(p => p.Spot.World).Distinct().Count())
             + (elsewhere > 0 ? "  ·  " + L.T("LootLocator.OtherLevels", elsewhere) : "")
-            + (predicted ? "  ·  " + L.T("LootLocator.PredictedCount", possible.Count(p => p.Predicted == true)) : "");
+            + (possible.Any(p => p.Predicted is not null) ? "  ·  " + L.T("LootLocator.PredictedCount", possible.Count(p => p.Predicted == true)) : "");
         LegendTitle.Text = table ? L.T("LootLocator.LegendTable") : L.T("LootLocator.LegendItem");
         ShowTableItems(row, level);
         // the worlds that have any, most first; the one shown kept when it has some
         var worlds = possible.GroupBy(p => p.Spot.World).OrderByDescending(g => g.Count())
             .Select(g => new WorldChoice(g.Key, L.T("LootLocator.WorldCount", WorldName(g.Key), g.Count()))).ToList();
-        string? keep = _shownWorld is { } shown && worlds.Any(w => w.Path == shown) ? shown : worlds.FirstOrDefault()?.Path;
+        string? keep = _preferWorld is { } preferred && worlds.Any(w => w.Path == preferred) ? preferred
+            : _shownWorld is { } shown && worlds.Any(w => w.Path == shown) ? shown : worlds.FirstOrDefault()?.Path;
+        _preferWorld = null;
         _ignoreWorld = true;
         WorldBox.ItemsSource = worlds;
         WorldBox.SelectedItem = worlds.FirstOrDefault(w => w.Path == keep);
@@ -548,7 +595,12 @@ public partial class LootLocatorWindow : Window, IMessageHost
         buttons.Children.Add(SmallButton(L.T("LootLocator.OpenLayer"), () => _ = DataViewers.OpenLinkAsync(spot.Layer, _locator, this, this)));
         Details.Children.Add(buttons);
 
-        if (App.Settings.LootShowPredicted && LootRoll.Seed(spot.Position) == 0)
+        if (spot.Kind == LootKind.Monster)
+        {
+            Details.Children.Add(Title(L.T("LootLocator.MonsterTitle")));
+            Details.Children.Add(Hint(L.T("LootLocator.MonsterNote")));
+        }
+        else if (App.Settings.LootShowPredicted && LootRoll.Seed(spot.Position) == 0)
         {
             Details.Children.Add(Title(L.T("LootLocator.PredictedTitle", level)));
             Details.Children.Add(Hint(L.T("LootLocator.PredictedRandom")));
