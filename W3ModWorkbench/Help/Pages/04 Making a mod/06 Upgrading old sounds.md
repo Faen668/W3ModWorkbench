@@ -30,12 +30,6 @@ To undo, delete the upgraded file and remove `.bak` from the end of the original
 - **A streamed sound's size** is worked out from its `.wem`, the mod's own or the game's.
 - **A mod's own `Init.bnk` is left out.** It would replace the game's, which every other sound needs.
 
-## How it was worked out
-
-Every rule comes from data, not guesses. The original game's banks that old mods carry were matched object by object with the same banks as the Remastered ships them, 20,601 objects in all. Each difference was traced to a rule, or to a change CDPR made by hand. The game's 740 banks and 5,789 streamed sounds showed what version 150 holds. Upgrading those old banks gives back the game's own objects, apart from CDPR's own edits.
-
-Anything no bank showed a rule for isn't guessed at. A bank holding one stays as it was, and its notes say why.
-
 > note: Some of the original game's sounds got new IDs in the Remastered. A mod bank that plays one of those by its old ID still won't find it, and its notes list each one. Those sounds have to be added to the mod again.
 
 > tip: Old mods that replace whole game banks (music packs, for example) carry the original game's version of every other sound in that bank too. The upgrade keeps them, but the Remastered's own versions of those sounds are newer.

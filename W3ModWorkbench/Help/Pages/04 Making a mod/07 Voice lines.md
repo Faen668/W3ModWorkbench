@@ -99,8 +99,6 @@ W3ModWorkbench.exe --lipsync-from-audio "D:\My Mod\workspace\speech\en" --to re
 
 A speech file has a table of every line, then each line's sound and lip sync one after another. The table is sorted by each line's ID mixed with the language's number, and the game finds a line by halving it, so a line out of order can't be found at all. Any change means writing the whole file again: the game's own English file is 4.2 GB.
 
-> note: A `.re` is an HDF5 file, read and written by our own code. REDkit's plugin, run on Geralt's head from REDkit, opens ours and sets every one of the 145 shape keys at every frame to the game's own values (between 0 and 1, as above). A `.re` made from each of 3,236 of the game's lines and 1,145 older mod lines reads back to the same lip sync, every control within 0.0005 at every frame, and REDkit's own `.re` files read and write back with every value the same.
+> note: A `.re` is an HDF5 file, the kind REDkit's Blender plugin opens and saves. Every face control keeps its values when a lip sync goes to `.re` and back.
 
-> note: A `.wem` made from a `.wav` is laid out as the game's: the writer gives back every one of the game's 64,509 voice sounds without markers byte for byte from its own packets, and each sound is encoded with the game's settings (every packet one 20 ms CELT frame at full bandwidth, the same look-ahead and packet count). The encoding is Opus's own, from the Concentus library the app already uses to play the game's voice lines.
-
-> note: The writer was checked by writing the game's own `enpc.w3speech` (64,718 lines) back byte for byte, and mods' speech files the same way.
+> note: A `.wem` made from a `.wav` is made as the game's own voice lines are, with the game's settings, so the game plays it as one of its own. The encoding is Opus's own, from the Concentus library the app already uses to play the game's voice lines.
