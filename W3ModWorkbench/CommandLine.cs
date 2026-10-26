@@ -19,10 +19,11 @@ namespace W3ModWorkbench;
 ///          --scale &lt;path&gt; &lt;factor&gt;   --offset &lt;path&gt; &lt;amount&gt;   (--fields a,b after a scale or offset)
 ///          --only-class &lt;name&gt; after an edit: that edit only to objects of the class
 /// W3ModWorkbench.exe --recipe    &lt;recipe file&gt; [--check]
+///   to and from JSON: - as the file reads standard input, --out - writes standard output (one file)
 ///   any of them: --match &lt;regex&gt;, --skip &lt;regex&gt; for the files taken from folders
 /// W3ModWorkbench.exe --speech-unpack &lt;files&gt; | --speech-pack &lt;folders&gt; | --lipsync &lt;files or folders&gt; --to re|raw
 /// W3ModWorkbench.exe --strings-to-csv &lt;files&gt; [--layout radish|redkit] | --csv-to-strings &lt;files&gt;
-/// W3ModWorkbench.exe --help [topic]   (-h, /?; topics: commands, options, filter, edits, recipes, voice, examples)
+/// W3ModWorkbench.exe --help [topic]   (-h, /?; topics: commands, options, filter, edits, recipes, pipes, voice, examples)
 /// </code>
 /// </summary>
 public static partial class CommandLine
@@ -51,10 +52,12 @@ public static partial class CommandLine
         bool redirected = OutputRedirected();
         bool console = !redirected && AttachConsole(-1);
         if (redirected) Console.OutputEncoding = new System.Text.UTF8Encoding(false);
-        var output = Console.Out;
+        // a file's data written to the output: what happened goes to the error output, so the data is all a script reads
+        bool dataOut = WritesStandardOutput(args);
+        var output = dataOut ? Console.Error : Console.Out;
         // in a terminal, a line that keeps saying how far it is; a script reading the output gets only the results
-        var progress = console ? new ConsoleProgress(output) : null;
-        output.WriteLine();
+        var progress = console && !dataOut ? new ConsoleProgress(output) : null;
+        if (!dataOut) output.WriteLine();
         try
         {
             string command = args[0].ToLowerInvariant();
@@ -140,6 +143,12 @@ public static partial class CommandLine
                 return Report(output, ran, check,
                     recipe.Kind == Cr2wRecipeKind.FromJson ? NoJson : recipe.Kind == Cr2wRecipeKind.Edit ? NoEditable : NoCr2w);
             }
+            if (paths.Contains(StandardStream) || outputFolder == StandardStream)
+            {
+                if (command is not ("--to-json" or "--from-json")) throw new ArgumentException("- (standard input or output) goes with --to-json or --from-json.");
+                if (match is not null || skip is not null || recursive) throw new ArgumentException("--match, --skip and --recursive are for folders: standard input or output takes one file.");
+                return ConvertOne(command == "--from-json", paths, outputFolder, overwrite, asLatest, output);
+            }
             if (paths.Count == 0) throw new ArgumentException("Give the files or folders to work on. Run --help for the options.");
             if (className is not null)
                 edits = [.. edits.Select(e => e.ClassName.Length > 0 ? e : With(e, className: className))];
@@ -224,6 +233,84 @@ public static partial class CommandLine
         return failed == 0 ? 0 : 1;
     }
 
+    /// <summary>"-" as the input reads standard input; as --out, it writes to standard output.</summary>
+    private const string StandardStream = "-";
+
+    /// <summary>Whether a file's data will be written to standard output: --out -, or - as the input with no --out.</summary>
+    private static bool WritesStandardOutput(string[] args)
+    {
+        if (args.Length == 0 || !args[0].Equals("--to-json", StringComparison.OrdinalIgnoreCase) && !args[0].Equals("--from-json", StringComparison.OrdinalIgnoreCase))
+            return false;
+        int at = Array.FindIndex(args, a => a.Equals("--out", StringComparison.OrdinalIgnoreCase));
+        return at < 0 ? args.Contains(StandardStream) : at + 1 < args.Length && args[at + 1] == StandardStream;
+    }
+
+    /// <summary>
+    /// One file converted through standard input or output, so a script can keep it in memory: - as the input reads
+    /// it from standard input, and --out - (or no --out, with - as the input) writes the result to standard output.
+    /// With - as the input, --out names the file to write. What happened goes to the error output.
+    /// </summary>
+    private static int ConvertOne(bool fromJson, List<string> paths, string? outputPath, bool overwrite, bool asLatest, TextWriter report)
+    {
+        if (paths.Count != 1) throw new ArgumentException("Standard input or output takes one file: give one file, or - for standard input.");
+        string input = paths[0] == StandardStream ? StandardStream : Path.GetFullPath(paths[0]);
+        string? output = outputPath is null or StandardStream
+            ? input == StandardStream || outputPath == StandardStream ? null : throw new ArgumentException("--out - writes to standard output.")
+            : Path.GetFullPath(outputPath);
+        if (output is not null && Directory.Exists(output)) throw new ArgumentException($"With - as the input, --out is the file to write, and {output} is a folder.");
+        if (input != StandardStream && !File.Exists(input)) throw new ArgumentException($"There's no file {input}.");
+        // nothing sent in (typed in a terminal, or run through start): reading would wait for ever
+        if (input == StandardStream && GetFileType(GetStdHandle(-10)) is not (1 or 3))
+            throw new ArgumentException("Nothing is coming in on standard input: send the file to it, with < name.env in a batch file or from a script.");
+        string inputName = input == StandardStream ? "standard input" : input;
+        if (output is not null && !overwrite && File.Exists(output))
+        {
+            report.WriteLine($"skipped {inputName}: {Path.GetFileName(output)} is there already; add --overwrite to replace it.");
+            return 1;
+        }
+
+        byte[] result;
+        string? note;
+        try
+        {
+            if (fromJson)
+            {
+                using var reader = input == StandardStream
+                    ? new StreamReader(Console.OpenStandardInput(), new System.Text.UTF8Encoding(false), detectEncodingFromByteOrderMarks: true)
+                    : new StreamReader(input, new System.Text.UTF8Encoding(false), detectEncodingFromByteOrderMarks: true);
+                result = Cr2wJsonBatch.FromJsonText(reader.ReadToEnd(), asLatest, out note);
+            }
+            else
+            {
+                byte[] data;
+                if (input == StandardStream)
+                {
+                    using var buffer = new MemoryStream();
+                    using (var stdin = Console.OpenStandardInput()) stdin.CopyTo(buffer);
+                    data = buffer.ToArray();
+                }
+                else data = File.ReadAllBytes(input);
+                string json = Cr2wJsonBatch.ToJsonText(data, input == StandardStream ? null : Core.Projects.FileSafety.GamePathOf(input), out note);
+                result = new System.Text.UTF8Encoding(false).GetBytes(json);
+            }
+            if (output is null)
+            {
+                using var stdout = Console.OpenStandardOutput();
+                stdout.Write(result);
+                stdout.Flush();
+            }
+            else Cr2wJsonBatch.Write(output, result);
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or NotSupportedException
+            or FormatException or InvalidOperationException or System.Text.Json.JsonException or ArgumentException)
+        {
+            report.WriteLine($"FAILED  {inputName}: {ex.Message}");
+            return 1;
+        }
+        report.WriteLine($"ok      {output ?? "standard output"}{(note is null ? "" : $"  ({note})")}");
+        return 0;
+    }
+
     /// <summary>An edit with its class or its fields changed.</summary>
     private static Cr2wBulkEdit With(Cr2wBulkEdit e, string? className = null, IReadOnlyList<string>? fields = null) => new()
     {
@@ -267,7 +354,7 @@ public static partial class CommandLine
     private const string Title = """
         W3 Mod Workbench: CR2W files (.env, .w2mi, .w2ent…) to JSON and back, the same edit to many at once, and voice
         lines, lip syncs and strings.
-        --help <topic> shows one part: commands, options, filter, edits, recipes, voice, examples.
+        --help <topic> shows one part: commands, options, filter, edits, recipes, pipes, voice, examples.
 
         """;
 
@@ -297,6 +384,8 @@ public static partial class CommandLine
               --check            With --edit or --recipe: try the edits and say what would change, saving nothing
               --match <regex>    Only the files in folders whose path matches (see: --help filter)
               --skip <regex>     Not the files in folders whose path matches
+              -                  With --to-json or --from-json, as the file: read it from standard input;
+                                 --out - writes the result to standard output (see: --help pipes)
 
             """),
         ("filter", """
@@ -327,6 +416,19 @@ public static partial class CommandLine
               A recipe is a form from the CR2W and JSON window saved to run again (Save as recipe; the Recipes tab).
               They're kept in %AppData%\W3ModWorkbench\recipes, or the folder set in Settings > General.
               --recipe <file> runs one; --check tries a recipe of edits first; --match and --skip replace its filter.
+
+            """),
+        ("pipes", """
+            Standard input and output, for a script that keeps the file in memory (Python's subprocess)
+              --to-json and --from-json convert one file this way:
+                - as the file        Read it from standard input
+                --out -              Write the result to standard output; with - as the file, that's the default
+                --out <file>         With - as the file: the file to write (--overwrite to replace it)
+              What happened goes to the error output, so standard output holds only the file. The exit code is 0
+              when it was converted and 1 when it couldn't be; the error output says why.
+                W3ModWorkbench.exe --to-json "D:\mymod\envs\night.env" --out -
+                W3ModWorkbench.exe --to-json - < night.env > night.env.json
+                W3ModWorkbench.exe --from-json - --out "D:\mymod\envs\night.env" < night.env.json
 
             """),
         ("voice", VoiceHelp),

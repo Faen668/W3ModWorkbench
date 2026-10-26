@@ -1123,6 +1123,8 @@ public static partial class Cr2wJson
         }
         if (double.IsPositiveInfinity(value)) return "Infinity";
         if (double.IsNegativeInfinity(value)) return "-Infinity";
+        // -0.0, not -0: Python and others read -0 as the whole number 0, and write the file back without the sign
+        if (value == 0 && double.IsNegative(value)) return JsonNode.Parse("-0.0")!;
         return JsonValue.Create(value)!;
     }
 
@@ -1133,7 +1135,7 @@ public static partial class Cr2wJson
             int bits = BitConverter.SingleToInt32Bits(value);
             return bits == BitConverter.SingleToInt32Bits(float.NaN) ? "NaN" : $"NaN:{bits:x8}";
         }
-        if (float.IsInfinity(value)) return Number((double)value);
+        if (float.IsInfinity(value) || value == 0 && float.IsNegative(value)) return Number((double)value);
         return JsonValue.Create(value)!;
     }
 

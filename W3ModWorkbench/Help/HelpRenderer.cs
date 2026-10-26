@@ -288,11 +288,11 @@ public sealed partial class HelpRenderer(FrameworkElement owner, Action<string> 
         return stack;
     }
 
-    /// <summary>A table: "| a | b |" rows, the first the header, a "|---|" row skipped.</summary>
+    /// <summary>A table: "| a | b |" rows, the first the header, a "|---|" row skipped. "\|" is a | inside a cell.</summary>
     private FrameworkElement Table(List<string> rows)
     {
         var cells = rows.Where(r => !Regex.IsMatch(r, @"^\|[\s:\-|]+\|?$"))
-            .Select(r => r.Trim('|').Split('|').Select(c => c.Trim()).ToList()).ToList();
+            .Select(r => Regex.Split(r.Trim('|'), @"(?<!\\)\|").Select(c => c.Trim().Replace(@"\|", "|")).ToList()).ToList();
         int columns = cells.Max(c => c.Count);
         var grid = new Grid();
         for (int c = 0; c < columns; c++) grid.ColumnDefinitions.Add(new ColumnDefinition { Width = c == columns - 1 ? new GridLength(1, GridUnitType.Star) : GridLength.Auto });

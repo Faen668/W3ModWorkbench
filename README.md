@@ -55,7 +55,7 @@
 ### CR2W and JSON
 - **Any resource file as JSON and back**: `.env`, `.w2mi`, `.w2ent`, quests, scenes, meshes and the rest turn into readable JSON to edit by hand or with a script, and back into the game's format byte for byte. Every file is checked to come back exactly as it was before it's written.
 - **Bulk edits**: the same tone mapping in all 500 of your `.env` files, a value set or removed everywhere, fog curves scaled by 0.8, with a dry run first and the property picked from a file.
-- **Scriptable**: `W3ModWorkbench.exe --to-json`, `--from-json` and `--edit` run with no window, for batch files and Python scripts. Extract can write CR2W files as JSON straight from the bundles.
+- **Scriptable**: `W3ModWorkbench.exe --to-json`, `--from-json` and `--edit` run with no window, for batch files and Python scripts; with `-` and `--out -` a file goes through standard input and output, so Python can read and write CR2W files as dictionaries without temporary files. Extract can write CR2W files as JSON straight from the bundles.
 
 ### Compiled scripts
 - **Decompiles `precompiled.rsblob`** back into WitcherScript, split into tidy `.ws` files:

@@ -280,17 +280,23 @@ public static class Cr2wJsonBatch
         {
             string output = OutputPath(file, root, outputFolder, Cr2wName(file));
             if (!overwrite && File.Exists(output)) return new Cr2wJsonResult(file, null, L.T("Cr2wJsonBatch.ThereAlreadyTurnOverwrite", Path.GetFileName(output)));
-            if (!asLatest)
-            {
-                Write(output, Cr2wJson.FromJsonText(File.ReadAllText(file, Encoding.UTF8)));
-                return new Cr2wJsonResult(file, output, null);
-            }
-            var document = Load(file);
-            byte[] data = Cr2wJson.FromJson(Cr2wJson.UpgradeToLatest(document, out var report));
-            Cr2wJson.ToJson(Cr2wFile.Read(data), out _); // what was written must read
-            Write(output, data);
-            return new Cr2wJsonResult(file, output, null, UpgradeNote(report));
+            Write(output, FromJsonText(File.ReadAllText(file, Encoding.UTF8), asLatest, out string? note));
+            return new Cr2wJsonResult(file, output, null, note);
         });
+
+    /// <summary>
+    /// A converted JSON file's text as CR2W; with <paramref name="asLatest"/>, a file of an older version is written as
+    /// version 164, and the note says what that changed.
+    /// </summary>
+    public static byte[] FromJsonText(string json, bool asLatest, out string? note)
+    {
+        note = null;
+        if (!asLatest) return Cr2wJson.FromJsonText(json);
+        byte[] data = Cr2wJson.FromJson(Cr2wJson.UpgradeToLatest(Parse(json), out var report));
+        Cr2wJson.ToJson(Cr2wFile.Read(data), out _); // what was written must read
+        note = UpgradeNote(report);
+        return data;
+    }
 
     /// <summary>
     /// Saves CR2W files of older versions as version 164, the way the engine would after loading them (see
@@ -383,22 +389,24 @@ public static class Cr2wJsonBatch
     /// <summary>A CR2W file or a converted JSON file, as JSON.</summary>
     public static JsonObject Load(string file)
     {
-        if (file.EndsWith(Suffix, StringComparison.OrdinalIgnoreCase))
-        {
-            try
-            {
-                return JsonNode.Parse(File.ReadAllText(file, Encoding.UTF8),
-                    documentOptions: new JsonDocumentOptions { AllowTrailingCommas = true, CommentHandling = JsonCommentHandling.Skip }) as JsonObject
-                    ?? throw new InvalidDataException(L.T("Cr2wJsonBatch.JsonIsntObject"));
-            }
-            catch (JsonException ex) { throw new InvalidDataException(L.T("Cr2wJsonBatch.JsonCantRead", ex.Message)); }
-        }
+        if (file.EndsWith(Suffix, StringComparison.OrdinalIgnoreCase)) return Parse(File.ReadAllText(file, Encoding.UTF8));
         return Cr2wJson.ToJson(Cr2wFile.Read(File.ReadAllBytes(file)), out _);
+    }
+
+    /// <summary>A converted JSON file's text, read as JSON.</summary>
+    public static JsonObject Parse(string json)
+    {
+        try
+        {
+            return JsonNode.Parse(json, documentOptions: new JsonDocumentOptions { AllowTrailingCommas = true, CommentHandling = JsonCommentHandling.Skip }) as JsonObject
+                ?? throw new InvalidDataException(L.T("Cr2wJsonBatch.JsonIsntObject"));
+        }
+        catch (JsonException ex) { throw new InvalidDataException(L.T("Cr2wJsonBatch.JsonCantRead", ex.Message)); }
     }
 
     // ---------------------------------------------------------------- shared
 
-    private static void Write(string output, byte[] data)
+    internal static void Write(string output, byte[] data)
     {
         FileSafety.CheckWrite(output);
         Directory.CreateDirectory(Path.GetDirectoryName(output)!);
