@@ -18,8 +18,11 @@ public sealed record MapDot(LayerEntity Entity, LayerInfo Layer, int Group)
     public string Title => Entity.Name.Length > 0 ? Entity.Name : Entity.Template is { } t ? System.IO.Path.GetFileNameWithoutExtension(t) : "";
 }
 
-/// <summary>A marker on a <see cref="WorldMap"/>: a pin or a waypoint, where, its colour, its name and, for an area, its radius in metres.</summary>
-public sealed record MapMarker(Vector2 At, Color Color, string? Label, float Radius, bool Diamond);
+/// <summary>
+/// A marker on a <see cref="WorldMap"/>: a pin or a waypoint, where, its colour, its name and, for an area, its radius in
+/// metres; a dot's own radius in pixels, and a tag for one that can be clicked (raised by <see cref="WorldMap.MarkerPicked"/>).
+/// </summary>
+public sealed record MapMarker(Vector2 At, Color Color, string? Label, float Radius, bool Diamond, float Size = 2, object? Tag = null);
 
 /// <summary>A plant over the map: where its foot is, its turn (radians), how far it reaches (metres), and its picture from above.</summary>
 public sealed record MapPlant(Vector2 At, float Yaw, float Reach, BitmapSource Picture);
@@ -88,6 +91,9 @@ public sealed class WorldMap : FrameworkElement
     /// <summary>Raised when the map is clicked, with the dot nearest the click (within a few pixels), or null.</summary>
     public event EventHandler<MapDot?>? DotPicked;
 
+    /// <summary>Raised when the map is clicked away from any dot, with the tagged marker nearest the click, or null; only while some marker has a tag.</summary>
+    public event EventHandler<MapMarker?>? MarkerPicked;
+
     public WorldMap()
     {
         SetResourceReference(TextBrushProperty, "TextFillColorPrimaryBrush");
@@ -122,6 +128,30 @@ public sealed class WorldMap : FrameworkElement
         else _overlays.Insert(under ? 0 : _overlays.Count, (key, picture, new Rect(corner.X, corner.Y, size, size), maxScale));
         Changed();
     }
+
+    /// <summary>
+    /// Every picture laid over the terrain whose name starts with <paramref name="prefix"/> replaced by these at once, with
+    /// one repaint: tiles loaded for the part of the world in view. They go just over the picture named
+    /// <paramref name="after"/>, or over every other when it's null or not there.
+    /// </summary>
+    public void SetOverlays(string prefix, IEnumerable<(string Key, BitmapSource Picture, Vector2 Corner, float Size)> pictures, string? after = null)
+    {
+        _overlays.RemoveAll(o => o.Key.StartsWith(prefix, StringComparison.Ordinal));
+        int at = after is null ? -1 : _overlays.FindIndex(o => o.Key == after);
+        at = at < 0 ? _overlays.Count : at + 1;
+        foreach (var (key, picture, corner, size) in pictures)
+            if (Shareable(picture) is { } shared) _overlays.Insert(at++, (key, shared, new Rect(corner.X, corner.Y, size, size), double.MaxValue));
+        Changed();
+    }
+
+    /// <summary>Raised as the map is moved or zoomed (often while dragging: wait for it to settle before heavy work).</summary>
+    public event EventHandler? ViewChanged;
+
+    /// <summary>How many pixels a metre the map is drawn at.</summary>
+    public double PixelsPerMetre => _scale;
+
+    /// <summary>The part of the world in view, in metres: its south-west and north-east corners.</summary>
+    public (Vector2 Min, Vector2 Max) VisibleArea => (ToMap(new Point(0, ActualHeight)), ToMap(new Point(ActualWidth, 0)));
 
     /// <summary>The trees and grass drawn as their pictures from above once zoomed in; null for none.</summary>
     public void SetPlants(IReadOnlyList<MapPlant>? trees, IReadOnlyList<MapPlant>? grass)
@@ -200,6 +230,14 @@ public sealed class WorldMap : FrameworkElement
         set { _picked = value; InvalidateVisual(); }
     }
 
+    /// <summary>The marker picked, ringed, or null.</summary>
+    public MapMarker? PickedMarker
+    {
+        get => _pickedMarker;
+        set { _pickedMarker = value; InvalidateVisual(); }
+    }
+    private MapMarker? _pickedMarker;
+
     /// <summary>The layers whose dots stand out (the rest dimmed), or null for none.</summary>
     public void Highlight(HashSet<LayerInfo>? layers)
     {
@@ -270,6 +308,7 @@ public sealed class WorldMap : FrameworkElement
     private void Moved()
     {
         InvalidateVisual();
+        ViewChanged?.Invoke(this, EventArgs.Empty);
         _settle ??= new DispatcherTimer(TimeSpan.FromMilliseconds(90), DispatcherPriority.Background, (_, _) =>
         {
             _settle!.Stop();
@@ -376,10 +415,17 @@ public sealed class WorldMap : FrameworkElement
             float facing = p.Entity.Yaw;
             dc.DrawLine(PickedPen, at, new Point(at.X - Math.Sin(facing) * 14, at.Y - Math.Cos(facing) * 14));
         }
+        if (_pickedMarker is { } m)
+        {
+            var at = ToScreen(m.At.X, m.At.Y);
+            dc.DrawEllipse(null, PickedShadowPen, at, m.Size + 5, m.Size + 5);
+            dc.DrawEllipse(null, PickedPen, at, m.Size + 5, m.Size + 5);
+        }
         DrawScale(dc, dpi);
     }
 
     private static readonly Pen PickedPen = Frozen(new Pen(Brushes.White, 2));
+    private static readonly Pen PickedShadowPen = Frozen(new Pen(Frozen(new SolidColorBrush(Color.FromArgb(150, 0, 0, 0))), 4));
 
     /// <summary>A bar a round number of metres long, bottom right.</summary>
     private void DrawScale(DrawingContext dc, double dpi)
@@ -578,7 +624,8 @@ public sealed class WorldMap : FrameworkElement
                         g.Freeze();
                         dc.DrawGeometry(brush, outline, g);
                     }
-                    else dc.DrawEllipse(brush, null, at, 2, 2);
+                    // a bigger dot is outlined, to stand out on the game's map
+                    else dc.DrawEllipse(brush, m.Size > 2 ? outline : null, at, m.Size, m.Size);
                     if (named && m.Label is { Length: > 0 } label)
                     {
                         var text = new FormattedText(label, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, new Typeface("Segoe UI"), 11, Brushes.White, _dpi); // loc-ignore: the typeface
@@ -902,6 +949,19 @@ public sealed class WorldMap : FrameworkElement
         }
         _picked = best;
         DotPicked?.Invoke(this, best);
+        if (best is null && _markers.Any(m => m.Tag is not null))
+        {
+            MapMarker? marker = null;
+            double closest = double.MaxValue;
+            foreach (var m in _markers)
+            {
+                if (m.Tag is null) continue;
+                double d = (ToScreen(m.At.X, m.At.Y) - at).LengthSquared, reach = m.Size + 6;
+                if (d < reach * reach && d < closest) (marker, closest) = (m, d);
+            }
+            _pickedMarker = marker;
+            MarkerPicked?.Invoke(this, marker);
+        }
         InvalidateVisual();
     }
 }

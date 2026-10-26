@@ -19,7 +19,7 @@ Search ({{Ctrl+F}}) by in-game name, item name or tag, or pick a category. **Cha
 - **General**: the item's own attributes, the ones most changed first (price, weight, stack size, durability, upgrade slots…), the rest under **More attributes**, then its tags and base abilities.
 - **Stats**: each ability the item is given, with its stats. A stat the game gives one number shows one box; one with a range shows its min and max. An ability shared by other items says how many: changing it changes them all.
 - **Crafted by** / **Made by**: the schematic or alchemy recipe that makes it, with its ingredients.
-- **Found in**: each loot table it's in, with its quantities and chance.
+- **Found in**: each loot table it's in, with its quantities and chance. The [[Loot Locator]] shows where those tables are in the world.
 
 A value you've changed is marked, with the game's beside it. **Put back** on a section returns that definition to the game's.
 

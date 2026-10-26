@@ -1699,6 +1699,7 @@ public partial class MainWindow : Window, IMessageHost
         Add(L.T("MainWindow.LoadOrderAnalyser"), "Ctrl+Shift+L", () => LoadOrderWindow.Open(this));
         Add(L.T("MainWindow.ViewXMLOverrides"), "", () => XmlOverridesWindow.Open(this));
         Add(L.T("ItemEditor.MenuItem"), "", () => ItemEditorWindow.Open(this));
+        Add(L.T("LootLocator.MenuItem"), "", () => LootLocatorWindow.Open(this));
         Add(L.T("ComparePick.MenuItem"), "", () => ComparePickWindow.Open(this));
         menu.Items.Add(new Separator());
         Add(L.T("MainWindow.ConsoleCommands"), "", () => ConsoleCommandsWindow.Open(this));

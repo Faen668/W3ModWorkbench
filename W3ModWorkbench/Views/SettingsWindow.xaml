@@ -757,6 +757,21 @@
                             <TextBlock Style="{StaticResource Hint}" Text="{l:T Settings.Viewers.SpeechMakeLipSyncsHint}" />
                         </StackPanel>
                     </Border>
+
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource SectionTitle}" Text="{l:T Settings.Viewers.LootLocator}" />
+                            <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                <TextBlock Text="{l:T Settings.Viewers.LootPlayerLevel}" VerticalAlignment="Center" Margin="0,0,10,0" />
+                                <ComboBox x:Name="LootLevelBox" MinWidth="90" />
+                            </StackPanel>
+                            <TextBlock Style="{StaticResource Hint}" Text="{l:T Settings.Viewers.LootPlayerLevelHint}" />
+                            <CheckBox x:Name="LootWithModsCheck" Content="{l:T Settings.Viewers.LootWithMods}" Margin="0,10,0,0" />
+                            <TextBlock Style="{StaticResource Hint}" Text="{l:T Settings.Viewers.LootWithModsHint}" />
+                            <CheckBox x:Name="LootPredictedCheck" Content="{l:T Settings.Viewers.LootPredicted}" Margin="0,10,0,0" />
+                            <TextBlock Style="{StaticResource Hint}" Text="{l:T Settings.Viewers.LootPredictedHint}" />
+                        </StackPanel>
+                    </Border>
                 </StackPanel>
 
                 <!-- Privacy -->

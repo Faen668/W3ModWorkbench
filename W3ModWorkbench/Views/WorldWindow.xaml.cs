@@ -50,6 +50,8 @@ public partial class WorldWindow : Window, IMessageHost
     private System.Windows.Media.Imaging.BitmapSource? _navPicture;
     private bool _navLoaded, _navVisible;
     private System.Windows.Media.Imaging.BitmapSource? _gameMap;
+    private GameMinimap? _minimap;
+    private readonly MinimapDetail _minimapDetail;
     private FoliageLook? _foliage;
     private bool _gameMapByDefault;
     private bool _gameMapLoaded, _foliageLoaded;
@@ -116,6 +118,7 @@ public partial class WorldWindow : Window, IMessageHost
     private WorldWindow(string path, string source, Func<byte[]> readData, ResourceLocator locator, string? origin)
     {
         InitializeComponent();
+        _minimapDetail = new MinimapDetail(Map, after: "gamemap");
         MakeModBtn.Show(path, origin, readData);
         _path = path;
         _source = source;
@@ -483,6 +486,7 @@ public partial class WorldWindow : Window, IMessageHost
         }
         _gameMapByDefault = false;
         var look = (TerrainLook)LookBox.SelectedIndex;
+        _minimapDetail.Show(null, null);
         Map.SetOverlay("gamemap", null, default, 0);
         Map.SetTerrain(p.Picture(look), p.Terrain.Corner, p.Terrain.Size);
     }
@@ -640,40 +644,20 @@ public partial class WorldWindow : Window, IMessageHost
         if (!_gameMapLoaded)
         {
             _gameMapLoaded = true;
-            string folder = (_world!.World["minimapsPath"] as string ?? @"gameplay\gui_new\minimaps\" + Path.GetFileName(_world.Folder)).TrimEnd('\\');
             MapProgress.Visibility = Visibility.Visible;
             MapProgress.Text = L.T("WorldWindow.ReadingGameMap");
-            _gameMap = await Task.Run(() =>
+            var world = _world!;
+            _minimap = await Task.Run(() => GameMinimap.Read(_locator, world, GamePath, RedkitPicture));
+            _gameMap = _minimap is not { } minimap ? null : await Task.Run(() =>
             {
-                int n = terrain.TilesPerEdge, size = Math.Clamp(4096 / n, 32, 256), side = n * size;
-                var pixels = new byte[side * side * 4];
-                int found = 0;
-                Parallel.For(0, n * n, i =>
-                {
-                    int col = i % n, row = i / n;
-                    string path = $@"{folder}\tile{col}x{row}.jpg";
-                    var picture = MeshTextures.Load(_locator, path, size) ?? RedkitPicture(path);
-                    if (picture is null || picture.PixelWidth == 0) return;
-                    var scaled = new System.Windows.Media.Imaging.FormatConvertedBitmap(
-                        new System.Windows.Media.Imaging.TransformedBitmap(picture, new ScaleTransform((double)size / picture.PixelWidth, (double)size / picture.PixelHeight)),
-                        PixelFormats.Bgra32, null, 0);
-                    var tile = new byte[size * size * 4];
-                    scaled.CopyPixels(new Int32Rect(0, 0, Math.Min(size, scaled.PixelWidth), Math.Min(size, scaled.PixelHeight)), tile, size * 4, 0);
-                    for (int y = 0; y < size; y++)
-                        Array.Copy(tile, y * size * 4, pixels, (((n - 1 - row) * size + y) * side + col * size) * 4, size * 4);
-                    Interlocked.Increment(ref found);
-                });
-                if (found == 0) return null;
                 // the game's map covers only the walkable middle: the rest painted from the terrain to match it
                 if (_terrain is { } painted)
                 {
-                    string cells = GamePath.Contains('\\') ? Path.GetDirectoryName(GamePath)! : _world!.Folder;
+                    string cells = GamePath.Contains('\\') ? Path.GetDirectoryName(GamePath)! : world.Folder;
                     var trees = (_foliage ?? LoadFoliage(terrain, cells)).Trees.Select(p => (p.At, p.Reach)).ToList();
-                    GameMapFill.Complete(pixels, side, painted, TerrainArray("diffuse"), trees);
+                    GameMapFill.Complete(minimap.Pixels, minimap.Side, painted, TerrainArray("diffuse"), trees);
                 }
-                var bitmap = System.Windows.Media.Imaging.BitmapSource.Create(side, side, 96, 96, PixelFormats.Bgra32, null, pixels, side * 4);
-                bitmap.Freeze();
-                return bitmap;
+                return minimap.Picture();
             });
             MapProgress.Visibility = Visibility.Collapsed;
         }
@@ -690,6 +674,8 @@ public partial class WorldWindow : Window, IMessageHost
         // over the relief, which shows where the game has no minimap (past the playable middle)
         if (_terrain is { } pictures) Map.SetTerrain(pictures.Picture(TerrainLook.Relief), terrain.Corner, terrain.Size);
         Map.SetOverlay("gamemap", _gameMap, terrain.Corner, terrain.Size, under: true);
+        // the game's full-size tiles over it once zoomed in past its own detail
+        _minimapDetail.Show(_minimap, _locator, RedkitPicture);
     }
 
     /// <summary>REDkit's own picture of a game path (its depot keeps the hub map and minimap as .jpg files), or null.</summary>
