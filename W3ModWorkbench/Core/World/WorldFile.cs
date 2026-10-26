@@ -370,7 +370,8 @@ public sealed class WorldFile
         return (Entities(file), sector);
     }
 
-    private static List<LayerEntity> Entities(Cr2wFile file)
+    /// <summary>The entities of a layer file already read.</summary>
+    public static List<LayerEntity> Entities(Cr2wFile file)
     {
         var result = new List<LayerEntity>();
         if (file.First("CLayer") is not { } layer) return result;

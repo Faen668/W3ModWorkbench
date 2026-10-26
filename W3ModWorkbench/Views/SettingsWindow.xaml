@@ -772,6 +772,16 @@
                             <TextBlock Style="{StaticResource Hint}" Text="{l:T Settings.Viewers.LootPredictedHint}" />
                         </StackPanel>
                     </Border>
+
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource SectionTitle}" Text="{l:T Settings.Viewers.Bestiary}" />
+                            <CheckBox x:Name="BestiaryUnlistedCheck" Content="{l:T Settings.Viewers.BestiaryUnlisted}" Margin="0,4,0,0" />
+                            <TextBlock Style="{StaticResource Hint}" Text="{l:T Settings.Viewers.BestiaryUnlistedHint}" />
+                            <CheckBox x:Name="BestiaryWithModsCheck" Content="{l:T Settings.Viewers.LootWithMods}" Margin="0,10,0,0" />
+                            <TextBlock Style="{StaticResource Hint}" Text="{l:T Settings.Viewers.BestiaryWithModsHint}" />
+                        </StackPanel>
+                    </Border>
                 </StackPanel>
 
                 <!-- Privacy -->

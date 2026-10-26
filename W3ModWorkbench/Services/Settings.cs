@@ -206,6 +206,12 @@ public sealed class Settings
     /// <summary>Whether the Loot Locator shows what each place gives where it stands, from the game's roll re-created.</summary>
     public bool LootShowPredicted { get; set; } = true;
 
+    /// <summary>Whether the Bestiary reads the installed mods' copies of layers and templates, as the game does with them installed.</summary>
+    public bool BestiaryWithMods { get; set; }
+
+    /// <summary>Whether the Bestiary also lists the creatures the game's bestiary has no entry for (animals, people…).</summary>
+    public bool BestiaryShowUnlisted { get; set; }
+
     /// <summary>Whether the entity viewer shows what it's drawing (triangles, frame rate…) over the view.</summary>
     public bool ShowEntityInfo { get; set; } = true;
 

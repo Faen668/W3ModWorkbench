@@ -1,0 +1,266 @@
+<Window x:Class="W3ModWorkbench.BestiaryWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:l="clr-namespace:W3ModWorkbench.Localisation"
+        xmlns:local="clr-namespace:W3ModWorkbench"
+        Title="{l:T Bestiary.Title}" Icon="pack://application:,,,/W3ModWorkbench;component/Assets/app.ico"
+        Width="1600" Height="980" MinWidth="1100" MinHeight="620"
+        WindowStartupLocation="CenterOwner" PreviewKeyDown="Window_PreviewKeyDown">
+
+    <Window.Resources>
+        <Style x:Key="PanelTabs" TargetType="TabControl">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TabControl">
+                        <DockPanel>
+                            <WrapPanel DockPanel.Dock="Top" IsItemsHost="True" Margin="2,0,2,4" />
+                            <Border DockPanel.Dock="Top" Height="1" Background="{DynamicResource CardStrokeColorDefaultBrush}" Margin="0,0,0,2" />
+                            <ContentPresenter ContentSource="SelectedContent" TextElement.Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                        </DockPanel>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="PanelTab" TargetType="TabItem">
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TabItem">
+                        <Border x:Name="Back" Padding="9,4" Margin="0,0,2,4" CornerRadius="5" Background="Transparent" Cursor="Hand"
+                                TextElement.Foreground="{DynamicResource TextFillColorSecondaryBrush}">
+                            <ContentPresenter ContentSource="Header" TextElement.FontSize="12.5" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Back" Property="Background" Value="{DynamicResource SubtleFillColorTertiaryBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Back" Property="Background" Value="{DynamicResource AccentFillColorDefaultBrush}" />
+                                <Setter TargetName="Back" Property="TextElement.Foreground" Value="{DynamicResource TextOnAccentFillColorPrimaryBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="IconText" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="{StaticResource IconFont}" />
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style x:Key="Card" TargetType="Border">
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}" />
+            <Setter Property="Background" Value="{DynamicResource CardBackgroundFillColorDefaultBrush}" />
+        </Style>
+        <Style x:Key="SectionTitle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Margin" Value="0,14,0,6" />
+        </Style>
+        <Style x:Key="Hint" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Opacity" Value="0.65" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+        <Style x:Key="Small" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="11.5" />
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorTertiaryBrush}" />
+        </Style>
+        <Style TargetType="ListBoxItem" BasedOn="{StaticResource WashItem}">
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        </Style>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Margin="14,12,14,8">
+            <TextBlock Text="{l:T Bestiary.Title}" FontSize="16" FontWeight="SemiBold" />
+            <TextBlock Opacity="0.65" Margin="0,2,0,0" TextWrapping="Wrap" Text="{l:T Bestiary.Explain}" />
+        </StackPanel>
+
+        <Grid x:Name="Body" Grid.Row="1" Margin="14,0,14,0" Visibility="Hidden">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="300" MinWidth="220" />
+                <ColumnDefinition Width="8" />
+                <ColumnDefinition Width="430" MinWidth="320" />
+                <ColumnDefinition Width="8" />
+                <ColumnDefinition Width="*" MinWidth="420" />
+            </Grid.ColumnDefinitions>
+
+            <!-- the bestiary -->
+            <Border Style="{StaticResource Card}" ClipToBounds="True">
+                <DockPanel Margin="8">
+                    <Grid DockPanel.Dock="Top" Margin="0,0,0,6">
+                        <TextBox x:Name="SearchBox" Padding="30,5,8,5" VerticalContentAlignment="Center" TextChanged="SearchBox_TextChanged" />
+                        <TextBlock Style="{StaticResource IconText}" Text="&#xE721;" FontSize="12" Margin="10,0,0,0" Opacity="0.6" HorizontalAlignment="Left" IsHitTestVisible="False" />
+                        <TextBlock x:Name="SearchHint" Margin="31,0,0,0" Opacity="0.55" VerticalAlignment="Center" IsHitTestVisible="False" Text="{l:T Bestiary.Find}" />
+                    </Grid>
+                    <CheckBox x:Name="UnlistedCheck" DockPanel.Dock="Top" Content="{l:T Bestiary.ShowUnlisted}" Margin="2,0,0,6" MinWidth="0"
+                              ToolTip="{l:T Bestiary.ShowUnlistedTip}" Click="UnlistedCheck_Click" />
+                    <TextBlock x:Name="CountText" DockPanel.Dock="Bottom" Margin="4,4,4,2" Style="{StaticResource Small}" />
+                    <ListBox x:Name="CreatureList" BorderThickness="0" Background="Transparent" SelectionChanged="CreatureList_SelectionChanged" IsSynchronizedWithCurrentItem="False"
+                             VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.IsVirtualizingWhenGrouping="True" VirtualizingPanel.VirtualizationMode="Recycling"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                        <ListBox.GroupStyle>
+                            <GroupStyle>
+                                <GroupStyle.HeaderTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="12" Margin="6,10,0,4"
+                                                   Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}" />
+                                    </DataTemplate>
+                                </GroupStyle.HeaderTemplate>
+                            </GroupStyle>
+                        </ListBox.GroupStyle>
+                        <ListBox.ItemTemplate>
+                            <DataTemplate DataType="{x:Type local:BestiaryRow}">
+                                <DockPanel Margin="2,2">
+                                    <Border DockPanel.Dock="Left" Width="40" Height="40" CornerRadius="5" Margin="0,0,9,0" ClipToBounds="True"
+                                            Background="{DynamicResource SubtleFillColorSecondaryBrush}">
+                                        <Image Source="{Binding Icon}" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality" />
+                                    </Border>
+                                    <TextBlock DockPanel.Dock="Right" Text="{Binding CountText}" Style="{StaticResource Small}" VerticalAlignment="Center" Margin="6,0,0,0" />
+                                    <StackPanel VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Text="{Binding Detail}" Opacity="0.6" FontSize="12" TextTrimming="CharacterEllipsis" />
+                                    </StackPanel>
+                                </DockPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </DockPanel>
+            </Border>
+
+            <GridSplitter Grid.Column="1" Width="8" HorizontalAlignment="Stretch" Background="Transparent" ResizeBehavior="PreviousAndNext" Focusable="False" />
+
+            <!-- the entry, as the game shows it -->
+            <Border Grid.Column="2" Style="{StaticResource Card}" ClipToBounds="True">
+                <Grid>
+                    <ScrollViewer x:Name="EntryScroller" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                        <StackPanel x:Name="Entry" Margin="18,14,18,18" />
+                    </ScrollViewer>
+                    <TextBlock x:Name="EntryEmpty" HorizontalAlignment="Center" VerticalAlignment="Center" Opacity="0.65" TextWrapping="Wrap" TextAlignment="Center"
+                               Margin="16" Text="{l:T Bestiary.PickCreature}" />
+                </Grid>
+            </Border>
+
+            <GridSplitter Grid.Column="3" Width="8" HorizontalAlignment="Stretch" Background="Transparent" ResizeBehavior="PreviousAndNext" Focusable="False" />
+
+            <Grid Grid.Column="4">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="3*" MinHeight="220" />
+                    <RowDefinition Height="8" />
+                    <RowDefinition Height="2*" MinHeight="170" />
+                </Grid.RowDefinitions>
+
+                <!-- where it lives -->
+                <Border Style="{StaticResource Card}">
+                    <DockPanel Margin="8">
+                        <WrapPanel DockPanel.Dock="Top" Margin="0,0,0,6">
+                            <ComboBox x:Name="WorldBox" MinWidth="220" SelectionChanged="WorldBox_SelectionChanged" ToolTip="{l:T Bestiary.WorldTip}" Margin="0,0,10,4" />
+                            <CheckBox x:Name="ModsCheck" Content="{l:T LootLocator.WithMods}" MinWidth="0" Margin="0,0,12,4" VerticalAlignment="Center" Click="ModsCheck_Click"
+                                      ToolTip="{l:T Bestiary.WithModsTip}" />
+                            <Button Margin="0,0,8,4" Padding="10,3" Click="Fit_Click" ToolTip="{l:T LootLocator.FitTip}">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Style="{StaticResource IconText}" Text="&#xE9A6;" FontSize="12" Margin="0,0,6,0" />
+                                    <TextBlock Text="{l:T Common.Fit}" />
+                                </StackPanel>
+                            </Button>
+                            <Button x:Name="ExportButton" Margin="0,0,0,4" Padding="10,3" Click="Export_Click" IsEnabled="False" ToolTip="{l:T Bestiary.ExportTip}">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Style="{StaticResource IconText}" Text="&#xEDE1;" FontSize="12" Margin="0,0,6,0" />
+                                    <TextBlock Text="{l:T LootLocator.Export}" />
+                                </StackPanel>
+                            </Button>
+                        </WrapPanel>
+                        <TextBlock x:Name="HoverText" DockPanel.Dock="Bottom" Style="{StaticResource Small}" Margin="4,6,0,0" TextTrimming="CharacterEllipsis"
+                                   Text="{l:T Bestiary.MouseHint}" />
+                        <Border CornerRadius="6" ClipToBounds="True">
+                            <Grid>
+                                <local:WorldMap x:Name="Map" PointerMoved="Map_PointerMoved" MarkerPicked="Map_MarkerPicked" />
+                                <Border x:Name="Legend" HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="10" Padding="10,7" CornerRadius="6"
+                                        Background="{DynamicResource SolidBackgroundFillColorBaseBrush}" Opacity="0.92" Visibility="Collapsed">
+                                    <StackPanel>
+                                        <TextBlock Text="{l:T Bestiary.LegendTitle}" FontSize="11.5" FontWeight="SemiBold" Margin="0,0,0,4" />
+                                        <ItemsControl x:Name="LegendList">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <StackPanel Orientation="Horizontal" Margin="0,1">
+                                                        <Ellipse Width="10" Height="10" Fill="{Binding Brush}" Stroke="Black" StrokeThickness="1" VerticalAlignment="Center" />
+                                                        <TextBlock Text="{Binding Text}" FontSize="11.5" Margin="7,0,0,0" VerticalAlignment="Center" />
+                                                    </StackPanel>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                </Border>
+                                <TextBlock x:Name="MapProgress" Margin="12" HorizontalAlignment="Left" VerticalAlignment="Top" Padding="8,4" Visibility="Collapsed"
+                                           Background="{DynamicResource SolidBackgroundFillColorBaseBrush}" />
+                                <TextBlock x:Name="MapEmpty" HorizontalAlignment="Center" VerticalAlignment="Center" Opacity="0.75" TextWrapping="Wrap" TextAlignment="Center"
+                                           MaxWidth="420" Padding="12,8" Background="{DynamicResource SolidBackgroundFillColorBaseBrush}" Text="{l:T Bestiary.PickCreature}" />
+                            </Grid>
+                        </Border>
+                    </DockPanel>
+                </Border>
+
+                <GridSplitter Grid.Row="1" Height="8" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Background="Transparent" ResizeBehavior="PreviousAndNext" Focusable="False" />
+
+                <!-- its places, kinds and drops -->
+                <Border Grid.Row="2" Style="{StaticResource Card}">
+                    <TabControl x:Name="ListTabs" Margin="8,8,8,6" Style="{StaticResource PanelTabs}" ItemContainerStyle="{StaticResource PanelTab}">
+                        <TabItem x:Name="PlacesTab" Header="{l:T Bestiary.Places}">
+                            <DataGrid x:Name="PlaceGrid" Style="{StaticResource ViewerGrid}" Margin="0,4,0,0" SelectionMode="Single" SelectionChanged="PlaceGrid_SelectionChanged">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="{l:T LootLocator.Area}" Binding="{Binding Area}" Width="2*" />
+                                    <DataGridTextColumn Header="{l:T Bestiary.Variant}" Binding="{Binding Variant}" Width="2*" />
+                                    <DataGridTextColumn Header="{l:T Bestiary.Level}" Binding="{Binding Level}" Width="60" />
+                                    <DataGridTextColumn Header="{l:T Bestiary.SpawnLimit}" Binding="{Binding LimitText}" SortMemberPath="Limit" Width="90" />
+                                    <DataGridTextColumn Header="{l:T Bestiary.AtOnce}" Binding="{Binding AtOnceText}" SortMemberPath="AtOnce" Width="80" />
+                                    <DataGridTextColumn Header="{l:T LootLocator.Position}" Binding="{Binding PositionText}" Width="150" />
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </TabItem>
+                        <TabItem x:Name="VariantsTab" Header="{l:T Bestiary.Variants}">
+                            <DataGrid x:Name="VariantGrid" Style="{StaticResource ViewerGrid}" Margin="0,4,0,0" SelectionMode="Single" SelectionChanged="VariantGrid_SelectionChanged">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="{l:T Bestiary.Variant}" Binding="{Binding Title}" Width="2*" />
+                                    <DataGridTextColumn Header="{l:T Bestiary.Level}" Binding="{Binding Creature.Level}" Width="60" />
+                                    <DataGridTextColumn Header="{l:T Bestiary.Placed}" Binding="{Binding Places}" Width="70" />
+                                    <DataGridTextColumn Header="{l:T Bestiary.Abilities}" Binding="{Binding AbilitiesText}" Width="3*" />
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </TabItem>
+                        <TabItem x:Name="DropsTab" Header="{l:T Bestiary.Drops}">
+                            <DockPanel Margin="0,4,0,0">
+                                <TextBlock x:Name="DropsNote" DockPanel.Dock="Top" Style="{StaticResource Hint}" Margin="2,0,0,6" />
+                                <DataGrid x:Name="DropGrid" Style="{StaticResource ViewerGrid}" SelectionMode="Single" MouseDoubleClick="DropGrid_MouseDoubleClick">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="{l:T LootLocator.Item}" Binding="{Binding Title}" Width="2*" />
+                                        <DataGridTextColumn Header="{l:T LootLocator.ItemName}" Binding="{Binding Name}" Width="2*" />
+                                        <DataGridTextColumn Header="{l:T LootLocator.Chance}" Binding="{Binding ChanceText}" SortMemberPath="Chance" Width="80" />
+                                        <DataGridTextColumn Header="{l:T LootLocator.Quantity}" Binding="{Binding QuantityText}" Width="80" />
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                            </DockPanel>
+                        </TabItem>
+                    </TabControl>
+                </Border>
+            </Grid>
+        </Grid>
+
+        <StackPanel x:Name="Busy" Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center">
+            <ProgressBar IsIndeterminate="True" Width="240" Height="4" />
+            <TextBlock x:Name="BusyText" Margin="0,10,0,0" HorizontalAlignment="Center" Opacity="0.75" TextWrapping="Wrap" TextAlignment="Center" MaxWidth="520"
+                       Text="{l:T Bestiary.Reading}" />
+        </StackPanel>
+
+        <TextBlock x:Name="StatusText" Grid.Row="2" Margin="18,6,14,8" Opacity="0.8" TextTrimming="CharacterEllipsis" />
+        <local:MessageCard x:Name="Message" Grid.RowSpan="3" IsModal="True" />
+    </Grid>
+</Window>

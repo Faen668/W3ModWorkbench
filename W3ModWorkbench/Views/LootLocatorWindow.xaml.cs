@@ -124,6 +124,17 @@ public partial class LootLocatorWindow : Window, IMessageHost
         _open.Show();
     }
 
+    /// <summary>Opens the window on an item (by its name in the files): at once when it's read, else once it is.</summary>
+    public static void OpenItem(Window owner, string item)
+    {
+        Open(owner);
+        if (_open is not { } window) return;
+        if (window._loading) window._pendingItem = item;
+        else window.Select(item, false);
+    }
+
+    private string? _pendingItem;
+
     public Task ShowMessage(string? title, string message, MessageKind kind) => Message.Show(title, message, kind, primary: L.T("Common.OK"));
 
     private uint Level => LevelBox.SelectedItem is int level ? (uint)level : 1;
@@ -169,7 +180,12 @@ public partial class LootLocatorWindow : Window, IMessageHost
         StatusText.Text = L.T("LootLocator.Summary", _index.Spots.Count, _index.Worlds.Count, _roll.Tables.Count)
             + (_index.Problems.Count > 0 ? "  ·  " + L.T("LootLocator.SomeUnread", _index.Problems.Count) : "");
         Filter();
-        if (_selected is { } again) Select(again.Key, again.IsTable);
+        if (_pendingItem is { } pending)
+        {
+            _pendingItem = null;
+            Select(pending, false);
+        }
+        else if (_selected is { } again) Select(again.Key, again.IsTable);
         else ItemSearch.Focus();
     }
 
@@ -666,13 +682,16 @@ public partial class LootLocatorWindow : Window, IMessageHost
     };
 
     /// <summary>A template's or layer's file name as words: "sack__herbalist_area__prolog" as "sack herbalist area prolog".</summary>
-    private static string Humanise(string name) => string.Join(' ', name.Split('_', StringSplitOptions.RemoveEmptyEntries));
+    internal static string Humanise(string name) => string.Join(' ', name.Split('_', StringSplitOptions.RemoveEmptyEntries));
 
     /// <summary>Where a place is in its world: its layer's folders under the world's own.</summary>
-    private static string AreaOf(LootSpot spot)
+    internal static string AreaOf(LootSpot spot) => AreaOf(spot.World, spot.Layer);
+
+    /// <summary>Where a layer is in its world: its folders under the world's own, as words.</summary>
+    internal static string AreaOf(string world, string layerPath)
     {
-        string folder = Path.GetDirectoryName(spot.World) ?? "";
-        string layer = spot.Layer.StartsWith(folder + "\\", StringComparison.OrdinalIgnoreCase) ? spot.Layer[(folder.Length + 1)..] : spot.Layer;
+        string folder = Path.GetDirectoryName(world) ?? "";
+        string layer = layerPath.StartsWith(folder + "\\", StringComparison.OrdinalIgnoreCase) ? layerPath[(folder.Length + 1)..] : layerPath;
         if (layer.StartsWith(@"data\levels\", StringComparison.OrdinalIgnoreCase)) layer = layer[12..];
         layer = Path.ChangeExtension(layer, null);
         var parts = layer.Split('\\').Select(Humanise).ToList();
@@ -682,7 +701,7 @@ public partial class LootLocatorWindow : Window, IMessageHost
     }
 
     /// <summary>A world's name as players know it.</summary>
-    private static string WorldName(string world) => Path.GetFileName(Path.GetDirectoryName(world)) switch
+    internal static string WorldName(string world) => Path.GetFileName(Path.GetDirectoryName(world)) switch
     {
         "novigrad" => L.T("LootLocator.WorldNovigrad"),
         "skellige" => L.T("LootLocator.WorldSkellige"),

@@ -66,6 +66,18 @@ public sealed class LootIndex
 
     private sealed record Setup(List<LootParamInfo> Params, List<LootFixedItem> Fixed);
 
+    /// <summary>
+    /// A reader of templates' loot, its own cache shared by every call: a template's loot params and fixed items as a
+    /// <see cref="LootSpot"/> standing nowhere (for a monster's drops), or null for one with no loot.
+    /// </summary>
+    public static Func<string, LootSpot?> TemplateLoot(ResourceLocator locator)
+    {
+        var cache = new ConcurrentDictionary<string, Setup?>(StringComparer.OrdinalIgnoreCase);
+        var problems = new ConcurrentBag<string>();
+        return template => Resolve(locator, template, cache, problems, 0) is { } setup
+            ? new LootSpot("", "", "", "", default, template, setup.Params, setup.Fixed, -1, -1) : null;
+    }
+
     /// <summary>Reads every world's layers (REDkit's test world left out), a few seconds for the whole game.</summary>
     public static LootIndex Build(ResourceLocator locator, IProgress<string>? progress, CancellationToken token)
     {
