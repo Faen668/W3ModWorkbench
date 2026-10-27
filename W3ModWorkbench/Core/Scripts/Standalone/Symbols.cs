@@ -9,6 +9,7 @@ public enum TyKind { Void, Bool, Int, Float, Byte, String, Name, Null, Primitive
 /// <summary>A resolved type. Names are those of the script (a state's class name carries its machine's).</summary>
 public sealed record Ty(TyKind Kind, string Name = "", Ty? Element = null, Ty? Key = null)
 {
+    public string? NativeName { get; init; }
     public static readonly Ty Void = new(TyKind.Void), Bool = new(TyKind.Bool), Int = new(TyKind.Int),
         Float = new(TyKind.Float), Byte = new(TyKind.Byte), String = new(TyKind.String), Name_ = new(TyKind.Name),
         Null = new(TyKind.Null);
@@ -366,9 +367,17 @@ public sealed class Symbols
                 if (Inherited(native.Name, name)) continue;
                 // a script class up the chain may declare it already, and then it belongs to that class
                 if (Classes.GetValueOrDefault(native.Name)?.Parent is { } parent && FindField(parent, name) is not null) continue;
-                AddField(native.Name, name, ResolveRtti(typeName));
+                var actual = ResolveRtti(typeName);
+                if (Classes.TryGetValue(native.Name, out var owner) && owner.Fields.TryGetValue(name, out var previous)
+                    && previous.IsImport && actual.NativeName is not null && SameShape(previous.Type, actual))
+                    owner.Fields[name] = previous with { Type = actual };
+                else AddField(native.Name, name, actual);
             }
     }
+
+    private static bool SameShape(Ty left, Ty right) => left.Kind == right.Kind && left.Name == right.Name
+        && (left.Element is null ? right.Element is null : right.Element is not null && SameShape(left.Element, right.Element))
+        && (left.Key is null ? right.Key is null : right.Key is not null && SameShape(left.Key, right.Key));
 
     /// <summary>
     /// The engine's own methods and global functions the scripts don't declare. The dump has their names only, so a call to
@@ -403,7 +412,7 @@ public sealed class Symbols
         if (name.StartsWith("array:"))
         {
             string[] parts = name["array:".Length..].Split(',', 3);
-            return Ty.ArrayOf(ResolveRtti(parts.Length > 2 ? parts[2] : name["array:".Length..]));
+            return Ty.ArrayOf(ResolveRtti(parts.Length > 2 ? parts[2] : name["array:".Length..])) with { NativeName = name };
         }
         if (name.StartsWith("map:"))
         {

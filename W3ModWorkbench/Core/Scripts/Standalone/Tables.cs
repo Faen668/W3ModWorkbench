@@ -43,6 +43,7 @@ public sealed class Tables
     {
         var kind = ty.Kind switch
         {
+            TyKind.Primitive when symbols.SimpleTypes.Contains(ty.Name) => TypeKind.Simple,
             TyKind.Bool or TyKind.Int or TyKind.Float or TyKind.Byte or TyKind.Primitive => TypeKind.Fundamental,
             TyKind.String or TyKind.Name or TyKind.Void or TyKind.Null => TypeKind.Simple,
             TyKind.Enum => TypeKind.Enum,
@@ -51,13 +52,13 @@ public sealed class Tables
             TyKind.Class => TypeKind.Handle,
             _ => TypeKind.Array,
         };
-        string name = ty.Kind switch
+        string name = ty.NativeName ?? (ty.Kind switch
         {
             TyKind.Class => $"handle:{symbols.BlobName(ty.Name)}",
             TyKind.Array => $"array:2,0,{ImportElementName(ty.Element!, symbols)}",
             TyKind.Map => $"map:2,0,{ImportElementName(ty.Key!, symbols)},{ImportElementName(ty.Element!, symbols)}",
             _ => ty.RttiName,
-        };
+        });
         return ImportTypeNamed(name, kind);
     }
 
@@ -75,13 +76,13 @@ public sealed class Tables
         return index;
     }
 
-    private static string ImportElementName(Ty ty, Symbols symbols) => ty.Kind switch
+    private static string ImportElementName(Ty ty, Symbols symbols) => ty.NativeName ?? (ty.Kind switch
     {
         TyKind.Class => $"handle:{symbols.BlobName(ty.Name)}",
         TyKind.Array => $"array:2,0,{ImportElementName(ty.Element!, symbols)}",
         TyKind.Map => $"map:2,0,{ImportElementName(ty.Key!, symbols)},{ImportElementName(ty.Element!, symbols)}",
         _ => ty.RttiName,
-    };
+    });
 
     /// <summary>What a property or default is declared as: a class by its name, an array by its element's.</summary>
     public static string DefinitionTypeName(Ty ty, Symbols symbols) => ty.Kind switch

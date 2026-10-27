@@ -258,7 +258,7 @@ public sealed partial class FunctionCompiler
     private void GenArrayCall(ArrayCallee a, List<Expr?> args)
     {
         var element = a.Element;
-        int typeRef = _tables.ImportType(Ty.ArrayOf(element), _symbols);
+        int typeRef = _tables.ImportType(TypeOf(a.Array), _symbols);
         (Op Op, Ty[] Params) spec = a.Method switch
         {
             "Size" => (Op.ArraySize, []),
