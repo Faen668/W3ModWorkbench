@@ -488,6 +488,16 @@ public sealed class Decompiler(ScriptBlob blob, EnumResolver enums)
                 var obj = ParseExpr();
                 _nextIsMember = true;
                 var m = ParseExpr();
+                if (m.Text.StartsWith("virtual_parent.", StringComparison.Ordinal))
+                {
+                    if (obj.Text == "parent") return m;
+                    throw new NotSupportedException("Parent dispatch through a separate receiver cannot be preserved in source.");
+                }
+                if (m.Text.StartsWith("super.", StringComparison.Ordinal))
+                {
+                    if (obj.Text == "this") return m;
+                    throw new NotSupportedException("Parent dispatch through a separate receiver cannot be preserved in source.");
+                }
                 return new($"{Wrap(obj, Precedence.Primary)}.{m.Text}", Precedence.Primary) { Type = m.Type };
             }
 
@@ -504,14 +514,15 @@ public sealed class Decompiler(ScriptBlob blob, EnumResolver enums)
             {
                 int f = ins.Arg(2);
                 var args = ParseArgs();
-                if (f == -1 && _func.Kind == FunctionKind.Wrap)
-                    return Call("wrappedMethod", args); // a wrapped global function calls the original this way
+                if (f == -1)
+                    return Call(_func.Kind == FunctionKind.Wrap && !member ? "wrappedMethod" : _func.Name, args);
                 if (f <= 0)
                     return Operator(f, args);
                 var (name, owner) = f - 1 < blob.FunctionRefs.Count ? blob.FunctionRefs[f - 1] : ($"func{f}", -1);
                 string prefix = "";
-                if (!member && owner >= 0 && _func.Class is { } cls && name == _func.Name
-                    && blob.Types[owner].Name != cls.Name)
+                string currentOwner = _func.Class?.Name ?? _func.Owner;
+                if (!member && owner >= 0 && currentOwner.Length > 0 && (name == _func.Name || IsKnownBase(currentOwner, TypeName(owner)))
+                    && TypeName(owner) != currentOwner)
                     prefix = "super.";
                 return Call(prefix + name, args);
             }
@@ -520,14 +531,17 @@ public sealed class Decompiler(ScriptBlob blob, EnumResolver enums)
             {
                 string name = Name(ins.Arg(2));
                 var args = ParseArgs();
-                return Call(name == "@self" ? "wrappedMethod" : name, args);
+                return Call(name == "@self" ? _func.Kind == FunctionKind.Wrap && !member ? "wrappedMethod" : _func.Name : name, args);
             }
 
             case Op.EntryFunc:
-                return Call(Name(ins.Arg(1)), ParseArgs());
+            {
+                string name = Name(ins.Arg(1));
+                return Call(name == "@self" ? _func.Kind == FunctionKind.Wrap && !member ? "wrappedMethod" : _func.Name : name, ParseArgs());
+            }
 
             case Op.VirtualParentFunc:
-                return Call("super." + Name(ins.Arg(2)), ParseArgs());
+                return Call("virtual_parent." + Name(ins.Arg(2)), ParseArgs());
 
             case Op.Conditional:
             {
@@ -561,8 +575,6 @@ public sealed class Decompiler(ScriptBlob blob, EnumResolver enums)
                 var values = new List<string>();
                 for (int n = 0; n < ins.Arg(0); n++)
                 {
-                    if (_pos < _code.Count && _code[_pos].Op == Op.StructMember)
-                        _pos++;
                     values.Add(ParseExpr().Text);
                 }
                 return new($"{TypeName(ins.Arg(1))}({string.Join(", ", values)})", Precedence.Primary);
@@ -697,6 +709,17 @@ public sealed class Decompiler(ScriptBlob blob, EnumResolver enums)
         if ((symbol is "&&" or "||") && b.Prec == prec && b.Text.Contains(symbol, StringComparison.Ordinal))
             right = b.Text;
         return new($"{left} {symbol} {right}", prec);
+    }
+
+    private bool IsKnownBase(string owner, string target)
+    {
+        for (int depth = 0; owner.Length > 0 && depth < 64; depth++)
+        {
+            owner = blob.Classes.FirstOrDefault(value => !value.IsState && value.Name == owner)?.Base
+                ?? Standalone.Rtti.LoadBuiltIn().Classes.FirstOrDefault(value => value.Name == owner)?.Base ?? "";
+            if (owner == target) return true;
+        }
+        return false;
     }
 
     private Expr Conversion(string type)

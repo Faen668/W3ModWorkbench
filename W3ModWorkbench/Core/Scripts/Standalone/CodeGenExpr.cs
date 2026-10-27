@@ -212,7 +212,7 @@ public sealed partial class FunctionCompiler
             {
                 int end = NewLabel();
                 int at = w.IsClass
-                    ? Add(new Ins(Op.VirtualFunc) { B = line, C = _tables.Name("@self") })
+                    ? Add(new Ins(w.Info.Specifiers.IsEntry ? Op.EntryFunc : Op.VirtualFunc) { B = line, C = _tables.Name("@self") })
                     : Add(new Ins(Op.FinalFunc) { B = line, C = FuncRef.Current });
                 JumpTo(at, Slot.First, end);
                 GenArgs(w.Info, args);
