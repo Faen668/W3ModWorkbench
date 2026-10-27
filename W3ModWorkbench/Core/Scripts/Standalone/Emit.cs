@@ -44,7 +44,7 @@ public sealed class Ins(Op op)
         Op.SaveValue => 4,
         Op.IntToEnum or Op.EnumToString or Op.EnumToInt or Op.DynamicCast => 8,
         >= Op.ArrayClear and <= Op.ArrayElement => 8,
-        MapOp.Clear or MapOp.Size or MapOp.Contains or MapOp.Erase or MapOp.Element or MapOp.Key => 8,
+        MapOp.Clear or MapOp.Size or MapOp.Contains or MapOp.Erase or MapOp.Element or MapOp.TryGet or MapOp.Key => 8,
         _ => 0,
     };
 }
@@ -52,7 +52,7 @@ public sealed class Ins(Op op)
 /// <summary>The map operations. Each takes a type, the map, then its arguments.</summary>
 public static class MapOp
 {
-    public const Op Clear = Op.MapClear, Size = Op.MapSize, Contains = Op.MapContains, Erase = Op.MapErase, Element = Op.MapElement, Key = Op.MapKey;
+    public const Op Clear = Op.MapClear, Size = Op.MapSize, Contains = Op.MapContains, Erase = Op.MapErase, Element = Op.MapElement, TryGet = Op.MapTryGet, Key = Op.MapKey;
 }
 
 /// <summary>A function ref in an instruction: an import, the function itself, or one of the engine's operators.</summary>
@@ -135,7 +135,7 @@ public static class Emit
                 w.Compressed(ins.A);
                 break;
             case >= Op.ArrayClear and <= Op.ArrayElement: w.Compressed(ins.A); break;
-            case MapOp.Clear or MapOp.Size or MapOp.Contains or MapOp.Erase or MapOp.Element or MapOp.Key: w.Compressed(ins.A); break;
+            case MapOp.Clear or MapOp.Size or MapOp.Contains or MapOp.Erase or MapOp.Element or MapOp.TryGet or MapOp.Key: w.Compressed(ins.A); break;
             case Op.SavePoint: w.U16(ins.A); w.Compressed(ins.C); break;
             case Op.SaveValue: w.Compressed(ins.A); break;
         }

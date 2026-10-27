@@ -573,7 +573,7 @@ public sealed partial class FunctionCompiler
                     MapCallee mc => mc.Method switch
                     {
                         "Size" => Ty.Int,
-                        "Contains" => Ty.Bool,
+                        "Contains" or "Erase" or "TryGet" => Ty.Bool,
                         "Key" => mc.MapType.Key!,
                         _ => Ty.Void,
                     },

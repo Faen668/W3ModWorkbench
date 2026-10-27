@@ -296,6 +296,16 @@ public sealed partial class FunctionCompiler
             GenAs(args[i] ?? throw Fail("an argument is missing"), spec.Params[i]);
     }
 
+    private bool IsWritableMapOutput(Expr expression) => expression.Kind switch
+    {
+        Ident id => ResolveIdent(id.Name) is LocalVar or ParamVar || ResolveIdent(id.Name) is FieldVar { Field.IsConst: false },
+        Member member => !FieldOf(TypeOf(member.Object), member.Name).IsConst
+            && !(member.Object.Kind is Ident id && ResolveIdent(id.Name) is GlobalObject)
+            && (TypeOf(member.Object).Kind != TyKind.Struct || IsWritableMapOutput(member.Object)),
+        Index index => IsWritableMapOutput(index.Array),
+        _ => false
+    };
+
     private void GenMapCall(MapCallee m, List<Expr?> args)
     {
         (Op Op, Ty[] Params) spec = m.Method switch
@@ -304,14 +314,18 @@ public sealed partial class FunctionCompiler
             "Size" => (MapOp.Size, []),
             "Contains" => (MapOp.Contains, [m.MapType.Key!]),
             "Erase" => (MapOp.Erase, [m.MapType.Key!]),
+            "TryGet" => (MapOp.TryGet, [m.MapType.Key!, m.MapType.Element!]),
             "Key" => (MapOp.Key, [Ty.Int]),
             _ => throw Fail($"maps have no method '{m.Method}'"),
         };
         if (args.Count != spec.Params.Length) throw Fail($"map {m.Method} takes {spec.Params.Length} arguments, not {args.Count}");
+        if (m.Method == "TryGet" && (args[1] is not { } output || !IsWritableMapOutput(output) || TypeOf(output) != m.MapType.Element))
+            throw Fail($"map TryGet needs an assignable {m.MapType.Element} as its second argument");
         Add(new Ins(spec.Op) { A = _tables.ImportType(m.MapType, _symbols) });
         Gen(m.Map);
         for (int i = 0; i < args.Count; i++)
-            GenAs(args[i] ?? throw Fail("an argument is missing"), spec.Params[i]);
+            if (m.Method == "TryGet" && i == 1) Gen(args[i]!);
+            else GenAs(args[i] ?? throw Fail("an argument is missing"), spec.Params[i]);
     }
 
     private void GenConstructor(string name, List<Expr?> args)

@@ -570,7 +570,7 @@ public sealed class Decompiler(ScriptBlob blob, EnumResolver enums)
 
             case >= Op.ArrayClear and <= Op.ArrayElement:
                 return ArrayOp(ins.Op);
-            case Op.MapClear or Op.MapSize or Op.MapContains or Op.MapErase or Op.MapElement or Op.MapKey:
+            case Op.MapClear or Op.MapSize or Op.MapContains or Op.MapErase or Op.MapElement or Op.MapTryGet or Op.MapKey:
                 return MapOperation(ins.Op);
 
             case >= Op.StaticArraySize and <= Op.StaticArrayElement:
@@ -705,6 +705,7 @@ public sealed class Decompiler(ScriptBlob blob, EnumResolver enums)
             Op.MapContains => new($"{m}.Contains({ParseExpr().Text})", Precedence.Primary),
             Op.MapErase => new($"{m}.Erase({ParseExpr().Text})", Precedence.Primary),
             Op.MapKey => new($"{m}.Key({ParseExpr().Text})", Precedence.Primary),
+            Op.MapTryGet => new($"{m}.TryGet({ParseExpr().Text}, {ParseExpr().Text})", Precedence.Primary),
             _ => new($"{m}[{ParseExpr().Text}]", Precedence.Primary), // MapElement
         };
     }
