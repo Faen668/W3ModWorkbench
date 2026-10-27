@@ -12,6 +12,7 @@ public sealed class ScriptProperty
     public required string Owner { get; init; }
     /// <summary>The editor hint text from a "hint name = ..." line, usually empty.</summary>
     public string Hint { get; init; } = "";
+    public string Binding { get; init; } = "";
 }
 
 public enum FunctionKind
@@ -231,8 +232,8 @@ public sealed class ScriptBlob
             string hint = r.Str();
             int flags = r.Vlq();
             string type = r.Name(), owner = r.Name();
-            r.Name(); // unknown, empty in every blob seen so far
-            list.Add(new ScriptProperty { Name = name, Hint = hint, Flags = flags, Type = type, Owner = owner });
+            string binding = r.Name();
+            list.Add(new ScriptProperty { Name = name, Hint = hint, Flags = flags, Type = type, Owner = owner, Binding = binding });
         }
         return list;
     }

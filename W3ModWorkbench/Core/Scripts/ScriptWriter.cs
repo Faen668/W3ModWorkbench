@@ -11,16 +11,17 @@ public static class ScriptWriter
 {
     private const int FuncImport = 0x1, FuncNative = 0x200, FuncGlobal = 0x2, FuncFinal = 0x10, FuncEvent = 0x20, FuncLatent = 0x40, FuncEntry = 0x80,
         FuncExec = 0x100, FuncTimer = 0x400, FuncQuest = 0x1000, FuncPrivate = 0x4000, FuncProtected = 0x8000,
-        FuncPublic = 0x10000, FuncReplace = 0x40000, FuncAddMethod = 0x80000, FuncWrap = 0x100000;
+        FuncPublic = 0x10000, FuncReplace = 0x40000, FuncAddMethod = 0x80000, FuncWrap = 0x100000,
+        FuncStoryScene = 0x800, FuncCleanup = 0x2000, FuncReward = 0x20000;
 
     private const int KnownFunctionFlags = FuncImport | FuncNative | FuncGlobal | FuncFinal | FuncEvent | FuncLatent | FuncEntry | FuncExec
-        | FuncTimer | FuncQuest | FuncPrivate | FuncProtected | FuncPublic | FuncReplace | FuncAddMethod | FuncWrap;
+        | FuncTimer | FuncQuest | FuncPrivate | FuncProtected | FuncPublic | FuncReplace | FuncAddMethod | FuncWrap | FuncStoryScene | FuncCleanup | FuncReward;
 
-    private const int VarEditable = 0x1, VarConst = 0x2, VarImport = 0x4000, VarSaved = 0x8000,
+    private const int VarEditable = 0x1, VarConst = 0x2, VarInlined = 0x4, VarImport = 0x4000, VarSaved = 0x8000,
         VarPrivate = 0x10000, VarProtected = 0x20000;
 
     private const int ParamOut = 0x200, ParamOptional = 0x400;
-    private const int ClassImport = 0x2, ClassStatemachine = 0x400;
+    private const int ClassAbstract = 0x1, ClassImport = 0x2, ClassStatemachine = 0x400;
 
     public static List<ScriptDocument> Write(ScriptBlob blob, string sourceLabel)
     {
@@ -118,9 +119,9 @@ public static class ScriptWriter
 
     private static void WriteStruct(StringBuilder sb, ScriptStruct s)
     {
-        sb.Append($"struct {s.Name}\n{{\n"); // loc-ignore
+        sb.Append($"{((s.Flags & 2) != 0 ? "import " : "")}struct {s.Name}\n{{\n"); // loc-ignore
         foreach (var p in s.Properties)
-            sb.Append($"\t{VarModifiers(p.Flags)}var {p.Name} : {FormatType(p.Type)};\n"); // loc-ignore
+            WriteProperty(sb, p);
         WriteDefaults(sb, s.Defaults, s.Properties);
         sb.Append("}\n\n");
     }
@@ -131,18 +132,18 @@ public static class ScriptWriter
             sb.Append($"state {c.Name} in {c.StateOf}{(c.Base.Length > 0 ? " extends " + c.Base : "")}\n{{\n"); // loc-ignore
         else
         {
-            string mods = ((c.Flags & ClassImport) != 0 ? "import " : "") + ((c.Flags & ClassStatemachine) != 0 ? "statemachine " : "");
+            string mods = ((c.Flags & ClassImport) != 0 ? "import " : "") + ((c.Flags & ClassStatemachine) != 0 ? "statemachine " : "") + ((c.Flags & ClassAbstract) != 0 ? "abstract " : "");
             sb.Append($"{mods}class {c.Name}{(c.Base.Length > 0 ? " extends " + c.Base : "")}\n{{\n"); // loc-ignore
         }
 
         foreach (var p in c.Properties)
-            sb.Append($"\t{VarModifiers(p.Flags)}var {p.Name} : {FormatType(p.Type)};\n"); // loc-ignore
+            WriteProperty(sb, p);
         WriteDefaults(sb, c.Defaults, c.Properties);
         if (c.Properties.Count > 0 || c.Defaults.Count > 0)
             sb.Append('\n');
 
         foreach (var f in c.Functions)
-            WriteFunction(sb, f, 1, decompiler);
+            WriteFunction(sb, f, 1, decompiler, (c.Flags & ClassAbstract) != 0);
         if (sb[^1] == '\n' && sb[^2] == '\n') sb.Length--;
         sb.Append("}\n\n");
     }
@@ -203,10 +204,26 @@ public static class ScriptWriter
         if ((flags & VarEditable) != 0) sb.Append("editable ");
         if ((flags & VarSaved) != 0) sb.Append("saved ");
         if ((flags & VarConst) != 0) sb.Append("const ");
+        if ((flags & VarInlined) != 0) sb.Append("inlined ");
         return sb.ToString();
     }
 
-    private static void WriteFunction(StringBuilder sb, ScriptFunction f, int depth, Decompiler decompiler)
+    private static void WriteProperty(StringBuilder sb, ScriptProperty property)
+    {
+        string modifiers = VarModifiers(property.Flags);
+        if ((property.Flags & 0x80000) == 0)
+        {
+            sb.Append($"\t{modifiers}var {property.Name} : {FormatType(property.Type)};\n"); // loc-ignore
+            return;
+        }
+        modifiers = modifiers.Replace("const ", "");
+        string optional = (property.Flags & 0x100000) != 0 ? "optional " : "";
+        sb.Append($"\t{modifiers}{optional}autobind {property.Name} : {FormatType(property.Type)}");
+        if (property.Binding.Length > 0) sb.Append(" = ").Append(Decompiler.Quote(property.Binding));
+        sb.Append(";\n");
+    }
+
+    private static void WriteFunction(StringBuilder sb, ScriptFunction f, int depth, Decompiler decompiler, bool abstractOwner = false)
     {
         string pad = new('\t', depth);
         string? annotation = f.Kind switch
@@ -223,20 +240,24 @@ public static class ScriptWriter
         var mods = new StringBuilder();
         if ((f.Flags & FuncPrivate) != 0) mods.Append("private ");
         else if ((f.Flags & FuncProtected) != 0) mods.Append("protected ");
-        if ((f.Flags & FuncImport) != 0) mods.Append("import ");
+        if ((f.Flags & FuncImport) != 0 || ((f.Flags & FuncNative) != 0 && f.Code.Length == 0 && !abstractOwner)) mods.Append("import ");
         if ((f.Flags & FuncFinal) != 0) mods.Append("final ");
         if ((f.Flags & FuncEntry) != 0) mods.Append("entry ");
         if ((f.Flags & FuncLatent) != 0) mods.Append("latent ");
         if ((f.Flags & FuncExec) != 0) mods.Append("exec ");
         if ((f.Flags & FuncQuest) != 0) mods.Append("quest ");
         if ((f.Flags & FuncTimer) != 0) mods.Append("timer ");
+        if ((f.Flags & FuncStoryScene) != 0) mods.Append("storyscene ");
+        if ((f.Flags & FuncCleanup) != 0) mods.Append("cleanup ");
+        if ((f.Flags & FuncReward) != 0) mods.Append("reward ");
+        if (f.Kind is FunctionKind.Wrap or FunctionKind.Replace or FunctionKind.ReplaceGlobal) mods.Clear();
         // annotations always use "function", even when the target is an event
         mods.Append((f.Flags & FuncEvent) != 0 && annotation is null ? "event " : "function ");
 
         var parameters = f.Params.Select(p =>
             ((p.Flags & ParamOut) != 0 ? "out " : "") + ((p.Flags & ParamOptional) != 0 ? "optional " : "")
             + $"{p.Name} : {FormatType(p.Type)}");
-        string ret = f.Return.Count > 0 ? " : " + FormatType(f.Return[0].Type) : "";
+        string ret = f.Return.Count > 0 && (f.Flags & FuncEvent) == 0 ? " : " + FormatType(f.Return[0].Type) : "";
         int unknown = f.Flags & ~KnownFunctionFlags;
         string note = unknown != 0 ? $"  // flags 0x{unknown:X}" : "";
         sb.Append($"{pad}{mods}{f.Name}({string.Join(", ", parameters)}){ret}{note}\n");
