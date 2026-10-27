@@ -133,6 +133,8 @@ public sealed class ScriptBlob
             throw new InvalidDataException(L.T("ScriptBlob.NotCompiledScriptBlob"));
         var names = new BlobReader(data, tableAt);
         int count = names.U32();
+        if (count < 0 || count > data.Length - tableAt - 4)
+            throw new InvalidDataException("Invalid script blob name-table count.");
         Names = new string[count];
         for (int i = 0; i < count; i++)
             Names[i] = names.Str();
@@ -146,23 +148,23 @@ public sealed class ScriptBlob
         r.Skip(8);
         Configuration = r.Str();
 
-        for (int n = r.Vlq(); n > 0; n--)
+        for (int n = r.Count(); n > 0; n--)
         {
             string name = r.Name();
             var members = new List<(string, int)>();
-            for (int m = r.Vlq(); m > 0; m--)
+            for (int m = r.Count(); m > 0; m--)
                 members.Add((r.Name(), r.Vlq()));
             Enums.Add(new ScriptEnum { Name = name, Members = members });
         }
 
-        for (int n = r.Vlq(); n > 0; n--)
+        for (int n = r.Count(); n > 0; n--)
         {
             string name = r.Name();
             int flags = r.Vlq();
             Structs.Add(new ScriptStruct { Name = name, Flags = flags, Properties = Props(r), Defaults = Defaults(r) });
         }
 
-        for (int n = r.Vlq(); n > 0; n--)
+        for (int n = r.Count(); n > 0; n--)
         {
             var c = new ScriptClass
             {
@@ -173,7 +175,7 @@ public sealed class ScriptBlob
                 Flags = r.Vlq(),
                 Properties = Props(r)
             };
-            for (int f = r.Vlq(); f > 0; f--)
+            for (int f = r.Count(); f > 0; f--)
                 c.Functions.Add(Function(r, FunctionKind.Method, c));
             c.Defaults = Defaults(r);
             Classes.Add(c);
@@ -186,11 +188,11 @@ public sealed class ScriptBlob
         ReadFunctions(r, Wrapped, FunctionKind.Wrap);
         AddedFields.AddRange(Props(r));
 
-        for (int n = r.Vlq(); n > 0; n--)
+        for (int n = r.Count(); n > 0; n--)
             Types.Add((r.Name(), r.Vlq()));
-        for (int n = r.Vlq(); n > 0; n--)
+        for (int n = r.Count(); n > 0; n--)
             ImportedProperties.Add((r.Name(), r.Vlq(), r.Vlq()));
-        for (int n = r.Vlq(); n > 0; n--)
+        for (int n = r.Count(); n > 0; n--)
             FunctionRefs.Add((r.Name(), r.Vlq()));
 
         if (r.Position != tableAt)
@@ -199,7 +201,7 @@ public sealed class ScriptBlob
 
     private static void ReadFunctions(BlobReader r, List<ScriptFunction> into, FunctionKind kind)
     {
-        for (int n = r.Vlq(); n > 0; n--)
+        for (int n = r.Count(); n > 0; n--)
             into.Add(Function(r, kind, null));
     }
 
@@ -223,7 +225,7 @@ public sealed class ScriptBlob
     private static List<ScriptProperty> Props(BlobReader r)
     {
         var list = new List<ScriptProperty>();
-        for (int n = r.Vlq(); n > 0; n--)
+        for (int n = r.Count(); n > 0; n--)
         {
             string name = r.Name();
             string hint = r.Str();
@@ -238,7 +240,7 @@ public sealed class ScriptBlob
     private static List<ScriptDefault> Defaults(BlobReader r)
     {
         var list = new List<ScriptDefault>();
-        for (int n = r.Vlq(); n > 0; n--)
+        for (int n = r.Count(); n > 0; n--)
         {
             string prop = r.Name();
             var node = DefaultNode(r);
@@ -248,13 +250,14 @@ public sealed class ScriptBlob
     }
 
     /// <summary>One value: a key (field name, or empty), the value as text, then any child values.</summary>
-    private static ScriptDefaultNode DefaultNode(BlobReader r)
+    private static ScriptDefaultNode DefaultNode(BlobReader r, int depth = 0)
     {
+        if (depth > 128) throw new InvalidDataException("Default values are nested too deeply.");
         string key = r.Name();
         string value = r.Str();
         var children = new List<ScriptDefaultNode>();
-        for (int n = r.Vlq(); n > 0; n--)
-            children.Add(DefaultNode(r));
+        for (int n = r.Count(); n > 0; n--)
+            children.Add(DefaultNode(r, depth + 1));
         return new ScriptDefaultNode(key, value, children);
     }
 }
@@ -274,10 +277,15 @@ internal sealed class BlobReader(byte[] data, int position)
         return v;
     }
 
-    public void Skip(int n) => Position += n;
+    public void Skip(int n)
+    {
+        if (n < 0 || n > data.Length - Position) throw new InvalidDataException("Truncated script blob.");
+        Position += n;
+    }
 
     public byte[] Bytes(int n)
     {
+        if (n < 0 || n > data.Length - Position) throw new InvalidDataException("Invalid bytecode size.");
         var b = data.AsSpan(Position, n).ToArray();
         Position += n;
         return b;
@@ -291,9 +299,19 @@ internal sealed class BlobReader(byte[] data, int position)
         return value;
     }
 
+    public int Count()
+    {
+        int value = Vlq();
+        if (value < 0 || value > data.Length - Position) throw new InvalidDataException("Invalid table count.");
+        return value;
+    }
+
     public string Str()
     {
-        int length = Math.Abs(Vlq());
+        int rawLength = Vlq();
+        if (rawLength == int.MinValue) throw new InvalidDataException("Invalid string length.");
+        int length = Math.Abs(rawLength);
+        if (length > data.Length - Position) throw new InvalidDataException("Truncated string.");
         string s = Encoding.UTF8.GetString(data, Position, length);
         Position += length;
         return s;
@@ -302,6 +320,6 @@ internal sealed class BlobReader(byte[] data, int position)
     public string Name()
     {
         int i = Vlq();
-        return i >= 0 && i < Names.Length ? Names[i] : $"<name{i}>";
+        return i >= 0 && i < Names.Length ? Names[i] : throw new InvalidDataException("Invalid name table reference.");
     }
 }
