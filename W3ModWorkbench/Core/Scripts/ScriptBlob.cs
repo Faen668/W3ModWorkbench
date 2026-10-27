@@ -135,7 +135,7 @@ public sealed class ScriptBlob
         var names = new BlobReader(data, tableAt);
         int count = names.U32();
         if (count < 0 || count > data.Length - tableAt - 4)
-            throw new InvalidDataException("Invalid script blob name-table count.");
+            throw new InvalidDataException(L.T("ScriptBlob.ScriptBlobDamagedUnknown"));
         Names = new string[count];
         for (int i = 0; i < count; i++)
             Names[i] = names.Str();
@@ -253,7 +253,7 @@ public sealed class ScriptBlob
     /// <summary>One value: a key (field name, or empty), the value as text, then any child values.</summary>
     private static ScriptDefaultNode DefaultNode(BlobReader r, int depth = 0)
     {
-        if (depth > 128) throw new InvalidDataException("Default values are nested too deeply.");
+        if (depth > 128) throw new InvalidDataException(L.T("ScriptBlob.ScriptBlobDamagedUnknown"));
         string key = r.Name();
         string value = r.Str();
         var children = new List<ScriptDefaultNode>();
@@ -280,13 +280,13 @@ internal sealed class BlobReader(byte[] data, int position)
 
     public void Skip(int n)
     {
-        if (n < 0 || n > data.Length - Position) throw new InvalidDataException("Truncated script blob.");
+        if (n < 0 || n > data.Length - Position) throw new InvalidDataException(L.T("ScriptBlob.ScriptBlobDamagedUnknown"));
         Position += n;
     }
 
     public byte[] Bytes(int n)
     {
-        if (n < 0 || n > data.Length - Position) throw new InvalidDataException("Invalid bytecode size.");
+        if (n < 0 || n > data.Length - Position) throw new InvalidDataException(L.T("ScriptBlob.ScriptBlobDamagedUnknown"));
         var b = data.AsSpan(Position, n).ToArray();
         Position += n;
         return b;
@@ -303,16 +303,16 @@ internal sealed class BlobReader(byte[] data, int position)
     public int Count()
     {
         int value = Vlq();
-        if (value < 0 || value > data.Length - Position) throw new InvalidDataException("Invalid table count.");
+        if (value < 0 || value > data.Length - Position) throw new InvalidDataException(L.T("ScriptBlob.ScriptBlobDamagedUnknown"));
         return value;
     }
 
     public string Str()
     {
         int rawLength = Vlq();
-        if (rawLength == int.MinValue) throw new InvalidDataException("Invalid string length.");
+        if (rawLength == int.MinValue) throw new InvalidDataException(L.T("ScriptBlob.ScriptBlobDamagedUnknown"));
         int length = Math.Abs(rawLength);
-        if (length > data.Length - Position) throw new InvalidDataException("Truncated string.");
+        if (length > data.Length - Position) throw new InvalidDataException(L.T("ScriptBlob.ScriptBlobDamagedUnknown"));
         string s = Encoding.UTF8.GetString(data, Position, length);
         Position += length;
         return s;
@@ -321,6 +321,6 @@ internal sealed class BlobReader(byte[] data, int position)
     public string Name()
     {
         int i = Vlq();
-        return i >= 0 && i < Names.Length ? Names[i] : throw new InvalidDataException("Invalid name table reference.");
+        return i >= 0 && i < Names.Length ? Names[i] : throw new InvalidDataException(L.T("ScriptBlob.ScriptBlobDamagedUnknown"));
     }
 }

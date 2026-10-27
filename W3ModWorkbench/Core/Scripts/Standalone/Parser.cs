@@ -207,7 +207,8 @@ public sealed class Parser
                     if (EatPunct("="))
                     {
                         var t = Advance();
-                        binding = t.Kind is TokKind.Str or TokKind.Name or TokKind.Ident ? t.Text : null;
+                        // wcc keeps a bare word (single) as "$single", and a component's name as written
+                        binding = t.Kind is TokKind.Ident ? "$" + t.Text : t.Kind is TokKind.Str or TokKind.Name ? t.Text : null;
                     }
                     ExpectPunct(";");
                     cls.Fields.Add(new FieldDecl { Names = [name], Type = type, Specifiers = field, IsBinding = true, Binding = binding });

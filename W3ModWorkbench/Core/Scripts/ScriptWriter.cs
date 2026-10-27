@@ -18,10 +18,10 @@ public static class ScriptWriter
         | FuncTimer | FuncQuest | FuncPrivate | FuncProtected | FuncPublic | FuncReplace | FuncAddMethod | FuncWrap | FuncStoryScene | FuncCleanup | FuncReward;
 
     private const int VarEditable = 0x1, VarConst = 0x2, VarInlined = 0x4, VarImport = 0x4000, VarSaved = 0x8000,
-        VarPrivate = 0x10000, VarProtected = 0x20000;
+        VarPrivate = 0x10000, VarProtected = 0x20000, VarAutobind = 0x80000, VarOptional = 0x100000;
 
     private const int ParamOut = 0x200, ParamOptional = 0x400;
-    private const int ClassAbstract = 0x1, ClassImport = 0x2, ClassStatemachine = 0x400;
+    private const int ClassAbstract = 0x1, ClassImport = 0x2, ClassStatemachine = 0x400, StructImport = 0x2;
 
     public static List<ScriptDocument> Write(ScriptBlob blob, string sourceLabel)
     {
@@ -119,7 +119,7 @@ public static class ScriptWriter
 
     private static void WriteStruct(StringBuilder sb, ScriptStruct s)
     {
-        sb.Append($"{((s.Flags & 2) != 0 ? "import " : "")}struct {s.Name}\n{{\n"); // loc-ignore
+        sb.Append($"{((s.Flags & StructImport) != 0 ? "import " : "")}struct {s.Name}\n{{\n"); // loc-ignore
         foreach (var p in s.Properties)
             WriteProperty(sb, p);
         WriteDefaults(sb, s.Defaults, s.Properties);
@@ -211,15 +211,17 @@ public static class ScriptWriter
     private static void WriteProperty(StringBuilder sb, ScriptProperty property)
     {
         string modifiers = VarModifiers(property.Flags);
-        if ((property.Flags & 0x80000) == 0)
+        if ((property.Flags & VarAutobind) == 0)
         {
             sb.Append($"\t{modifiers}var {property.Name} : {FormatType(property.Type)};\n"); // loc-ignore
             return;
         }
         modifiers = modifiers.Replace("const ", "");
-        string optional = (property.Flags & 0x100000) != 0 ? "optional " : "";
-        sb.Append($"\t{modifiers}{optional}autobind {property.Name} : {FormatType(property.Type)}");
-        if (property.Binding.Length > 0) sb.Append(" = ").Append(Decompiler.Quote(property.Binding));
+        string optional = (property.Flags & VarOptional) != 0 ? "optional " : "";
+        sb.Append($"\t{modifiers}{optional}autobind {property.Name} : {FormatType(property.Type)}"); // loc-ignore
+        // "= single" is kept as "$single"; a component's name is kept as it is
+        if (property.Binding.StartsWith('$')) sb.Append(" = ").Append(property.Binding[1..]);
+        else if (property.Binding.Length > 0) sb.Append(" = ").Append(Decompiler.Quote(property.Binding));
         sb.Append(";\n");
     }
 

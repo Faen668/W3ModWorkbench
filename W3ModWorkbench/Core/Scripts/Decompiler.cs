@@ -14,6 +14,8 @@ internal sealed record Expr(string Text, int Prec)
     public string? Type { get; init; }
     public Expr? Inner { get; init; }
     public long? Literal { get; init; }
+    /// <summary>The type a conversion the compiler inserted on its own turned this into; shown only where it changes the result.</summary>
+    public string? Implicit { get; init; }
 }
 
 internal static class Precedence
@@ -492,12 +494,12 @@ public sealed class Decompiler(ScriptBlob blob, EnumResolver enums)
                 if (m.Text.StartsWith("virtual_parent.", StringComparison.Ordinal))
                 {
                     if (obj.Text == "parent") return m;
-                    throw new NotSupportedException("Parent dispatch through a separate receiver cannot be preserved in source.");
+                    throw new NotSupportedException("Parent dispatch through a separate receiver cannot be preserved in source."); // loc-ignore
                 }
                 if (m.Text.StartsWith("super.", StringComparison.Ordinal))
                 {
                     if (obj.Text == "this") return m;
-                    throw new NotSupportedException("Parent dispatch through a separate receiver cannot be preserved in source.");
+                    throw new NotSupportedException("Parent dispatch through a separate receiver cannot be preserved in source."); // loc-ignore
                 }
                 return new($"{Wrap(obj, Precedence.Primary)}.{m.Text}", Precedence.Primary) { Type = m.Type };
             }
@@ -522,7 +524,7 @@ public sealed class Decompiler(ScriptBlob blob, EnumResolver enums)
                 var (name, owner) = f - 1 < blob.FunctionRefs.Count ? blob.FunctionRefs[f - 1] : ($"func{f}", -1);
                 string prefix = "";
                 string currentOwner = _func.Class?.Name ?? _func.Owner;
-                if (!member && owner >= 0 && currentOwner.Length > 0 && (name == _func.Name || IsKnownBase(currentOwner, TypeName(owner)))
+                if (!member && owner >= 0 && currentOwner.Length > 0 && (name == _func.Name || NeedsSuper(currentOwner, TypeName(owner), name))
                     && TypeName(owner) != currentOwner)
                     prefix = "super.";
                 return Call(prefix + name, args);
@@ -594,8 +596,7 @@ public sealed class Decompiler(ScriptBlob blob, EnumResolver enums)
                 var e = ParseExpr();
                 if (e.Literal is long v && enums.Find(TypeName(ins.Arg(0)), v) is { } constant)
                     return new(constant, Precedence.Primary);
-                return new($"({TypeName(ins.Arg(0))}){Wrap(e, Precedence.Unary)}", Precedence.Unary)
-                    { EnumType = TypeName(ins.Arg(0)), Type = TypeName(ins.Arg(0)) };
+                return e with { EnumType = TypeName(ins.Arg(0)) };
             }
 
             case Op.EnumToInt:
@@ -604,34 +605,37 @@ public sealed class Decompiler(ScriptBlob blob, EnumResolver enums)
                 string type = TypeName(ins.Arg(0));
                 string text = e.Literal is long v && enums.Find(type, v) is { } constant
                     ? constant
-                    : e.Literal is long raw ? $"({type}){raw}" : Wrap(e, Precedence.Unary);
-                return new($"(int)({text})", Precedence.Unary) { EnumType = type, Inner = e };
+                    : e.Literal is long raw ? $"({type}){raw}" : $"(int){Wrap(e, Precedence.Unary)}";
+                return new(text, Precedence.Unary) { EnumType = type, Inner = e };
             }
 
             case Op.DynamicCast:
                 return new($"({TypeName(ins.Arg(0))}){Wrap(ParseExpr(), Precedence.Unary)}", Precedence.Unary);
 
             case Op.FloatToInt: case Op.StringToInt: case Op.BoolToInt:
-                return new($"(int){Wrap(ParseExpr(), Precedence.Unary)}", Precedence.Unary);
+                return new($"(int){Wrap(Explicit(ParseExpr()), Precedence.Unary)}", Precedence.Unary);
             case Op.StringToFloat: case Op.BoolToFloat:
-                return new($"(float){Wrap(ParseExpr(), Precedence.Unary)}", Precedence.Unary);
+                return new($"(float){Wrap(Explicit(ParseExpr()), Precedence.Unary)}", Precedence.Unary);
             case Op.IntToByte: case Op.FloatToByte: case Op.StringToByte: case Op.BoolToByte:
-                return new($"(byte){Wrap(ParseExpr(), Precedence.Unary)}", Precedence.Unary);
+                return new($"(byte){Wrap(Explicit(ParseExpr()), Precedence.Unary)}", Precedence.Unary);
 
-            case Op.ByteToBool: case Op.IntToBool: case Op.FloatToBool:
-            case Op.NameToBool: case Op.StringToBool: case Op.ObjectToBool:
-                return Conversion("bool");
-            case Op.ByteToInt:
-                return Conversion("int");
-            case Op.ByteToFloat: case Op.IntToFloat:
-                return Conversion("float");
-            case Op.ByteToString: case Op.BoolToString: case Op.IntToString: case Op.FloatToString:
-            case Op.NameToString: case Op.ObjectToString:
-                return Conversion("string");
+            // conversions the compiler inserts on its own
+            case Op.ByteToBool: case Op.ByteToInt: case Op.ByteToFloat: case Op.ByteToString: case Op.BoolToString:
+            case Op.IntToBool: case Op.IntToFloat: case Op.IntToString: case Op.FloatToBool: case Op.FloatToString:
+            case Op.NameToBool: case Op.NameToString: case Op.StringToBool: case Op.ObjectToBool: case Op.ObjectToString:
             case Op.EnumToString:
             {
-                var e = AsEnum(TypeName(ins.Arg(0)), ParseExpr());
-                return new($"(string){Wrap(e, Precedence.Unary)}", Precedence.Unary);
+                var e = ParseExpr();
+                // (int)EFDT_Head passed on as a float: an enum converts to int on its own, but not on to a float, so the cast stays
+                if (ins.Op is Op.IntToBool or Op.IntToFloat or Op.IntToString && e.EnumType is not null && e.Inner?.Literal is not null && !e.Text.StartsWith('('))
+                    return new($"(int){e.Text}", Precedence.Unary);
+                return e with { Implicit = ins.Op switch
+                {
+                    Op.ByteToInt => "int",
+                    Op.ByteToFloat or Op.IntToFloat => "float",
+                    Op.ByteToBool or Op.IntToBool or Op.FloatToBool or Op.NameToBool or Op.StringToBool or Op.ObjectToBool => "bool",
+                    _ => "string",
+                } };
             }
 
             default:
@@ -688,8 +692,8 @@ public sealed class Decompiler(ScriptBlob blob, EnumResolver enums)
         if (!Operators.TryGet(id, out string symbol, out int prec) || args.Count is 0 or > 2)
             return new($"{Operators.NameOf(id)}({string.Join(", ", args.Select(a => a.Text))})", Precedence.Primary);
         if (args.Count == 1)
-            return new($"{symbol}{Wrap(args[0], Precedence.Primary)}", Precedence.Unary);
-        return Binary(args[0], symbol, prec, args[1]);
+            return new($"{symbol}{Wrap(Explicit(args[0], numericOnly: true), Precedence.Primary)}", Precedence.Unary);
+        return Binary(Explicit(args[0], numericOnly: true), symbol, prec, Explicit(args[1], numericOnly: true));
     }
 
     private static Expr Binary(Expr a, string symbol, int prec, Expr b)
@@ -712,22 +716,32 @@ public sealed class Decompiler(ScriptBlob blob, EnumResolver enums)
         return new($"{left} {symbol} {right}", prec);
     }
 
-    private bool IsKnownBase(string owner, string target)
+    private static readonly Lazy<Standalone.Rtti> BuiltIn = new(Standalone.Rtti.LoadBuiltIn);
+
+    /// <summary>
+    /// Whether a direct call to <paramref name="target"/>'s <paramref name="name"/> needs "super.": only when a class between it and
+    /// <paramref name="owner"/> defines the name again, so a plain call would reach that one instead.
+    /// </summary>
+    private bool NeedsSuper(string owner, string target, string name)
     {
-        for (int depth = 0; owner.Length > 0 && depth < 64; depth++)
+        for (int depth = 0; owner.Length > 0 && owner != target && depth < 64; depth++)
         {
-            owner = blob.Classes.FirstOrDefault(value => !value.IsState && value.Name == owner)?.Base
-                ?? Standalone.Rtti.LoadBuiltIn().Classes.FirstOrDefault(value => value.Name == owner)?.Base ?? "";
-            if (owner == target) return true;
+            var script = blob.Classes.FirstOrDefault(value => !value.IsState && value.Name == owner);
+            var native = BuiltIn.Value.Classes.FirstOrDefault(value => value.Name == owner);
+            if (script?.Functions.Any(f => f.Name == name) == true || native?.Methods.Contains(name) == true
+                || blob.AddedMethods.Any(f => (f.Class?.Name ?? f.Owner) == owner && f.Name == name))
+                return true;
+            owner = script?.Base ?? native?.Base ?? "";
         }
         return false;
     }
 
-    private Expr Conversion(string type)
-    {
-        var value = ParseExpr();
-        return new($"({type})({value.Text})", Precedence.Unary);
-    }
+    /// <summary>
+    /// An operator picks its overload from its operands' number types, and a cast takes what it's given: there a conversion
+    /// the compiler inserted has to be written out, or (float)a / b compiles back as an int division.
+    /// </summary>
+    private static Expr Explicit(Expr e, bool numericOnly = false) =>
+        e.Implicit is { } type && e.Literal is null && (!numericOnly || type is "int" or "float") ? new($"({type}){Wrap(e, Precedence.Primary)}", Precedence.Unary) : e;
 
     private Expr MapOperation(Op op)
     {
@@ -793,7 +807,7 @@ public sealed class Decompiler(ScriptBlob blob, EnumResolver enums)
 
     public static string FormatFloat(float f)
     {
-        if (!float.IsFinite(f)) throw new InvalidDataException("A non-finite float cannot be written as a WitcherScript literal.");
+        if (!float.IsFinite(f)) throw new NotSupportedException($"{f} can't be written as a WitcherScript number."); // loc-ignore
         string s = f.ToString("R", CultureInfo.InvariantCulture);
         int exponentAt = s.IndexOf('E');
         if (exponentAt >= 0)
