@@ -450,7 +450,7 @@ public sealed class Decompiler(ScriptBlob blob, EnumResolver enums)
             case Op.IntConst: case Op.ShortConst: case Op.ByteConst: return Int(ins.Arg(0));
             case Op.FloatConst: return new(FormatFloat(ins.Float), ins.Float < 0 ? Precedence.Unary : Precedence.Primary);
             case Op.StringConst: return new(Quote(ins.Text ?? ""), Precedence.Primary);
-            case Op.NameConst: return new($"'{Name(ins.Arg(0))}'", Precedence.Primary);
+            case Op.NameConst: return new(Quote(Name(ins.Arg(0)), '\''), Precedence.Primary);
             case Op.BoolTrue: return new("true", Precedence.Primary);
             case Op.BoolFalse: return new("false", Precedence.Primary);
             case Op.LocalVar:
@@ -581,7 +581,8 @@ public sealed class Decompiler(ScriptBlob blob, EnumResolver enums)
                 var e = ParseExpr();
                 if (e.Literal is long v && enums.Find(TypeName(ins.Arg(0)), v) is { } constant)
                     return new(constant, Precedence.Primary);
-                return e with { EnumType = TypeName(ins.Arg(0)) };
+                return new($"({TypeName(ins.Arg(0))}){Wrap(e, Precedence.Unary)}", Precedence.Unary)
+                    { EnumType = TypeName(ins.Arg(0)), Type = TypeName(ins.Arg(0)) };
             }
 
             case Op.EnumToInt:
@@ -590,8 +591,8 @@ public sealed class Decompiler(ScriptBlob blob, EnumResolver enums)
                 string type = TypeName(ins.Arg(0));
                 string text = e.Literal is long v && enums.Find(type, v) is { } constant
                     ? constant
-                    : e.Literal is long raw ? $"({type}){raw}" : $"(int){Wrap(e, Precedence.Unary)}";
-                return new(text, Precedence.Unary) { EnumType = type, Inner = e };
+                    : e.Literal is long raw ? $"({type}){raw}" : Wrap(e, Precedence.Unary);
+                return new($"(int)({text})", Precedence.Unary) { EnumType = type, Inner = e };
             }
 
             case Op.DynamicCast:
@@ -604,17 +605,20 @@ public sealed class Decompiler(ScriptBlob blob, EnumResolver enums)
             case Op.IntToByte: case Op.FloatToByte: case Op.StringToByte: case Op.BoolToByte:
                 return new($"(byte){Wrap(ParseExpr(), Precedence.Unary)}", Precedence.Unary);
 
-            // conversions the compiler inserts on its own
-            case Op.ByteToBool: case Op.ByteToInt: case Op.ByteToFloat: case Op.ByteToString: case Op.BoolToString:
-            case Op.IntToBool: case Op.IntToFloat: case Op.IntToString: case Op.FloatToBool: case Op.FloatToString:
-            case Op.NameToBool: case Op.NameToString: case Op.StringToBool: case Op.ObjectToBool: case Op.ObjectToString:
+            case Op.ByteToBool: case Op.IntToBool: case Op.FloatToBool:
+            case Op.NameToBool: case Op.StringToBool: case Op.ObjectToBool:
+                return Conversion("bool");
+            case Op.ByteToInt:
+                return Conversion("int");
+            case Op.ByteToFloat: case Op.IntToFloat:
+                return Conversion("float");
+            case Op.ByteToString: case Op.BoolToString: case Op.IntToString: case Op.FloatToString:
+            case Op.NameToString: case Op.ObjectToString:
+                return Conversion("string");
             case Op.EnumToString:
             {
-                var e = ParseExpr();
-                // (int)EFDT_Head passed on as a float: an enum converts to int on its own, but not on to a float, so the cast stays
-                if (ins.Op is Op.IntToBool or Op.IntToFloat or Op.IntToString && e.EnumType is not null && e.Inner?.Literal is not null && !e.Text.StartsWith('('))
-                    return new($"(int){e.Text}", Precedence.Unary);
-                return e;
+                var e = AsEnum(TypeName(ins.Arg(0)), ParseExpr());
+                return new($"(string){Wrap(e, Precedence.Unary)}", Precedence.Unary);
             }
 
             default:
@@ -671,7 +675,7 @@ public sealed class Decompiler(ScriptBlob blob, EnumResolver enums)
         if (!Operators.TryGet(id, out string symbol, out int prec) || args.Count is 0 or > 2)
             return new($"{Operators.NameOf(id)}({string.Join(", ", args.Select(a => a.Text))})", Precedence.Primary);
         if (args.Count == 1)
-            return new($"{symbol}{Wrap(args[0], Precedence.Unary)}", Precedence.Unary);
+            return new($"{symbol}{Wrap(args[0], Precedence.Primary)}", Precedence.Unary);
         return Binary(args[0], symbol, prec, args[1]);
     }
 
@@ -693,6 +697,12 @@ public sealed class Decompiler(ScriptBlob blob, EnumResolver enums)
         if ((symbol is "&&" or "||") && b.Prec == prec && b.Text.Contains(symbol, StringComparison.Ordinal))
             right = b.Text;
         return new($"{left} {symbol} {right}", prec);
+    }
+
+    private Expr Conversion(string type)
+    {
+        var value = ParseExpr();
+        return new($"({type})({value.Text})", Precedence.Unary);
     }
 
     private Expr MapOperation(Op op)
@@ -728,7 +738,8 @@ public sealed class Decompiler(ScriptBlob blob, EnumResolver enums)
             Op.ArrayContains or Op.ArrayContainsFast => new($"{a}.Contains({One().Text})", Precedence.Primary),
             Op.ArrayPushBack => new($"{a}.PushBack({One().Text})", Precedence.Primary),
             Op.ArrayRemove or Op.ArrayRemoveFast => new($"{a}.Remove({One().Text})", Precedence.Primary),
-            Op.ArrayErase or Op.ArrayEraseFast => new($"{a}.Erase({One().Text})", Precedence.Primary),
+            Op.ArrayErase => new($"{a}.Erase({One().Text})", Precedence.Primary),
+            Op.ArrayEraseFast => new($"{a}.EraseFast({One().Text})", Precedence.Primary),
             Op.ArrayInsert => Insert(a),
             _ => new($"{a}[{One().Text}]", Precedence.Primary), // ArrayElement
         };
@@ -758,27 +769,31 @@ public sealed class Decompiler(ScriptBlob blob, EnumResolver enums)
 
     public static string FormatFloat(float f)
     {
+        if (!float.IsFinite(f)) throw new InvalidDataException("A non-finite float cannot be written as a WitcherScript literal.");
         string s = f.ToString("R", CultureInfo.InvariantCulture);
-        if (!s.Contains('.') && !s.Contains('E') && !s.Contains("Infinity") && !s.Contains("NaN"))
-            s += ".0";
-        return s;
+        int exponentAt = s.IndexOf('E');
+        if (exponentAt >= 0)
+        {
+            int exponent = int.Parse(s[(exponentAt + 1)..], CultureInfo.InvariantCulture);
+            string sign = s[0] == '-' ? "-" : "";
+            string mantissa = s[sign.Length..exponentAt];
+            int dot = mantissa.IndexOf('.');
+            int point = (dot >= 0 ? dot : mantissa.Length) + exponent;
+            string digits = mantissa.Replace(".", "");
+            s = sign + (point <= 0 ? "0." + new string('0', -point) + digits
+                : point >= digits.Length ? digits + new string('0', point - digits.Length)
+                : digits[..point] + "." + digits[point..]);
+        }
+        return s.Contains('.') ? s : s + ".0";
     }
 
-    public static string Quote(string s)
+    public static string Quote(string s, char delimiter = '"')
     {
-        var sb = new StringBuilder("\"");
+        var sb = new StringBuilder(delimiter.ToString());
         foreach (char c in s)
         {
-            sb.Append(c switch
-            {
-                '"' => "\\\"",
-                '\\' => "\\\\",
-                '\n' => "\\n",
-                '\r' => "\\r",
-                '\t' => "\\t",
-                _ => c.ToString(),
-            });
+            sb.Append(c == delimiter ? "\\" + delimiter : c.ToString());
         }
-        return sb.Append('"').ToString();
+        return sb.Append(delimiter).ToString();
     }
 }
