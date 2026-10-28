@@ -128,7 +128,7 @@ public sealed class Symbols
                 foreach (var (name, value) in decl.Members)
                 {
                     long v = value ?? next;
-                    next = v + 1;
+                    next = Math.Max(next, v + 1);
                     values.Add((name, (int)v));
                 }
                 foreach (var (member, _) in values) EnumMembers[member] = decl.Name;
