@@ -129,7 +129,10 @@ public static class ScriptWriter
     private static void WriteClass(StringBuilder sb, ScriptClass c, Decompiler decompiler)
     {
         if (c.IsState)
-            sb.Append($"state {c.Name} in {c.StateOf}{(c.Base.Length > 0 ? " extends " + c.Base : "")}\n{{\n"); // loc-ignore
+        {
+            string mods = ((c.Flags & ClassImport) != 0 ? "import " : "") + ((c.Flags & ClassAbstract) != 0 ? "abstract " : "");
+            sb.Append($"{mods}state {c.Name} in {c.StateOf}{(c.Base.Length > 0 ? " extends " + c.Base : "")}\n{{\n"); // loc-ignore
+        }
         else
         {
             string mods = ((c.Flags & ClassImport) != 0 ? "import " : "") + ((c.Flags & ClassStatemachine) != 0 ? "statemachine " : "") + ((c.Flags & ClassAbstract) != 0 ? "abstract " : "");
@@ -198,9 +201,9 @@ public static class ScriptWriter
     private static string VarModifiers(int flags)
     {
         var sb = new StringBuilder();
+        if ((flags & VarImport) != 0) sb.Append("import ");
         if ((flags & VarPrivate) != 0) sb.Append("private ");
         else if ((flags & VarProtected) != 0) sb.Append("protected ");
-        if ((flags & VarImport) != 0) sb.Append("import ");
         if ((flags & VarEditable) != 0) sb.Append("editable ");
         if ((flags & VarSaved) != 0) sb.Append("saved ");
         if ((flags & VarConst) != 0) sb.Append("const ");
@@ -231,18 +234,18 @@ public static class ScriptWriter
         string? annotation = f.Kind switch
         {
             FunctionKind.AddMethod => $"@addMethod({f.Owner})",
-            FunctionKind.Wrap => $"@wrapMethod({f.Owner})",
-            FunctionKind.Replace => $"@replaceMethod({f.Owner})",
-            FunctionKind.ReplaceGlobal => "@replaceMethod()",
+            FunctionKind.Wrap => f.Owner.Length == 0 ? "@wrapMethod" : $"@wrapMethod({f.Owner})",
+            FunctionKind.Replace => f.Owner.Length == 0 ? "@replaceMethod" : $"@replaceMethod({f.Owner})",
+            FunctionKind.ReplaceGlobal => "@replaceMethod",
             _ => null,
         };
         if (annotation is not null)
             sb.Append(pad).Append(annotation).Append('\n');
 
         var mods = new StringBuilder();
+        if ((f.Flags & FuncImport) != 0 || ((f.Flags & FuncNative) != 0 && f.Code.Length == 0 && !abstractOwner)) mods.Append("import ");
         if ((f.Flags & FuncPrivate) != 0) mods.Append("private ");
         else if ((f.Flags & FuncProtected) != 0) mods.Append("protected ");
-        if ((f.Flags & FuncImport) != 0 || ((f.Flags & FuncNative) != 0 && f.Code.Length == 0 && !abstractOwner)) mods.Append("import ");
         if ((f.Flags & FuncFinal) != 0) mods.Append("final ");
         if ((f.Flags & FuncEntry) != 0) mods.Append("entry ");
         if ((f.Flags & FuncLatent) != 0) mods.Append("latent ");
@@ -253,8 +256,8 @@ public static class ScriptWriter
         if ((f.Flags & FuncCleanup) != 0) mods.Append("cleanup ");
         if ((f.Flags & FuncReward) != 0) mods.Append("reward ");
         if (f.Kind is FunctionKind.Wrap or FunctionKind.Replace or FunctionKind.ReplaceGlobal) mods.Clear();
-        // annotations always use "function", even when the target is an event
-        mods.Append((f.Flags & FuncEvent) != 0 && annotation is null ? "event " : "function ");
+        // Added events declare their contract; wrappers/replacements inherit the target's.
+        mods.Append((f.Flags & FuncEvent) != 0 && (annotation is null || f.Kind == FunctionKind.AddMethod) ? "event " : "function ");
 
         var parameters = f.Params.Select(p =>
             ((p.Flags & ParamOut) != 0 ? "out " : "") + ((p.Flags & ParamOptional) != 0 ? "optional " : "")
