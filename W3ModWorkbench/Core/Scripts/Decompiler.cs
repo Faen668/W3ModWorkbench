@@ -555,7 +555,8 @@ public sealed class Decompiler(ScriptBlob blob, EnumResolver enums)
                     return Operator(f, args);
                 var (name, owner) = f - 1 < blob.FunctionRefs.Count ? blob.FunctionRefs[f - 1] : ($"func{f}", -1);
                 string prefix = "";
-                string currentOwner = _func.Class?.Name ?? _func.Owner;
+                string currentOwner = _func.Class is { IsState: true } state
+                    ? Standalone.Symbols.StateClassKey(state.StateOf, state.Name) : _func.Class?.Name ?? _func.Owner;
                 if (!member && owner >= 0 && currentOwner.Length > 0 && (name == _func.Name || NeedsSuper(currentOwner, TypeName(owner), name))
                     && TypeName(owner) != currentOwner)
                     prefix = "super.";
@@ -576,7 +577,10 @@ public sealed class Decompiler(ScriptBlob blob, EnumResolver enums)
             }
 
             case Op.VirtualParentFunc:
-                return Call("virtual_parent." + Name(ins.Arg(2)), ParseArgs());
+            {
+                string name = Name(ins.Arg(2));
+                return Call("virtual_parent." + (name == "@self" ? _func.Name : name), ParseArgs());
+            }
 
             case Op.Conditional:
             {
