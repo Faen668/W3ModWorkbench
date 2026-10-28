@@ -45,6 +45,7 @@ public sealed class Decompiler(ScriptBlob blob, EnumResolver enums)
         public Expr? E;
         public int Target;
         public int Target2;
+        public string? SwitchType;
     }
 
     private sealed record Ctx(int? Break, HashSet<int> Continue);
@@ -80,7 +81,6 @@ public sealed class Decompiler(ScriptBlob blob, EnumResolver enums)
     {
         var list = new List<Stmt>();
         int line = 0;
-        string? switchType = null;
         while (_pos < _code.Count)
         {
             var ins = _code[_pos];
@@ -132,14 +132,14 @@ public sealed class Decompiler(ScriptBlob blob, EnumResolver enums)
                     st.Kind = Kind.Switch;
                     st.Target = ins.RtEnd + ins.Arg(1);
                     st.E = ParseExpr();
-                    switchType = st.E.Type ?? blob.Types.ElementAtOrDefault(ins.Arg(0)).Name;
+                    st.SwitchType = st.E.Type ?? blob.Types.ElementAtOrDefault(ins.Arg(0)).Name;
                     break;
                 case Op.SwitchLabel:
                     _pos++;
                     st.Kind = Kind.Case;
                     st.Target = ins.Rt + 3 + ins.Arg(0);
                     st.Target2 = ins.RtEnd + ins.Arg(1);
-                    st.E = AsEnum(switchType, ParseExpr());
+                    st.E = ParseExpr();
                     break;
                 case Op.SwitchDefault:
                     _pos++;
@@ -151,6 +151,32 @@ public sealed class Decompiler(ScriptBlob blob, EnumResolver enums)
                     break;
             }
             list.Add(st);
+        }
+        // A switch's label links skip any nested switches in its bodies.
+        var offsets = new Dictionary<int, int>();
+        for (int i = list.Count - 1; i >= 0; i--) offsets[list[i].Rt] = i;
+        int Resolve(int rt)
+        {
+            var visited = new HashSet<int>();
+            while (offsets.TryGetValue(rt, out int index) && visited.Add(rt))
+            {
+                var statement = list[index];
+                if (statement.Kind == Kind.Jump) rt = statement.Target;
+                else if (statement.Kind is Kind.Line or Kind.Nop && index + 1 < list.Count) rt = list[index + 1].Rt;
+                else return index;
+            }
+            return -1;
+        }
+        foreach (var selection in list.Where(statement => statement.Kind == Kind.Switch))
+        {
+            int at = Resolve(selection.Target);
+            var visited = new HashSet<int>();
+            while (at >= 0 && visited.Add(at) && list[at].Kind == Kind.Case)
+            {
+                var label = list[at];
+                label.E = AsEnum(selection.SwitchType, label.E!);
+                at = Resolve(label.Target);
+            }
         }
         return list;
     }
@@ -390,6 +416,10 @@ public sealed class Decompiler(ScriptBlob blob, EnumResolver enums)
                         for (int q = physical[0]; q < defaultAt && found < 0; q++)
                             if (_stmts[q].Kind == Kind.Jump && _stmts[q].Target > _stmts[defaultAt].Rt)
                                 found = IndexAt(_stmts[q].Target);
+                        int defaultBody = Next(defaultAt + 1, end);
+                        if (found < 0 && defaultBody < end && _stmts[defaultBody].Kind == Kind.Jump
+                            && _stmts[defaultBody].Target > _stmts[defaultAt].Rt)
+                            found = IndexAt(_stmts[defaultBody].Target);
                         // every case returned: default runs to the end of the enclosing block
                         switchEnd = found > defaultAt && found <= end ? found : end;
                     }
