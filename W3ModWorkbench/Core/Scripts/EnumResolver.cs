@@ -35,9 +35,9 @@ public sealed partial class EnumResolver
         long next = extends ? vanilla!.Keys.Max() + 1 : 0;
         foreach (var (name, value) in e.Members)
         {
-            if (value != int.MaxValue) next = value;
-            map.TryAdd(next, name);
-            next++;
+            long number = value != int.MaxValue ? value : next;
+            map.TryAdd(number, name);
+            next = extends ? number + 1 : Math.Max(next, number + 1);
         }
         return map;
     }
@@ -53,6 +53,18 @@ public sealed partial class EnumResolver
         if (_local.TryGetValue(enumType, out var map) && map.TryGetValue(value, out var n)) return n;
         if (_vanilla.TryGetValue(enumType, out map) && map.TryGetValue(value, out n)) return n;
         return null;
+    }
+
+    internal long DecodeConstant(string enumType, long value, int storageBits)
+    {
+        if (storageBits != 8 || value is < 128 or > 255) return value;
+        var local = _local.GetValueOrDefault(enumType);
+        var vanilla = _vanilla.GetValueOrDefault(enumType);
+        long signed = (sbyte)(byte)value;
+        return (local?.ContainsKey(signed) == true || vanilla?.ContainsKey(signed) == true)
+            && (local is null || local.Keys.All(n => n is >= sbyte.MinValue and <= sbyte.MaxValue))
+            && (vanilla is null || vanilla.Keys.All(n => n is >= sbyte.MinValue and <= sbyte.MaxValue))
+            ? signed : value;
     }
 
     private static Dictionary<string, Dictionary<long, string>> LoadVanilla(string dir)
@@ -74,9 +86,9 @@ public sealed partial class EnumResolver
                         {
                             var parts = raw.Split('=', 2, StringSplitOptions.TrimEntries);
                             if (parts[0].Length == 0) continue;
-                            if (parts.Length == 2 && TryNumber(parts[1], out long v)) next = v;
-                            map.TryAdd(next, parts[0]);
-                            next++;
+                            long number = parts.Length == 2 && TryNumber(parts[1], out long v) ? v : next;
+                            map.TryAdd(number, parts[0]);
+                            next = Math.Max(next, number + 1);
                         }
                         result.TryAdd(m.Groups[1].Value, map);
                     }

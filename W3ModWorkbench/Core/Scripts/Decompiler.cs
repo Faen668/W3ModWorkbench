@@ -14,6 +14,7 @@ internal sealed record Expr(string Text, int Prec)
     public string? Type { get; init; }
     public Expr? Inner { get; init; }
     public long? Literal { get; init; }
+    public int StorageBits { get; init; }
     /// <summary>The type a conversion the compiler inserted on its own turned this into; shown only where it changes the result.</summary>
     public string? Implicit { get; init; }
 }
@@ -450,7 +451,8 @@ public sealed class Decompiler(ScriptBlob blob, EnumResolver enums)
             case Op.Null: return new("NULL", Precedence.Primary);
             case Op.IntOne: return Int(1);
             case Op.IntZero: return Int(0);
-            case Op.IntConst: case Op.ShortConst: case Op.ByteConst: return Int(ins.Arg(0));
+            case Op.IntConst: case Op.ShortConst: return Int(ins.Arg(0));
+            case Op.ByteConst: return Int(ins.Arg(0)) with { StorageBits = 8 };
             case Op.FloatConst: return new(FormatFloat(ins.Float), ins.Float < 0 ? Precedence.Unary : Precedence.Primary);
             case Op.StringConst: return new(Quote(ins.Text ?? ""), Precedence.Primary);
             case Op.NameConst: return new(Quote(Name(ins.Arg(0)), '\''), Precedence.Primary);
@@ -594,6 +596,7 @@ public sealed class Decompiler(ScriptBlob blob, EnumResolver enums)
             case Op.IntToEnum:
             {
                 var e = ParseExpr();
+                if (e.Literal is { } raw) e = Int(enums.DecodeConstant(TypeName(ins.Arg(0)), raw, e.StorageBits));
                 if (e.Literal is long v && enums.Find(TypeName(ins.Arg(0)), v) is { } constant)
                     return new(constant, Precedence.Primary);
                 return e with { EnumType = TypeName(ins.Arg(0)) };
@@ -603,6 +606,7 @@ public sealed class Decompiler(ScriptBlob blob, EnumResolver enums)
             {
                 var e = ParseExpr();
                 string type = TypeName(ins.Arg(0));
+                if (e.Literal is { } rawValue) e = Int(enums.DecodeConstant(type, rawValue, e.StorageBits));
                 string text = e.Literal is long v && enums.Find(type, v) is { } constant
                     ? constant
                     : e.Literal is long raw ? $"({type}){raw}" : $"(int){Wrap(e, Precedence.Unary)}";
@@ -660,10 +664,12 @@ public sealed class Decompiler(ScriptBlob blob, EnumResolver enums)
     }
 
     /// <summary>An integer literal stored into an enum-typed place reads better as the enum's constant.</summary>
-    private Expr AsEnum(string? type, Expr e) =>
-        type is not null && e.Literal is long v && enums.Find(type, v) is { } constant
-            ? new Expr(constant, Precedence.Primary)
-            : e;
+    private Expr AsEnum(string? type, Expr e)
+    {
+        if (type is null || e.Literal is not { } raw) return e;
+        long value = enums.DecodeConstant(type, raw, e.StorageBits);
+        return enums.Find(type, value) is { } constant ? new Expr(constant, Precedence.Primary) : e;
+    }
 
     private static Expr Int(long v) => new(v.ToString(CultureInfo.InvariantCulture), v < 0 ? Precedence.Unary : Precedence.Primary) { Literal = v };
 
