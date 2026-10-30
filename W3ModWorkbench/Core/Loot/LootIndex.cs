@@ -96,6 +96,7 @@ public sealed class LootIndex
         var problems = new ConcurrentBag<string>();
         var spots = new List<LootSpot>();
         var worlds = locator.AllPaths(".w2w").Where(w => !w.StartsWith(@"engine\", StringComparison.OrdinalIgnoreCase)).ToList();
+        var layers = locator.AllPaths(".w2l");
         foreach (string worldPath in worlds)
         {
             token.ThrowIfCancellationRequested();
@@ -107,15 +108,14 @@ public sealed class LootIndex
                 problems.Add($"{worldPath}: {ex.Message}");
                 continue;
             }
-            if (world.EmbeddedLayers is not { } tree) continue;
             var found = new ConcurrentBag<LootSpot>();
-            Parallel.ForEach(tree.AllLayers(), new ParallelOptions { MaxDegreeOfParallelism = Math.Max(2, Environment.ProcessorCount / 2), CancellationToken = token }, layer =>
+            Parallel.ForEach(world.GameLayers(layers), new ParallelOptions { MaxDegreeOfParallelism = Math.Max(2, Environment.ProcessorCount / 2), CancellationToken = token }, layer =>
             {
                 Cr2wFile file;
-                try { file = Cr2wFile.Read(locator.ReadFile(layer.Path) ?? throw new FileNotFoundException(layer.Path)); }
+                try { file = Cr2wFile.Read(locator.ReadFile(layer) ?? throw new FileNotFoundException(layer)); }
                 catch (Exception ex) when (ex is IOException or InvalidDataException)
                 {
-                    problems.Add($"{layer.Path}: {ex.Message}");
+                    problems.Add($"{layer}: {ex.Message}");
                     return;
                 }
                 if (file.First("CLayer") is not { } cl) return;
@@ -128,7 +128,7 @@ public sealed class LootIndex
                     if (setup.Params.Count == 0 && !e.ClassName.Contains("Container", StringComparison.OrdinalIgnoreCase)
                         && !e.ClassName.Contains("Stash", StringComparison.OrdinalIgnoreCase)) continue;
                     var (position, _) = Scenes.SceneStaging.Transform(e["transform"]);
-                    found.Add(new LootSpot(worldPath, layer.Path, e.ClassName, e["name"] as string ?? "", position, template, setup.Params, setup.Fixed,
+                    found.Add(new LootSpot(worldPath, layer, e.ClassName, e["name"] as string ?? "", position, template, setup.Params, setup.Fixed,
                         IntOf(e, "minLootParamNumber") ?? TemplateInt(locator, template, "minLootParamNumber", ints),
                         IntOf(e, "maxLootParamNumber") ?? TemplateInt(locator, template, "maxLootParamNumber", ints)) { IndexInLayer = index });
                 }

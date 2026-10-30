@@ -817,6 +817,8 @@ public partial class LootLocatorWindow : Window, IMessageHost
         if (layer.StartsWith(@"data\levels\", StringComparison.OrdinalIgnoreCase)) layer = layer[12..];
         // a file outside the world's folder (a DLC's community) without its DLC's data folder
         layer = Regex.Replace(layer, @"^dlc\\[^\\]+\\data\\", "", RegexOptions.IgnoreCase);
+        // a layer a DLC or mod adds to the world (dlc\ep1\levels\novigrad\ep1\…): the DLC's name, then its folders, once
+        layer = Regex.Replace(layer, @"^dlc\\([^\\]+)\\levels\\[^\\]+\\(?:\1\\)?", @"$1\", RegexOptions.IgnoreCase);
         layer = Path.ChangeExtension(layer, null);
         var parts = layer.Split('\\').Select(Humanise).ToList();
         // "loot" and the like name the layer, not the place

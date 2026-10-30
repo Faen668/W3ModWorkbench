@@ -50,7 +50,13 @@ public sealed class BestiaryRow(BestiaryEntry? entry, BestiaryCreature? creature
 public sealed record BestiaryPlaceRow(BestiaryPlace Place, string Area, string Variant, int Level, int Limit, int AtOnce)
 {
     public string SourceText => L.T(Place.Source == BestiarySource.Community ? "Bestiary.SourceCommunity" : "Bestiary.SourceEncounter");
-    public string QuestText => Place.Quest ? L.T("LootLocator.Yes") : "";
+    public string QuestText => Place.Quest ? L.T("LootLocator.Yes") : Place.StartsOff ? L.T("Bestiary.StartsOff") : "";
+    public string ModText => Place.Mod ? L.T("LootLocator.Yes") : "";
+
+    /// <summary>Spawns only while a quest needs it, or once the story switches it on: drawn as a diamond.</summary>
+    public bool Special => Place.Quest || Place.StartsOff;
+
+    public MapMarker Marker(Color color) => new(new Vector2(Place.Position.X, Place.Position.Y), color, null, 0, Special, 4.5f, this) { Square = Place.Mod };
     public string LimitText => Limit > 0 ? Limit.ToString(CultureInfo.CurrentCulture) : "";
     public string AtOnceText => AtOnce > 0 ? AtOnce.ToString(CultureInfo.CurrentCulture) : "";
     public string PositionText => LootLocatorWindow.Position(Place.Position);
@@ -439,9 +445,10 @@ public partial class BestiaryWindow : Window, IMessageHost
     private async Task ShowWorldAsync(string? world, bool fit)
     {
         var rows = _places.Where(p => p.Place.World == world).ToList();
-        // a quest's spawn is a diamond, drawn over the rest
-        Map.SetMarkers([.. rows.OrderBy(p => p.Place.Quest).ThenBy(p => p.Level).Select(p => new MapMarker(new Vector2(p.Place.Position.X, p.Place.Position.Y), BandOf(p.Level).Color, null, 0, p.Place.Quest, 4.5f, p))]);
-        QuestLegend.Visibility = rows.Any(p => p.Place.Quest) ? Visibility.Visible : Visibility.Collapsed;
+        // a quest's spawn is a diamond and a mod's a square, drawn over the rest
+        Map.SetMarkers([.. rows.OrderBy(p => p.Place.Mod).ThenBy(p => p.Special).ThenBy(p => p.Level).Select(p => p.Marker(BandOf(p.Level).Color))]);
+        QuestLegend.Visibility = rows.Any(p => p.Special) ? Visibility.Visible : Visibility.Collapsed;
+        ModLegend.Visibility = rows.Any(p => p.Place.Mod) ? Visibility.Visible : Visibility.Collapsed;
         Map.SetShapes([]);
         Map.PickedMarker = null;
         PlaceGrid.ItemsSource = rows.OrderBy(p => p.Area, StringComparer.CurrentCultureIgnoreCase).ThenBy(p => p.Level).ToList();
@@ -517,7 +524,7 @@ public partial class BestiaryWindow : Window, IMessageHost
             return;
         }
         var at = new Vector2(row.Place.Position.X, row.Place.Position.Y);
-        if (Map.PickedMarker?.Tag != row) Map.PickedMarker = new MapMarker(at, BandOf(row.Level).Color, null, 0, row.Place.Quest, 4.5f, row);
+        if (Map.PickedMarker?.Tag != row) Map.PickedMarker = row.Marker(BandOf(row.Level).Color);
         Map.SetShapes(row.Place.Area is { Count: > 2 } area ? [new MapShape(area, BandOf(row.Level).Color, true, true, true)] : []);
         if (PlaceGrid.IsKeyboardFocusWithin) Map.FitTo(at - new Vector2(90), at + new Vector2(90));
         if (VariantGrid.ItemsSource is IEnumerable<BestiaryVariantRow> variants
@@ -540,10 +547,10 @@ public partial class BestiaryWindow : Window, IMessageHost
         if (dialog.ShowDialog(this) != true) return;
         var csv = new StringBuilder();
         static string Cell(string s) => s.Contains(',') || s.Contains('"') ? "\"" + s.Replace("\"", "\"\"") + "\"" : s;
-        csv.AppendLine("world,area,kind,template,spawned by,quest,level,spawn limit,at once,x,y,z,layer"); // loc-ignore: a file's column names
+        csv.AppendLine("world,area,kind,template,spawned by,quest,starts off,mod,level,spawn limit,at once,x,y,z,layer"); // loc-ignore: a file's column names
         foreach (var p in _places.OrderBy(p => p.Place.World).ThenBy(p => p.Area))
             csv.AppendLine(string.Join(",", Cell(LootLocatorWindow.WorldName(p.Place.World)), Cell(p.Area), Cell(p.Variant), Cell(p.Place.Template),
-                p.Place.Source == BestiarySource.Community ? "community" : "encounter", p.Place.Quest ? "yes" : "no", p.Level, p.Limit, p.AtOnce, // loc-ignore: a file's values
+                p.Place.Source == BestiarySource.Community ? "community" : "encounter", p.Place.Quest ? "yes" : "no", p.Place.StartsOff ? "yes" : "no", p.Place.Mod ? "yes" : "no", p.Level, p.Limit, p.AtOnce, // loc-ignore: a file's values
                 p.Place.Position.X.ToString("0.###", CultureInfo.InvariantCulture), p.Place.Position.Y.ToString("0.###", CultureInfo.InvariantCulture),
                 p.Place.Position.Z.ToString("0.###", CultureInfo.InvariantCulture), Cell(p.Place.Layer)));
         try

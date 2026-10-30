@@ -22,7 +22,11 @@ public sealed record MapDot(LayerEntity Entity, LayerInfo Layer, int Group)
 /// A marker on a <see cref="WorldMap"/>: a pin or a waypoint, where, its colour, its name and, for an area, its radius in
 /// metres; a dot's own radius in pixels, and a tag for one that can be clicked (raised by <see cref="WorldMap.MarkerPicked"/>).
 /// </summary>
-public sealed record MapMarker(Vector2 At, Color Color, string? Label, float Radius, bool Diamond, float Size = 2, object? Tag = null);
+public sealed record MapMarker(Vector2 At, Color Color, string? Label, float Radius, bool Diamond, float Size = 2, object? Tag = null)
+{
+    /// <summary>Drawn as a square (a place a mod adds), over a diamond.</summary>
+    public bool Square { get; init; }
+}
 
 /// <summary>A plant over the map: where its foot is, its turn (radians), how far it reaches (metres), and its picture from above.</summary>
 public sealed record MapPlant(Vector2 At, float Yaw, float Reach, BitmapSource Picture);
@@ -597,7 +601,7 @@ public sealed class WorldMap : FrameworkElement
                 }
         }
 
-        /// <summary>Each marker: a diamond for a pin, a dot for a waypoint, a ring for a quest's area, named once zoomed in enough.</summary>
+        /// <summary>Each marker: a diamond for a pin, a square, a dot for a waypoint, a ring for a quest's area, named once zoomed in enough.</summary>
         private void DrawMarkers(DrawingContext dc, Rect view)
         {
             if (_markers.Count == 0) return;
@@ -613,7 +617,8 @@ public sealed class WorldMap : FrameworkElement
                     var at = ToScreen(m.At.X, m.At.Y);
                     if (!view.Contains(at)) continue;
                     if (m.Radius > 0) dc.DrawEllipse(null, ring, at, m.Radius * Scale, m.Radius * Scale);
-                    if (m.Diamond)
+                    if (m.Square) dc.DrawRectangle(brush, outline, new Rect(at.X - 4.5, at.Y - 4.5, 9, 9));
+                    else if (m.Diamond)
                     {
                         var g = new StreamGeometry();
                         using (var c = g.Open())

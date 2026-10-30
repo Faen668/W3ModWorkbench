@@ -30,7 +30,7 @@ The game's own minimap, with each place as a dot coloured by its chance: yellow 
 
 ## Places and what they give
 
-**Places** lists the world's places, likeliest first, with their area (the layer they're in), chance, respawn time and position. Click one, or a dot on the map, to see what it can give:
+**Places** lists the world's places, likeliest first, with their area (the layer they're in), chance, respawn time and position. **Chance** is how often a container like that one gets the item, over many random rolls; the game's roll for each placed spot is fixed by where it stands, so **Rolled here** is the one to trust for that exact spot. A chest can show 10% and still say **Yes**. Click one, or a dot on the map, to see what it can give:
 
 - **Rolled here**: what that exact spot gives at the level chosen. The game picks a place's items from where it stands, so the same spot always gets the same items; a spot rolled at random each time says so.
 - **Uses N of these tables**: the place's tables, each with the chance it's used. Click a table to look at it.

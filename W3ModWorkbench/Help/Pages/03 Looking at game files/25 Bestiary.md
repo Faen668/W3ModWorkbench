@@ -22,7 +22,7 @@ The middle column is the creature's bestiary page: its artwork, its category, **
 
 ## Where it lives
 
-The map shows every place that spawns the creature, whether an encounter or a community (a quest's or a village's spawn set) spawns it, coloured by level: blue up to level 5, then green, yellow, orange, and red from level 31. A **diamond** is a place kept with a quest's files: it spawns only during that quest. Drag to move, use the wheel to zoom, and **Fit** shows all the places again.
+The map shows every place that spawns the creature, whether an encounter or a community (a quest's or a village's spawn set) spawns it, coloured by level: blue up to level 5, then green, yellow, orange, and red from level 31. A **diamond** is a place kept with a quest's files, which spawns only during that quest, or an encounter placed switched off, which spawns only once the story turns it on. A **square** is a place an installed mod adds or changes. Drag to move, use the wheel to zoom, and **Fit** shows all the places again.
 
 - **World** picks the world shown, each with how many places in it spawn the creature.
 - **Installed mods** reads the installed mods' copies of layers, communities, templates and item files too, as the game does with them installed, so a mod's changes to what a creature drops show under **Drops**.
@@ -30,7 +30,7 @@ The map shows every place that spawns the creature, whether an encounter or a co
 
 Below the map:
 
-- **Places** lists each place: its area, the kind spawned there, what spawns it (**Encounter** or **Community**), whether it's a quest's, its level, how many it spawns in all (**Spawn limit**) and how many at a time (**At once**). Click one, or a dot on the map, to ring it and draw its area.
+- **Places** lists each place: its area, the kind spawned there, what spawns it (**Encounter** or **Community**), whether it's a quest's (**After an event** for one the story switches on), whether a mod adds it, its level, how many it spawns in all (**Spawn limit**) and how many at a time (**At once**). Click one, or a dot on the map, to ring it and draw its area.
 - **Kinds** lists each kind of the creature (a nest boss, an underwater drowner, a stronger later one) with its level, how many places spawn it and its abilities.
 - **Drops** lists what the kind picked drops, each item with its chance at the player level set in the [[Loot Locator]]. Double-click an item to open it in the Loot Locator, already looked for, at a level it drops at and in the world shown here.
 

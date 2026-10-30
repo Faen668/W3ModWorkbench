@@ -48,6 +48,12 @@ public sealed record BestiaryPlace(string World, string Layer, string Name, Vect
 {
     public BestiarySource Source { get; init; } = BestiarySource.Encounter;
 
+    /// <summary>Its layer (or community file) comes from an installed mod: one the mod adds, or the game's own the mod changes.</summary>
+    public bool Mod { get; init; }
+
+    /// <summary>An encounter placed switched off, spawning only once a quest or a fact turns it on.</summary>
+    public bool StartsOff { get; init; }
+
     public bool Quest => BestiaryIndex.IsQuestPath(Layer);
 }
 
@@ -128,14 +134,28 @@ public sealed class BestiaryIndex
         progress?.Report("communities");
         var communities = ReadCommunities(locator, options);
         ReadCreatures(communities.SelectMany(c => c.Templates).Distinct(StringComparer.OrdinalIgnoreCase));
+        // a monster whose entry its quest unlocks, not the game's rules (the djinn: npc.ws skips mon_djinn), is that entry's
+        var questEntries = ReadQuestEntries(locator, options, byJournal);
+        foreach (var community in communities)
+            if (questEntries.TryGetValue(community.Path, out var unlocked))
+                foreach (string template in community.Templates)
+                    if (creatures.TryGetValue(template, out var c) && c.Entry is null && c.Abilities.Any(a => a.StartsWith("mon_", StringComparison.OrdinalIgnoreCase)))
+                        c.Entry = unlocked;
         foreach (var c in creatures.Values.Where(c => c.Entry is null).ToList()) creatures.TryRemove(c.Template, out _);
         communities = [.. communities.Select(c => c with { Templates = [.. c.Templates.Where(creatures.ContainsKey)] }).Where(c => c.Templates.Count > 0)];
         var wanted = communities.SelectMany(c => c.Phases).SelectMany(p => p.SpawnTags.Concat(p.Actions.SelectMany(a => a.ApTags))).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         // the places, world by world, and the spots tagged as those communities' spawn and action points
         var places = new ConcurrentBag<BestiaryPlace>();
+        var trees = new ConcurrentDictionary<string, Cr2wFile?>(StringComparer.OrdinalIgnoreCase);
+        Cr2wFile? ReadTree(string path) => trees.GetOrAdd(path, p =>
+        {
+            try { return Cr2wFile.Read(locator.ReadFile(p) ?? []); }
+            catch (Exception ex) when (ex is IOException or InvalidDataException) { return null; }
+        });
         var tagged = new Dictionary<string, ConcurrentDictionary<string, ConcurrentBag<Vector3>>>(StringComparer.OrdinalIgnoreCase);
         var worlds = locator.AllPaths(".w2w").Where(w => !w.StartsWith(@"engine\", StringComparison.OrdinalIgnoreCase)).ToList();
+        var layers = locator.AllPaths(".w2l");
         foreach (string worldPath in worlds)
         {
             token.ThrowIfCancellationRequested();
@@ -144,11 +164,10 @@ public sealed class BestiaryIndex
             WorldFile world;
             try { world = WorldFile.Read(locator.ReadFile(worldPath) ?? throw new FileNotFoundException(worldPath), worldPath); }
             catch (Exception ex) when (ex is IOException or InvalidDataException) { continue; }
-            if (world.EmbeddedLayers is not { } tree) continue;
-            Parallel.ForEach(tree.AllLayers(), options, layer =>
+            Parallel.ForEach(world.GameLayers(layers), options, layer =>
             {
                 Cr2wFile file;
-                try { file = Cr2wFile.Read(locator.ReadFile(layer.Path) ?? []); }
+                try { file = Cr2wFile.Read(locator.ReadFile(layer) ?? []); }
                 catch (Exception ex) when (ex is IOException or InvalidDataException) { return; }
                 if (file.First("CLayer") is not { } cl) return;
                 bool hasEncounter = false;
@@ -163,13 +182,17 @@ public sealed class BestiaryIndex
                     foreach (string tag in found) tags.GetOrAdd(tag, _ => []).Add(at);
                 }
                 if (!hasEncounter) return;
+                bool fromMod = locator.IsFromMod(layer);
                 foreach (var e in WorldFile.Entities(file).Where(e => e.ClassName == "CEncounter"))
                 {
                     var area = e.Components.FirstOrDefault(c => c.Outline is { Count: > 2 })?.Outline;
+                    // an encounter can list definitions its tree never names (Novigrad's townsfolk all list a ghoul): those never spawn
+                    var used = UsedDefinitions(file, e.Object, ReadTree);
                     foreach (var dh in e.Object.Array("creatureDefinition").OfType<RedHandle>())
-                        if (file.Object(dh) is { } d && d["entityTemplate"] is RedHandle th && file.PathOf(th) is { } template)
-                            places.Add(new BestiaryPlace(worldPath, layer.Path, e.Name, e.Position, area, template,
-                                (int)d.Integer("totalSpawnLimit"), (int)d.Integer("maxSpawnedAtOnce")));
+                        if (file.Object(dh) is { } d && d["entityTemplate"] is RedHandle th && file.PathOf(th) is { } template
+                            && (used.Count == 0 || used.Contains(d["definitionName"] as string ?? "")))
+                            places.Add(new BestiaryPlace(worldPath, layer, e.Name, e.Position, area, template,
+                                (int)d.Integer("totalSpawnLimit"), (int)d.Integer("maxSpawnedAtOnce")) { Mod = fromMod, StartsOff = e.Object["enabled"] is false });
                 }
             });
         }
@@ -191,7 +214,7 @@ public sealed class BestiaryIndex
                 if (spots.Count == 0) continue;
                 foreach (string template in community.Templates)
                     places.Add(new BestiaryPlace(world, community.Path, community.Comment.Length > 0 ? community.Comment : Path.GetFileNameWithoutExtension(community.Path),
-                        spots[0], null, template, 0, phase.Quantity) { Source = BestiarySource.Community });
+                        spots[0], null, template, 0, phase.Quantity) { Source = BestiarySource.Community, Mod = locator.IsFromMod(community.Path) });
             }
 
         // every template the encounters spawn or the journal names
@@ -203,6 +226,59 @@ public sealed class BestiaryIndex
             Entries = entries, Categories = categories, Creatures = new Dictionary<string, BestiaryCreature>(creatures, StringComparer.OrdinalIgnoreCase),
             Places = [.. places.OrderBy(p => p.World).ThenBy(p => p.Layer, StringComparer.OrdinalIgnoreCase)], Worlds = worlds, Rules = rules.Count,
         };
+    }
+
+    /// <summary>
+    /// The communities of quests that unlock one bestiary entry themselves, with that entry: a quest phase (.w2phase)
+    /// naming exactly one entry's journal file among the files it uses, by the community files it uses.
+    /// </summary>
+    private static Dictionary<string, BestiaryEntry> ReadQuestEntries(ResourceLocator locator, ParallelOptions options, IReadOnlyDictionary<string, BestiaryEntry> byJournal)
+    {
+        var found = new ConcurrentDictionary<string, BestiaryEntry?>(StringComparer.OrdinalIgnoreCase);
+        var marker = "bestiary"u8.ToArray();
+        Parallel.ForEach(locator.AllPaths(".w2phase"), options, path =>
+        {
+            if (locator.ReadFile(path) is not { } data || data.AsSpan().IndexOf(marker) < 0) return;
+            Cr2wFile file;
+            try { file = Cr2wFile.Read(data); }
+            catch (InvalidDataException) { return; }
+            var entries = file.Imports.Select(i => byJournal.GetValueOrDefault(i.Path)).OfType<BestiaryEntry>().Distinct().ToList();
+            if (entries.Count != 1) return;
+            foreach (var community in file.Imports.Where(i => i.Path.EndsWith(".w2comm", StringComparison.OrdinalIgnoreCase)))
+                // two quests unlocking different entries for one community: neither is trusted
+                found.AddOrUpdate(community.Path, entries[0], (_, had) => had == entries[0] ? had : null);
+        });
+        return found.Where(p => p.Value is not null).ToDictionary(p => p.Key, p => p.Value!, StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>The creature definitions an encounter's spawn tree names, following the .spawntree files it includes.</summary>
+    private static HashSet<string> UsedDefinitions(Cr2wFile file, RedObject encounter, Func<string, Cr2wFile?> read)
+    {
+        var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var seen = new HashSet<RedObject>();
+        void Walk(Cr2wFile f, RedObject node)
+        {
+            if (!seen.Add(node)) return;
+            if (node.ClassName == "CSpawnTreeIncludeTreeNode")
+            {
+                if (node["spawnTree"] is RedHandle include && f.PathOf(include) is { } path && read(path) is { Exports.Count: > 0 } included && included.Object(0) is { } tree)
+                    Walk(included, tree);
+                return;
+            }
+            if (node["creatureDefinition"] is string named) used.Add(named);
+            foreach (var (_, _, value) in node.Properties) Visit(f, value);
+        }
+        void Visit(Cr2wFile f, object? value)
+        {
+            switch (value)
+            {
+                case RedHandle h when f.Object(h) is { } o: Walk(f, o); break;
+                case RedObject o: Walk(f, o); break;
+                case List<object?> list: foreach (var x in list) Visit(f, x); break;
+            }
+        }
+        Visit(file, encounter["spawnTree"]);
+        return used;
     }
 
     // ---------------------------------------------------------------- communities

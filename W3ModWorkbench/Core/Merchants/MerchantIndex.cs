@@ -127,6 +127,7 @@ public sealed class MerchantIndex
     public static MerchantIndex Build(ResourceLocator locator, IProgress<string>? progress, CancellationToken token)
     {
         var worlds = locator.AllPaths(".w2w").Where(w => !w.StartsWith(@"engine\", StringComparison.OrdinalIgnoreCase)).ToList();
+        var layers = locator.AllPaths(".w2l");
         var loot = LootIndex.TemplateLoot(locator);
         var merchants = new ConcurrentDictionary<string, Merchant?>(StringComparer.OrdinalIgnoreCase);
         Merchant? MerchantOf(string template) => merchants.GetOrAdd(template, t => ReadMerchant(locator, t, loot));
@@ -143,11 +144,10 @@ public sealed class MerchantIndex
             WorldFile world;
             try { world = WorldFile.Read(locator.ReadFile(worldPath) ?? throw new FileNotFoundException(worldPath), worldPath); }
             catch (Exception ex) when (ex is IOException or InvalidDataException) { continue; }
-            if (world.EmbeddedLayers is not { } tree) continue;
-            Parallel.ForEach(tree.AllLayers(), options, layer =>
+            Parallel.ForEach(world.GameLayers(layers), options, layer =>
             {
                 Cr2wFile file;
-                try { file = Cr2wFile.Read(locator.ReadFile(layer.Path) ?? []); }
+                try { file = Cr2wFile.Read(locator.ReadFile(layer) ?? []); }
                 catch (Exception ex) when (ex is IOException or InvalidDataException) { return; }
                 if (file.First("CLayer") is not { } cl) return;
                 bool hasEncounter = false;
@@ -166,7 +166,7 @@ public sealed class MerchantIndex
                     var encounterTags = e.Object["tags"] is byte[] t ? file.Tags(t) : [];
                     foreach (var dh in e.Object.Array("creatureDefinition").OfType<RedHandle>())
                         if (file.Object(dh) is { } d && d["entityTemplate"] is RedHandle th && file.PathOf(th) is { } template && MerchantOf(template) is not null)
-                            encounters.Add(new EncounterDef(worldPath, layer.Path, e.Name, e.Position, area, encounterTags, d["definitionName"] as string ?? "", template, file, e.Object));
+                            encounters.Add(new EncounterDef(worldPath, layer, e.Name, e.Position, area, encounterTags, d["definitionName"] as string ?? "", template, file, e.Object));
                 }
             });
         }

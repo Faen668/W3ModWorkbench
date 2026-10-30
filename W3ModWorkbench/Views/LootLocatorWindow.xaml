@@ -234,8 +234,16 @@
                                     <DataGrid.Columns>
                                         <DataGridTextColumn Header="{l:T LootLocator.Place}" Binding="{Binding Title}" Width="2*" />
                                         <DataGridTextColumn Header="{l:T LootLocator.Area}" Binding="{Binding Area}" Width="2*" />
-                                        <DataGridTextColumn Header="{l:T LootLocator.Chance}" Binding="{Binding ChanceText}" SortMemberPath="Chance" Width="80" />
-                                        <DataGridTextColumn x:Name="PredictedColumn" Header="{l:T LootLocator.Predicted}" Binding="{Binding PredictedText}" SortMemberPath="PredictedSort" Width="90" />
+                                        <DataGridTextColumn Binding="{Binding ChanceText}" SortMemberPath="Chance" Width="80">
+                                            <DataGridTextColumn.Header>
+                                                <TextBlock Text="{l:T LootLocator.Chance}" ToolTip="{l:T LootLocator.ChanceTip}" />
+                                            </DataGridTextColumn.Header>
+                                        </DataGridTextColumn>
+                                        <DataGridTextColumn x:Name="PredictedColumn" Binding="{Binding PredictedText}" SortMemberPath="PredictedSort" Width="90">
+                                            <DataGridTextColumn.Header>
+                                                <TextBlock Text="{l:T LootLocator.Predicted}" ToolTip="{l:T LootLocator.PredictedColumnTip}" />
+                                            </DataGridTextColumn.Header>
+                                        </DataGridTextColumn>
                                         <DataGridTextColumn Header="{l:T LootLocator.Respawn}" Binding="{Binding RespawnText}" SortMemberPath="Respawn" Width="80" />
                                         <DataGridTextColumn Header="{l:T LootLocator.Position}" Binding="{Binding PositionText}" Width="150" />
                                     </DataGrid.Columns>

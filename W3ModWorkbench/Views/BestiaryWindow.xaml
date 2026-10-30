@@ -202,6 +202,10 @@
                                             <Polygon Points="5,0 10,5 5,10 0,5" Fill="{DynamicResource TextFillColorSecondaryBrush}" Stroke="Black" StrokeThickness="1" VerticalAlignment="Center" />
                                             <TextBlock Text="{l:T Bestiary.QuestLegend}" FontSize="11.5" Margin="7,0,0,0" VerticalAlignment="Center" />
                                         </StackPanel>
+                                        <StackPanel x:Name="ModLegend" Orientation="Horizontal" Margin="0,1" Visibility="Collapsed">
+                                            <Rectangle Width="9" Height="9" Margin="0.5,0" Fill="{DynamicResource TextFillColorSecondaryBrush}" Stroke="Black" StrokeThickness="1" VerticalAlignment="Center" />
+                                            <TextBlock Text="{l:T Bestiary.ModLegend}" FontSize="11.5" Margin="7,0,0,0" VerticalAlignment="Center" />
+                                        </StackPanel>
                                     </StackPanel>
                                 </Border>
                                 <TextBlock x:Name="MapProgress" Margin="12" HorizontalAlignment="Left" VerticalAlignment="Top" Padding="8,4" Visibility="Collapsed"
@@ -224,7 +228,8 @@
                                     <DataGridTextColumn Header="{l:T LootLocator.Area}" Binding="{Binding Area}" Width="2*" />
                                     <DataGridTextColumn Header="{l:T Bestiary.Variant}" Binding="{Binding Variant}" Width="2*" />
                                     <DataGridTextColumn Header="{l:T Bestiary.SpawnedBy}" Binding="{Binding SourceText}" Width="100" />
-                                    <DataGridTextColumn Header="{l:T Bestiary.Quest}" Binding="{Binding QuestText}" Width="60" />
+                                    <DataGridTextColumn Header="{l:T Bestiary.Quest}" Binding="{Binding QuestText}" Width="90" />
+                                    <DataGridTextColumn Header="{l:T Bestiary.Mod}" Binding="{Binding ModText}" Width="55" />
                                     <DataGridTextColumn Header="{l:T Bestiary.Level}" Binding="{Binding Level}" Width="60" />
                                     <DataGridTextColumn Header="{l:T Bestiary.SpawnLimit}" Binding="{Binding LimitText}" SortMemberPath="Limit" Width="90" />
                                     <DataGridTextColumn Header="{l:T Bestiary.AtOnce}" Binding="{Binding AtOnceText}" SortMemberPath="AtOnce" Width="80" />

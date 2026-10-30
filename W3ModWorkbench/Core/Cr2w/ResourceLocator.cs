@@ -69,6 +69,9 @@ public sealed class ResourceLocator
     /// <summary>A file by its game path, read from the nearest archive that has it. Null when none has.</summary>
     public byte[]? ReadFile(string path) => ProjectFile(path) is { } own ? File.ReadAllBytes(own) : Find(path) is { } entry ? Read(entry) : null;
 
+    /// <summary>Whether the copy of a file that's read comes from an installed mod (one in mods\, or installed as DLC).</summary>
+    public bool IsFromMod(string path) => Find(path) is { } entry && ModFolder(entry.Archive.FilePath) is not null;
+
     /// <summary>The open project's own copy of a game file, when it has one.</summary>
     public string? ProjectFile(string path)
     {

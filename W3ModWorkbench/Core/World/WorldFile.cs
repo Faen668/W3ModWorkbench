@@ -268,6 +268,28 @@ public sealed class WorldFile
 
     public static bool IsWorld(string path) => path.EndsWith(".w2w", StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Every layer the game loads into a world: the world's own tree, then the layers DLC (and mods installed as DLC)
+    /// add to it from dlc\&lt;name&gt;\levels\&lt;the world's folder&gt;\ (Hearts of Stone's Velen is all there).
+    /// </summary>
+    /// <param name="allLayers">Every .w2l path the locator has (<c>AllPaths(".w2l")</c>), read once for all worlds.</param>
+    public IEnumerable<string> GameLayers(IReadOnlyList<string> allLayers)
+    {
+        // a world that keeps no tree (a mod's own, uncooked) has the layers in its folder
+        var own = EmbeddedLayers?.AllLayers().Select(l => l.Path).ToList()
+            ?? [.. allLayers.Where(p => p.StartsWith(Folder + "\\", StringComparison.OrdinalIgnoreCase))];
+        string world = System.IO.Path.GetFileName(Folder);
+        var known = own.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return own.Concat(allLayers.Where(p => !known.Contains(p) && IsDlcLayerOf(p, world)));
+    }
+
+    private static bool IsDlcLayerOf(string path, string world)
+    {
+        var parts = path.Split('\\', 5);
+        return parts.Length == 5 && parts[0].Equals("dlc", StringComparison.OrdinalIgnoreCase) && parts[2].Equals("levels", StringComparison.OrdinalIgnoreCase)
+            && parts[3].Equals(world, StringComparison.OrdinalIgnoreCase);
+    }
+
     public static WorldFile Read(byte[] data, string path)
     {
         var file = Cr2wFile.Read(data);
