@@ -5,6 +5,7 @@ using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using W3ModWorkbench.Core.Cr2w;
 using W3ModWorkbench.Core.Loot;
+using W3ModWorkbench.Core.Scenes;
 using W3ModWorkbench.Core.World;
 
 namespace W3ModWorkbench.Core.Bestiary;
@@ -34,9 +35,21 @@ public sealed record BestiaryCreature(string Template, string SfxTag, IReadOnlyL
     public string Title => string.Join(' ', Path.GetFileNameWithoutExtension(Template).Split('_', StringSplitOptions.RemoveEmptyEntries));
 }
 
-/// <summary>A placed encounter that can spawn a template: where, its area's outline when it has one, and how many it spawns.</summary>
+/// <summary>What spawns a creature at a place: an encounter placed in a world's layer, or a community (.w2comm).</summary>
+public enum BestiarySource { Encounter, Community }
+
+/// <summary>
+/// A place that can spawn a template: an encounter (Layer: its layer) or a community's story phase (Layer: the
+/// community file), where, its area's outline when it has one, and how many it spawns (0 when it doesn't say). Quest
+/// is set for one kept with a quest's files, which spawns only while the quest needs it.
+/// </summary>
 public sealed record BestiaryPlace(string World, string Layer, string Name, Vector3 Position, IReadOnlyList<Vector2>? Area, string Template,
-    int TotalSpawnLimit, int MaxSpawnedAtOnce);
+    int TotalSpawnLimit, int MaxSpawnedAtOnce)
+{
+    public BestiarySource Source { get; init; } = BestiarySource.Encounter;
+
+    public bool Quest => BestiaryIndex.IsQuestPath(Layer);
+}
 
 /// <summary>
 /// The game's bestiary, joined to its monsters: every creature entry and category of the journal, the monster templates
@@ -69,34 +82,87 @@ public sealed class BestiaryIndex
             yield return ($@"{root}gameplay\gui_new\textures\journal\bestiary\{entry.Image}", $@"{root}gameplay\gui_new\icons\monsters\{entry.Image}");
     }
 
+    /// <summary>Whether a file is kept with a quest's files (quests\…, dlc\bob\data\quests\…).</summary>
+    public static bool IsQuestPath(string path) =>
+        path.StartsWith(@"quests\", StringComparison.OrdinalIgnoreCase) || path.Contains(@"\quests\", StringComparison.OrdinalIgnoreCase);
+
     /// <summary>The creatures of an entry.</summary>
     public IEnumerable<BestiaryCreature> CreaturesOf(BestiaryEntry entry) => Creatures.Values.Where(c => c.Entry == entry);
 
-    /// <summary>Reads the bestiary, the rules and every world's encounters: a few seconds.</summary>
+    /// <summary>Reads the bestiary, the rules, the communities and every world's encounters: a few seconds.</summary>
     public static BestiaryIndex Build(ResourceLocator locator, string? scriptsFolder, IProgress<string>? progress, CancellationToken token)
     {
         progress?.Report("journal");
         var (entries, categories) = ReadJournals(locator);
         var aliases = ReadAliases(locator);
         var rules = scriptsFolder is null ? [] : ReadRules(Path.Combine(scriptsFolder, "game", "npc", "npc.ws"));
+        var options = new ParallelOptions { MaxDegreeOfParallelism = Math.Max(2, Environment.ProcessorCount / 2), CancellationToken = token };
 
-        // the places, world by world
+        // each creature's entry: the game's rules first, then a template the journal names itself
+        var loot = LootIndex.TemplateLoot(locator);
+        var creatures = new ConcurrentDictionary<string, BestiaryCreature>(StringComparer.OrdinalIgnoreCase);
+        var byJournal = entries.GroupBy(e => e.JournalPath, StringComparer.OrdinalIgnoreCase).ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+        var byTemplate = entries.Where(e => e.Template is not null).GroupBy(e => e.Template!, StringComparer.OrdinalIgnoreCase).ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+        BestiaryEntry? EntryOf(BestiaryCreature c) => byTemplate.TryGetValue(c.Template, out var named) ? named
+            : Match(rules, c) is { } alias && aliases.TryGetValue(alias, out var journal) && byJournal.TryGetValue(journal, out var entry) ? entry : null;
+        // one that turns into a monster when it dies (a cloaked woman into an alp) is that monster's, fought at its level
+        var deathSpawns = ReadDeathSpawns(locator, options);
+        var spawnedCreatures = new ConcurrentDictionary<string, BestiaryCreature?>(StringComparer.OrdinalIgnoreCase);
+        BestiaryCreature? Spawned(string resource) => spawnedCreatures.GetOrAdd(resource, r =>
+        {
+            if (!aliases.TryGetValue(r, out var path) || ReadCreature(locator, path, _ => null) is not { } spawned) return null;
+            spawned.Entry = EntryOf(spawned);
+            return spawned;
+        });
+        void ReadCreatures(IEnumerable<string> templates) => Parallel.ForEach(templates.Where(t => !creatures.ContainsKey(t)).ToList(), options, template =>
+        {
+            if (ReadCreature(locator, template, loot) is not { } c) return;
+            c.Entry = EntryOf(c);
+            if (c.Entry is null && c.Abilities.Where(deathSpawns.ContainsKey).Select(a => Spawned(deathSpawns[a])).FirstOrDefault(s => s?.Entry is not null) is { } into)
+                c = c with { Level = into.Level, Entry = into.Entry };
+            creatures[template] = c;
+        });
+
+        // the communities that spawn a bestiary creature (a village's people are spawned the same way, and left out),
+        // and the tags of the spots their story phases spawn at
+        progress?.Report("communities");
+        var communities = ReadCommunities(locator, options);
+        ReadCreatures(communities.SelectMany(c => c.Templates).Distinct(StringComparer.OrdinalIgnoreCase));
+        foreach (var c in creatures.Values.Where(c => c.Entry is null).ToList()) creatures.TryRemove(c.Template, out _);
+        communities = [.. communities.Select(c => c with { Templates = [.. c.Templates.Where(creatures.ContainsKey)] }).Where(c => c.Templates.Count > 0)];
+        var wanted = communities.SelectMany(c => c.Phases).SelectMany(p => p.SpawnTags.Concat(p.Actions.SelectMany(a => a.ApTags))).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        // the places, world by world, and the spots tagged as those communities' spawn and action points
         var places = new ConcurrentBag<BestiaryPlace>();
+        var tagged = new Dictionary<string, ConcurrentDictionary<string, ConcurrentBag<Vector3>>>(StringComparer.OrdinalIgnoreCase);
         var worlds = locator.AllPaths(".w2w").Where(w => !w.StartsWith(@"engine\", StringComparison.OrdinalIgnoreCase)).ToList();
         foreach (string worldPath in worlds)
         {
             token.ThrowIfCancellationRequested();
             progress?.Report(worldPath);
+            var tags = tagged[worldPath] = new(StringComparer.OrdinalIgnoreCase);
             WorldFile world;
             try { world = WorldFile.Read(locator.ReadFile(worldPath) ?? throw new FileNotFoundException(worldPath), worldPath); }
             catch (Exception ex) when (ex is IOException or InvalidDataException) { continue; }
             if (world.EmbeddedLayers is not { } tree) continue;
-            Parallel.ForEach(tree.AllLayers(), new ParallelOptions { MaxDegreeOfParallelism = Math.Max(2, Environment.ProcessorCount / 2), CancellationToken = token }, layer =>
+            Parallel.ForEach(tree.AllLayers(), options, layer =>
             {
                 Cr2wFile file;
                 try { file = Cr2wFile.Read(locator.ReadFile(layer.Path) ?? []); }
                 catch (Exception ex) when (ex is IOException or InvalidDataException) { return; }
-                if (file.First("CLayer") is not { } cl || !cl.Array("entities").OfType<RedHandle>().Any(h => file.Exports[h.Export ?? 0].ClassName == "CEncounter")) return;
+                if (file.First("CLayer") is not { } cl) return;
+                bool hasEncounter = false;
+                foreach (var h in cl.Array("entities").OfType<RedHandle>())
+                {
+                    if (file.Object(h) is not { } e) continue;
+                    if (e.ClassName == "CEncounter") hasEncounter = true;
+                    if (wanted.Count == 0 || e["tags"] is not byte[] { Length: > 1 } raw) continue;
+                    var found = file.Tags(raw).Where(wanted.Contains).ToList();
+                    if (found.Count == 0) continue;
+                    var at = SceneStaging.Transform(e["transform"]).Position;
+                    foreach (string tag in found) tags.GetOrAdd(tag, _ => []).Add(at);
+                }
+                if (!hasEncounter) return;
                 foreach (var e in WorldFile.Entities(file).Where(e => e.ClassName == "CEncounter"))
                 {
                     var area = e.Components.FirstOrDefault(c => c.Outline is { Count: > 2 })?.Outline;
@@ -108,21 +174,29 @@ public sealed class BestiaryIndex
             });
         }
 
+        // a community's story phase stands where its spawn points are, else where its timetable sends it
+        IReadOnlyList<Vector3> Find(string world, IEnumerable<string> tags) =>
+            tagged.TryGetValue(world, out var byTag) ? [.. tags.SelectMany(t => byTag.TryGetValue(t, out var at) ? at : []).Distinct()] : [];
+        foreach (var community in communities)
+            foreach (var phase in community.Phases)
+            {
+                // a timetable's layer named without its world is in the world that has its action points
+                var apTags = phase.Actions.SelectMany(a => a.ApTags).ToList();
+                string? world = phase.Actions.Select(a => a.World).FirstOrDefault(w => w.Length > 0 && tagged.ContainsKey(w))
+                    ?? worlds.Select(w => (World: w, Hits: Find(w, phase.SpawnTags).Count * 1000 + Find(w, apTags).Count)).Where(x => x.Hits > 0)
+                        .OrderByDescending(x => x.Hits).Select(x => x.World).FirstOrDefault();
+                if (world is null) continue;
+                var spots = Find(world, phase.SpawnTags);
+                if (spots.Count == 0) spots = Find(world, phase.Actions.Where(a => a.World.Length == 0 || a.World.Equals(world, StringComparison.OrdinalIgnoreCase)).SelectMany(a => a.ApTags));
+                if (spots.Count == 0) continue;
+                foreach (string template in community.Templates)
+                    places.Add(new BestiaryPlace(world, community.Path, community.Comment.Length > 0 ? community.Comment : Path.GetFileNameWithoutExtension(community.Path),
+                        spots[0], null, template, 0, phase.Quantity) { Source = BestiarySource.Community });
+            }
+
         // every template the encounters spawn or the journal names
         progress?.Report("templates");
-        var loot = LootIndex.TemplateLoot(locator);
-        var templates = places.Select(p => p.Template).Concat(entries.Select(e => e.Template).OfType<string>()).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-        var creatures = new ConcurrentDictionary<string, BestiaryCreature>(StringComparer.OrdinalIgnoreCase);
-        Parallel.ForEach(templates, template => { if (ReadCreature(locator, template, loot) is { } c) creatures[template] = c; });
-
-        // each creature's entry: the game's rules first, then a template the journal names itself
-        var byJournal = entries.GroupBy(e => e.JournalPath, StringComparer.OrdinalIgnoreCase).ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
-        var byTemplate = entries.Where(e => e.Template is not null).GroupBy(e => e.Template!, StringComparer.OrdinalIgnoreCase).ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
-        foreach (var c in creatures.Values)
-        {
-            if (byTemplate.TryGetValue(c.Template, out var named)) c.Entry = named;
-            else if (Match(rules, c) is { } alias && aliases.TryGetValue(alias, out var journal) && byJournal.TryGetValue(journal, out var entry)) c.Entry = entry;
-        }
+        ReadCreatures(places.Select(p => p.Template).Concat(entries.Select(e => e.Template).OfType<string>()).Distinct(StringComparer.OrdinalIgnoreCase));
 
         return new BestiaryIndex
         {
@@ -130,6 +204,90 @@ public sealed class BestiaryIndex
             Places = [.. places.OrderBy(p => p.World).ThenBy(p => p.Layer, StringComparer.OrdinalIgnoreCase)], Worlds = worlds, Rules = rules.Count,
         };
     }
+
+    // ---------------------------------------------------------------- communities
+
+    /// <summary>A story phase of a community entry: the tags of its spawn points, its timetable's action points (by world) and how many it spawns.</summary>
+    private sealed record CommunityPhase(IReadOnlyList<string> SpawnTags, IReadOnlyList<(string World, IReadOnlyList<string> ApTags)> Actions, int Quantity);
+
+    /// <summary>A community entry: its file, its comment, the templates it spawns and its story phases.</summary>
+    private sealed record CommunitySpawn(string Path, string Comment, IReadOnlyList<string> Templates, IReadOnlyList<CommunityPhase> Phases);
+
+    private static List<CommunitySpawn> ReadCommunities(ResourceLocator locator, ParallelOptions options)
+    {
+        var found = new ConcurrentBag<CommunitySpawn>();
+        Parallel.ForEach(locator.AllPaths(".w2comm"), options, path =>
+        {
+            Cr2wFile file;
+            try { file = Cr2wFile.Read(locator.ReadFile(path) ?? []); }
+            catch (Exception ex) when (ex is IOException or InvalidDataException) { return; }
+            if (file.First("CCommunity") is not { } community) return;
+            // a timetable's action points; a layer is named as "its path;its world's path" (without extensions)
+            var timetables = new Dictionary<string, List<(string, IReadOnlyList<string>)>>(StringComparer.OrdinalIgnoreCase);
+            foreach (var timetable in community.Array("storyPhaseTimetable").OfType<RedObject>())
+                if (timetable["name"] is string name)
+                    timetables[name] = [.. timetable.Array("actionCategies").OfType<RedObject>().SelectMany(t => t.Array("actions").OfType<RedObject>()).SelectMany(a =>
+                    {
+                        string layer = a.Struct("layerName")?["layerName"] as string ?? "";
+                        int split = layer.IndexOf(';');
+                        string world = split >= 0 ? layer[(split + 1)..] + ".w2w" : "";
+                        return a.Array("actionCategories").OfType<RedObject>().Select(c => (world, (IReadOnlyList<string>)[.. TagsOf(file, c["apTags"])]));
+                    })];
+            foreach (var entry in community.Array("communityTable").OfType<RedObject>())
+            {
+                var templates = entry.Array("entities").OfType<RedObject>().Select(e => e["entityTemplate"] is RedHandle h ? file.PathOf(h) : null)
+                    .OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+                if (templates.Count == 0) continue;
+                var phases = entry.Array("storyPhases").OfType<RedObject>().Select(p => new CommunityPhase([.. TagsOf(file, p["spawnPointTags"])],
+                    p["timetableName"] is string tt && timetables.TryGetValue(tt, out var actions) ? actions : [],
+                    p.Array("spawnTimetable").OfType<RedObject>().Select(t => (int)t.Integer("quantity", 1)).DefaultIfEmpty(0).Max())).ToList();
+                found.Add(new CommunitySpawn(path, entry["comment"] as string ?? "", templates, phases));
+            }
+        });
+        return [.. found];
+    }
+
+    /// <summary>
+    /// The monsters some creatures turn into when they die, from the game's AI trees: an ability test (has SpawnAlpor)
+    /// above a spawn task (CBTTaskBruxaSpawnDef) names the resource alias spawned in their place. By ability.
+    /// </summary>
+    private static Dictionary<string, string> ReadDeathSpawns(ResourceLocator locator, ParallelOptions options)
+    {
+        var found = new ConcurrentDictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var marker = "CBTTaskBruxaSpawnDef"u8.ToArray();
+        Parallel.ForEach(locator.AllPaths(".w2behtree"), options, path =>
+        {
+            if (locator.ReadFile(path) is not { } data || data.AsSpan().IndexOf(marker) < 0) return;
+            Cr2wFile file;
+            try { file = Cr2wFile.Read(data); }
+            catch (InvalidDataException) { return; }
+            RedObject? TaskOf(RedObject decorator) => decorator["taskOrigin"] is RedHandle h ? file.Object(h) : null;
+            for (int i = 0; i < file.Exports.Count; i++)
+            {
+                if (TaskOf(file.Object(i)) is not { ClassName: "CBTTaskHasAbilityDef" } test || test["abilityName"]?.ToString() is not { Length: > 0 } ability) continue;
+                // the decorators below the test, down to the spawn task
+                var node = file.Object(i);
+                for (int depth = 0; depth < 8 && node["child"] is RedHandle child && file.Object(child) is { } next; depth++)
+                {
+                    node = next;
+                    if (TaskOf(node) is { ClassName: "CBTTaskBruxaSpawnDef" } spawn && spawn["resourceName"]?.ToString() is { Length: > 0 } resource)
+                    {
+                        found.TryAdd(ability, resource);
+                        break;
+                    }
+                }
+            }
+        });
+        return new Dictionary<string, string>(found, StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>A tag list's tags, kept as its bytes or in a struct holding them.</summary>
+    private static IEnumerable<string> TagsOf(Cr2wFile file, object? value) => value switch
+    {
+        byte[] raw => file.Tags(raw),
+        RedObject holder => TagsOf(file, holder["tags"]),
+        _ => [],
+    };
 
     // ---------------------------------------------------------------- the journal
 
@@ -327,13 +485,7 @@ public sealed class BestiaryIndex
         {
             var file = Cr2wFile.Read(locator.ReadFile(template) ?? []);
             if (file.First("CEntityTemplate") is not { } t) return null;
-            string sfx = "";
-            var abilities = new List<string>();
-            foreach (var p in t.Array("templateParams").OfType<RedHandle>().Select(file.Object).OfType<RedObject>())
-            {
-                if (p.ClassName == "CAnimGlobalParam" && p["sfxTag"]?.ToString() is { Length: > 0 } tag && sfx.Length == 0) sfx = tag;
-                if (p.ClassName == "CCharacterStatsParam") abilities.AddRange(p.Array("abilities").Select(a => a?.ToString() ?? "").Where(a => a.Length > 0));
-            }
+            var (sfx, abilities) = SoundAndAbilities(locator, file, t, 0);
             int level = 1;
             var tags = new List<string>();
             if (t["entityObject"] is RedHandle eh && file.Object(eh) is { } entity)
@@ -344,5 +496,35 @@ public sealed class BestiaryIndex
             return new BestiaryCreature(template, sfx, abilities, tags, level, loot(template));
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException) { return null; }
+    }
+
+    /// <summary>
+    /// A template's sound tag and abilities, from its own params, else from the templates it includes, as the game puts
+    /// them together (a cloaked woman who turns into an alp includes the alp's template, and with it the alp's).
+    /// </summary>
+    private static (string Sfx, List<string> Abilities) SoundAndAbilities(ResourceLocator locator, Cr2wFile file, RedObject template, int depth)
+    {
+        string sfx = "";
+        var abilities = new List<string>();
+        foreach (var p in template.Array("templateParams").OfType<RedHandle>().Select(file.Object).OfType<RedObject>())
+        {
+            if (p.ClassName == "CAnimGlobalParam" && p["sfxTag"]?.ToString() is { Length: > 0 } tag && sfx.Length == 0) sfx = tag;
+            if (p.ClassName == "CCharacterStatsParam") abilities.AddRange(p.Array("abilities").Select(a => a?.ToString() ?? "").Where(a => a.Length > 0));
+        }
+        if (depth > 4 || (sfx.Length > 0 && abilities.Count > 0)) return (sfx, abilities);
+        foreach (var inc in template.Array("includes").OfType<RedHandle>())
+        {
+            if (file.PathOf(inc) is not { } path) continue;
+            try
+            {
+                var included = Cr2wFile.Read(locator.ReadFile(path) ?? []);
+                if (included.First("CEntityTemplate") is not { } it) continue;
+                var (s, a) = SoundAndAbilities(locator, included, it, depth + 1);
+                if (sfx.Length == 0) sfx = s;
+                if (abilities.Count == 0) abilities = a;
+            }
+            catch (Exception ex) when (ex is IOException or InvalidDataException) { }
+        }
+        return (sfx, abilities);
     }
 }

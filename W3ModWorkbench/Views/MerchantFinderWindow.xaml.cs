@@ -63,6 +63,7 @@ public partial class MerchantFinderWindow : Window, IMessageHost
 
     private ResourceLocator _locator = null!;
     private ItemDatabase? _db;
+    private bool _dbWithMods;
     private Dictionary<uint, string> _strings = [];
     private Dictionary<uint, string> _names = [];
     private MerchantIndex? _index;
@@ -133,10 +134,16 @@ public partial class MerchantFinderWindow : Window, IMessageHost
         {
             var progress = new Progress<string>(what => BusyText.Text = L.T("LootLocator.ReadingWhat", what));
             var locator = _locator;
-            _db ??= await Task.Run(() => ItemDatabase.Load(game, progress));
-            if (_strings.Count == 0)
+            bool withMods = ModsCheck.IsChecked == true;
+            bool reload = _db is null || _dbWithMods != withMods;
+            if (reload)
             {
-                var strings = await GameStringIndex.GetAsync(game, App.GameLanguage, dlcAndMods: false);
+                _db = await Task.Run(() => ItemDatabase.Load(game, progress, withMods: withMods));
+                _dbWithMods = withMods;
+            }
+            if (_strings.Count == 0 || reload)
+            {
+                var strings = await GameStringIndex.GetAsync(game, App.GameLanguage, dlcAndMods: withMods);
                 _strings = strings.All.GroupBy(s => s.Id).ToDictionary(g => g.Key, g => g.First().Text);
                 _names = strings.All.GroupBy(s => s.KeyHash).ToDictionary(g => g.Key, g => g.First().Text);
             }

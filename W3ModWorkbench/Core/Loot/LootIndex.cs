@@ -41,6 +41,15 @@ public sealed record LootSpot(string World, string Layer, string ClassName, stri
         _ => LootKind.Other,
     };
 
+    /// <summary>Where the entity stands in its layer's list, -1 for none.</summary>
+    public int IndexInLayer { get; init; } = -1;
+
+    /// <summary>
+    /// The name the game knows the entity by: its own, else (cooked layers leave most out) its template's file name
+    /// followed by where it stands in the layer, as the engine names it on loading.
+    /// </summary>
+    public string EngineName => Name.Length > 0 || IndexInLayer < 0 ? Name : Path.GetFileNameWithoutExtension(Template) + IndexInLayer.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
     /// <summary>The template's file name, which names the kind of container (sack, old chest, wall shelf…).</summary>
     public string Title => Name.Length > 0 ? Name : Path.GetFileNameWithoutExtension(Template);
 
@@ -110,9 +119,10 @@ public sealed class LootIndex
                     return;
                 }
                 if (file.First("CLayer") is not { } cl) return;
-                foreach (var h in cl.Array("entities").OfType<RedHandle>())
+                var entities = cl.Array("entities");
+                for (int index = 0; index < entities.Count; index++)
                 {
-                    if (file.Object(h) is not { } e || e["template"] is not RedHandle th || file.PathOf(th) is not { } template) continue;
+                    if (entities[index] is not RedHandle h || file.Object(h) is not { } e || e["template"] is not RedHandle th || file.PathOf(th) is not { } template) continue;
                     if (Resolve(locator, template, templates, problems, 0) is not { } setup) continue;
                     // fixed items alone count only in a container: on an NPC's work spot they're the props it holds
                     if (setup.Params.Count == 0 && !e.ClassName.Contains("Container", StringComparison.OrdinalIgnoreCase)
@@ -120,7 +130,7 @@ public sealed class LootIndex
                     var (position, _) = Scenes.SceneStaging.Transform(e["transform"]);
                     found.Add(new LootSpot(worldPath, layer.Path, e.ClassName, e["name"] as string ?? "", position, template, setup.Params, setup.Fixed,
                         IntOf(e, "minLootParamNumber") ?? TemplateInt(locator, template, "minLootParamNumber", ints),
-                        IntOf(e, "maxLootParamNumber") ?? TemplateInt(locator, template, "maxLootParamNumber", ints)));
+                        IntOf(e, "maxLootParamNumber") ?? TemplateInt(locator, template, "maxLootParamNumber", ints)) { IndexInLayer = index });
                 }
             });
             spots.AddRange(found.OrderBy(s => s.Layer, StringComparer.OrdinalIgnoreCase).ThenBy(s => s.Position.X).ThenBy(s => s.Position.Y));

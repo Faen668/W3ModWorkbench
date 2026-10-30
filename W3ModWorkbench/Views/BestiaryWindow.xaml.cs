@@ -46,9 +46,11 @@ public sealed class BestiaryRow(BestiaryEntry? entry, BestiaryCreature? creature
     public event PropertyChangedEventHandler? PropertyChanged;
 }
 
-/// <summary>A place a creature spawns: its encounter, the kind spawned there, its level, and how many.</summary>
+/// <summary>A place a creature spawns: its encounter or community, the kind spawned there, its level, and how many.</summary>
 public sealed record BestiaryPlaceRow(BestiaryPlace Place, string Area, string Variant, int Level, int Limit, int AtOnce)
 {
+    public string SourceText => L.T(Place.Source == BestiarySource.Community ? "Bestiary.SourceCommunity" : "Bestiary.SourceEncounter");
+    public string QuestText => Place.Quest ? L.T("LootLocator.Yes") : "";
     public string LimitText => Limit > 0 ? Limit.ToString(CultureInfo.CurrentCulture) : "";
     public string AtOnceText => AtOnce > 0 ? AtOnce.ToString(CultureInfo.CurrentCulture) : "";
     public string PositionText => LootLocatorWindow.Position(Place.Position);
@@ -84,6 +86,7 @@ public partial class BestiaryWindow : Window, IMessageHost
 
     private ResourceLocator _locator = null!;
     private ItemDatabase? _db;
+    private bool _dbWithMods;
     private Dictionary<uint, string> _strings = [];
     private Dictionary<uint, string> _names = [];
     private BestiaryIndex? _index;
@@ -150,10 +153,16 @@ public partial class BestiaryWindow : Window, IMessageHost
         {
             var progress = new Progress<string>(what => BusyText.Text = L.T("LootLocator.ReadingWhat", what));
             var locator = _locator;
-            _db ??= await Task.Run(() => ItemDatabase.Load(game, progress));
-            if (_strings.Count == 0)
+            bool withMods = ModsCheck.IsChecked == true;
+            bool reload = _db is null || _dbWithMods != withMods;
+            if (reload)
             {
-                var strings = await GameStringIndex.GetAsync(game, App.GameLanguage, dlcAndMods: false);
+                _db = await Task.Run(() => ItemDatabase.Load(game, progress, withMods: withMods));
+                _dbWithMods = withMods;
+            }
+            if (_strings.Count == 0 || reload)
+            {
+                var strings = await GameStringIndex.GetAsync(game, App.GameLanguage, dlcAndMods: withMods);
                 _strings = strings.All.GroupBy(s => s.Id).ToDictionary(g => g.Key, g => g.First().Text);
                 _names = strings.All.GroupBy(s => s.KeyHash).ToDictionary(g => g.Key, g => g.First().Text);
             }
@@ -182,6 +191,7 @@ public partial class BestiaryWindow : Window, IMessageHost
     {
         var index = _index!;
         var placesOf = index.Places.GroupBy(p => p.Template, StringComparer.OrdinalIgnoreCase).ToDictionary(g => g.Key, g => g.Count(), StringComparer.OrdinalIgnoreCase);
+        var outsideQuests = index.Places.Where(p => !p.Quest).Select(p => p.Template).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var categories = index.Categories.Select((c, i) => (c, i)).ToDictionary(x => x.c.Guid, x => (Name: Text(x.c.Name, x.c.BaseName), Order: x.i));
         var rows = new List<BestiaryRow>();
         foreach (var e in index.Entries)
@@ -190,7 +200,9 @@ public partial class BestiaryWindow : Window, IMessageHost
             var creatures = index.CreaturesOf(e).ToList();
             int places = creatures.Sum(c => placesOf.GetValueOrDefault(c.Template));
             var levels = creatures.Where(c => placesOf.ContainsKey(c.Template)).Select(c => c.Level).ToList();
-            string detail = places == 0 ? L.T("Bestiary.OnlyInQuests") : L.T("Bestiary.Levels", LevelRange(levels));
+            string detail = places == 0 ? L.T("Bestiary.OnlyInQuests")
+                : creatures.All(c => !outsideQuests.Contains(c.Template)) ? L.T("Bestiary.InQuestsLevels", LevelRange(levels))
+                : L.T("Bestiary.Levels", LevelRange(levels));
             var (group, order) = categories.TryGetValue(e.Category, out var cat) ? cat : (L.T("Bestiary.OtherGroup"), categories.Count);
             rows.Add(new BestiaryRow(e, null, name, detail, group, order, places));
         }
@@ -427,7 +439,9 @@ public partial class BestiaryWindow : Window, IMessageHost
     private async Task ShowWorldAsync(string? world, bool fit)
     {
         var rows = _places.Where(p => p.Place.World == world).ToList();
-        Map.SetMarkers([.. rows.OrderBy(p => p.Level).Select(p => new MapMarker(new Vector2(p.Place.Position.X, p.Place.Position.Y), BandOf(p.Level).Color, null, 0, false, 4.5f, p))]);
+        // a quest's spawn is a diamond, drawn over the rest
+        Map.SetMarkers([.. rows.OrderBy(p => p.Place.Quest).ThenBy(p => p.Level).Select(p => new MapMarker(new Vector2(p.Place.Position.X, p.Place.Position.Y), BandOf(p.Level).Color, null, 0, p.Place.Quest, 4.5f, p))]);
+        QuestLegend.Visibility = rows.Any(p => p.Place.Quest) ? Visibility.Visible : Visibility.Collapsed;
         Map.SetShapes([]);
         Map.PickedMarker = null;
         PlaceGrid.ItemsSource = rows.OrderBy(p => p.Area, StringComparer.CurrentCultureIgnoreCase).ThenBy(p => p.Level).ToList();
@@ -503,7 +517,7 @@ public partial class BestiaryWindow : Window, IMessageHost
             return;
         }
         var at = new Vector2(row.Place.Position.X, row.Place.Position.Y);
-        if (Map.PickedMarker?.Tag != row) Map.PickedMarker = new MapMarker(at, BandOf(row.Level).Color, null, 0, false, 4.5f, row);
+        if (Map.PickedMarker?.Tag != row) Map.PickedMarker = new MapMarker(at, BandOf(row.Level).Color, null, 0, row.Place.Quest, 4.5f, row);
         Map.SetShapes(row.Place.Area is { Count: > 2 } area ? [new MapShape(area, BandOf(row.Level).Color, true, true, true)] : []);
         if (PlaceGrid.IsKeyboardFocusWithin) Map.FitTo(at - new Vector2(90), at + new Vector2(90));
         if (VariantGrid.ItemsSource is IEnumerable<BestiaryVariantRow> variants
@@ -526,9 +540,10 @@ public partial class BestiaryWindow : Window, IMessageHost
         if (dialog.ShowDialog(this) != true) return;
         var csv = new StringBuilder();
         static string Cell(string s) => s.Contains(',') || s.Contains('"') ? "\"" + s.Replace("\"", "\"\"") + "\"" : s;
-        csv.AppendLine("world,area,kind,template,level,spawn limit,at once,x,y,z,layer"); // loc-ignore: a file's column names
+        csv.AppendLine("world,area,kind,template,spawned by,quest,level,spawn limit,at once,x,y,z,layer"); // loc-ignore: a file's column names
         foreach (var p in _places.OrderBy(p => p.Place.World).ThenBy(p => p.Area))
-            csv.AppendLine(string.Join(",", Cell(LootLocatorWindow.WorldName(p.Place.World)), Cell(p.Area), Cell(p.Variant), Cell(p.Place.Template), p.Level, p.Limit, p.AtOnce,
+            csv.AppendLine(string.Join(",", Cell(LootLocatorWindow.WorldName(p.Place.World)), Cell(p.Area), Cell(p.Variant), Cell(p.Place.Template),
+                p.Place.Source == BestiarySource.Community ? "community" : "encounter", p.Place.Quest ? "yes" : "no", p.Level, p.Limit, p.AtOnce, // loc-ignore: a file's values
                 p.Place.Position.X.ToString("0.###", CultureInfo.InvariantCulture), p.Place.Position.Y.ToString("0.###", CultureInfo.InvariantCulture),
                 p.Place.Position.Z.ToString("0.###", CultureInfo.InvariantCulture), Cell(p.Place.Layer)));
         try

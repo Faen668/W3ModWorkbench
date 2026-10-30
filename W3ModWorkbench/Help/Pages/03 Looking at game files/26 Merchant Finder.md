@@ -30,7 +30,7 @@ The game's own map, with each spot the merchant goes to coloured by what they do
 
 - **World** picks the world shown, each with how many of the merchant's places are in it.
 - **Player level** sets the level the stock's chances are for; the [[Loot Locator]] and the [[Bestiary]] use the same level.
-- **Installed mods** reads the installed mods' copies of layers, communities and templates too, as the game does with them installed.
+- **Installed mods** reads the installed mods' copies of layers, communities, templates and item files too, as the game does with them installed, so a mod's changes to a shop's stock show too.
 - **Export** saves every merchant and every place they can be, with their hours, what decides it and their position, as a CSV file.
 
 ## Stock, places and quests

@@ -231,8 +231,10 @@ public sealed class MerchantIndex
                     if (phase["timetableName"] is string tt && timetables.TryGetValue(tt, out var actions))
                         foreach (var a in actions)
                         {
-                            if (world.Length == 0) (world, layer) = (a.World, a.Layer);
-                            stands.AddRange(Find(a.World, a.ApTags).Select(p => new MerchantStand(p, a.Category, a.From, a.To)));
+                            // a layer named without its world ("gameplay\ard_skellig\kaer_trolde\…") is in the world that has its action points
+                            string at = a.World.Length > 0 ? a.World : worlds.FirstOrDefault(w => Find(w, a.ApTags).Count > 0) ?? "";
+                            if (world.Length == 0) (world, layer) = (at, a.Layer);
+                            stands.AddRange(Find(at, a.ApTags).Select(p => new MerchantStand(p, a.Category, a.From, a.To)));
                         }
                     var spawnTags = TagsOf(file, phase["spawnPointTags"]).ToList();
                     if (stands.Count == 0 && world.Length > 0)

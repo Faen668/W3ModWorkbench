@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.IO;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
@@ -26,6 +27,15 @@ public sealed record LootFoundRow(string Key, string Title, string Detail, int C
     public string CountText => Count.ToString("N0", CultureInfo.CurrentCulture);
     public Visibility WarnVisibility => Warning is null ? Visibility.Collapsed : Visibility.Visible;
     public string? WarnTip => Warning;
+
+    /// <summary>For an item, its category in the item files ("" for an item they don't define).</summary>
+    public string Category { get; init; } = "";
+}
+
+/// <summary>A category the item list can show: its name in the files (null for every one), its name in the game and how many items it has.</summary>
+public sealed record LootCategoryChoice(string? Key, string Title, int Count)
+{
+    public override string ToString() => Key is null ? Title : $"{Title} ({Count.ToString("N0", CultureInfo.CurrentCulture)})";
 }
 
 /// <summary>A place that can give what was looked for: how likely at the level chosen, whether the game's roll for that exact spot gives it, and its respawn time.</summary>
@@ -77,6 +87,7 @@ public partial class LootLocatorWindow : Window, IMessageHost
 
     private ResourceLocator _locator = null!;
     private ItemDatabase? _db;
+    private bool _dbWithMods;
     private Dictionary<uint, string> _names = [];
     private LootIndex? _index;
     private LootRoll? _roll;
@@ -164,10 +175,16 @@ public partial class LootLocatorWindow : Window, IMessageHost
         {
             var progress = new Progress<string>(what => BusyText.Text = L.T("LootLocator.ReadingWhat", what));
             var locator = _locator;
-            _db ??= await Task.Run(() => ItemDatabase.Load(game, progress));
-            if (_names.Count == 0)
+            bool withMods = ModsCheck.IsChecked == true;
+            bool reload = _db is null || _dbWithMods != withMods;
+            if (reload)
             {
-                var strings = await GameStringIndex.GetAsync(game, App.GameLanguage, dlcAndMods: false);
+                _db = await Task.Run(() => ItemDatabase.Load(game, progress, withMods: withMods));
+                _dbWithMods = withMods;
+            }
+            if (_names.Count == 0 || reload)
+            {
+                var strings = await GameStringIndex.GetAsync(game, App.GameLanguage, dlcAndMods: withMods);
                 _names = strings.All.GroupBy(s => s.KeyHash).ToDictionary(g => g.Key, g => g.First().Text);
             }
             var db = _db;
@@ -231,13 +248,48 @@ public partial class LootLocatorWindow : Window, IMessageHost
             int tables = roll.Tables.Values.Count(d => d.Items.Any(i => i.Name.Equals(p.Key, StringComparison.OrdinalIgnoreCase)));
             string detail = !title.Equals(p.Key, StringComparison.OrdinalIgnoreCase) ? p.Key
                 : NameOf(p.Key) is null ? L.T("LootLocator.ItemDetailPlain") : L.T("LootLocator.InTables", tables);
-            return new LootFoundRow(p.Key, title, detail, p.Value.Sum(k => _setups[k].Spots.Count), false);
+            return new LootFoundRow(p.Key, title, detail, p.Value.Sum(k => _setups[k].Spots.Count), false)
+            {
+                Category = _db?.Find(DefKind.Item, p.Key)?.Attribute("category")?.Trim() ?? "",
+            };
         }).OrderBy(r => r.Title, StringComparer.CurrentCultureIgnoreCase)];
+        BuildCategories();
         _tableRows = [.. roll.Tables.Values.Select(t => new LootFoundRow(t.Name, t.Name, L.T("LootLocator.TableDetail", t.Items.Count, Path.GetFileName(t.GamePath)),
                 _tableSetups.TryGetValue(t.Name, out var keys) ? keys.Sum(k => _setups[k].Spots.Count) : 0, true))
             .Concat(_tableSetups.Keys.Where(t => !roll.Tables.ContainsKey(t)).Select(t => new LootFoundRow(t, t.Length == 0 ? L.T("LootLocator.NoName") : t,
                 L.T("LootLocator.TableUndefined"), _tableSetups[t].Sum(k => _setups[k].Spots.Count), true, L.T("LootLocator.TableUndefinedTip"))))
             .OrderBy(r => r.Title, StringComparer.CurrentCultureIgnoreCase)];
+    }
+
+    /// <summary>
+    /// The item categories for the category box, by the name the game gives them (its inventory's item_category_ text),
+    /// else the files' name; two the game names alike keep the files' name beside it. The one picked stays picked.
+    /// </summary>
+    private void BuildCategories()
+    {
+        string? picked = (CategoryBox.SelectedItem as LootCategoryChoice)?.Key;
+        var groups = _itemRows.GroupBy(r => r.Category, StringComparer.OrdinalIgnoreCase).Select(g =>
+        {
+            string title = g.Key.Length == 0 ? L.T("LootLocator.NoCategory")
+                : _names.TryGetValue(W3Strings.HashKey("item_category_" + g.Key), out var text) && text.Length is > 0 and <= 40 && !text.Contains('.') ? text
+                : char.ToUpper(Humanise(g.Key)[0], CultureInfo.CurrentCulture) + Humanise(g.Key)[1..];
+            return (g.Key, Title: title, Count: g.Count());
+        }).ToList();
+        var choices = groups.Select(g => new LootCategoryChoice(g.Key,
+                groups.Count(o => o.Title.Equals(g.Title, StringComparison.CurrentCultureIgnoreCase)) > 1 ? $"{g.Title} · {g.Key}" : g.Title, g.Count))
+            .OrderBy(c => c.Key!.Length == 0).ThenBy(c => c.Title, StringComparer.CurrentCultureIgnoreCase).ToList();
+        choices.Insert(0, new LootCategoryChoice(null, L.T("LootLocator.EveryCategory"), _itemRows.Count));
+        _settingCategories = true;
+        CategoryBox.ItemsSource = choices;
+        CategoryBox.SelectedItem = choices.FirstOrDefault(c => c.Key is not null && c.Key.Equals(picked, StringComparison.OrdinalIgnoreCase)) ?? choices[0];
+        _settingCategories = false;
+    }
+
+    private bool _settingCategories;
+
+    private void CategoryBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!_settingCategories) Filter();
     }
 
     /// <summary>An item's name in the game's language, from its definition's localisation key, or null.</summary>
@@ -267,7 +319,8 @@ public partial class LootLocatorWindow : Window, IMessageHost
         static bool Matches(LootFoundRow r, string text) => text.Length == 0
             || r.Title.Contains(text, StringComparison.CurrentCultureIgnoreCase) || r.Key.Contains(text, StringComparison.OrdinalIgnoreCase);
         string items = ItemSearch.Text.Trim(), tables = TableSearch.Text.Trim();
-        var itemRows = _itemRows.Where(r => Matches(r, items)).ToList();
+        string? category = (CategoryBox.SelectedItem as LootCategoryChoice)?.Key;
+        var itemRows = _itemRows.Where(r => (category is null || r.Category.Equals(category, StringComparison.OrdinalIgnoreCase)) && Matches(r, items)).ToList();
         var tableRows = _tableRows.Where(r => (UnusedCheck.IsChecked == true || r.Count > 0) && Matches(r, tables)).ToList();
         ItemList.ItemsSource = itemRows;
         TableList.ItemsSource = tableRows;
@@ -300,6 +353,13 @@ public partial class LootLocatorWindow : Window, IMessageHost
         ModeTabs.SelectedItem = table ? TablesTab : ItemsTab;
         var list = table ? TableList : ItemList;
         var search = table ? TableSearch : ItemSearch;
+        if (!table && CategoryBox.SelectedItem is LootCategoryChoice { Key: { } category } && !row.Category.Equals(category, StringComparison.OrdinalIgnoreCase))
+        {
+            _settingCategories = true;
+            CategoryBox.SelectedIndex = 0;
+            _settingCategories = false;
+            if (!find) Filter();
+        }
         if (find)
         {
             search.Text = row.Title;
@@ -401,11 +461,11 @@ public partial class LootLocatorWindow : Window, IMessageHost
                 var odds = roll.Odds(s, level);
                 double chance = table ? odds.Tables.GetValueOrDefault(name) : odds.Items.GetValueOrDefault(name);
                 // what the game's roll gives this spot: its respawn time is the game's own for it (see LootRoll.Roll)
-                var rolled = roll.Roll(s, level, LootRoll.Seed(s.Position));
+                var rolled = roll.Roll(s, level, LootRoll.Seed(s));
                 var hit = rolled.FirstOrDefault(i => table ? i.Table.Equals(name, StringComparison.OrdinalIgnoreCase) : i.Item.Equals(name, StringComparison.OrdinalIgnoreCase));
                 // a seed of 0 is no seed: the game rolls that spot at random each time, so nothing is fixed there
                 // a monster's drops are rolled at each kill, where it falls: nothing is fixed at its encounter
-                bool? given = predicted && s.Kind != LootKind.Monster && LootRoll.Seed(s.Position) != 0 ? hit is not null : null;
+                bool? given = predicted && s.Kind != LootKind.Monster && LootRoll.Seed(s) != 0 ? hit is not null : null;
                 return new LootPlaceRow(s, Humanise(s.Title), AreaOf(s), chance, given, s.Kind == LootKind.Monster ? null : hit is { Table.Length: > 0 } ? hit.Respawn : RespawnOf(s, name, table));
             }).ToList();
         });
@@ -610,7 +670,7 @@ public partial class LootLocatorWindow : Window, IMessageHost
             Details.Children.Add(Title(L.T("LootLocator.MonsterTitle")));
             Details.Children.Add(Hint(L.T("LootLocator.MonsterNote")));
         }
-        else if (App.Settings.LootShowPredicted && LootRoll.Seed(spot.Position) == 0)
+        else if (App.Settings.LootShowPredicted && LootRoll.Seed(spot) == 0)
         {
             Details.Children.Add(Title(L.T("LootLocator.PredictedTitle", level)));
             Details.Children.Add(Hint(L.T("LootLocator.PredictedRandom")));
@@ -618,7 +678,7 @@ public partial class LootLocatorWindow : Window, IMessageHost
         else if (App.Settings.LootShowPredicted)
         {
             Details.Children.Add(Title(L.T("LootLocator.PredictedTitle", level)));
-            var rolled = roll.Roll(spot, level, LootRoll.Seed(spot.Position));
+            var rolled = roll.Roll(spot, level, LootRoll.Seed(spot));
             if (rolled.Count == 0) Details.Children.Add(Hint(L.T("LootLocator.PredictedNothing")));
             foreach (var i in rolled) Details.Children.Add(ItemLine(i.Item, Range(i.QuantityMin, i.QuantityMax)));
             Details.Children.Add(Hint(L.T("LootLocator.PredictedNote")));
@@ -755,6 +815,8 @@ public partial class LootLocatorWindow : Window, IMessageHost
         string folder = Path.GetDirectoryName(world) ?? "";
         string layer = layerPath.StartsWith(folder + "\\", StringComparison.OrdinalIgnoreCase) ? layerPath[(folder.Length + 1)..] : layerPath;
         if (layer.StartsWith(@"data\levels\", StringComparison.OrdinalIgnoreCase)) layer = layer[12..];
+        // a file outside the world's folder (a DLC's community) without its DLC's data folder
+        layer = Regex.Replace(layer, @"^dlc\\[^\\]+\\data\\", "", RegexOptions.IgnoreCase);
         layer = Path.ChangeExtension(layer, null);
         var parts = layer.Split('\\').Select(Humanise).ToList();
         // "loot" and the like name the layer, not the place

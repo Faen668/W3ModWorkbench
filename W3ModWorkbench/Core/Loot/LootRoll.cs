@@ -69,16 +69,24 @@ public sealed class LootRoll
     public static uint Hash(uint i, uint s)
     {
         uint x = unchecked(((i << 13) + (s << 13)) ^ (i + s));
-        return unchecked((x * (x * x * 15731u + 789221u) - 771674611u) & 0x7fffffff);
+        return unchecked((x * (x * x * 15731u + 789221u) - 771171059u) & 0x7fffffff);
     }
 
     /// <summary>
-    /// A placed entity's seed: the sum of a name's characters (none for a container) and the floor of its x, its y and a
-    /// tenth of its z. The same place always rolls the same items, except where this comes out 0: the engine takes 0 as
-    /// no seed and rolls that place with its own random numbers each time.
+    /// A placed entity's seed: the sum of its name's characters (<see cref="LootSpot.EngineName"/>) and the floor of its x, its y and a tenth of its z. The
+    /// same place always rolls the same items, except where this comes out 0: the engine takes 0 as no seed and rolls
+    /// that place with its own random numbers each time.
     /// </summary>
-    public static uint Seed(System.Numerics.Vector3 at) =>
-        unchecked((uint)((int)MathF.Floor(at.X) + (int)MathF.Floor(at.Y) + (int)MathF.Floor(at.Z * 0.1f)));
+    public static uint Seed(string name, System.Numerics.Vector3 at)
+    {
+        uint sum = 0;
+        // the engine adds the name's bytes as signed chars
+        foreach (byte b in System.Text.Encoding.UTF8.GetBytes(name)) sum += (ushort)(sbyte)b;
+        return unchecked(sum + (uint)((int)MathF.Floor(at.X) + (int)MathF.Floor(at.Y) + (int)MathF.Floor(at.Z * 0.1f)));
+    }
+
+    /// <summary>A placed loot spot's seed, from its name and where it stands.</summary>
+    public static uint Seed(LootSpot spot) => Seed(spot.EngineName, spot.Position);
 
     private static uint Between(uint lo, uint hiExclusive, uint seed) => lo + Hash(0, seed) % (hiExclusive - lo);
 

@@ -86,12 +86,34 @@ public sealed partial class ItemDatabase
         return p.Contains(@"\items_plus\") || p.Contains(@"\abilities_plus\");
     }
 
-    /// <summary>Reads the game's definitions from its folder.</summary>
-    public static ItemDatabase Load(string gameFolder, IProgress<string>? progress = null, CancellationToken token = default)
+    /// <summary>
+    /// Reads the game's definitions from its folder. With <paramref name="withMods"/>, the enabled installed mods' are
+    /// read first, in the game's load order: a mod's copy of a file is the one kept, as in the game, and the files a mod
+    /// installed as DLC adds are read beside the game's.
+    /// </summary>
+    public static ItemDatabase Load(string gameFolder, IProgress<string>? progress = null, CancellationToken token = default, bool withMods = false)
     {
         var db = new ItemDatabase();
+        var bundles = new List<string>();
+        if (withMods)
+        {
+            var official = OfficialDlc.Names(gameFolder);
+            var options = new LoadOrder.LoadOrderOptions(Path.Combine(gameFolder, "mods"), true, LoadOrder.ModScanner.FindSettingsFile(), gameFolder);
+            foreach (var mod in LoadOrder.LoadOrderAnalyzer.DiscoverMods(options).Where(m => m.Enabled && !(m.IsDlc && official.Contains(m.Name))))
+            {
+                string modContent = Path.Combine(mod.Folder, "content");
+                try
+                {
+                    if (Directory.Exists(modContent)) bundles.AddRange(Directory.GetFiles(modContent, "*.bundle").Order(StringComparer.OrdinalIgnoreCase));
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    db.Problems.Add($"{mod.Name}: {ex.Message}");
+                }
+            }
+        }
         string content = Path.Combine(gameFolder, "content");
-        var bundles = Directory.Exists(content) ? Directory.GetFiles(content, "*.bundle", SearchOption.AllDirectories).Order(StringComparer.OrdinalIgnoreCase).ToList() : [];
+        if (Directory.Exists(content)) bundles.AddRange(Directory.GetFiles(content, "*.bundle", SearchOption.AllDirectories).Order(StringComparer.OrdinalIgnoreCase));
         foreach (string path in bundles)
         {
             token.ThrowIfCancellationRequested();
