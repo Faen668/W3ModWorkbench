@@ -172,9 +172,30 @@ public static class ModPacker
                         notes.Add(L.T("ModPacker.CouldntCookedGoes", file.GamePath, ex.Message));
                     }
                 }
+                else if (ResourceCooker.IsMesh(file.GamePath))
+                {
+                    // a REDkit source mesh is cooked into the mesh and its buffer; one cooked already goes in as it is
+                    try
+                    {
+                        byte[]? Read(string path) => byPath.TryGetValue(path, out var own) ? File.ReadAllBytes(own.FilePath) : gameFile?.Invoke(path);
+                        if (ResourceCooker.CookMesh(file.GamePath, File.ReadAllBytes(file.FilePath), Read, out string? note) is { } mesh)
+                        {
+                            string gamePath = file.GamePath.ToLowerInvariant();
+                            bundled.Add(Stage(gamePath, mesh.File));
+                            bundled.Add(Stage(gamePath + ".1.buffer", mesh.Buffer));
+                            if (note is not null) notes.Add($"{file.GamePath}: {note}");
+                            others++;
+                            continue;
+                        }
+                    }
+                    catch (InvalidDataException ex)
+                    {
+                        notes.Add(L.T("ModPacker.CouldntCookedGoes", file.GamePath, ex.Message));
+                    }
+                }
                 else if (ResourceCooker.Cooks(file.GamePath))
                 {
-                    // a REDkit source material, entity or mesh is cooked; one cooked already goes in as it is
+                    // a REDkit source material or entity is cooked; one cooked already goes in as it is
                     try
                     {
                         if (ResourceCooker.Cook(file.GamePath, File.ReadAllBytes(file.FilePath)) is { } resource)
@@ -191,6 +212,10 @@ public static class ModPacker
                 }
                 bundled.Add(file);
             }
+
+            // a file made here (a cooked mesh's buffer) takes the place of the workspace's file of that path
+            var staged = new HashSet<string>(bundled.Where(b => b.FilePath.StartsWith(staging, StringComparison.OrdinalIgnoreCase)).Select(b => b.GamePath), StringComparer.OrdinalIgnoreCase);
+            bundled.RemoveAll(b => staged.Contains(b.GamePath) && !b.FilePath.StartsWith(staging, StringComparison.OrdinalIgnoreCase));
 
             Directory.CreateDirectory(content);
             if (bundled.Count > 0)

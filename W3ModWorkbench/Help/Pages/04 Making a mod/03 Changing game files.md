@@ -3,7 +3,7 @@ title: Changing game files
 icon: E70F
 order: 3
 summary: Copy a game file into your project, change it, and let the build put it in your mod.
-keywords: copy to project workspace change texture mesh material xml override replace cook dds png make a mod dependencies entity armour retexture redkit r4data source w2mi w2ent uncooked
+keywords: copy to project workspace change texture mesh material xml override replace cook dds png make a mod dependencies entity armour retexture redkit r4data source w2mi w2ent w2mesh uncooked collision
 windows: ModMakerWindow
 ---
 Your mod changes the game by shipping its own copy of a file, at the same game path. The game then uses your copy instead of its own. The app never changes the game's files; you change copies in your project.
@@ -71,6 +71,7 @@ Files from REDkit (its `r4data`, or a REDkit project's workspace) aren't cooked,
 
 - textures (`.xbm`), cube maps (`.w2cube`) and texture arrays (`.texarray`);
 - materials (`.w2mi`);
+- meshes (`.w2mesh`), into the mesh and its `.1.buffer`. A mesh's collision isn't cooked: the game keeps collision in `collision.cache`, which Build can't make, so things pass through the mesh unless you put a `collision.cache` made with REDkit at the top of your workspace;
 - entities (`.w2ent`), except those that include other entity templates, play effects or have appearances.
 
-> warning: Any other REDkit source file (a mesh, an entity Build can't cook yet, a scene…) goes into the mod as it is, and the game won't load it. Files copied from the game's bundles are cooked already, so start from those where you can. Build lists any uncooked file, and why, before it starts.
+> warning: Any other REDkit source file (an entity Build can't cook yet, a destructible, a scene…) goes into the mod as it is, and the game won't load it. Files copied from the game's bundles are cooked already, so start from those where you can. Build lists any uncooked file, and why, before it starts.

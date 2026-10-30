@@ -23,7 +23,7 @@ build\modMyFirstMod\content\
 
 - **Scripts** are always compiled into `precompiled.rsblob`, the way REDkit publishes a mod. If any don't compile, nothing is built, and **Show errors** lists the mistakes, each opening its line.
 - With **Also ship the loose scripts** ticked in [[Projects|Project properties]], the `.ws` files go in `content\scripts` beside it, as your mod's source for others to read or merge. The `info.json` tells the game to run the compiled ones.
-- **Workspace files** are packed into the bundle, textures into the texture cache (cooked from your pictures, see [[Changing game files]]) and sounds into the sound cache. REDkit's source textures, materials and entities are cooked on the way in.
+- **Workspace files** are packed into the bundle, textures into the texture cache (cooked from your pictures, see [[Changing game files]]) and sounds into the sound cache. REDkit's source textures, materials, meshes and entities are cooked on the way in.
 - **Sound banks** (`.bnk`) must be made with Wwise 2023.1, as the game's own are (bank version 150). The game won't load a bank of any other version, such as one made for the next-gen game, and never plays it. Build still packs it, but says which banks those are.
 - **Voice lines** go in the language's speech file (`enpc.w3speech`, `depc.w3speech`…). Put them in `speech\en` (or `speech\de` and so on) as `ID.wem`, each with its lip sync as `ID.raw` or `ID.cr2w`, and Build packs each language's folder into its speech file. A speech file at the top of your workspace goes in as it is, or, when there's a `speech` folder for its language too, gives the lines the folder hasn't got (see [[Voice lines]]).
 

@@ -44,7 +44,14 @@ public static class MeshWriter
     /// </param>
     /// <param name="boneNames">The bones the chunks' vertices name, in order; the template's for the same bones.</param>
     /// <param name="inverseBinds">For each bone, the matrix that takes the mesh into the bone's space as it was bound.</param>
-    public static CookedMesh Write(MeshFile template, IReadOnlyList<MeshChunk> chunks, string[] boneNames, Matrix4x4[] inverseBinds)
+    /// <param name="shadows">The descriptions of the chunks only for shadows to make, when the template has none to go by (a mesh being cooked).</param>
+    /// <param name="packedChunks">The uncooked list of chunks to keep beside the cooked one, when the template's file hasn't got it.</param>
+    /// <param name="quantization">
+    /// The box positions are stored in (its least corner and its size), when it isn't the box round the chunks' positions:
+    /// a mesh being cooked is stored in the box its source keeps. The mesh's bounding box is still the one round the positions.
+    /// </param>
+    public static CookedMesh Write(MeshFile template, IReadOnlyList<MeshChunk> chunks, string[] boneNames, Matrix4x4[] inverseBinds,
+        IReadOnlyList<MeshChunk>? shadows = null, JsonArray? packedChunks = null, (Vector3 Min, Vector3 Size)? quantization = null)
     {
         var visible = chunks.Where(c => c.Positions.Length > 0 && c.Indices.Length > 0).ToList();
         if (visible.Count == 0) throw new InvalidDataException(L.T("MeshWriter.NoChunks"));
@@ -66,10 +73,12 @@ public static class MeshWriter
                 min = Vector3.Min(min, p);
                 max = Vector3.Max(max, p);
             }
+        var (boxMin, boxMax) = (min, max);
         var scale = max - min;
+        if (quantization is { } q) (min, scale) = q;
 
         // the template's chunks only for shadows, made again from the new chunks of their LODs
-        var shadows = template.Chunks.Where(c => c.IsShadowOnly).ToList();
+        shadows ??= template.Chunks.Where(c => c.IsShadowOnly).ToList();
 
         // a stream with the same bytes as one already written is written once, and both descriptions point at it
         var buffer = new MemoryStream();
@@ -189,8 +198,8 @@ public static class MeshWriter
         else cooked.Remove("bonePositions");
 
         var box = mesh["boundingBox"] as JsonObject;
-        mesh["boundingBox"] = new JsonObject { ["Min"] = Vector(min, W(box?["Min"], 0)), ["Max"] = Vector(max, W(box?["Max"], 1)) };
-        mesh["chunks"] = PackedChunks(mesh["chunks"] as JsonArray, visible);
+        mesh["boundingBox"] = new JsonObject { ["Min"] = Vector(boxMin, W(box?["Min"], 0)), ["Max"] = Vector(boxMax, W(box?["Max"], 1)) };
+        mesh["chunks"] = PackedChunks(packedChunks ?? mesh["chunks"] as JsonArray, visible);
 
         var names = (JsonArray)json["file"]!["names"]!;
         mesh["$tail"] = Convert.ToBase64String(Tail(template, visible, boneNames, inverseBinds, names));

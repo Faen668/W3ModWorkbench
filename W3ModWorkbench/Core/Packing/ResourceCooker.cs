@@ -22,13 +22,13 @@ namespace W3ModWorkbench.Core.Packing;
 /// the template has them, editor fields and all, since REDkit's own copy can be stale (bounding boxes not filled in).
 /// </para>
 /// </summary>
-public static class ResourceCooker
+public static partial class ResourceCooker
 {
     private const int CookedFlag = 0x2000;
 
     /// <summary>Whether Build cooks a source file of this kind.</summary>
     public static bool Cooks(string gamePath) => gamePath.EndsWith(".w2mi", StringComparison.OrdinalIgnoreCase)
-        || gamePath.EndsWith(".w2ent", StringComparison.OrdinalIgnoreCase);
+        || gamePath.EndsWith(".w2ent", StringComparison.OrdinalIgnoreCase) || IsMesh(gamePath);
 
     /// <summary>
     /// Why Build can't cook this source file yet (an entity that includes other templates, plays effects or has
@@ -36,6 +36,11 @@ public static class ResourceCooker
     /// </summary>
     public static string? CantCook(string gamePath, byte[] source)
     {
+        if (IsMesh(gamePath))
+        {
+            var mesh = Cr2wFile.Read(source);
+            return TextureCooker.IsCooked(mesh) || mesh.Exports.Count > 0 && mesh.Exports[0].ClassName == "CMesh" ? null : L.T("ResourceCooker.NotPlainMesh");
+        }
         if (!gamePath.EndsWith(".w2ent", StringComparison.OrdinalIgnoreCase)) return null;
         var file = Cr2wFile.Read(source);
         if (TextureCooker.IsCooked(file) || file.First("CEntityTemplate") is not { } template) return null;
@@ -46,7 +51,7 @@ public static class ResourceCooker
             : null;
     }
 
-    /// <summary>A REDkit source file cooked, or null when it's cooked already.</summary>
+    /// <summary>A REDkit source file cooked, or null when it's cooked already. A mesh is cooked by <see cref="CookMesh"/>, not here.</summary>
     /// <exception cref="InvalidDataException">It can't be cooked yet (see <see cref="CantCook"/>), or can't be read.</exception>
     public static byte[]? Cook(string gamePath, byte[] source)
     {
@@ -331,11 +336,12 @@ public static class ResourceCooker
     /// met going through the objects from the first, following each reference to an object it hasn't met yet before
     /// going on (see <see cref="FirstUse"/>). What it no longer uses goes.
     /// </summary>
-    private static byte[] Write(JsonObject json)
+    /// <param name="tailNames">Names the first object keeps after its properties (a mesh's bones), which come after its own.</param>
+    private static byte[] Write(JsonObject json, IReadOnlyList<string>? tailNames = null)
     {
         var file = (JsonObject)json["file"]!;
         foreach (string table in new[] { "names", "latin1", "nameHashes", "stringOrder", "tableHeaders" }) file.Remove(table);
-        var order = FirstUse(json);
+        var order = FirstUse(json, tailNames);
         // imports nothing refers to any more go; numbered references (import#N) keep the list as it is
         if (file["imports"] is JsonArray imports && !json.ToJsonString().Contains("\"import#", StringComparison.Ordinal))
         {
@@ -352,10 +358,10 @@ public static class ResourceCooker
         }
         byte[] unordered = Cr2wJson.FromJson(json);
         var used = ((JsonArray)Cr2wJson.ToJson(Cr2wFile.Read(unordered), out _)["file"]!["names"]!).Select(n => (string)n!).ToList();
-        var usedSet = new HashSet<string>(used, StringComparer.Ordinal);
+        var usedSet = new HashSet<string>(used.Concat(tailNames ?? []), StringComparer.Ordinal);
         var names = new List<string> { "" };
         names.AddRange(order.Names.Where(usedSet.Contains));
-        names.AddRange(used.Where(n => !order.Names.Contains(n)));
+        names.AddRange(used.Concat(tailNames ?? []).Where(n => !order.Names.Contains(n)));
         file["names"] = new JsonArray([.. names.Distinct(StringComparer.Ordinal).Select(n => (JsonNode?)n)]);
         return Cr2wJson.FromJson(json);
     }
@@ -375,7 +381,7 @@ public static class ResourceCooker
     /// object an attachment hangs from before the attachment's own properties). The properties the cook adds to a template come after everything else, as if they were set after the
     /// rest was written.
     /// </summary>
-    private static (List<string> Names, List<string> Imports, HashSet<string> Soft) FirstUse(JsonObject json)
+    private static (List<string> Names, List<string> Imports, HashSet<string> Soft) FirstUse(JsonObject json, IReadOnlyList<string>? tailNames = null)
     {
         var objects = (JsonArray)json["objects"]!;
         var file = (JsonObject)json["file"]!;
@@ -495,6 +501,8 @@ public static class ResourceCooker
                 Name(type);
                 Value(type, parameter["value"]);
             }
+            if (index == 0 && !late)
+                foreach (string name in tailNames ?? []) Name(name);
             // an entity's components and a component's attachments, listed after its properties
             if (!late && o["$tail"] is JsonValue tail && tail.TryGetValue<string>(out var t))
                 foreach (int next in TailObjects(Convert.FromBase64String(t)))
