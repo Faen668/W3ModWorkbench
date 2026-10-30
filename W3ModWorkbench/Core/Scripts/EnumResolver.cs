@@ -52,8 +52,22 @@ public sealed partial class EnumResolver
     {
         if (_local.TryGetValue(enumType, out var map) && map.TryGetValue(value, out var n)) return n;
         if (_vanilla.TryGetValue(enumType, out map) && map.TryGetValue(value, out n)) return n;
+        if (Native.Value.TryGetValue(enumType, out map) && map.TryGetValue(value, out n)) return n;
         return null;
     }
+
+    /// <summary>The engine's own enums (EAIAttitude and the like), which no script declares, from the built-in RTTI dump.</summary>
+    private static readonly Lazy<Dictionary<string, Dictionary<long, string>>> Native = new(() =>
+    {
+        var result = new Dictionary<string, Dictionary<long, string>>(StringComparer.Ordinal);
+        foreach (var e in Standalone.Rtti.LoadBuiltIn().Enums)
+        {
+            var map = new Dictionary<long, string>();
+            foreach (var (name, value) in e.Options) map.TryAdd(value, name);
+            result.TryAdd(e.Name, map);
+        }
+        return result;
+    });
 
     private static Dictionary<string, Dictionary<long, string>> LoadVanilla(string dir)
     {

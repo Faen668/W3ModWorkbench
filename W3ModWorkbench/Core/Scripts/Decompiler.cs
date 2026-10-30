@@ -25,12 +25,15 @@ internal static class Precedence
 }
 
 /// <summary>Turns a function's bytecode back into WitcherScript statements.</summary>
-public sealed class Decompiler(ScriptBlob blob, EnumResolver enums)
+public sealed class Decompiler(ScriptBlob blob, EnumResolver enums, GameDeclarations? game = null)
 {
+    private readonly GameDeclarations _game = game ?? GameDeclarations.Empty;
     private ScriptFunction _func = null!;
     private List<Instruction> _code = [];
     private int _pos;
     private bool _nextIsMember;
+    /// <summary>The type of the object a member call is made on, when known.</summary>
+    private string? _nextReceiver;
 
     // ------------------------------------------------------------------ statements
 
@@ -379,8 +382,8 @@ public sealed class Decompiler(ScriptBlob blob, EnumResolver enums)
                         i++;
                         continue;
                     }
-                    // The label chain is the order cases are tested in; bodies follow the order labels
-                    // sit in memory. Grouped labels (case A: case B:) are stored back to front.
+                    // The label chain is the order cases are tested in; labels and bodies sit in memory in
+                    // source order. Grouped labels (case A: case B:) are chained back to front, so write them as stored.
                     var physical = labels.OrderBy(x => x).ToList();
                     if (switchEnd < 0)
                     {
@@ -403,7 +406,7 @@ public sealed class Decompiler(ScriptBlob blob, EnumResolver enums)
                         int run = l;
                         while (run + 1 < physical.Count && Next(physical[run] + 1, physical[run + 1]) == physical[run + 1])
                             run++;
-                        foreach (int li in physical.Skip(l).Take(run - l + 1).OrderBy(labels.IndexOf))
+                        foreach (int li in physical.Skip(l).Take(run - l + 1))
                             lines.Add(_stmts[li].Kind == Kind.Default ? $"{pad}\tdefault:" : $"{pad}\tcase {_stmts[li].E!.Text}:"); // loc-ignore
                         int bodyEnd = run + 1 < physical.Count ? physical[run + 1] : switchEnd;
                         Emit(lines, physical[run] + 1, bodyEnd, depth + 2, inner);
@@ -441,7 +444,9 @@ public sealed class Decompiler(ScriptBlob blob, EnumResolver enums)
             throw new InvalidOperationException("The code ended in the middle of an expression."); // loc-ignore
 
         bool member = _nextIsMember;
+        string? receiver = member ? _nextReceiver : CurrentClass;
         _nextIsMember = false;
+        _nextReceiver = null;
         var ins = _code[_pos++];
 
         switch (ins.Op)
@@ -462,16 +467,16 @@ public sealed class Decompiler(ScriptBlob blob, EnumResolver enums)
                 return Var(ins.Arg(0), _func.Params);
             case Op.ObjectVar: case Op.BindableVar: case Op.DefaultVar:
                 return new(Name(ins.Arg(0)), Precedence.Primary) { Type = MemberType(ins.Arg(1), Name(ins.Arg(0))) };
-            case Op.This: return new("this", Precedence.Primary);
-            case Op.TheGame: return new("theGame", Precedence.Primary);
-            case Op.ThePlayer: return new("thePlayer", Precedence.Primary);
-            case Op.TheCamera: return new("theCamera", Precedence.Primary);
-            case Op.TheSound: return new("theSound", Precedence.Primary);
-            case Op.TheDebug: return new("theDebug", Precedence.Primary);
-            case Op.TheTimer: return new("theTimer", Precedence.Primary);
-            case Op.TheInput: return new("theInput", Precedence.Primary);
-            case Op.TheTelemetry: return new("theTelemetry", Precedence.Primary);
-            case Op.TheHud: return new("theHud", Precedence.Primary);
+            case Op.This: return new("this", Precedence.Primary) { Type = CurrentClass };
+            case Op.TheGame: return new("theGame", Precedence.Primary) { Type = "CR4Game" };
+            case Op.ThePlayer: return new("thePlayer", Precedence.Primary) { Type = "CR4Player" };
+            case Op.TheCamera: return new("theCamera", Precedence.Primary) { Type = "CCameraDirector" };
+            case Op.TheSound: return new("theSound", Precedence.Primary) { Type = "CScriptSoundSystem" };
+            case Op.TheDebug: return new("theDebug", Precedence.Primary) { Type = "CDebugAttributesManager" };
+            case Op.TheTimer: return new("theTimer", Precedence.Primary) { Type = "CTimerScriptKeyword" };
+            case Op.TheInput: return new("theInput", Precedence.Primary) { Type = "CInputManager" };
+            case Op.TheTelemetry: return new("theTelemetry", Precedence.Primary) { Type = "CR4TelemetryScriptProxy" };
+            case Op.TheHud: return new("theHud", Precedence.Primary) { Type = "CR4Hud" };
 
             case Op.Parent:
             {
@@ -490,6 +495,7 @@ public sealed class Decompiler(ScriptBlob blob, EnumResolver enums)
             {
                 var obj = ParseExpr();
                 _nextIsMember = true;
+                _nextReceiver = obj.Type is { } objType ? GameDeclarations.ClassName(objType) : null;
                 var m = ParseExpr();
                 if (m.Text.StartsWith("virtual_parent.", StringComparison.Ordinal))
                 {
@@ -518,23 +524,28 @@ public sealed class Decompiler(ScriptBlob blob, EnumResolver enums)
                 int f = ins.Arg(2);
                 var args = ParseArgs();
                 if (f == -1)
-                    return Call(_func.Kind == FunctionKind.Wrap && !member ? "wrappedMethod" : _func.Name, args);
+                    return Call(_func.Kind == FunctionKind.Wrap && !member ? "wrappedMethod" : _func.Name, args, FromBlob(_func));
                 if (f <= 0)
                     return Operator(f, args);
                 var (name, owner) = f - 1 < blob.FunctionRefs.Count ? blob.FunctionRefs[f - 1] : ($"func{f}", -1);
+                var signature = owner >= 0 && owner < blob.Types.Count ? MethodSignature(blob.Types[owner].Name, name) : GlobalSignature(name);
                 string prefix = "";
                 string currentOwner = _func.Class?.Name ?? _func.Owner;
                 if (!member && owner >= 0 && currentOwner.Length > 0 && (name == _func.Name || NeedsSuper(currentOwner, TypeName(owner), name))
                     && TypeName(owner) != currentOwner)
                     prefix = "super.";
-                return Call(prefix + name, args);
+                return Call(prefix + name, args, signature);
             }
 
             case Op.VirtualFunc:
             {
                 string name = Name(ins.Arg(2));
                 var args = ParseArgs();
-                return Call(name == "@self" ? _func.Kind == FunctionKind.Wrap && !member ? "wrappedMethod" : _func.Name : name, args);
+                // @self: a method of the same name as this one, on this object or (a member call) another's
+                if (name == "@self" && !member)
+                    return Call(_func.Kind == FunctionKind.Wrap ? "wrappedMethod" : _func.Name, args, FromBlob(_func));
+                if (name == "@self") name = _func.Name;
+                return Call(name, args, (receiver is null ? null : MethodSignature(receiver, name)) ?? AnySignature(name));
             }
 
             case Op.EntryFunc:
@@ -567,7 +578,7 @@ public sealed class Decompiler(ScriptBlob blob, EnumResolver enums)
             {
                 var owner = ParseExpr();
                 string t = TypeName(ins.Arg(0));
-                return new(owner.IsEmpty ? $"new {t}" : $"new {t} in {Wrap(owner, Precedence.Unary)}", Precedence.Unary); // loc-ignore
+                return new(owner.IsEmpty ? $"new {t}" : $"new {t} in {Wrap(owner, Precedence.Unary)}", Precedence.Unary) { Type = t }; // loc-ignore
             }
 
             case Op.Delete:
@@ -593,10 +604,12 @@ public sealed class Decompiler(ScriptBlob blob, EnumResolver enums)
 
             case Op.IntToEnum:
             {
+                // a constant's name compiles to a bare number of the enum's size; a number converted was written as one
                 var e = ParseExpr();
-                if (e.Literal is long v && enums.Find(TypeName(ins.Arg(0)), v) is { } constant)
-                    return new(constant, Precedence.Primary);
-                return e with { EnumType = TypeName(ins.Arg(0)) };
+                string type = TypeName(ins.Arg(0));
+                if (e.Literal is not null)
+                    return new($"({type}){Wrap(e, Precedence.Unary)}", Precedence.Unary) { EnumType = type, Type = type };
+                return e with { EnumType = type };
             }
 
             case Op.EnumToInt:
@@ -610,7 +623,7 @@ public sealed class Decompiler(ScriptBlob blob, EnumResolver enums)
             }
 
             case Op.DynamicCast:
-                return new($"({TypeName(ins.Arg(0))}){Wrap(ParseExpr(), Precedence.Unary)}", Precedence.Unary);
+                return new($"({TypeName(ins.Arg(0))}){Wrap(ParseExpr(), Precedence.Unary)}", Precedence.Unary) { Type = TypeName(ins.Arg(0)) };
 
             case Op.FloatToInt: case Op.StringToInt: case Op.BoolToInt:
                 return new($"(int){Wrap(Explicit(ParseExpr()), Precedence.Unary)}", Precedence.Unary);
@@ -650,13 +663,60 @@ public sealed class Decompiler(ScriptBlob blob, EnumResolver enums)
     }
 
     /// <summary>The declared type of field <paramref name="name"/> on the type at <paramref name="typeIndex"/>, if the blob defines it.</summary>
-    private string? MemberType(int typeIndex, string name)
+    private string? MemberType(int typeIndex, string name) =>
+        typeIndex >= 0 && typeIndex < blob.Types.Count ? FieldType(blob.Types[typeIndex].Name, name) : null;
+
+    /// <summary>The declared type of field <paramref name="name"/> on <paramref name="owner"/> or a class it extends, in the blob or the game.</summary>
+    internal string? FieldType(string owner, string name)
     {
-        if (typeIndex < 0 || typeIndex >= blob.Types.Count) return null;
-        string owner = blob.Types[typeIndex].Name;
-        return blob.Classes.FirstOrDefault(c => c.Name == owner)?.Properties.FirstOrDefault(p => p.Name == name)?.Type
-            ?? blob.Structs.FirstOrDefault(c => c.Name == owner)?.Properties.FirstOrDefault(p => p.Name == name)?.Type
-            ?? blob.AddedFields.FirstOrDefault(f => f.Owner == owner && f.Name == name)?.Type;
+        for (int depth = 0; owner.Length > 0 && depth < 64; depth++)
+        {
+            var script = blob.Classes.FirstOrDefault(c => !c.IsState && c.Name == owner);
+            var type = script?.Properties.FirstOrDefault(p => p.Name == name)?.Type
+                ?? blob.Structs.FirstOrDefault(c => c.Name == owner)?.Properties.FirstOrDefault(p => p.Name == name)?.Type
+                ?? blob.AddedFields.FirstOrDefault(f => f.Owner == owner && f.Name == name)?.Type;
+            if (type is not null) return type;
+            var decl = _game.Types.GetValueOrDefault(owner);
+            if (decl?.Fields.TryGetValue(name, out type) == true) return type;
+            owner = script is { Base.Length: > 0 } ? script.Base : decl?.Parent ?? "";
+        }
+        return null;
+    }
+
+    private string? CurrentClass => _func.Class is { IsState: false } c ? c.Name : _func.Owner.Length > 0 ? _func.Owner : null;
+
+    private static FunctionSignature FromBlob(ScriptFunction f) =>
+        new([.. f.Params.Select(p => p.Type)], f.Return.Count > 0 ? f.Return[0].Type : null);
+
+    private FunctionSignature? GlobalSignature(string name) =>
+        blob.Globals.Concat(blob.ReplacedGlobals).FirstOrDefault(f => f.Name == name) is { } own ? FromBlob(own) : _game.Globals.GetValueOrDefault(name);
+
+    /// <summary><paramref name="cls"/>'s method <paramref name="name"/>, its own or one it inherits, from the blob or the game.</summary>
+    private FunctionSignature? MethodSignature(string cls, string name)
+    {
+        for (int depth = 0; cls.Length > 0 && depth < 64; depth++)
+        {
+            var script = blob.Classes.FirstOrDefault(c => !c.IsState && c.Name == cls);
+            if (script?.Functions.FirstOrDefault(f => f.Name == name) is { } own) return FromBlob(own);
+            if (blob.AddedMethods.Concat(blob.Replaced).FirstOrDefault(f => f.Owner == cls && f.Name == name) is { } added) return FromBlob(added);
+            var decl = _game.Types.GetValueOrDefault(cls);
+            if (decl?.Methods.TryGetValue(name, out var sig) == true) return sig;
+            cls = script is { Base.Length: > 0 } ? script.Base : decl?.Parent ?? "";
+        }
+        return null;
+    }
+
+    /// <summary>A method called on something of unknown type: every method of that name, with the parameter types they all agree on.</summary>
+    private FunctionSignature? AnySignature(string name)
+    {
+        var all = blob.Classes.SelectMany(c => c.Functions).Concat(blob.AddedMethods).Concat(blob.Replaced)
+            .Where(f => f.Name == name).Select(FromBlob)
+            .Concat(_game.MethodsByName.GetValueOrDefault(name) ?? []).ToList();
+        if (all.Count == 0) return null;
+        int count = all.Max(s => s.Params.Count);
+        var types = Enumerable.Range(0, count)
+            .Select(i => all.Select(s => s.Params.ElementAtOrDefault(i)).Distinct().ToList() is [{ } only] ? only : "").ToList();
+        return new(types, all.Select(s => s.Return).Distinct().Count() == 1 ? all[0].Return : null);
     }
 
     /// <summary>An integer literal stored into an enum-typed place reads better as the enum's constant.</summary>
@@ -680,11 +740,13 @@ public sealed class Decompiler(ScriptBlob blob, EnumResolver enums)
         return args;
     }
 
-    private static Expr Call(string name, List<Expr> args)
+    /// <summary>A call; a bare number passed where the parameter is an enum was written as the enum's constant, so it's shown as one.</summary>
+    private Expr Call(string name, List<Expr> args, FunctionSignature? signature = null)
     {
         int used = args.Count;
         while (used > 0 && args[used - 1].IsEmpty) used--;
-        return new($"{name}({string.Join(", ", args.Take(used).Select(a => a.Text))})", Precedence.Primary);
+        var text = args.Take(used).Select((a, i) => AsEnum(signature?.Params.ElementAtOrDefault(i), a).Text);
+        return new($"{name}({string.Join(", ", text)})", Precedence.Primary) { Type = signature?.Return };
     }
 
     private static Expr Operator(int id, List<Expr> args)
@@ -708,11 +770,9 @@ public sealed class Decompiler(ScriptBlob blob, EnumResolver enums)
 
         if (prec == Precedence.Assign)
             return new($"{a.Text} {symbol} {b.Text}", prec);
+        // left-associative, as the compiler reads a && b && c: only a chain on the right keeps its brackets
         string left = Wrap(a, prec);
         string right = b.Prec <= prec ? $"({b.Text})" : b.Text;
-        // && and || chains are associative; keep them flat
-        if ((symbol is "&&" or "||") && b.Prec == prec && b.Text.Contains(symbol, StringComparison.Ordinal))
-            right = b.Text;
         return new($"{left} {symbol} {right}", prec);
     }
 
@@ -762,13 +822,15 @@ public sealed class Decompiler(ScriptBlob blob, EnumResolver enums)
     {
         var arr = ParseExpr();
         string a = Wrap(arr, Precedence.Primary);
+        // array:2,0,EJournalStatus holds EJournalStatus
+        string? element = arr.Type is { } at && at.StartsWith("array:", StringComparison.Ordinal) && at.Split(',', 3) is [_, _, var inner] ? inner : null;
         Expr One() => ParseExpr();
         return op switch
         {
             Op.ArrayClear => new($"{a}.Clear()", Precedence.Primary),
             Op.ArraySize => new($"{a}.Size()", Precedence.Primary),
             Op.ArrayPopBack => new($"{a}.PopBack()", Precedence.Primary),
-            Op.ArrayLast => new($"{a}.Last()", Precedence.Primary),
+            Op.ArrayLast => new($"{a}.Last()", Precedence.Primary) { Type = element },
             Op.ArrayResize => new($"{a}.Resize({One().Text})", Precedence.Primary),
             Op.ArrayGrow => new($"{a}.Grow({One().Text})", Precedence.Primary),
             Op.ArrayFindFirst or Op.ArrayFindFirstFast => new($"{a}.FindFirst({One().Text})", Precedence.Primary),
@@ -779,7 +841,7 @@ public sealed class Decompiler(ScriptBlob blob, EnumResolver enums)
             Op.ArrayErase => new($"{a}.Erase({One().Text})", Precedence.Primary),
             Op.ArrayEraseFast => new($"{a}.EraseFast({One().Text})", Precedence.Primary),
             Op.ArrayInsert => Insert(a),
-            _ => new($"{a}[{One().Text}]", Precedence.Primary), // ArrayElement
+            _ => new($"{a}[{One().Text}]", Precedence.Primary) { Type = element }, // ArrayElement
         };
 
         Expr Insert(string target)

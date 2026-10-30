@@ -15,6 +15,7 @@ Decompiled code is real WitcherScript, usually very close to what the author wro
 - **`public`** isn't shown, as it's the default; `private` and `protected` are.
 - **Annotated functions** always use `function`, even when they wrap an `event`, as REDkit writes them.
 - **Defaults** (`default x = …;`) come after the class's variables, and **hints** after them.
+- **Enum values** come back as their names (`EES_HorseBlinders`, `AIA_Hostile`) when the game is installed, as the names come from its scripts. Without it some show as numbers, and the file's first lines say so.
 
 ## Signs that something needs a look
 

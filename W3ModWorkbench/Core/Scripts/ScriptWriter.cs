@@ -26,7 +26,7 @@ public static class ScriptWriter
     public static List<ScriptDocument> Write(ScriptBlob blob, string sourceLabel)
     {
         var enums = new EnumResolver(blob);
-        var decompiler = new Decompiler(blob, enums);
+        var decompiler = new Decompiler(blob, enums, GameDeclarations.For(blob));
         string header = Header(blob, sourceLabel, enums);
         var docs = new List<ScriptDocument>();
         var all = new StringBuilder(header);
@@ -138,7 +138,8 @@ public static class ScriptWriter
 
         foreach (var p in c.Properties)
             WriteProperty(sb, p);
-        WriteDefaults(sb, c.Defaults, c.Properties);
+        // a default can set a field the class inherits, from the game's classes too
+        WriteDefaults(sb, c.Defaults, c.Properties, name => c.IsState || c.Base.Length == 0 ? null : decompiler.FieldType(c.Base, name));
         if (c.Properties.Count > 0 || c.Defaults.Count > 0)
             sb.Append('\n');
 
@@ -148,11 +149,11 @@ public static class ScriptWriter
         sb.Append("}\n\n");
     }
 
-    private static void WriteDefaults(StringBuilder sb, List<ScriptDefault> defaults, List<ScriptProperty> props)
+    private static void WriteDefaults(StringBuilder sb, List<ScriptDefault> defaults, List<ScriptProperty> props, Func<string, string?>? inherited = null)
     {
         foreach (var d in defaults)
         {
-            string type = props.FirstOrDefault(p => p.Name == d.Property)?.Type ?? "";
+            string type = props.FirstOrDefault(p => p.Name == d.Property)?.Type ?? inherited?.Invoke(d.Property) ?? "";
             if (d.Children.Count == 0)
                 sb.Append($"\tdefault {d.Property} = {DefaultValue(type, d.Value)};\n"); // loc-ignore
             else
