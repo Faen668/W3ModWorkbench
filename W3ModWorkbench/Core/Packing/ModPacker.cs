@@ -93,7 +93,7 @@ public static class ModPacker
         {
             var bundled = new List<BundleWriter.Source>();
             var cache = new List<CacheTexture>();
-            int cooked = 0, imported = 0;
+            int cooked = 0, imported = 0, others = 0;
             BundleWriter.Source Stage(string gamePath, byte[] data)
             {
                 string to = Path.Combine(staging, gamePath);
@@ -172,6 +172,23 @@ public static class ModPacker
                         notes.Add(L.T("ModPacker.CouldntCookedGoes", file.GamePath, ex.Message));
                     }
                 }
+                else if (ResourceCooker.Cooks(file.GamePath))
+                {
+                    // a REDkit source material, entity or mesh is cooked; one cooked already goes in as it is
+                    try
+                    {
+                        if (ResourceCooker.Cook(file.GamePath, File.ReadAllBytes(file.FilePath)) is { } resource)
+                        {
+                            bundled.Add(Stage(file.GamePath.ToLowerInvariant(), resource));
+                            others++;
+                            continue;
+                        }
+                    }
+                    catch (InvalidDataException ex)
+                    {
+                        notes.Add(L.T("ModPacker.CouldntCookedGoes", file.GamePath, ex.Message));
+                    }
+                }
                 bundled.Add(file);
             }
 
@@ -182,7 +199,7 @@ public static class ModPacker
                 progress?.Report(L.T("ModPacker.WritingBundlesMetadata"));
                 MetadataStore.Write(content);
                 made.Add(L.T("ModPacker.FilesInBundles", L.T("Count.File", bundled.Count), string.Join(", ", bundles.Select(b => Path.GetFileName(b.FilePath))))
-                    + (cooked + imported > 0 ? $" ({string.Join(", ", new[] { cooked > 0 ? L.T("ModPacker.TexturesCooked", L.T("Count.Texture", cooked)) : null, imported > 0 ? L.T("ModPacker.TexturesFromPictures", L.T("Count.Texture", imported)) : null }.OfType<string>())})" : ""));
+                    + (cooked + imported + others > 0 ? $" ({string.Join(", ", new[] { cooked > 0 ? L.T("ModPacker.TexturesCooked", L.T("Count.Texture", cooked)) : null, imported > 0 ? L.T("ModPacker.TexturesFromPictures", L.T("Count.Texture", imported)) : null, others > 0 ? L.T("ModPacker.OtherFilesCooked", L.T("Count.File", others)) : null }.OfType<string>())})" : ""));
             }
             if (cache.Count > 0)
             {

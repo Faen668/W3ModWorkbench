@@ -220,9 +220,9 @@ public static class ModBuilder
 
     /// <summary>
     /// Files in the workspace that a build would pack but the game wouldn't use, and why: REDkit's source files Build
-    /// can't cook (anything but a texture: a mesh, an entity, a cube map…), which the game can't load until they're cooked.
-    /// Textures are cooked when the mod is built (REDkit's source <c>.xbm</c> files, and pictures made into textures), and
-    /// everything else is fine to pack.
+    /// can't cook (see <see cref="BuildCooks"/>), which the game can't load until they're cooked. What Build cooks is
+    /// cooked when the mod is built (REDkit's source textures, materials and entities, and pictures made into textures),
+    /// and everything else is fine to pack.
     /// <para>
     /// A cooked file is told by its objects: the game's cook marks each one with flag 0x2000, and REDkit's source files
     /// have none marked. Of the game's, its DLC's and installed mods' bundles, every file has at least one.
@@ -235,13 +235,25 @@ public static class ModBuilder
         foreach (string file in Directory.EnumerateFiles(project.WorkspacePath, "*", SearchOption.AllDirectories))
             if (IsUncooked(file) && !BuildCooks(file))
                 issues.Add(new WorkspaceIssue(Path.GetRelativePath(project.WorkspacePath, file),
-                    L.T("ModBuilder.IsntCookedREDkitSource")));
+                    WhyNotCooked(file) is { } why ? L.T("ModBuilder.IsntCookedBuildCant", why) : L.T("ModBuilder.IsntCookedREDkitSource")));
         return issues;
     }
 
-    /// <summary>Whether Build cooks a file of this kind when it isn't cooked: textures (<c>.xbm</c>), cube maps and texture arrays.</summary>
+    /// <summary>
+    /// Whether Build cooks this file when it isn't cooked: textures (<c>.xbm</c>), cube maps, texture arrays, and what
+    /// <see cref="Packing.ResourceCooker"/> cooks (materials, and entities that don't need other files to cook).
+    /// </summary>
     public static bool BuildCooks(string file) => file.EndsWith(".xbm", StringComparison.OrdinalIgnoreCase)
-        || file.EndsWith(".w2cube", StringComparison.OrdinalIgnoreCase) || file.EndsWith(".texarray", StringComparison.OrdinalIgnoreCase);
+        || file.EndsWith(".w2cube", StringComparison.OrdinalIgnoreCase) || file.EndsWith(".texarray", StringComparison.OrdinalIgnoreCase)
+        || Packing.ResourceCooker.Cooks(file) && WhyNotCooked(file) is null;
+
+    /// <summary>Why Build can't cook a file of a kind it cooks (an entity that includes others, say), or null.</summary>
+    private static string? WhyNotCooked(string file)
+    {
+        if (!Packing.ResourceCooker.Cooks(file)) return null;
+        try { return Packing.ResourceCooker.CantCook(file, File.ReadAllBytes(file)); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException) { return null; }
+    }
 
     /// <summary>Whether a file is a CR2W resource that hasn't been cooked: none of its objects carry the cook's flag.</summary>
     public static bool IsUncooked(string file)
