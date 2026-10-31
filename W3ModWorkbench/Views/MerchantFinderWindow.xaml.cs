@@ -354,7 +354,7 @@ public partial class MerchantFinderWindow : Window, IMessageHost
         var refs = stock.Params.SelectMany(p => p.Tables).Where(t => roll.Tables.ContainsKey(t.Table)).ToList();
         var amounts = refs.SelectMany(t => roll.Tables[t.Table].Items.Select(i => (Item: i, Respawn: t.Respawn is { } own && own != 0 ? own : roll.Tables[t.Table].Respawn)))
             .GroupBy(x => x.Item.Name, StringComparer.OrdinalIgnoreCase).ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
-        StockNote.Text = L.T("Merchant.StockOf", level);
+        StockNote.Text = LootLocatorWindow.DropCount(odds) + Environment.NewLine + L.T("Merchant.StockOf", level);
         List<MerchantStockRow> rows;
         StockGrid.ItemsSource = rows = odds.Items.OrderByDescending(p => p.Value).ThenBy(p => ItemName(p.Key) ?? p.Key, StringComparer.CurrentCultureIgnoreCase).Select(p =>
         {

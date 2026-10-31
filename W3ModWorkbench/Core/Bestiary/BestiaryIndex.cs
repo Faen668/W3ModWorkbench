@@ -31,6 +31,9 @@ public sealed record BestiaryCreature(string Template, string SfxTag, IReadOnlyL
 {
     public BestiaryEntry? Entry { get; set; }
 
+    /// <summary>A quest's own entry for this one when its kind's entry is a general one (Grottore, a spriggan): listed under both.</summary>
+    public BestiaryEntry? Unique { get; set; }
+
     /// <summary>The template's file name as words, for a creature with no entry.</summary>
     public string Title => string.Join(' ', Path.GetFileNameWithoutExtension(Template).Split('_', StringSplitOptions.RemoveEmptyEntries));
 }
@@ -93,7 +96,7 @@ public sealed class BestiaryIndex
         path.StartsWith(@"quests\", StringComparison.OrdinalIgnoreCase) || path.Contains(@"\quests\", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>The creatures of an entry.</summary>
-    public IEnumerable<BestiaryCreature> CreaturesOf(BestiaryEntry entry) => Creatures.Values.Where(c => c.Entry == entry);
+    public IEnumerable<BestiaryCreature> CreaturesOf(BestiaryEntry entry) => Creatures.Values.Where(c => c.Entry == entry || c.Unique == entry);
 
     /// <summary>Reads the bestiary, the rules, the communities and every world's encounters: a few seconds.</summary>
     public static BestiaryIndex Build(ResourceLocator locator, string? scriptsFolder, IProgress<string>? progress, CancellationToken token)
@@ -135,12 +138,16 @@ public sealed class BestiaryIndex
         var communities = ReadCommunities(locator, options);
         ReadCreatures(communities.SelectMany(c => c.Templates).Distinct(StringComparer.OrdinalIgnoreCase));
         // a monster whose entry its quest unlocks, not the game's rules (the djinn: npc.ws skips mon_djinn), is that entry's
-        var questEntries = ReadQuestEntries(locator, options, byJournal);
+        var phases = ReadQuestPhases(locator, options, byJournal);
+        var byQuest = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var community in communities)
-            if (questEntries.TryGetValue(community.Path, out var unlocked))
+            if (QuestEntryOf(phases, community.Path) is { } unlocked)
                 foreach (string template in community.Templates)
                     if (creatures.TryGetValue(template, out var c) && c.Entry is null && c.Abilities.Any(a => a.StartsWith("mon_", StringComparison.OrdinalIgnoreCase)))
+                    {
                         c.Entry = unlocked;
+                        byQuest.Add(template);
+                    }
         foreach (var c in creatures.Values.Where(c => c.Entry is null).ToList()) creatures.TryRemove(c.Template, out _);
         communities = [.. communities.Select(c => c with { Templates = [.. c.Templates.Where(creatures.ContainsKey)] }).Where(c => c.Templates.Count > 0)];
         var wanted = communities.SelectMany(c => c.Phases).SelectMany(p => p.SpawnTags.Concat(p.Actions.SelectMany(a => a.ApTags))).ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -221,6 +228,26 @@ public sealed class BestiaryIndex
         progress?.Report("templates");
         ReadCreatures(places.Select(p => p.Template).Concat(entries.Select(e => e.Template).OfType<string>()).Distinct(StringComparer.OrdinalIgnoreCase));
 
+        // a monster given its quest's entry keeps it only when nothing else placed is that entry's: the pale widow's quest
+        // spawns ghost panthers too, which the game keeps out of the bestiary
+        var placed = places.Select(p => p.Template).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (string template in byQuest)
+            if (creatures[template].Entry is { } q && creatures.Values.Any(c => c.Entry == q && !byQuest.Contains(c.Template) && placed.Contains(c.Template)))
+                creatures[template].Entry = null;
+        // an entry its quest unlocks that nothing placed is (Grottore, the quest's own spriggan) is the quest's own monsters'
+        // of the general kind in the same group of the bestiary, or of the only general kind it has
+        var used = creatures.Values.Where(c => placed.Contains(c.Template)).Select(c => c.Entry).OfType<BestiaryEntry>().ToHashSet();
+        foreach (var phase in phases)
+        {
+            if (QuestFolder(phase.Path) is not { } folder || phase.Entries.Where(e => !used.Contains(e)).ToList() is not [var unique]) continue;
+            var kinds = creatures.Values.Where(c => c.Entry is not null && c.Unique is null && placed.Contains(c.Template)
+                && c.Template.StartsWith(folder, StringComparison.OrdinalIgnoreCase)).GroupBy(c => c.Entry!).ToList();
+            var same = kinds.Where(k => k.Key.Category == unique.Category).ToList();
+            if ((same.Count == 1 ? same[0] : kinds.Count == 1 ? kinds[0] : null) is not { } kind) continue;
+            foreach (var c in kind) c.Unique = unique;
+            used.Add(unique);
+        }
+
         return new BestiaryIndex
         {
             Entries = entries, Categories = categories, Creatures = new Dictionary<string, BestiaryCreature>(creatures, StringComparer.OrdinalIgnoreCase),
@@ -228,13 +255,12 @@ public sealed class BestiaryIndex
         };
     }
 
-    /// <summary>
-    /// The communities of quests that unlock one bestiary entry themselves, with that entry: a quest phase (.w2phase)
-    /// naming exactly one entry's journal file among the files it uses, by the community files it uses.
-    /// </summary>
-    private static Dictionary<string, BestiaryEntry> ReadQuestEntries(ResourceLocator locator, ParallelOptions options, IReadOnlyDictionary<string, BestiaryEntry> byJournal)
+    /// <summary>A quest phase (.w2phase) that uses bestiary entries' journal files: those entries, and the community files it uses.</summary>
+    private sealed record QuestPhase(string Path, IReadOnlyList<BestiaryEntry> Entries, IReadOnlyList<string> Communities);
+
+    private static List<QuestPhase> ReadQuestPhases(ResourceLocator locator, ParallelOptions options, IReadOnlyDictionary<string, BestiaryEntry> byJournal)
     {
-        var found = new ConcurrentDictionary<string, BestiaryEntry?>(StringComparer.OrdinalIgnoreCase);
+        var found = new ConcurrentBag<QuestPhase>();
         var marker = "bestiary"u8.ToArray();
         Parallel.ForEach(locator.AllPaths(".w2phase"), options, path =>
         {
@@ -243,12 +269,30 @@ public sealed class BestiaryIndex
             try { file = Cr2wFile.Read(data); }
             catch (InvalidDataException) { return; }
             var entries = file.Imports.Select(i => byJournal.GetValueOrDefault(i.Path)).OfType<BestiaryEntry>().Distinct().ToList();
-            if (entries.Count != 1) return;
-            foreach (var community in file.Imports.Where(i => i.Path.EndsWith(".w2comm", StringComparison.OrdinalIgnoreCase)))
-                // two quests unlocking different entries for one community: neither is trusted
-                found.AddOrUpdate(community.Path, entries[0], (_, had) => had == entries[0] ? had : null);
+            if (entries.Count == 0) return;
+            found.Add(new QuestPhase(path, entries, [.. file.Imports.Select(i => i.Path).Where(p => p.EndsWith(".w2comm", StringComparison.OrdinalIgnoreCase))]));
         });
-        return found.Where(p => p.Value is not null).ToDictionary(p => p.Key, p => p.Value!, StringComparer.OrdinalIgnoreCase);
+        return [.. found.OrderBy(p => p.Path, StringComparer.OrdinalIgnoreCase)];
+    }
+
+    /// <summary>
+    /// The entry a community's quests unlock when they unlock just one: the phases using the community that name exactly
+    /// one entry's journal file, all naming the same one.
+    /// </summary>
+    private static BestiaryEntry? QuestEntryOf(List<QuestPhase> phases, string community)
+    {
+        var unlocked = phases.Where(p => p.Entries.Count == 1 && p.Communities.Contains(community, StringComparer.OrdinalIgnoreCase)).Select(p => p.Entries[0]).Distinct().ToList();
+        return unlocked is [var one] ? one : null;
+    }
+
+    /// <summary>A quest's own folder, from one of its phases: quest_files\mq7002_stubborn_knight.w2phase or quest_files\q704_truth\phases\….</summary>
+    private static string? QuestFolder(string phase)
+    {
+        const string Files = @"\quest_files\";
+        int at = phase.IndexOf(Files, StringComparison.OrdinalIgnoreCase);
+        if (at < 0) return null;
+        string name = phase[(at + Files.Length)..].Split('\\')[0];
+        return phase[..(at + Files.Length)] + Path.GetFileNameWithoutExtension(name) + "\\";
     }
 
     /// <summary>The creature definitions an encounter's spawn tree names, following the .spawntree files it includes.</summary>

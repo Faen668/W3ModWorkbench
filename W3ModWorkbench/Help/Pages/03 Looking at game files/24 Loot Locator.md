@@ -33,8 +33,8 @@ The game's own minimap, with each place as a dot coloured by its chance: yellow 
 **Places** lists the world's places, likeliest first, with their area (the layer they're in), chance, respawn time and position. **Chance** is how often a container like that one gets the item, over many random rolls; the game's roll for each placed spot is fixed by where it stands, so **Rolled here** is the one to trust for that exact spot. A chest can show 10% and still say **Yes**. Click one, or a dot on the map, to see what it can give:
 
 - **Rolled here**: what that exact spot gives at the level chosen. The game picks a place's items from where it stands, so the same spot always gets the same items; a spot rolled at random each time says so.
-- **Uses N of these tables**: the place's tables, each with the chance it's used. Click a table to look at it.
-- **Can give**: every item and its chance. Click an item to look for it.
+- **Uses N of these tables**: the place's tables, each with the chance it's used and how many of its items it gives. Click a table to look at it.
+- **Can give**: how many different items the place gives each time, then every item and its chance. Click an item to look for it.
 - **Always holds**: items the template always holds (some quest chests).
 
 **Copy position** copies its world position, and **Open the template** and **Open the layer** open the files it comes from.

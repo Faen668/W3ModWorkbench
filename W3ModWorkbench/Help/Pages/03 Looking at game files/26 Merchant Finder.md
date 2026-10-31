@@ -35,7 +35,7 @@ The game's own map, with each spot the merchant goes to coloured by what they do
 
 ## Stock, places and quests
 
-- **Stock** lists what the shop holds when it fills: each item's chance at the level chosen, how many, and its base price. Double-click an item to find where else it can be found in the [[Loot Locator]].
+- **Stock** lists what the shop holds when it fills: how many different items, then each item's chance at the level chosen, how many, and its base price. Double-click an item to find where else it can be found in the [[Loot Locator]].
 - **Places** lists each place the merchant can be: its world and area, its hours, what decides whether they're there, and whether a community or an encounter spawns them. Click one to see it on the card and the map.
 - **Quests** lists the quests that bring the merchant, move them to another phase or send them away. Double-click one to open its file.
 
