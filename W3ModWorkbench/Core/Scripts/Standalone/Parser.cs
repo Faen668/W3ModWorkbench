@@ -98,7 +98,10 @@ public sealed class Parser
         string? cls = null;
         if (EatPunct("("))
         {
-            if (!IsPunct(")")) cls = Identifier(); // `@wrapMethod()` is how a global function is wrapped
+            // a global function is wrapped or replaced with no brackets at all: wcc refuses `@wrapMethod()`
+            if (IsPunct(")") && !_skipBodies)
+                throw new ScriptSyntaxException("syntax error, unexpected ')', expecting TOKEN_IDENT, near ')'", Cur.Line); // loc-ignore
+            if (!IsPunct(")")) cls = Identifier();
             ExpectPunct(")");
         }
         return new Annotation(kind, cls, line);
