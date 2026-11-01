@@ -31,7 +31,7 @@ The map shows every place that spawns the creature, whether an encounter or a co
 Below the map:
 
 - **Places** lists each place: its area, the kind spawned there, what spawns it (**Encounter** or **Community**), whether it's a quest's (**After an event** for one the story switches on), whether a mod adds it, its level, how many it spawns in all (**Spawn limit**) and how many at a time (**At once**). Click one, or a dot on the map, to ring it and draw its area.
-- **Kinds** lists each kind of the creature (a nest boss, an underwater drowner, a stronger later one) with its level, how many places spawn it and its abilities.
-- **Drops** lists what the kind picked drops, each item with its chance at the player level set in the [[Loot Locator]]. Double-click an item to open it in the Loot Locator, already looked for, at a level it drops at and in the world shown here.
+- **Kinds** lists each kind of the creature (a nest boss, an underwater drowner, a stronger later one) with its level, how many places spawn it and its abilities. A contract's own monster that is a special one of a common kind, such as Grottore, a spriggan, is listed under both entries, marked **also under** the other.
+- **Drops** lists what the kind picked drops, each item with its chance at the player level set in the [[Loot Locator]], and how many different items one drops. Double-click an item to open it in the Loot Locator, already looked for, at a level it drops at and in the world shown here.
 
 ![Bruxae: their page and what one drops](bestiary-drops.jpg)

@@ -15,7 +15,11 @@ public sealed record LootTableDef(string Name, uint PicksMin, uint PicksMax, uin
 public sealed record RolledItem(string Item, uint QuantityMin, uint QuantityMax, string Table, uint Respawn);
 
 /// <summary>How likely each item and table is at a place: the share of rolls that gave it.</summary>
-public sealed record LootOdds(IReadOnlyDictionary<string, double> Items, IReadOnlyDictionary<string, double> Tables, int Rolls);
+public sealed record LootOdds(IReadOnlyDictionary<string, double> Items, IReadOnlyDictionary<string, double> Tables, int Rolls)
+{
+    /// <summary>How many different items a roll gave: the fewest, the most and on average.</summary>
+    public (int Min, int Max, double Average) Count { get; init; }
+}
 
 /// <summary>
 /// The game's loot roll, re-created from witcher3.exe: CR4LootManager's generator (template params, then each param's
@@ -222,15 +226,18 @@ public sealed class LootRoll
         var tables = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         // the engine's own noise from many seeds: a seed is a place, so this is the spread over places like it
         uint seed = 0x9E3779B9;
+        int fewest = int.MaxValue, most = 0, total = 0;
         for (int r = 0; r < OddsRolls; r++)
         {
             seed = unchecked(seed * 1664525u + 1013904223u) | 1;
             var rolled = Roll(spot, level, seed);
+            (fewest, most, total) = (Math.Min(fewest, rolled.Count), Math.Max(most, rolled.Count), total + rolled.Count);
             foreach (var i in rolled) items[i.Item] = items.GetValueOrDefault(i.Item) + 1;
             foreach (string t in rolled.Select(i => i.Table).Where(t => t.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase)) tables[t] = tables.GetValueOrDefault(t) + 1;
         }
         return new LootOdds(items.ToDictionary(p => p.Key, p => p.Value / (double)OddsRolls, StringComparer.OrdinalIgnoreCase),
-            tables.ToDictionary(p => p.Key, p => p.Value / (double)OddsRolls, StringComparer.OrdinalIgnoreCase), OddsRolls);
+            tables.ToDictionary(p => p.Key, p => p.Value / (double)OddsRolls, StringComparer.OrdinalIgnoreCase), OddsRolls)
+        { Count = (fewest, most, total / (double)OddsRolls) };
     });
 
     /// <summary>The share of a table's rolls that give each of its items, at a player level: what it gives when it's used.</summary>
@@ -238,14 +245,16 @@ public sealed class LootRoll
     {
         var items = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         uint seed = 0x9E3779B9;
+        int fewest = int.MaxValue, most = 0, total = 0;
         for (int r = 0; r < OddsRolls; r++)
         {
             seed = unchecked(seed * 1664525u + 1013904223u) | 1;
             uint m = table.PicksMax > table.PicksMin ? Between(table.PicksMin, table.PicksMax + 1, seed) : table.PicksMin;
-            foreach (string name in Pick(table.Items, m, i => i.Chance, i => LevelOk(level, i.LevelMin, i.LevelMax), seed).Select(i => i.Name).Distinct(StringComparer.OrdinalIgnoreCase))
-                items[name] = items.GetValueOrDefault(name) + 1;
+            var names = Pick(table.Items, m, i => i.Chance, i => LevelOk(level, i.LevelMin, i.LevelMax), seed).Select(i => i.Name).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            (fewest, most, total) = (Math.Min(fewest, names.Count), Math.Max(most, names.Count), total + names.Count);
+            foreach (string name in names) items[name] = items.GetValueOrDefault(name) + 1;
         }
         return new LootOdds(items.ToDictionary(p => p.Key, p => p.Value / (double)OddsRolls, StringComparer.OrdinalIgnoreCase),
-            new Dictionary<string, double>(), OddsRolls);
+            new Dictionary<string, double>(), OddsRolls) { Count = (fewest, most, total / (double)OddsRolls) };
     });
 }

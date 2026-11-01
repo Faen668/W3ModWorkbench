@@ -291,12 +291,12 @@ public partial class BestiaryWindow : Window, IMessageHost
         var templates = creatures.Select(c => c.Template).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var byTemplate = creatures.ToDictionary(c => c.Template, StringComparer.OrdinalIgnoreCase);
         _places = [.. index.Places.Where(p => templates.Contains(p.Template)).Select(p => new BestiaryPlaceRow(p, LootLocatorWindow.AreaOf(p.World, p.Layer),
-            VariantTitle(byTemplate[p.Template]), byTemplate[p.Template].Level, p.TotalSpawnLimit, p.MaxSpawnedAtOnce))];
+            VariantTitle(byTemplate[p.Template], row.Entry), byTemplate[p.Template].Level, p.TotalSpawnLimit, p.MaxSpawnedAtOnce))];
         ExportButton.IsEnabled = _places.Count > 0;
         await ShowEntryAsync(row, version);
         if (version != _version) return;
 
-        var variants = creatures.Select(c => new BestiaryVariantRow(c, VariantTitle(c), _places.Count(p => p.Place.Template.Equals(c.Template, StringComparison.OrdinalIgnoreCase))))
+        var variants = creatures.Select(c => new BestiaryVariantRow(c, VariantTitle(c, row.Entry), _places.Count(p => p.Place.Template.Equals(c.Template, StringComparison.OrdinalIgnoreCase))))
             .OrderByDescending(v => v.Places).ThenBy(v => v.Creature.Level).ToList();
         VariantGrid.ItemsSource = variants;
         VariantGrid.SelectedItem = variants.FirstOrDefault(v => v.Creature.Loot is not null) ?? variants.FirstOrDefault();
@@ -325,7 +325,13 @@ public partial class BestiaryWindow : Window, IMessageHost
         await ShowWorldAsync(keep, true);
     }
 
-    private static string VariantTitle(BestiaryCreature c) => LootLocatorWindow.Humanise(Path.GetFileNameWithoutExtension(c.Template));
+    /// <summary>A kind's name, saying which other entry it's also under (Grottore's spriggan is under both).</summary>
+    private string VariantTitle(BestiaryCreature c, BestiaryEntry? shown)
+    {
+        string title = LootLocatorWindow.Humanise(Path.GetFileNameWithoutExtension(c.Template));
+        var other = shown is null ? null : c.Unique == shown ? c.Entry : c.Unique;
+        return other is null ? title : L.T("Bestiary.AlsoUnder", title, Text(other.Name, other.BaseName));
+    }
 
     /// <summary>The middle column: the entry's artwork and texts, as the game's bestiary shows them, and what works against it.</summary>
     private async Task ShowEntryAsync(BestiaryRow row, int version)
@@ -421,7 +427,7 @@ public partial class BestiaryWindow : Window, IMessageHost
         var odds = roll.Odds(loot, level);
         var amounts = loot.Params.SelectMany(p => p.Tables).Where(t => roll.Tables.ContainsKey(t.Table)).SelectMany(t => roll.Tables[t.Table].Items)
             .GroupBy(i => i.Name, StringComparer.OrdinalIgnoreCase).ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
-        DropsNote.Text = L.T("Bestiary.DropsOf", variant.Title, level);
+        DropsNote.Text = LootLocatorWindow.DropCount(odds) + Environment.NewLine + L.T("Bestiary.DropsOf", variant.Title, level);
         DropGrid.ItemsSource = odds.Items.OrderByDescending(p => p.Value).Select(p => new BestiaryDropRow(ItemName(p.Key) ?? p.Key, p.Key, p.Value,
             amounts.TryGetValue(p.Key, out var a) ? (a.QuantityMin == a.QuantityMax ? $"×{a.QuantityMin}" : $"×{a.QuantityMin}–{a.QuantityMax}") : "")).ToList(); // loc-ignore: numbers
     }

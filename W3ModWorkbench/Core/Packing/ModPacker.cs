@@ -93,7 +93,7 @@ public static class ModPacker
         {
             var bundled = new List<BundleWriter.Source>();
             var cache = new List<CacheTexture>();
-            int cooked = 0, imported = 0;
+            int cooked = 0, imported = 0, others = 0;
             BundleWriter.Source Stage(string gamePath, byte[] data)
             {
                 string to = Path.Combine(staging, gamePath);
@@ -172,8 +172,50 @@ public static class ModPacker
                         notes.Add(L.T("ModPacker.CouldntCookedGoes", file.GamePath, ex.Message));
                     }
                 }
+                else if (ResourceCooker.IsMesh(file.GamePath))
+                {
+                    // a REDkit source mesh is cooked into the mesh and its buffer; one cooked already goes in as it is
+                    try
+                    {
+                        byte[]? Read(string path) => byPath.TryGetValue(path, out var own) ? File.ReadAllBytes(own.FilePath) : gameFile?.Invoke(path);
+                        if (ResourceCooker.CookMesh(file.GamePath, File.ReadAllBytes(file.FilePath), Read, out string? note) is { } mesh)
+                        {
+                            string gamePath = file.GamePath.ToLowerInvariant();
+                            bundled.Add(Stage(gamePath, mesh.File));
+                            bundled.Add(Stage(gamePath + ".1.buffer", mesh.Buffer));
+                            if (note is not null) notes.Add($"{file.GamePath}: {note}");
+                            others++;
+                            continue;
+                        }
+                    }
+                    catch (InvalidDataException ex)
+                    {
+                        notes.Add(L.T("ModPacker.CouldntCookedGoes", file.GamePath, ex.Message));
+                    }
+                }
+                else if (ResourceCooker.Cooks(file.GamePath))
+                {
+                    // a REDkit source material or entity is cooked; one cooked already goes in as it is
+                    try
+                    {
+                        if (ResourceCooker.Cook(file.GamePath, File.ReadAllBytes(file.FilePath)) is { } resource)
+                        {
+                            bundled.Add(Stage(file.GamePath.ToLowerInvariant(), resource));
+                            others++;
+                            continue;
+                        }
+                    }
+                    catch (InvalidDataException ex)
+                    {
+                        notes.Add(L.T("ModPacker.CouldntCookedGoes", file.GamePath, ex.Message));
+                    }
+                }
                 bundled.Add(file);
             }
+
+            // a file made here (a cooked mesh's buffer) takes the place of the workspace's file of that path
+            var staged = new HashSet<string>(bundled.Where(b => b.FilePath.StartsWith(staging, StringComparison.OrdinalIgnoreCase)).Select(b => b.GamePath), StringComparer.OrdinalIgnoreCase);
+            bundled.RemoveAll(b => staged.Contains(b.GamePath) && !b.FilePath.StartsWith(staging, StringComparison.OrdinalIgnoreCase));
 
             Directory.CreateDirectory(content);
             if (bundled.Count > 0)
@@ -182,7 +224,7 @@ public static class ModPacker
                 progress?.Report(L.T("ModPacker.WritingBundlesMetadata"));
                 MetadataStore.Write(content);
                 made.Add(L.T("ModPacker.FilesInBundles", L.T("Count.File", bundled.Count), string.Join(", ", bundles.Select(b => Path.GetFileName(b.FilePath))))
-                    + (cooked + imported > 0 ? $" ({string.Join(", ", new[] { cooked > 0 ? L.T("ModPacker.TexturesCooked", L.T("Count.Texture", cooked)) : null, imported > 0 ? L.T("ModPacker.TexturesFromPictures", L.T("Count.Texture", imported)) : null }.OfType<string>())})" : ""));
+                    + (cooked + imported + others > 0 ? $" ({string.Join(", ", new[] { cooked > 0 ? L.T("ModPacker.TexturesCooked", L.T("Count.Texture", cooked)) : null, imported > 0 ? L.T("ModPacker.TexturesFromPictures", L.T("Count.Texture", imported)) : null, others > 0 ? L.T("ModPacker.OtherFilesCooked", L.T("Count.File", others)) : null }.OfType<string>())})" : ""));
             }
             if (cache.Count > 0)
             {

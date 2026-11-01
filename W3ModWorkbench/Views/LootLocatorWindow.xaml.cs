@@ -696,7 +696,7 @@ public partial class LootLocatorWindow : Window, IMessageHost
                 string table = t.Table;
                 link.Click += (_, _) => Select(table, true);
                 line.Inlines.Add(link);
-                line.Inlines.Add(Quiet("  " + (defined ? Percent(odds.Tables.GetValueOrDefault(t.Table)) : L.T("LootLocator.TableUndefined"))));
+                line.Inlines.Add(Quiet("  " + (defined ? Percent(odds.Tables.GetValueOrDefault(t.Table)) + "  ·  " + TablePicks(roll.Tables[t.Table]) : L.T("LootLocator.TableUndefined"))));
                 Details.Children.Add(line);
             }
         }
@@ -704,6 +704,7 @@ public partial class LootLocatorWindow : Window, IMessageHost
         if (odds.Items.Count > 0)
         {
             Details.Children.Add(Title(L.T("LootLocator.CanGive")));
+            Details.Children.Add(Hint(DropCount(odds)));
             foreach (var (item, chance) in odds.Items.OrderByDescending(p => p.Value)) Details.Children.Add(ItemLine(item, Percent(chance)));
         }
         if (spot.Fixed.Count > 0)
@@ -793,6 +794,14 @@ public partial class LootLocatorWindow : Window, IMessageHost
     public static string Percent(double chance) => chance <= 0 ? "0%" : chance < 0.001 ? L.T("LootLocator.UnderTenth") : L.T("LootLocator.PercentValue", chance * 100);
 
     public static string Position(System.Numerics.Vector3 at) => string.Format(CultureInfo.InvariantCulture, "{0:0.00}, {1:0.00}, {2:0.00}", at.X, at.Y, at.Z);
+
+    /// <summary>How many different items a roll gives: a range with its average, or the one number.</summary>
+    public static string DropCount(LootOdds odds) => odds.Count.Min == odds.Count.Max
+        ? L.T("LootLocator.DropCountFixed", odds.Count.Max)
+        : L.T("LootLocator.DropCount", odds.Count.Min, odds.Count.Max, odds.Count.Average);
+
+    /// <summary>How many of its items a table gives when it's used.</summary>
+    private static string TablePicks(LootTableDef table) => L.T("LootLocator.TablePicks", table.PicksMin == table.PicksMax ? $"{table.PicksMin}" : $"{table.PicksMin}–{table.PicksMax}"); // loc-ignore: numbers
 
     private static string Range(uint min, uint max) => min == max ? $"×{min}" : $"×{min}–{max}"; // loc-ignore: numbers
 
