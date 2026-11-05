@@ -66,13 +66,28 @@ public sealed class ResourceLocator
 
     // ---------------------------------------------------------------- files in bundles
 
+    /// <summary>
+    /// Where a path naming an old DLC folder would be now: Remastered merged some DLC into the game, while files can still
+    /// name the folder it had (<c>dlc\dlc18\data\items\x.w2mesh</c> is now <c>items\x.w2mesh</c>). This is only for looking
+    /// again when the path as written isn't found, which always wins. Null for a path of any other kind.
+    /// </summary>
+    public static string? MergedPath(string path)
+    {
+        if (!path.StartsWith(@"dlc\", StringComparison.OrdinalIgnoreCase)) return null;
+        int data = path.IndexOf(@"\data\", StringComparison.OrdinalIgnoreCase);
+        return data < 0 || data + 6 == path.Length ? null : path[(data + 6)..];
+    }
+
     /// <summary>A file by its game path, read from the nearest archive that has it. Null when none has.</summary>
-    public byte[]? ReadFile(string path) => ProjectFile(path) is { } own ? File.ReadAllBytes(own) : Find(path) is { } entry ? Read(entry) : null;
+    public byte[]? ReadFile(string path) =>
+        ReadExact(path) ?? (MergedPath(path) is { } merged ? ReadExact(merged) : null);
+
+    private byte[]? ReadExact(string path) => ProjectFile(path) is { } own ? File.ReadAllBytes(own) : FindExact(path) is { } entry ? Read(entry) : null;
 
     /// <summary>Whether the copy of a file that's read comes from an installed mod (one in mods\, or installed as DLC).</summary>
     public bool IsFromMod(string path) => Find(path) is { } entry && ModFolder(entry.Archive.FilePath) is not null;
 
-    /// <summary>The open project's own copy of a game file, when it has one.</summary>
+    /// <summary>The open project's own copy of a game file at exactly that path, when it has one.</summary>
     public string? ProjectFile(string path)
     {
         if (string.IsNullOrEmpty(path) || _projectFiles?.Invoke() is not { } folder) return null;
@@ -81,7 +96,10 @@ public sealed class ResourceLocator
     }
 
     /// <summary>Where a file is: the nearest archive with a file at that path. Null when none has one.</summary>
-    public ArchiveEntry? Find(string path)
+    public ArchiveEntry? Find(string path) =>
+        FindExact(path) ?? (MergedPath(path) is { } merged ? FindExact(merged) : null);
+
+    private ArchiveEntry? FindExact(string path)
     {
         if (string.IsNullOrEmpty(path)) return null;
         foreach (var archive in _open.Where(a => a is not TextureCacheArchive))
@@ -99,15 +117,23 @@ public sealed class ResourceLocator
     /// </summary>
     public byte[]? ReadBuffer(string resourcePath, int number, IArchive? owner)
     {
+        if (ReadBufferExact(resourcePath, number, owner) is { } data) return data;
+        // a resource found where its path says keeps to its own buffers; another copy's wouldn't fit it
+        return MergedPath(resourcePath) is { } merged && ProjectFile(resourcePath) is null && FindExact(resourcePath) is null
+            ? ReadBufferExact(merged, number, owner) : null;
+    }
+
+    private byte[]? ReadBufferExact(string resourcePath, int number, IArchive? owner)
+    {
         string path = $"{resourcePath}.{number}.buffer";
-        if (ProjectFile(resourcePath) is not null) return ProjectFile(path) is { } own ? File.ReadAllBytes(own) : ReadFile(path);
+        if (ProjectFile(resourcePath) is not null) return ReadExact(path);
         if (owner is not null)
         {
             string? folder = Path.GetDirectoryName(owner.FilePath);
             foreach (var archive in _open.Concat(Beside(folder)).Where(a => Path.GetDirectoryName(a.FilePath) == folder))
                 if (Index(archive).TryGetValue(path, out var entry)) return Read(entry);
         }
-        return ReadFile(path);
+        return ReadExact(path);
     }
 
     private static byte[] Read(ArchiveEntry entry)
@@ -145,7 +171,10 @@ public sealed class ResourceLocator
     /// A cooked resource's entry in the game's collision caches (a cloth's APEX asset), from the nearest that has it:
     /// beside the file being looked at, then the installed mods', the DLC's and content0's. Null when none has.
     /// </summary>
-    public byte[]? ReadCollision(string path)
+    public byte[]? ReadCollision(string path) =>
+        ReadCollisionExact(path) ?? (MergedPath(path) is { } merged ? ReadCollisionExact(merged) : null);
+
+    private byte[]? ReadCollisionExact(string path)
     {
         var places = new List<string>();
         if (_near is not null) places.Add(Path.Combine(_near, "collision.cache"));
@@ -194,8 +223,30 @@ public sealed class ResourceLocator
     /// </summary>
     public TextureEntry? FindTexture(string xbmPath)
     {
+        if (FindTextureExact(xbmPath) is { } exact) return exact;
+        // anything at the path as written wins: a texture with its pixels in its own .xbm, or a project's picture not built yet
+        return MergedPath(xbmPath) is { } merged && ProjectFile(xbmPath) is null && FindExact(xbmPath) is null && ProjectPictureExact(xbmPath) is null
+            ? FindTextureExact(merged) : null;
+    }
+
+    private TextureEntry? FindTextureExact(string xbmPath)
+    {
         foreach (var cache in Caches())
             if (FindInCache(cache, xbmPath) is { } entry) return entry;
+        return null;
+    }
+
+    /// <summary>
+    /// The picture in the project that Build makes a texture from (<c>name.tga</c> beside <c>name.xbm</c>, or .dds, .png…),
+    /// before the mod is built: its disk path, or null.
+    /// </summary>
+    public string? ProjectPicture(string xbmPath) =>
+        ProjectPictureExact(xbmPath) ?? (MergedPath(xbmPath) is { } merged ? ProjectPictureExact(merged) : null);
+
+    private string? ProjectPictureExact(string xbmPath)
+    {
+        foreach (string ext in new[] { ".dds", ".tga", ".png", ".bmp", ".jpg", ".jpeg" })
+            if (ProjectFile(Path.ChangeExtension(xbmPath, ext)) is { } file) return file;
         return null;
     }
 

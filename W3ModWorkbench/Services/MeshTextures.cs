@@ -158,12 +158,7 @@ public static class MeshTextures
     /// The picture in the project that Build makes a texture from (<c>name.tga</c> beside <c>name.xbm</c>, or .dds, .png…),
     /// before the mod is built: its disk path, or null.
     /// </summary>
-    private static string? PictureFile(ResourceLocator locator, string xbmPath)
-    {
-        foreach (string ext in new[] { ".dds", ".tga", ".png", ".bmp", ".jpg", ".jpeg" })
-            if (locator.ProjectFile(Path.ChangeExtension(xbmPath, ext)) is { } file && File.Exists(file)) return file;
-        return null;
-    }
+    private static string? PictureFile(ResourceLocator locator, string xbmPath) => locator.ProjectPicture(xbmPath);
 
     /// <summary>A project picture standing for a texture not built yet, as the format asked for; null when there's none or it can't be read.</summary>
     /// <summary>

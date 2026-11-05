@@ -35,7 +35,7 @@ The preview draws the material as the game draws it, and changes as you do.
 ## Based on, and used by
 
 - **Based on** shows what the material is built on, nearest first. Click one to open it.
-- **Used by** lists the meshes and materials that use it. Double-click one to open it, or right-click a mesh to preview the material on it.
+- **Used by** lists the meshes, materials and entities that use it. Double-click one to open it, or right-click a mesh to preview the material on it.
 
 ## Saving
 

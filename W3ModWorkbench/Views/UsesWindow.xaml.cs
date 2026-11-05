@@ -60,7 +60,8 @@ public partial class UsesWindow : Window
             UsesEmpty.Visibility = Visibility.Visible;
             return;
         }
-        var rows = links.Order(StringComparer.OrdinalIgnoreCase).Select(path => new LinkRow(path, "", _browser.ItemForPath(path))).ToList();
+        var rows = links.Order(StringComparer.OrdinalIgnoreCase).Select(path => new LinkRow(path, "",
+            _browser.ItemForPath(path) ?? (Core.Cr2w.ResourceLocator.MergedPath(path) is { } merged ? _browser.ItemForPath(merged) : null))).ToList();
         UsesList.ItemsSource = rows;
         UsesTitle.Text = L.T("UsesWindow.Uses2", rows.Count);
         UsesEmpty.Text = L.T("UsesWindow.DoesntNameAnyOther");

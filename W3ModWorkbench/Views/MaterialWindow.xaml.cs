@@ -476,7 +476,8 @@ public partial class MaterialWindow : Window, IMessageHost
                 var drawnWith = users.Where(u => u.EndsWith(".w2mesh", StringComparison.OrdinalIgnoreCase)).Take(60)
                     .SelectMany(m => index.UsedBy(m)).Where(u => u.Path.EndsWith(".w2ent", StringComparison.OrdinalIgnoreCase)).ToList();
                 foreach (var source in drawnWith) _sources.TryAdd(source.Path, source);
-                entities = [.. drawnWith.Select(u => u.Path).Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase)];
+                // an entity can name the material itself as well, and is then listed once, with the files that do
+                entities = [.. drawnWith.Select(u => u.Path).Except(users, StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase)];
                 everywhere = true;
             }
             catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or InvalidOperationException) { }

@@ -18,7 +18,8 @@ public sealed record ReferenceSource(string ArchivePath, string Path);
 /// </summary>
 public sealed class ReferenceIndex
 {
-    private const string Header = "W3MW-REFS 1";
+    // 2: the links include those of the CR2W files nested in a file
+    private const string Header = "W3MW-REFS 2";
 
     public static readonly string CacheFolder = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "W3ModWorkbench", "References");
@@ -29,6 +30,9 @@ public sealed class ReferenceIndex
         ".buffer", ".xbm", ".texarray", ".w2cube", ".dds", ".png", ".jpg", ".tga", ".bmp", ".wem", ".bnk", ".ogg", ".wav", ".usm", ".bk2",
         ".csv", ".xml", ".ws", ".txt", ".ini", ".json", ".log", ".w3strings", ".w3speech", ".cache", ".db", ".subs", ".redscripts", ".bin",
     };
+
+    // the loose files worth reading whole, as CR2W files can be nested in them
+    private static readonly HashSet<string> HoldsOthers = new(StringComparer.OrdinalIgnoreCase) { ".w2ent", ".w2cent", ".w2l" };
 
     private readonly Dictionary<string, List<ReferenceSource>> _usedBy;
 
@@ -46,24 +50,62 @@ public sealed class ReferenceIndex
 
     private static string Key(string path) => path.Replace('/', '\\').TrimStart('\\').ToLowerInvariant();
 
-    /// <summary>The paths a file refers to, from its CR2W imports; none for a file that isn't a resource.</summary>
+    /// <summary>
+    /// The paths a file refers to, from its CR2W imports and those of the CR2W files inside it: a cooked entity keeps its
+    /// components in one (flatCompiledData), its streamed components and attachments and its cooked effects in more, and
+    /// a world layer's entities theirs. None for a file that isn't a resource.
+    /// </summary>
     public static List<string> LinksOf(byte[] data)
     {
         if (!Cr2w.Cr2wFile.IsCr2w(data)) return [];
+        var links = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         try
         {
-            return [.. Cr2w.Cr2wFile.Read(data).Imports.Select(i => i.Path).Where(p => p.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase)];
+            foreach (var import in Cr2w.Cr2wFile.Read(data).Imports)
+                if (import.Path.Length > 0 && seen.Add(import.Path)) links.Add(import.Path);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            // a file whose header can't be read refers to nothing as far as the index knows
-            return [];
+            // a file whose header can't be read names nothing itself as far as the index knows
+        }
+        AddNested(data, links, seen);
+        return links;
+    }
+
+    /// <summary>
+    /// The imports of every CR2W file inside another, however deep: they're found by their bytes rather than by the
+    /// properties that hold them, so a property that's new here can't hide any. Bytes that only look like the start of
+    /// one are passed over, as their tables don't fit.
+    /// </summary>
+    private static void AddNested(byte[] data, List<string> links, HashSet<string> seen)
+    {
+        int at = 4;
+        while (at < data.Length)
+        {
+            int found = data.AsSpan(at).IndexOf("CR2W"u8);
+            if (found < 0) return;
+            int start = at + found;
+            at = start + 4;
+            if (data.Length - start < 44) return;
+            int version = BitConverter.ToInt32(data, start + 4);
+            if (version > 170 || version < Cr2w.Cr2wFile.FirstVersion) continue;
+            if (version > Cr2w.Cr2wLegacy.LastVersion) AddImports(data, start, links, seen);
+            else
+                try
+                {
+                    // older layouts keep their links differently, and are few
+                    foreach (var import in Cr2w.Cr2wFile.Read(data[start..]).Imports)
+                        if (import.Path.Length > 0 && seen.Add(import.Path)) links.Add(import.Path);
+                }
+                catch (Exception ex) when (ex is not OutOfMemoryException) { }
         }
     }
 
     /// <summary>
-    /// The paths a loose file refers to, reading only its header (the string and import tables come before its objects),
-    /// so a big source mesh costs a few kilobytes; older layouts (154 and before) are read whole.
+    /// The paths a loose file refers to. Only a file that can hold others is read whole; for the rest its header is
+    /// enough (the string and import tables come before its objects), so a big source mesh costs a few kilobytes.
+    /// Older layouts (154 and before) are read whole.
     /// </summary>
     public static List<string> LinksOfFile(string path)
     {
@@ -74,7 +116,7 @@ public sealed class ReferenceIndex
             stream.ReadExactly(head);
             if (!Cr2w.Cr2wFile.IsCr2w(head)) return [];
             int version = BitConverter.ToInt32(head, 4);
-            if (version <= Cr2w.Cr2wLegacy.LastVersion || head.Length < 160) return LinksOf(File.ReadAllBytes(path));
+            if (version <= Cr2w.Cr2wLegacy.LastVersion || head.Length < 160 || HoldsOthers.Contains(Path.GetExtension(path))) return LinksOf(File.ReadAllBytes(path));
             // the strings table (0) and the imports table (2), each an offset, a count and a checksum after the header
             long stringsEnd = (long)BitConverter.ToInt32(head, 40) + BitConverter.ToInt32(head, 44);
             long importsEnd = BitConverter.ToInt32(head, 64) + BitConverter.ToInt32(head, 68) * 8L;
@@ -83,7 +125,9 @@ public sealed class ReferenceIndex
             var data = new byte[end];
             stream.Position = 0;
             stream.ReadExactly(data);
-            return Imports(data);
+            var links = new List<string>();
+            AddImports(data, 0, links, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+            return links;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
         {
@@ -91,22 +135,26 @@ public sealed class ReferenceIndex
         }
     }
 
-    /// <summary>The import paths in the start of a CR2W file of the current layout, as far as its strings and imports go.</summary>
-    private static List<string> Imports(byte[] data)
+    /// <summary>
+    /// The import paths of a CR2W file of the current layout starting at <paramref name="start"/>, read from its header's
+    /// strings and imports tables alone. Nothing is added when those tables don't fit in the bytes there.
+    /// </summary>
+    private static void AddImports(byte[] data, int start, List<string> links, HashSet<string> seen)
     {
-        int stringsAt = BitConverter.ToInt32(data, 40), stringsSize = BitConverter.ToInt32(data, 44);
-        int importsAt = BitConverter.ToInt32(data, 64), count = BitConverter.ToInt32(data, 68);
-        var links = new List<string>(count);
+        int room = data.Length - start;
+        if (room < 160) return;
+        int stringsAt = BitConverter.ToInt32(data, start + 40), stringsSize = BitConverter.ToInt32(data, start + 44);
+        int importsAt = BitConverter.ToInt32(data, start + 64), count = BitConverter.ToInt32(data, start + 68);
+        if (stringsAt < 0 || stringsSize < 0 || importsAt < 0 || count < 0 || (long)stringsAt + stringsSize > room || importsAt + count * 8L > room) return;
         for (int i = 0; i < count; i++)
         {
-            int offset = BitConverter.ToInt32(data, importsAt + i * 8);
+            int offset = BitConverter.ToInt32(data, start + importsAt + i * 8);
             if (offset < 0 || offset >= stringsSize) continue;
-            var from = data.AsSpan(stringsAt + offset, stringsSize - offset);
+            var from = data.AsSpan(start + stringsAt + offset, stringsSize - offset);
             int zero = from.IndexOf((byte)0);
             string text = Encoding.UTF8.GetString(zero < 0 ? from : from[..zero]);
-            if (text.Length > 0 && !links.Contains(text, StringComparer.OrdinalIgnoreCase)) links.Add(text);
+            if (text.Length > 0 && seen.Add(text)) links.Add(text);
         }
-        return links;
     }
 
     /// <summary>Whether a file can refer to others, as far as its name says.</summary>
@@ -121,7 +169,8 @@ public sealed class ReferenceIndex
     /// </summary>
     public static Task<ReferenceIndex> BuildAsync(IEnumerable<IArchive> archives, IProgress<(int Done, int Total, string Name)>? progress, CancellationToken token) => Task.Run(() =>
     {
-        var list = archives.Where(a => a is Bundle or RedkitDepot).DistinctBy(a => a.FilePath, StringComparer.OrdinalIgnoreCase).ToList();
+        var all = archives.DistinctBy(a => a.FilePath, StringComparer.OrdinalIgnoreCase).ToList();
+        var list = all.Where(a => a is Bundle or RedkitDepot).ToList();
         Directory.CreateDirectory(CacheFolder);
         var work = list.Select(a => (Archive: a, Files: a.Entries.Where(e => MayLink(e.Path)).ToList())).ToList();
         var counter = new Counter(work.Sum(w => w.Files.Count), progress);
@@ -134,7 +183,19 @@ public sealed class ReferenceIndex
             perArchive.Add((w.Archive.FilePath, LinksIn(w.Archive, w.Files, counter, token)));
         counter.Finish();
 
+        // what the game or a mod has at the path as written; REDkit's copies aren't what the game loads
+        var exists = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var archive in all.Where(a => a is not RedkitDepot))
+            foreach (var entry in archive.Entries) exists.Add(entry.Path);
+
         var usedBy = new Dictionary<string, List<ReferenceSource>>(StringComparer.Ordinal);
+        void Add(string target, ReferenceSource from)
+        {
+            string key = Key(target);
+            if (!usedBy.TryGetValue(key, out var users)) usedBy[key] = users = [];
+            // the same file naming both a path and the old folder's name for it is one user
+            if (users.Count == 0 || !ReferenceEquals(users[^1], from)) users.Add(from);
+        }
         int files = 0;
         foreach (var (archivePath, links) in perArchive)
             foreach (var (source, targets) in links)
@@ -143,9 +204,9 @@ public sealed class ReferenceIndex
                 var from = new ReferenceSource(archivePath, source);
                 foreach (string target in targets)
                 {
-                    string key = Key(target);
-                    if (!usedBy.TryGetValue(key, out var users)) usedBy[key] = users = [];
-                    users.Add(from);
+                    Add(target, from);
+                    // a path naming a DLC folder merged into the game means the file now at the path without it
+                    if (Cr2w.ResourceLocator.MergedPath(target) is { } merged && !exists.Contains(target)) Add(merged, from);
                 }
             }
         return new ReferenceIndex(usedBy, files);
