@@ -14,6 +14,7 @@ internal sealed record Expr(string Text, int Prec)
     public string? Type { get; init; }
     public Expr? Inner { get; init; }
     public long? Literal { get; init; }
+    public int StorageBits { get; init; }
     /// <summary>The type a conversion the compiler inserted on its own turned this into; shown only where it changes the result.</summary>
     public string? Implicit { get; init; }
 }
@@ -47,6 +48,7 @@ public sealed class Decompiler(ScriptBlob blob, EnumResolver enums, GameDeclarat
         public Expr? E;
         public int Target;
         public int Target2;
+        public string? SwitchType;
     }
 
     private sealed record Ctx(int? Break, HashSet<int> Continue);
@@ -82,7 +84,6 @@ public sealed class Decompiler(ScriptBlob blob, EnumResolver enums, GameDeclarat
     {
         var list = new List<Stmt>();
         int line = 0;
-        string? switchType = null;
         while (_pos < _code.Count)
         {
             var ins = _code[_pos];
@@ -134,14 +135,14 @@ public sealed class Decompiler(ScriptBlob blob, EnumResolver enums, GameDeclarat
                     st.Kind = Kind.Switch;
                     st.Target = ins.RtEnd + ins.Arg(1);
                     st.E = ParseExpr();
-                    switchType = st.E.Type ?? blob.Types.ElementAtOrDefault(ins.Arg(0)).Name;
+                    st.SwitchType = st.E.Type ?? blob.Types.ElementAtOrDefault(ins.Arg(0)).Name;
                     break;
                 case Op.SwitchLabel:
                     _pos++;
                     st.Kind = Kind.Case;
                     st.Target = ins.Rt + 3 + ins.Arg(0);
                     st.Target2 = ins.RtEnd + ins.Arg(1);
-                    st.E = AsEnum(switchType, ParseExpr());
+                    st.E = ParseExpr();
                     break;
                 case Op.SwitchDefault:
                     _pos++;
@@ -153,6 +154,32 @@ public sealed class Decompiler(ScriptBlob blob, EnumResolver enums, GameDeclarat
                     break;
             }
             list.Add(st);
+        }
+        // A switch's label links skip any nested switches in its bodies.
+        var offsets = new Dictionary<int, int>();
+        for (int i = list.Count - 1; i >= 0; i--) offsets[list[i].Rt] = i;
+        int Resolve(int rt)
+        {
+            var visited = new HashSet<int>();
+            while (offsets.TryGetValue(rt, out int index) && visited.Add(rt))
+            {
+                var statement = list[index];
+                if (statement.Kind == Kind.Jump) rt = statement.Target;
+                else if (statement.Kind is Kind.Line or Kind.Nop && index + 1 < list.Count) rt = list[index + 1].Rt;
+                else return index;
+            }
+            return -1;
+        }
+        foreach (var selection in list.Where(statement => statement.Kind == Kind.Switch))
+        {
+            int at = Resolve(selection.Target);
+            var visited = new HashSet<int>();
+            while (at >= 0 && visited.Add(at) && list[at].Kind == Kind.Case)
+            {
+                var label = list[at];
+                label.E = AsEnum(selection.SwitchType, label.E!);
+                at = Resolve(label.Target);
+            }
         }
         return list;
     }
@@ -392,6 +419,10 @@ public sealed class Decompiler(ScriptBlob blob, EnumResolver enums, GameDeclarat
                         for (int q = physical[0]; q < defaultAt && found < 0; q++)
                             if (_stmts[q].Kind == Kind.Jump && _stmts[q].Target > _stmts[defaultAt].Rt)
                                 found = IndexAt(_stmts[q].Target);
+                        int defaultBody = Next(defaultAt + 1, end);
+                        if (found < 0 && defaultBody < end && _stmts[defaultBody].Kind == Kind.Jump
+                            && _stmts[defaultBody].Target > _stmts[defaultAt].Rt)
+                            found = IndexAt(_stmts[defaultBody].Target);
                         // every case returned: default runs to the end of the enclosing block
                         switchEnd = found > defaultAt && found <= end ? found : end;
                     }
@@ -455,7 +486,8 @@ public sealed class Decompiler(ScriptBlob blob, EnumResolver enums, GameDeclarat
             case Op.Null: return new("NULL", Precedence.Primary);
             case Op.IntOne: return Int(1);
             case Op.IntZero: return Int(0);
-            case Op.IntConst: case Op.ShortConst: case Op.ByteConst: return Int(ins.Arg(0));
+            case Op.IntConst: case Op.ShortConst: return Int(ins.Arg(0));
+            case Op.ByteConst: return Int(ins.Arg(0)) with { StorageBits = 8 };
             case Op.FloatConst: return new(FormatFloat(ins.Float), ins.Float < 0 ? Precedence.Unary : Precedence.Primary);
             case Op.StringConst: return new(Quote(ins.Text ?? ""), Precedence.Primary);
             case Op.NameConst: return new(Quote(Name(ins.Arg(0)), '\''), Precedence.Primary);
@@ -530,7 +562,8 @@ public sealed class Decompiler(ScriptBlob blob, EnumResolver enums, GameDeclarat
                 var (name, owner) = f - 1 < blob.FunctionRefs.Count ? blob.FunctionRefs[f - 1] : ($"func{f}", -1);
                 var signature = owner >= 0 && owner < blob.Types.Count ? MethodSignature(blob.Types[owner].Name, name) : GlobalSignature(name);
                 string prefix = "";
-                string currentOwner = _func.Class?.Name ?? _func.Owner;
+                string currentOwner = _func.Class is { IsState: true } state
+                    ? Standalone.Symbols.StateClassKey(state.StateOf, state.Name) : _func.Class?.Name ?? _func.Owner;
                 if (!member && owner >= 0 && currentOwner.Length > 0 && (name == _func.Name || NeedsSuper(currentOwner, TypeName(owner), name))
                     && TypeName(owner) != currentOwner)
                     prefix = "super.";
@@ -555,7 +588,10 @@ public sealed class Decompiler(ScriptBlob blob, EnumResolver enums, GameDeclarat
             }
 
             case Op.VirtualParentFunc:
-                return Call("virtual_parent." + Name(ins.Arg(2)), ParseArgs());
+            {
+                string name = Name(ins.Arg(2));
+                return Call("virtual_parent." + (name == "@self" ? _func.Name : name), ParseArgs());
+            }
 
             case Op.Conditional:
             {
@@ -607,6 +643,7 @@ public sealed class Decompiler(ScriptBlob blob, EnumResolver enums, GameDeclarat
                 // a constant's name compiles to a bare number of the enum's size; a number converted was written as one
                 var e = ParseExpr();
                 string type = TypeName(ins.Arg(0));
+                if (e.Literal is { } raw) e = Int(enums.DecodeConstant(type, raw, e.StorageBits));
                 if (e.Literal is not null)
                     return new($"({type}){Wrap(e, Precedence.Unary)}", Precedence.Unary) { EnumType = type, Type = type };
                 return e with { EnumType = type };
@@ -616,6 +653,7 @@ public sealed class Decompiler(ScriptBlob blob, EnumResolver enums, GameDeclarat
             {
                 var e = ParseExpr();
                 string type = TypeName(ins.Arg(0));
+                if (e.Literal is { } rawValue) e = Int(enums.DecodeConstant(type, rawValue, e.StorageBits));
                 string text = e.Literal is long v && enums.Find(type, v) is { } constant
                     ? constant
                     : e.Literal is long raw ? $"({type}){raw}" : $"(int){Wrap(e, Precedence.Unary)}";
@@ -720,10 +758,12 @@ public sealed class Decompiler(ScriptBlob blob, EnumResolver enums, GameDeclarat
     }
 
     /// <summary>An integer literal stored into an enum-typed place reads better as the enum's constant.</summary>
-    private Expr AsEnum(string? type, Expr e) =>
-        type is not null && e.Literal is long v && enums.Find(type, v) is { } constant
-            ? new Expr(constant, Precedence.Primary)
-            : e;
+    private Expr AsEnum(string? type, Expr e)
+    {
+        if (type is null || e.Literal is not { } raw) return e;
+        long value = enums.DecodeConstant(type, raw, e.StorageBits);
+        return enums.Find(type, value) is { } constant ? new Expr(constant, Precedence.Primary) : e;
+    }
 
     private static Expr Int(long v) => new(v.ToString(CultureInfo.InvariantCulture), v < 0 ? Precedence.Unary : Precedence.Primary) { Literal = v };
 
