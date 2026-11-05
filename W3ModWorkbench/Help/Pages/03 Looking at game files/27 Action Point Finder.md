@@ -8,6 +8,8 @@ windows: ActionPointFinderWindow
 ---
 **Tools > Action Point Finder…** shows the action points the game's worlds place on the game's own map. An action point is a spot an NPC goes to and does something at: hammering at an anvil, sitting on a bench, sleeping, or waiting out the rain under an awning. Each one has tags, and a job tree that says which categories of work it offers and which animations play there. The game sends an NPC to a point only when both match what it's looking for.
 
+![The rain shelters in Toussaint: who the rain reaction can send to each point, and in red the points it never picks](action-point-finder.jpg)
+
 ## Views
 
 The list on the left picks what's shown:
@@ -39,6 +41,8 @@ The middle column says what the view is, how many points it has in each world an
 - the quest or story character it's placed for and where that was read from, or that it's the open world's, with buttons that show all of that quest's or character's points, and every point with the same job or job tree;
 - its tags, its job tree's categories, its component's name, and the animations its job tree plays;
 - **Open the layer**, **Open the job tree**, and the template when the layer keeps one.
+
+![A job's view: what its animations show, who it's for, and its points by what they're there for](action-point-finder-job.jpg)
 
 ## The map and the list
 

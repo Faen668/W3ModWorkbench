@@ -4,7 +4,7 @@
         xmlns:l="clr-namespace:W3ModWorkbench.Localisation"
         xmlns:local="clr-namespace:W3ModWorkbench"
         Title="{l:T ActionPoints.Title}" Icon="pack://application:,,,/W3ModWorkbench;component/Assets/app.ico"
-        Width="1600" Height="980" MinWidth="1100" MinHeight="620"
+        Width="1600" Height="980" MinWidth="1160" MinHeight="620"
         WindowStartupLocation="CenterOwner" PreviewKeyDown="Window_PreviewKeyDown">
 
     <Window.Resources>

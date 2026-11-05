@@ -9,7 +9,7 @@ namespace W3ModWorkbench.Core.ActionPoints;
 
 /// <summary>
 /// An action point's job tree (.w2job): the categories its root node accepts, which is all a selector asks an action
-/// point for (CActionPointComponent::GetActionCategories reads only the root), and the animations its actions play.
+/// point for, and the animations its actions play.
 /// </summary>
 public sealed record JobTreeInfo(IReadOnlyList<string> Categories, IReadOnlyList<string> Animations);
 

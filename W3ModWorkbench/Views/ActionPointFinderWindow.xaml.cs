@@ -259,7 +259,7 @@ public partial class ActionPointFinderWindow : Window, IMessageHost
 
     private static string Capitalised(string s) => s.Length > 0 ? char.ToUpper(s[0], CultureInfo.CurrentCulture) + s[1..] : s;
 
-    /// <summary>Whom a job's trees are for, from their names' m, w, d and c: "Men, women".</summary>
+    /// <summary>Whom a job's trees are for, from their names' m, w, d and c: "Men, Women".</summary>
     private static string BodiesText(string bodies)
     {
         var who = bodies.Select(c => c switch
@@ -269,7 +269,7 @@ public partial class ActionPointFinderWindow : Window, IMessageHost
             'd' => L.T("ActionPoints.KindDwarf"),
             _ => L.T("ActionPoints.KindChild"),
         }).ToList();
-        return who.Count == 0 ? "" : Capitalised(string.Join(", ", who.Select((w, i) => i == 0 ? w : w.ToLower(CultureInfo.CurrentCulture))));
+        return string.Join(", ", who);
     }
 
     /// <summary>A job tree's name: its file's, without the _jt the game's mostly end in.</summary>
@@ -714,8 +714,8 @@ public partial class ActionPointFinderWindow : Window, IMessageHost
     /// <summary>A world's points in the view, those the filter leaves: on the map in their kinds' colours (the points with no kind and the odd ones out on top), and in the list.</summary>
     private async Task ShowWorldAsync(string? world, bool fit)
     {
-        string filter = FilterBox.Text.Trim();
-        _shownRows = [.. _rows.Where(r => r.Point.World == world && IsShown(r) && (filter.Length == 0 || r.Search.Contains(filter, StringComparison.OrdinalIgnoreCase)))
+        var filter = FilterBox.Text.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        _shownRows = [.. _rows.Where(r => r.Point.World == world && IsShown(r) && filter.All(word => r.Search.Contains(word, StringComparison.OrdinalIgnoreCase)))
             .OrderBy(r => r.Area, StringComparer.CurrentCultureIgnoreCase)];
         var kinds = _selected?.View.Kinds ?? [];
         // a mod's points are diamonds, drawn over the game's
