@@ -1489,7 +1489,7 @@ public partial class PreviewWindow : Window, IMessageHost
             actions.Add((L.T("PreviewWindow.ShowFolder"), () => Process.Start("explorer.exe", $"/select,\"{output}\"")));
         string logName = compiler.Kind == CompilerKind.WccLite ? "wcc_lite.log" : "compiler.log";
         actions.Add((L.T("PreviewWindow.ShowLog"), () => ShowAlone(new PreviewItem(logName, title, System.Text.Encoding.UTF8.GetBytes(result.Log)), this)));
-        Results.SetActions(result.Success ? L.T("PreviewWindow.Saved", output) + (compiler.Kind == CompilerKind.BuiltIn ? L.T("PreviewWindow.CompiledBuiltCompiler") : "")
+        Results.SetActions(result.Success ? L.T("PreviewWindow.Saved", output) + (compiler.Caveat is { } caveat ? L.T("PreviewWindow.CompiledBuiltCompiler") + ". " + caveat : "")
             : compiler.Kind == CompilerKind.WccLite ? L.T("PreviewWindow.NothingSavedWccLites") : L.T("PreviewWindow.NothingSavedCompilersLog"), [.. actions]);
     }
 
@@ -1545,7 +1545,7 @@ public partial class PreviewWindow : Window, IMessageHost
             ? warnings == 0 ? L.T("PreviewWindow.Compiled", seconds) : L.T("PreviewWindow.Compiled2", seconds, L.T("Count.Warning", warnings))
             : errors > 0 ? L.T("PreviewWindow.FailedCount", L.T("Count.Error", errors)) + (warnings > 0 ? $", {L.T("Count.Warning", warnings)}" : "")
             : L.T("PreviewWindow.Failed");
-        string empty = live ? L.T("ScriptBench.Check.NoProblems")
+        string empty = live ? $"{L.T("ScriptBench.Check.NoProblems")}. {CompilerChoice.BuiltInCaveat(ScriptCompiler.IsWccLite(App.Settings.WccLitePath ?? ""))}"
             : result.Success ? L.T("PreviewWindow.CompiledNoWarningsSaved", output)
             : result.Failure ?? L.T("PreviewWindow.DidntCompileScripts", compiler.Name);
         return (rows, summary, empty);

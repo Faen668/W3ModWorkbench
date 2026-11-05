@@ -67,7 +67,7 @@ Under the list, it says whether your game has that language's text and voices in
 
 ## Scripts and editors
 
-- **Compiling**: wcc_lite when it's set, else the built-in compiler; or always the built-in one, which takes a second instead of a minute. Both write the same `precompiled.rsblob`. Use wcc_lite for a release. See [[Compiling]].
+- **Compiling**: wcc_lite when it's set, else the built-in compiler; or always the built-in one, which takes a second instead of a minute. Both write the same `precompiled.rsblob`. wcc_lite is the game's own, so it's the check that counts: use it for a release. See [[Compiling]].
 - **Opening files**: tabs in one window, or a window for each file, for files that open in the preview window. Scripts always open in [[Script Bench]].
 - **Split view**: whether a split ({{Ctrl+\}}) puts the second group of tabs beside the first or below it.
 - **Font size** and **tab width** of the code editors (scripts, XML and stubs), with a sample. The game's scripts are indented with tabs, so the tab width is how far in their code sits. JSON keeps its two spaces.

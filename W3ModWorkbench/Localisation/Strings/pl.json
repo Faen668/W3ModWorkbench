@@ -204,7 +204,7 @@
   "Settings.Scripts.Compiling": "Kompilowanie",
   "Settings.Scripts.CompilerAuto": "wcc_lite, jeśli ustawiono, w przeciwnym razie wbudowany kompilator",
   "Settings.Scripts.CompilerBuiltIn": "Zawsze wbudowany kompilator",
-  "Settings.Scripts.CompilerHint": "Wbudowany kompilator potrzebuje sekundy i tylko skryptów gry. wcc_lite potrzebuje około minuty i jest narzędziem samej gry, więc używaj go przy wydaniu. Oba zapisują ten sam precompiled.rsblob.",
+  "Settings.Scripts.CompilerHint": "Wbudowany kompilator potrzebuje sekundy i tylko skryptów gry. wcc_lite potrzebuje około minuty i jest narzędziem samej gry: liczy się jego sprawdzenie, więc używaj go przy wydaniu. Oba zapisują ten sam precompiled.rsblob.",
   "Settings.Scripts.WillUseBuiltIn": "„Kompiluj” użyje wbudowanego kompilatora.",
   "Settings.Scripts.WillUseNeither": "Żaden kompilator nie może działać: nie znaleziono skryptów gry. Ustaw folder gry w sekcji „Gra i narzędzia”.",
   "Settings.Scripts.WillUseWcc": "„Kompiluj” użyje wcc_lite.",
@@ -5334,6 +5334,8 @@
   "SceneTimeline.StandingWhereThey": "(stoją tam, gdzie są)",
 
   "CompilerChoice.BuiltCompiler": "wbudowany kompilator",
+  "CompilerChoice.WccLiteCounts": "Wbudowany kompilator stosuje zasady wcc_lite, ale liczy się sprawdzenie przez wcc_lite: skompiluj nim przed wydaniem.",
+  "CompilerChoice.WccLiteCountsNoRedkit": "Wbudowany kompilator stosuje zasady wcc_lite, ale jeśli masz REDkit, przed wydaniem liczy się sprawdzenie przez wcc_lite.",
   "CompilerChoice.NothingToCompileWith": "Kompilacja wymaga wcc_lite.exe z REDkita albo skryptów gry. Ustaw wcc_lite w Ustawieniach (Ctrl+, w oknie głównym) albo ustaw tam folder gry, aby wbudowany kompilator znalazł skrypty gry",
 
   "ScriptBlob.ScriptBlobDamagedUnknown": "Blob skryptów jest uszkodzony lub ma nieznany format.",

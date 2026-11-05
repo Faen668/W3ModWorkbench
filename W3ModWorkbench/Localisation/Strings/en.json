@@ -205,7 +205,7 @@
   "Settings.Scripts.Compiling": "Compiling",
   "Settings.Scripts.CompilerAuto": "wcc_lite when it's set, else the built-in compiler",
   "Settings.Scripts.CompilerBuiltIn": "Always the built-in compiler",
-  "Settings.Scripts.CompilerHint": "The built-in compiler takes a second and needs only the game's scripts. wcc_lite takes about a minute and is the game's own, so use it for a release. Both write the same precompiled.rsblob.",
+  "Settings.Scripts.CompilerHint": "The built-in compiler takes a second and needs only the game's scripts. wcc_lite takes about a minute and is the game's own: it's the check that counts, so use it for a release. Both write the same precompiled.rsblob.",
   "Settings.Scripts.WillUseBuiltIn": "Compile will use the built-in compiler.",
   "Settings.Scripts.WillUseNeither": "Neither compiler can run: the game's scripts weren't found. Set the game folder under Game and tools.",
   "Settings.Scripts.WillUseWcc": "Compile will use wcc_lite.",
@@ -5350,6 +5350,8 @@
   "SceneTimeline.StandingWhereThey": "(standing where they are)",
 
   "CompilerChoice.BuiltCompiler": "the built-in compiler",
+  "CompilerChoice.WccLiteCounts": "The built-in compiler follows wcc_lite's rules, but wcc_lite is the check that counts: compile with it before you release.",
+  "CompilerChoice.WccLiteCountsNoRedkit": "The built-in compiler follows wcc_lite's rules, but if you have REDkit, wcc_lite is the check that counts before you release.",
   "CompilerChoice.NothingToCompileWith": "Compiling needs either REDkit's wcc_lite.exe or the game's scripts. Set wcc_lite in Settings (Ctrl+, in the main window), or set the game folder there so the built-in compiler can find the game's scripts",
 
   "ScriptBlob.ScriptBlobDamagedUnknown": "The script blob is damaged or in an unknown format.",

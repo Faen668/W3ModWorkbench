@@ -41,7 +41,7 @@ public static class DefaultValues
                     if (type.IsClass && d.Value.Kind is NullLit)
                         errors.Add(new(file.Path, line, "Unknown class 'NULL'"));
                     else if (Problem(symbols, type, text) is { } problem)
-                        errors.Add(new(file.Path, line, $"Unable to parse value: {problem}"));
+                        errors.Add(new(file.Path, line, "Unable to parse value")); // loc-ignore
                     else if (type.Kind == TyKind.Bool && !IsNumber(text)
                         && !text.Equals("true", StringComparison.OrdinalIgnoreCase) && !text.Equals("false", StringComparison.OrdinalIgnoreCase))
                         warnings.Add(new(file.Path, line, $"'{text}' isn't true or false. wcc_lite takes it, as it reads only how a bool's value starts, but it's likely a typo."));

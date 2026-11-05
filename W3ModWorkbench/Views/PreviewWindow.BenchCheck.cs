@@ -153,7 +153,7 @@ public partial class PreviewWindow
         if (count > 0) ProblemsIcon.SetResourceReference(System.Windows.Controls.TextBlock.ForegroundProperty, "SystemFillColorCautionBrush");
         else ProblemsIcon.ClearValue(System.Windows.Controls.TextBlock.ForegroundProperty);
         ProblemsText.Text = _checking && count == 0 ? L.T("ScriptBench.Check.Checking") : count == 0 ? L.T("ScriptBench.Check.NoProblems") : L.T("ScriptBench.Check.Problems", count);
-        ProblemsButton.ToolTip = L.T("ScriptBench.Check.Tip");
+        ProblemsButton.ToolTip = $"{L.T("ScriptBench.Check.Tip")} {CompilerChoice.BuiltInCaveat(ScriptCompiler.IsWccLite(App.Settings.WccLitePath ?? ""))}";
     }
 
     /// <summary>The status bar's count clicked: every problem, by file, in the list under the tabs.</summary>

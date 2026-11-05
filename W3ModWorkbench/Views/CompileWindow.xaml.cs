@@ -144,7 +144,7 @@ public partial class CompileWindow : Window, IMessageHost
         string logName = compiler.Kind == CompilerKind.WccLite ? "wcc_lite.log" : "compiler.log";
         actions.Add((L.T("PreviewWindow.ShowLog"), () => PreviewWindow.ShowAlone(new PreviewItem(logName, _title, System.Text.Encoding.UTF8.GetBytes(result.Log)), this)));
         // the path is above already, and in the list when nothing's wrong: the strip says only who compiled it
-        Results.SetActions(result.Success ? L.T("CompileWindow.CompiledBy", compiler.Name)
+        Results.SetActions(result.Success ? L.T("CompileWindow.CompiledBy", compiler.Name) + (compiler.Caveat is { } caveat ? " " + caveat : "")
             : compiler.Kind == CompilerKind.WccLite ? L.T("PreviewWindow.NothingSavedWccLites") : L.T("PreviewWindow.NothingSavedCompilersLog"), [.. actions]);
     }
 

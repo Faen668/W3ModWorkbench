@@ -19,16 +19,27 @@ public sealed class Parser
 
     private readonly List<Token> _tokens;
     private readonly bool _skipBodies;
+    private readonly List<WccFunctionCode>? _functions;
+    private int _nextFunction;
+    private WccFunctionCode? _currentCode;
     private int _pos;
 
-    private Parser(List<Token> tokens, bool skipBodies)
+    private Parser(List<Token> tokens, bool skipBodies, List<WccFunctionCode>? functions = null)
     {
         _tokens = tokens;
         _skipBodies = skipBodies;
+        _functions = functions;
     }
 
     public static List<Item> ParseSource(string source, bool skipBodies) =>
         new Parser(Lexer.Tokenize(source, lenient: skipBodies), skipBodies).Items();
+
+    /// <summary>
+    /// A project's file, once <see cref="WccSyntax.CheckFile"/> has passed it: each function keeps its code for the
+    /// check made when it's compiled, and a body this parser can't read waits for that check to say why.
+    /// </summary>
+    public static List<Item> ParseChecked(List<WccToken> tokens, List<WccFunctionCode> functions, int lastLine) =>
+        new Parser(WccLexer.ForParser(tokens, lastLine), false, functions).Items();
 
     private Token Cur => _tokens[_pos];
     private Token PeekAt(int offset) => _tokens[Math.Min(_pos + offset, _tokens.Count - 1)];
@@ -145,7 +156,7 @@ public sealed class Parser
                     Advance();
                     return new EnumItem(ParseEnum());
                 case "var":
-                    var f = ParseField(field);
+                    var f = ParseField(field, allowNoSemicolon: true);
                     f.Annotation = annotation;
                     return new FieldItem(f);
                 default:
@@ -226,7 +237,7 @@ public sealed class Parser
                         SkipUntil(";");
                     else
                     {
-                        var value = ParseExpr();
+                        var value = DefaultValue();
                         ExpectPunct(";");
                         cls.Defaults.Add(new DefaultAssignment(name, value));
                     }
@@ -238,7 +249,20 @@ public sealed class Parser
                     return;
                 case "defaults":
                     Advance();
-                    SkipBraces();
+                    if (_functions is null)
+                    {
+                        SkipBraces();
+                        return;
+                    }
+                    ExpectPunct("{");
+                    while (!EatPunct("}"))
+                    {
+                        string assigned = Identifier();
+                        ExpectPunct("=");
+                        var value = DefaultValue();
+                        ExpectPunct(";");
+                        cls.Defaults.Add(new DefaultAssignment(assigned, value));
+                    }
                     return;
                 default:
                     if (ApplySpecifier(word, fn, field)) break;
@@ -251,6 +275,26 @@ public sealed class Parser
             }
             Advance();
         }
+    }
+
+    /// <summary>A default's value. The grouped kinds, <c>{1, 2}</c> and <c>(a = 1)</c>, are read past: the compiler can't store them yet and says so.</summary>
+    private Expr DefaultValue()
+    {
+        int line = Cur.Line;
+        if (_functions is not null && (IsPunct("{") || IsPunct("(") || Cur.Kind == TokKind.Ident && PeekAt(1) is { Kind: TokKind.Punct, Text: "(" }))
+        {
+            if (Cur.Kind == TokKind.Ident) Advance();
+            int depth = 0;
+            do
+            {
+                if (IsPunct("{") || IsPunct("(")) depth++;
+                else if (IsPunct("}") || IsPunct(")")) depth--;
+                Advance();
+            }
+            while (depth > 0 && Cur.Kind != TokKind.Eof);
+            return new Expr(new GroupedValue(), line);
+        }
+        return ParseExpr();
     }
 
     private void SkipUntil(string punct)
@@ -322,7 +366,7 @@ public sealed class Parser
         return new EnumDecl { Name = name, Members = members, Lines = lines };
     }
 
-    private FieldDecl ParseField(FieldSpecifiers specifiers)
+    private FieldDecl ParseField(FieldSpecifiers specifiers, bool allowNoSemicolon = false)
     {
         if (!EatKeyword("var")) throw Error("expected 'var'");
         int line = Cur.Line;
@@ -332,7 +376,9 @@ public sealed class Parser
         var type = ParseTypeRef();
         Expr? init = null;
         if (EatPunct("=")) init = ParseExpr();
-        ExpectPunct(";");
+        // wcc_lite's own check has passed by now, and it doesn't ask @addField for the semicolon
+        if (_functions is null || !allowNoSemicolon) ExpectPunct(";");
+        else EatPunct(";");
         return new FieldDecl { Names = names, Type = type, Specifiers = specifiers, Initializer = init, Line = line };
     }
 
@@ -347,8 +393,18 @@ public sealed class Parser
             // ">>" can't happen: the lexer never joins two of them
             ExpectPunct(">");
         }
-        return new TypeRef(name, args);
+        var type = new TypeRef(name, args);
+        while (_functions is not null && IsPunct("[") && PeekAt(1) is { Kind: TokKind.Int } size && PeekAt(2) is { Kind: TokKind.Punct, Text: "]" })
+        {
+            Advance();
+            Advance();
+            Advance();
+            type = new TypeRef($"[{size.Int}]{TypeText(type)}", [type]) { IsStaticArray = true };
+        }
+        return type;
     }
+
+    private static string TypeText(TypeRef type) => type.Args.Count == 0 ? type.Name : $"{type.Name}<{string.Join(",", type.Args.Select(TypeText))}>";
 
     private FunctionDecl ParseFunction(FunctionSpecifiers specs)
     {
@@ -385,6 +441,8 @@ public sealed class Parser
 
         List<Stmt>? body;
         bool usesWrapped = false;
+        WccFunctionCode? code = null;
+        ScriptSyntaxException? unread = null;
         if (IsPunct("{"))
         {
             int start = _pos;
@@ -393,8 +451,23 @@ public sealed class Parser
                 SkipBraces();
                 body = [];
             }
-            else
+            else if (_functions is null)
                 body = ParseBlock();
+            else
+            {
+                code = _currentCode = _nextFunction < _functions.Count ? _functions[_nextFunction++] : null;
+                try
+                {
+                    body = ParseBlock();
+                }
+                catch (ScriptSyntaxException ex)
+                {
+                    unread = ex;
+                    body = [];
+                    _pos = start;
+                    SkipBraces();
+                }
+            }
             for (int i = start; i < _pos && !usesWrapped; i++)
                 usesWrapped = _tokens[i].Kind == TokKind.Ident && _tokens[i].Text == "wrappedMethod";
         }
@@ -403,7 +476,11 @@ public sealed class Parser
             ExpectPunct(";");
             body = null;
         }
-        return new FunctionDecl { Name = name, Specifiers = specs, Params = parms, ReturnType = returnType, Body = body, Line = line, UsesWrappedMethod = usesWrapped };
+        return new FunctionDecl
+        {
+            Name = name, Specifiers = specs, Params = parms, ReturnType = returnType, Body = body, Line = line, UsesWrappedMethod = usesWrapped,
+            Code = code, Unread = unread,
+        };
     }
 
     private List<Stmt> ParseBlock()
@@ -413,9 +490,40 @@ public sealed class Parser
         while (!EatPunct("}"))
         {
             if (Cur.Kind == TokKind.Eof) throw Error("expected '}'");
-            list.Add(ParseStatement());
+            if (_functions is not null && IsKeyword("var")) ParseLocals(list);
+            else list.Add(ParseStatement());
         }
         return list;
+    }
+
+    /// <summary>
+    /// One <c>var</c> of a checked file's function: <c>var a, b : T, c : U;</c>, or one with an initialiser, which runs
+    /// to the first semicolon. A function with no code has its initialisers ignored whatever they say, as in wcc_lite.
+    /// </summary>
+    private void ParseLocals(List<Stmt> output)
+    {
+        Advance();
+        while (true)
+        {
+            int line = Cur.Line;
+            var names = new List<string> { Identifier() };
+            while (EatPunct(",")) names.Add(Identifier());
+            ExpectPunct(":");
+            var type = ParseTypeRef();
+            Expr? initializer = null;
+            bool hasInitializer = EatPunct("=");
+            if (hasInitializer)
+            {
+                if (_currentCode is { Body.Count: 0 })
+                    while (!IsPunct(";") && Cur.Kind != TokKind.Eof) Advance();
+                else
+                    initializer = ParseExpr();
+            }
+            output.Add(new Stmt(new VarStmt(new FieldDecl { Names = names, Type = type, Specifiers = new FieldSpecifiers(), Initializer = initializer, Line = line }), PrevLine));
+            if (!hasInitializer && EatPunct(",")) continue;
+            ExpectPunct(";");
+            return;
+        }
     }
 
     private Stmt ParseStatement()
@@ -466,11 +574,11 @@ public sealed class Parser
                 {
                     Advance();
                     ExpectPunct("(");
-                    var init = OptionalExpr(";");
+                    var init = ExprList(";");
                     ExpectPunct(";");
                     var cond = OptionalExpr(";");
                     ExpectPunct(";");
-                    var step = OptionalExpr(")");
+                    var step = ExprList(")");
                     ExpectPunct(")");
                     int line = PrevLine;
                     return new Stmt(new ForStmt(init, cond, step, ParseStatement()), line);
@@ -480,6 +588,11 @@ public sealed class Parser
                     Advance();
                     var value = ParenExpr();
                     int line = PrevLine;
+                    if (_functions is not null && !IsPunct("{"))
+                    {
+                        ParseStatement();
+                        return new Stmt(new SwitchStmt(value, []), line);
+                    }
                     return new Stmt(new SwitchStmt(value, SwitchItems()), line);
                 }
                 case "break":
@@ -506,6 +619,43 @@ public sealed class Parser
                     var value = ParseExpr();
                     ExpectPunct(";");
                     kind = new DeleteStmt(value);
+                    break;
+                }
+                case "enter" when _functions is not null:
+                {
+                    Advance();
+                    var value = ParseExpr();
+                    ExpectPunct(";");
+                    kind = new EnterStmt(value);
+                    break;
+                }
+                case "savepoint" when _functions is not null:
+                {
+                    Advance();
+                    ExpectPunct("(");
+                    string saved = Advance().Text;
+                    var names = new List<string?>();
+                    while (EatPunct(","))
+                        names.Add(IsPunct(",") || IsPunct(")") ? null : Identifier());
+                    ExpectPunct(")");
+                    kind = new SavePointStmt(saved, names);
+                    break;
+                }
+                case "case" when _functions is not null:
+                {
+                    Advance();
+                    ParseExpr();
+                    ExpectPunct(":");
+                    ParseStatement();
+                    kind = new StrayLabelStmt(true);
+                    break;
+                }
+                case "default" when _functions is not null && PeekAt(1) is { Kind: TokKind.Punct, Text: ":" }:
+                {
+                    Advance();
+                    Advance();
+                    ParseStatement();
+                    kind = new StrayLabelStmt(false);
                     break;
                 }
                 default:
@@ -561,6 +711,16 @@ public sealed class Parser
     }
 
     private Expr? OptionalExpr(string terminator) => IsPunct(terminator) ? null : ParseExpr();
+
+    /// <summary>What a for loop's first and last parts hold: <c>i = 0, j = 1</c>.</summary>
+    private Expr? ExprList(string terminator)
+    {
+        var first = OptionalExpr(terminator);
+        if (first is null || !IsPunct(",")) return first;
+        var list = new List<Expr> { first };
+        while (EatPunct(",")) list.Add(ParseExpr());
+        return new Expr(new ExprSequence(list), first.Line);
+    }
 
     public Expr ParseExpr()
     {
@@ -648,6 +808,8 @@ public sealed class Parser
             else if (EatPunct("("))
             {
                 var args = Arguments();
+                // wcc_lite takes f()() as f(): the game has one
+                if (args.Count == 0 && expr.Kind is Call) continue;
                 expr = new Expr(new Call(expr, args), PrevLine);
             }
             else if (EatPunct("["))

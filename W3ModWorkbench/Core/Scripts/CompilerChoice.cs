@@ -27,6 +27,12 @@ public sealed record CompilerChoice(CompilerKind Kind, string? WccLite, string G
         return new CompilerChoice(CompilerKind.BuiltIn, hasWcc ? wccLitePath : null, scripts, mods is not null && Directory.Exists(mods) ? mods : null);
     }
 
+    /// <summary>What to say beside a pass from the built-in compiler: only wcc_lite's pass is the game's own. Null for wcc_lite.</summary>
+    public string? Caveat => Kind == CompilerKind.WccLite ? null : BuiltInCaveat(WccLite is not null);
+
+    public static string BuiltInCaveat(bool wccLiteSet) =>
+        L.T(wccLiteSet ? "CompilerChoice.WccLiteCounts" : "CompilerChoice.WccLiteCountsNoRedkit");
+
     /// <summary>Why nothing can compile, for a tooltip or a message.</summary>
     public static string NothingToCompileWith => L.T("CompilerChoice.NothingToCompileWith");
 

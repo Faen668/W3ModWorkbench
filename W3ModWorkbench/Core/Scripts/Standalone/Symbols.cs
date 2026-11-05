@@ -48,7 +48,8 @@ public sealed record Ty(TyKind Kind, string Name = "", Ty? Element = null, Ty? K
     };
 }
 
-public sealed record FieldInfo(string Name, Ty Type, string Owner, bool IsBindable = false, bool IsImport = false, bool IsConst = false);
+public sealed record FieldInfo(string Name, Ty Type, string Owner, bool IsBindable = false, bool IsImport = false, bool IsConst = false,
+    Visibility Visibility = Visibility.Default);
 
 public sealed record ParamInfo(string Name, Ty Type, bool IsOptional, bool IsOut);
 
@@ -77,6 +78,7 @@ public sealed class ClassInfo
     /// <summary>The name the class was declared with: for a state, without its machine.</summary>
     public string ShortName { get; init; } = "";
     public bool IsStruct { get; init; }
+    public bool IsAbstract { get; init; }
     public string? StateMachine { get; init; }
     /// <summary>
     /// When wcc_lite made the class: the engine's come first, in the engine's order, as they're there before any script
@@ -145,15 +147,19 @@ public sealed class Symbols
     /// </summary>
     public void ExtendEnums(IEnumerable<SourceFile> files, Action<SourceFile, int, string>? problem)
     {
+        var definedHere = new HashSet<string>();
         foreach (var file in files)
             foreach (var item in file.Items.OfType<EnumItem>())
             {
                 var decl = item.Decl;
                 if (!Enums.TryGetValue(decl.Name, out var existing))
                 {
+                    if (problem is not null) CheckNewEnum(file, decl, problem);
+                    definedHere.Add(decl.Name);
                     AddEnums([new SourceFile(file.Path, [item])], true);
                     continue;
                 }
+                bool ownEnum = definedHere.Contains(decl.Name);
                 var values = existing.Values.ToList();
                 var used = values.Select(v => v.Value).ToHashSet();
                 int next = used.Count == 0 ? 0 : used.Max() + 1;
@@ -164,7 +170,9 @@ public sealed class Symbols
                     int at = values.FindIndex(v => v.Name == name);
                     if (at >= 0)
                     {
-                        if (problem is not null && value is { } given && given != values[at].Value)
+                        if (problem is not null && ownEnum && value is not null)
+                            problem(file, line, $"Enumerator '{name}' in '{decl.Name}' has an explicit value, that is forbidden for new enumerators defined in enum extensions (mods) to prevent conflicts."); // loc-ignore
+                        else if (problem is not null && value is { } given && given != values[at].Value)
                             problem(file, line, $"Enumerator '{name}' in '{decl.Name}' has an explicit value, but it does not match previous definition."); // loc-ignore
                         continue;
                     }
@@ -191,6 +199,25 @@ public sealed class Symbols
             }
     }
 
+    /// <summary>An enum wcc_lite hasn't seen: each name once, each value for one name.</summary>
+    private static void CheckNewEnum(SourceFile file, EnumDecl decl, Action<SourceFile, int, string> problem)
+    {
+        var names = new HashSet<string>();
+        var values = new Dictionary<long, string>();
+        long next = 0;
+        for (int i = 0; i < decl.Members.Count; i++)
+        {
+            var (name, value) = decl.Members[i];
+            int line = i < decl.Lines.Count ? decl.Lines[i] : 1;
+            long v = value ?? next;
+            next = Math.Max(next, v + 1);
+            if (!names.Add(name))
+                problem(file, line, $"Enumerator '{name}' in '{decl.Name}' is defined more than once."); // loc-ignore
+            else if (!values.TryAdd(v, name))
+                problem(file, line, $"Enumerator value {v} ('{name}') in '{decl.Name}' is already associated to a different name ('{values[v]}')."); // loc-ignore
+        }
+    }
+
     public void AddTypeNames(IEnumerable<SourceFile> files)
     {
         foreach (var file in files)
@@ -214,6 +241,7 @@ public sealed class Symbols
                     BlobName = key,
                     Parent = parent,
                     IsStruct = decl.IsStruct,
+                    IsAbstract = decl.IsAbstract,
                     StateMachine = decl.StateMachineOf,
                     StateParentName = decl.StateMachineOf is null ? null : decl.Parent,
                     ShortName = decl.Name,
@@ -279,7 +307,7 @@ public sealed class Symbols
                 foreach (var field in decl.Fields)
                 {
                     var ty = Resolve(field.Type);
-                    foreach (string name in field.Names) AddField(key, name, ty, field.IsBinding, field.Specifiers.IsImport, field.Specifiers.IsConst || field.IsBinding);
+                    foreach (string name in field.Names) AddField(key, name, ty, field.IsBinding, field.Specifiers.IsImport, field.Specifiers.IsConst && !field.Specifiers.IsImport || field.IsBinding, field.Specifiers.Visibility);
                 }
                 foreach (var method in decl.Methods)
                 {
@@ -304,7 +332,7 @@ public sealed class Symbols
             {
                 if (field.Annotation?.Class is not { } cls) break;
                 var ty = Resolve(field.Type);
-                foreach (string name in field.Names) AddField(cls, name, ty, isConst: field.Specifiers.IsConst);
+                foreach (string name in field.Names) AddField(cls, name, ty, isConst: field.Specifiers.IsConst, visibility: field.Specifiers.Visibility);
                 break;
             }
         }
@@ -433,11 +461,11 @@ public sealed class Symbols
         }
     }
 
-    private void AddField(string cls, string name, Ty ty, bool bindable = false, bool isImport = false, bool isConst = false)
+    private void AddField(string cls, string name, Ty ty, bool bindable = false, bool isImport = false, bool isConst = false, Visibility visibility = Visibility.Default)
     {
         if (!Classes.TryGetValue(cls, out var info) || info.Fields.ContainsKey(name)) return;
         info.FieldOrder.Add(name);
-        info.Fields[name] = new FieldInfo(name, ty, cls, bindable, isImport, isConst);
+        info.Fields[name] = new FieldInfo(name, ty, cls, bindable, isImport, isConst, visibility);
     }
 
     public FunctionInfo FunctionInfoOf(FunctionDecl decl, string? owner)
@@ -456,6 +484,11 @@ public sealed class Symbols
 
     public Ty Resolve(TypeRef type)
     {
+        if (type.IsStaticArray)
+        {
+            var element = Resolve(type.Args[0]);
+            return Ty.Primitive(type.Name[..(type.Name.IndexOf(']') + 1)] + (element.Kind == TyKind.Class ? $"handle:{element.Name}" : element.RttiName));
+        }
         if (type.Name == "array")
         {
             if (type.Args.Count == 0) throw new CompileException(L.T("Symbols.ArrayWithoutElementType"));

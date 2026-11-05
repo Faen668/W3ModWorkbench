@@ -204,7 +204,7 @@
   "Settings.Scripts.Compiling": "Kompilieren",
   "Settings.Scripts.CompilerAuto": "wcc_lite, wenn festgelegt, sonst der eingebaute Compiler",
   "Settings.Scripts.CompilerBuiltIn": "Immer der eingebaute Compiler",
-  "Settings.Scripts.CompilerHint": "Der eingebaute Compiler braucht eine Sekunde und nur die Skripte des Spiels. wcc_lite braucht etwa eine Minute und ist der des Spiels selbst, verwenden Sie ihn also für eine Veröffentlichung. Beide schreiben dieselbe precompiled.rsblob.",
+  "Settings.Scripts.CompilerHint": "Der eingebaute Compiler braucht eine Sekunde und nur die Skripte des Spiels. wcc_lite braucht etwa eine Minute und ist der des Spiels selbst: Seine Prüfung ist maßgeblich, verwenden Sie ihn also für eine Veröffentlichung. Beide schreiben dieselbe precompiled.rsblob.",
   "Settings.Scripts.WillUseBuiltIn": "„Kompilieren“ verwendet den eingebauten Compiler.",
   "Settings.Scripts.WillUseNeither": "Keiner der Compiler kann laufen: Die Skripte des Spiels wurden nicht gefunden. Legen Sie den Spielordner unter „Spiel und Werkzeuge“ fest.",
   "Settings.Scripts.WillUseWcc": "„Kompilieren“ verwendet wcc_lite.",
@@ -5334,6 +5334,8 @@
   "SceneTimeline.StandingWhereThey": "(stehen, wo sie sind)",
 
   "CompilerChoice.BuiltCompiler": "der eingebaute Compiler",
+  "CompilerChoice.WccLiteCounts": "Der eingebaute Compiler folgt den Regeln von wcc_lite, aber maßgeblich ist die Prüfung durch wcc_lite: Kompilieren Sie vor der Veröffentlichung damit.",
+  "CompilerChoice.WccLiteCountsNoRedkit": "Der eingebaute Compiler folgt den Regeln von wcc_lite, aber wenn Sie REDkit haben, ist vor der Veröffentlichung die Prüfung durch wcc_lite maßgeblich.",
   "CompilerChoice.NothingToCompileWith": "Zum Kompilieren braucht es entweder REDkits wcc_lite.exe oder die Skripte des Spiels. Legen Sie wcc_lite in den Einstellungen fest (Strg+, im Hauptfenster), oder legen Sie dort den Spielordner fest, damit der eingebaute Compiler die Skripte des Spiels findet",
 
   "ScriptBlob.ScriptBlobDamagedUnknown": "Der Skript-Blob ist beschädigt oder hat ein unbekanntes Format.",

@@ -49,7 +49,7 @@ public static class UnknownTypes
         foreach (var p in function.Params)
             if (Unknown(symbols, p.Type) is { } type)
                 problems.Add(new(file, function.Line, $"Unknown type '{type}' for property '{p.Name}'."));
-        if (function.ReturnType is { } ret && Unknown(symbols, ret) is { } returned)
+        if (function.ReturnType is { Name: not "void" } ret && Unknown(symbols, ret) is { } returned)
             problems.Add(new(file, function.Line, $"Unknown type '{returned}' for property '__return'."));
         if (function.Body is null) return;
         var locals = new List<FieldDecl>();
@@ -85,6 +85,8 @@ public static class UnknownTypes
     /// <summary>The type as wcc_lite names it when it doesn't know it (<c>array:2,0,CActord</c>), or null when it does.</summary>
     private static string? Unknown(Symbols symbols, TypeRef type)
     {
+        if (type.Name == "void") return "None";
+        if (type.IsStaticArray) return Unknown(symbols, type.Args[0]);
         if (type.Name == "array" && type.Args.Count == 1)
             return Unknown(symbols, type.Args[0]) is { } inner ? $"array:2,0,{inner}" : null;
         if (type.Name == "map" && type.Args.Count == 2)

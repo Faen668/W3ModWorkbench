@@ -32,6 +32,8 @@ public sealed partial class FunctionCompiler
     private sealed record FieldVar(FieldInfo Field) : Resolved;
     private sealed record EnumConstant(string Enum, int Value) : Resolved;
     private sealed record GlobalObject(Op Op, Ty Type) : Resolved;
+    /// <summary>A class's or struct's name in code, which wins over a local of that name and has no value.</summary>
+    private sealed record ClassName : Resolved;
 
     private enum Receiver { ImplicitThis, Super, Object }
 
@@ -95,8 +97,8 @@ public sealed partial class FunctionCompiler
         var parms = new Dictionary<string, Ty>();
         foreach (var p in decl.Params) parms[p.Name] = symbols.Resolve(p.Type);
         // an event returns a bool, and a wrapper what it wraps, whether or not it says so
-        var ret = decl.ReturnType is { } rt ? symbols.Resolve(rt)
-            : decl.Specifiers.IsEvent ? Ty.Bool
+        var ret = decl.Specifiers.IsEvent ? Ty.Bool
+            : decl.ReturnType is { } rt ? symbols.Resolve(rt)
             : wrap.Target?.ReturnType ?? Ty.Void;
 
         var localMap = new Dictionary<string, Ty>();
@@ -107,12 +109,30 @@ public sealed partial class FunctionCompiler
         if (body.Count > 0)
         {
             foreach (var statement in body) compiler.GenStmt(statement);
+            compiler.CheckReturns(decl, body);
             if (compiler._errors.Count > 0) throw new CompileErrorsException(compiler._errors);
             compiler.Add(Op.Nop);
         }
+        else if (compiler.MissingReturn(decl))
+            throw new CompileErrorsException([new CompileException("Function must return a value", decl.Line)]); // loc-ignore
         else if (decl.Body is null && decl.Specifiers.IsImport && (thisClass is null || decl.Annotation is { Kind: AnnotationKind.AddMethod }))
             compiler.GenImportCall(decl);
         return new CompiledBody { Code = compiler.Finish(), Locals = locals };
+    }
+
+    /// <summary>Whether wcc_lite wants a value back from this function and it has no code at all.</summary>
+    private bool MissingReturn(FunctionDecl decl) =>
+        decl.Body is not null && decl.ReturnType is not null && _returnType.Kind != TyKind.Void && !decl.Specifiers.IsEvent && !decl.Specifiers.IsImport;
+
+    private void CheckReturns(FunctionDecl decl, List<Stmt> body)
+    {
+        if (decl.ReturnType is null || _returnType.Kind == TyKind.Void || decl.Specifiers.IsEvent || decl.Specifiers.IsImport || _errors.Count > 0) return;
+        if (body.All(s => s.Kind is VarStmt or EmptyStmt))
+        {
+            _errors.Add(new CompileException("Function must return a value", decl.Line)); // loc-ignore
+            return;
+        }
+        if (NotReturning(body, decl.Line) is { } line) _errors.Add(new CompileException("Not all control paths return a value", line)); // loc-ignore
     }
 
     private static void CollectLocals(IEnumerable<Stmt> statements, List<(string, TypeRef)> output)
@@ -177,7 +197,7 @@ public sealed partial class FunctionCompiler
     {
         "theGame" => (Op.TheGame, "CR4Game"),
         "thePlayer" => (Op.ThePlayer, "CR4Player"),
-        "theCamera" => (Op.TheCamera, "CCameraDirector"),
+        "theCamera" => (Op.TheCamera, "CR4CameraDirector"),
         "theSound" => (Op.TheSound, "CScriptSoundSystem"),
         "theDebug" => (Op.TheDebug, "CDebugAttributesManager"),
         "theTimer" => (Op.TheTimer, "CTimerScriptKeyword"),
@@ -294,6 +314,9 @@ public sealed partial class FunctionCompiler
                 break;
             case IfStmt i:
             {
+                if (i.Then.Kind is EmptyStmt) throw Fail("Empty 'if' statements not allowed");
+                if (i.Else?.Kind is EmptyStmt) throw Fail("Empty 'else' statements not allowed");
+                CheckCondition(i.Cond);
                 Breakpoint(line);
                 int elseLabel = NewLabel();
                 int at = Add(Op.JumpIfFalse);
@@ -315,6 +338,7 @@ public sealed partial class FunctionCompiler
             }
             case WhileStmt w:
             {
+                CheckCondition(w.Cond);
                 int start = NewLabel(), end = NewLabel(), again = NewLabel();
                 Place(start);
                 int at = Add(Op.JumpIfFalse);
@@ -330,6 +354,7 @@ public sealed partial class FunctionCompiler
             }
             case DoWhileStmt d:
             {
+                CheckCondition(d.Cond);
                 int start = NewLabel(), check = NewLabel(), end = NewLabel();
                 Place(start);
                 LoopBody(d.Body, end, check);
@@ -354,6 +379,7 @@ public sealed partial class FunctionCompiler
                 Place(start);
                 if (f.Cond is { } cond)
                 {
+                    CheckCondition(cond);
                     int at = Add(Op.JumpIfFalse);
                     JumpTo(at, Slot.First, end);
                     GenAs(cond, Ty.Bool);
@@ -376,7 +402,7 @@ public sealed partial class FunctionCompiler
                 break;
             case BreakStmt:
             {
-                if (_loops.Count == 0) throw Fail("break outside a loop or switch");
+                if (_loops.Count == 0) throw Fail("break used outside loop");
                 int target = _loops[^1].Break;
                 Breakpoint(line);
                 int at = Add(Op.Jump);
@@ -386,15 +412,16 @@ public sealed partial class FunctionCompiler
             case ContinueStmt:
             {
                 int? target = _loops.AsEnumerable().Reverse().Select(l => l.Continue).FirstOrDefault(c => c.HasValue);
-                if (target is null) throw Fail("continue outside a loop");
+                if (target is null) throw Fail("continue used outside loop");
                 Breakpoint(line);
                 int at = Add(Op.Jump);
                 JumpTo(at, Slot.First, target.Value);
                 break;
             }
             case ReturnStmt r:
+                if (CallsLatent(r.Value)) throw Fail($"Function '{_functionName}' - latent calls not allowed in return statement");
                 if (r.Value is { } returned && _returnType.Kind == TyKind.Void && TypeOf(returned).Kind != TyKind.Void) throw Fail($"Function '{_functionName}' can't return a value");
-                if (r.Value is null && _returnType.Kind != TyKind.Void) throw Fail($"Function '{_functionName}' should return a value");
+                if (r.Value is null && _returnType.Kind != TyKind.Void) throw Fail($"Unable to convert from 'void' to '{MessageName(_returnType)}'");
                 Add(Op.Return);
                 if (r.Value is { } value)
                 {
@@ -409,7 +436,14 @@ public sealed partial class FunctionCompiler
                     Add(Op.Nop);
                 }
                 break;
+            case EnterStmt:
+                throw Fail("Delete can by used only on objects");
+            case SavePointStmt save:
+                throw Fail(save.Name.Length == 0 ? "SavePoint name is not set." : $"Function '{_functionName}' doesn't support SavePoints");
+            case StrayLabelStmt label:
+                throw Fail(label.IsCase ? "Illegal case" : "Illegal default");
             case DeleteStmt del:
+                if (TypeOf(del.Value).Kind != TyKind.Class) throw Fail("Delete can by used only on objects");
                 Breakpoint(line);
                 Add(Op.Delete);
                 Gen(del.Value);
@@ -435,6 +469,10 @@ public sealed partial class FunctionCompiler
 
     private void GenSwitch(Expr expr, List<SwitchItem> items)
     {
+        if (items.Count == 0) throw Fail("Empty switch");
+        if (CallsLatent(expr)) throw Fail("Switch expression must not be latent");
+        if (items.Count(i => i is DefaultItem) > 1) throw Fail("More than one default");
+        if (items.OfType<CaseItem>().Any(c => CallsLatent(c.Value))) throw Fail("Case expression must not be latent");
         var ty = TypeOf(expr);
         int exprType = _tables.ImportType(ty, _symbols);
         int end = NewLabel(), defaultLabel = NewLabel();
@@ -503,6 +541,8 @@ public sealed partial class FunctionCompiler
 
     private Resolved ResolveIdent(string name)
     {
+        if (name == "default" && _thisClass is null) throw Fail("'default' is valid only inside a class");
+        if (IsClassName(name)) return new ClassName();
         if (_locals.TryGetValue(name, out var local)) return new LocalVar(local);
         if (_params.TryGetValue(name, out var param)) return new ParamVar(param);
         if (_thisClass is not null && _symbols.FindField(_thisClass, name) is { } field) return new FieldVar(field);
@@ -526,10 +566,11 @@ public sealed partial class FunctionCompiler
         return _symbols.Classes.GetValueOrDefault(cls)?.StateMachine ?? throw Fail($"Class '{cls}' is not a state and therefore 'parent' has no sense");
     }
 
-    private FieldInfo FieldOf(Ty ty, string name)
+    private FieldInfo FieldOf(Ty ty, string name, Expr? owner = null)
     {
+        if (name == "super") throw Fail("'super' modified must go first");
         if (ty.Kind is not (TyKind.Class or TyKind.Struct) || _symbols.FindField(ty.Name, name) is not { } field)
-            throw Fail($"'{name}' is not a member of '{ReferenceName(ty)}'");
+            throw Fail($"'{name}' is not a member of '{(owner is null || IsReference(owner) ? ReferenceName(ty) : MessageName(ty))}'");
         return field;
     }
 
@@ -540,6 +581,7 @@ public sealed partial class FunctionCompiler
     {
         switch (expr.Kind)
         {
+            case ExprSequence: return Ty.Void;
             case IntLit: return Ty.Int;
             case FloatLit: return Ty.Float;
             case StrLit: return Ty.String;
@@ -552,8 +594,9 @@ public sealed partial class FunctionCompiler
                     LocalVar l => l.Type,
                     ParamVar p => p.Type,
                     GlobalObject g => g.Type,
-                    FieldVar f => f.Field.Type,
+                    FieldVar f => FieldAccessed(f.Field).Type,
                     EnumConstant e => Ty.Enum(e.Enum),
+                    ClassName => Ty.Void,
                     _ => throw Fail("unknown name"),
                 };
             case ThisExpr: return ThisType();
@@ -561,8 +604,17 @@ public sealed partial class FunctionCompiler
             case ParentExpr or VirtualParentExpr: return Ty.Class(StateMachine());
             case Member m:
             {
+                if (m.Object.Kind is Ident { Name: "default" })
+                {
+                    if (_thisClass is null) throw Fail("'default' is valid only inside a class");
+                    return FieldOf(ThisType(), m.Name).Type;
+                }
+                if (m.Object.Kind is SuperExpr && _thisClass is null) throw Fail("'super' is valid only inside function in class");
                 var objectType = m.Object.Kind is SuperExpr ? ThisType() : TypeOf(m.Object);
-                return FieldOf(objectType, m.Name).Type;
+                var field = FieldOf(objectType, m.Name, m.Object);
+                if (objectType.Kind == TyKind.Struct) CheckStructOwner(m.Object, m.Name);
+                CheckFieldAccess(field);
+                return field.Type;
             }
             case Call c:
                 return ResolveCall(c.Callee) switch
@@ -588,22 +640,38 @@ public sealed partial class FunctionCompiler
                     _ => throw Fail("unknown call"),
                 };
             case Index ix:
-                return TypeOf(ix.Array) is { Kind: TyKind.Array or TyKind.Map } arr ? arr.Element!
-                    : throw Fail($"{TypeOf(ix.Array)} can't be indexed");
-            case Unary { Op: "!" }: return Ty.Bool;
+                if (TypeOf(ix.Array) is not { Kind: TyKind.Array or TyKind.Map } arr) throw Fail("Subscript requires array, map or set type");
+                CheckArrayOwner(ix.Array);
+                return arr.Element!;
+            case Unary { Op: "!" } not:
+                CheckLogicOperand("LogicNot", not.Operand, TypeOf(not.Operand), null, Ty.Void, first: true);
+                return Ty.Bool;
             case Unary { Op: "~" }: return Ty.Int;
             case Unary u: return Numeric(TypeOf(u.Operand));
             case Binary b:
-                return PlanBinary(b.Op, TypeOf(b.Left), TypeOf(b.Right)) switch
+                var leftType = TypeOf(b.Left);
+                var rightType = TypeOf(b.Right);
+                CheckOperands(b, leftType, rightType);
+                return PlanBinary(b.Op, leftType, rightType) switch
                 {
                     InternalPlan p => p.Result,
                     _ => Ty.Bool,
                 };
             case Assign a: return TypeOf(a.Target);
             case Ternary t:
-                return TypeOf(t.Then) is { Kind: TyKind.Null } ? TypeOf(t.Else) : TypeOf(t.Then);
-            case Cast c: return _symbols.Resolve(c.Type);
-            case New n: return _symbols.Resolve(n.Type);
+                var thenType = TypeOf(t.Then);
+                var elseType = TypeOf(t.Else);
+                CheckTernary(t, thenType, elseType);
+                return thenType is { Kind: TyKind.Null } ? elseType : thenType;
+            case Cast c:
+            {
+                var target = _symbols.Resolve(c.Type);
+                CheckCast(c.Operand, TypeOf(c.Operand), target);
+                return target;
+            }
+            case New n:
+                CheckNew(n);
+                return _symbols.Resolve(n.Type);
         }
         throw Fail("unsupported expression");
     }
@@ -615,6 +683,7 @@ public sealed partial class FunctionCompiler
             case Ident id:
             {
                 string name = id.Name;
+                if (name == "default" && _thisClass is null) throw Fail("'default' is valid only inside a class");
                 if (name == "wrappedMethod")
                 {
                     if (_wrap is { Kind: WrapKind.Class, Target: { } t1 }) return new WrappedCallee(t1, true);
@@ -628,6 +697,8 @@ public sealed partial class FunctionCompiler
             }
             case Member m:
             {
+                if (m.Name == "super") throw Fail("'super' modified must go first");
+                if (m.Object.Kind is Ident { Name: "default" }) throw Fail($"You cannot call function '{m.Name}' from within default scope");
                 if (m.Object.Kind is SuperExpr)
                 {
                     string parent = ParentClass();
@@ -674,6 +745,8 @@ public sealed partial class FunctionCompiler
             candidates.Add((Ty.Int, Ty.Int));
             candidates.Add((Ty.Byte, Ty.Byte));
         }
+        else if (l0.Kind == TyKind.Float && r0.Kind == TyKind.Byte || l0.Kind == TyKind.Byte && r0.Kind == TyKind.Float)
+            candidates.Add((Ty.Float, Ty.Float));
         else if (r0.Kind == TyKind.Int)
             candidates.Add((l0, Ty.Float));
         else if (l0.Kind == TyKind.Int)
@@ -690,7 +763,7 @@ public sealed partial class FunctionCompiler
 
         if (op is "==" or "!=")
             return new TestPlan(op == "==", left.Kind == TyKind.Null ? right : left);
-        throw Fail($"Unable to find suitable operator '{op}' for given types ({left.RttiName}, {right.RttiName})");
+        throw Fail($"Unable to find suitable operator '{OperatorName(op)}' for given types ({MessageName(left)}, {MessageName(right)})");
     }
 
     /// <summary>
@@ -701,7 +774,7 @@ public sealed partial class FunctionCompiler
     private bool IsImplicit(Ty from, Ty to) => (from.Kind, to.Kind) switch
     {
         (TyKind.Null, TyKind.Class) => true,
-        (TyKind.Class, TyKind.Class) => _symbols.IsSubclass(from.Name, to.Name),
+        (TyKind.Class, TyKind.Class) => _symbols.IsSubclass(from.Name, to.Name) || to.Name == "CObject" && !IsState(from.Name),
         (TyKind.Class, TyKind.Bool or TyKind.String) => true,
         (TyKind.Int, TyKind.Float or TyKind.Byte or TyKind.Bool or TyKind.String or TyKind.Enum) => true,
         (TyKind.Byte, TyKind.Int or TyKind.Float or TyKind.Bool or TyKind.String) => true,
@@ -723,7 +796,7 @@ public sealed partial class FunctionCompiler
         (TyKind.Float or TyKind.Bool or TyKind.String, TyKind.Int or TyKind.Byte) => true,
         (TyKind.Bool or TyKind.String, TyKind.Float) => true,
         (TyKind.Name, TyKind.Bool) => true,
-        (TyKind.Class, TyKind.Class) => _symbols.IsSubclass(to.Name, from.Name),
+        (TyKind.Class, TyKind.Class) => _symbols.IsSubclass(to.Name, from.Name) || from.Name == "CObject" && !IsState(to.Name),
         _ => false,
     };
 
@@ -787,7 +860,7 @@ public sealed partial class FunctionCompiler
             case (TyKind.Struct, TyKind.Struct): break;
             case (TyKind.Primitive, _) or (_, TyKind.Primitive): break;
             case (_, TyKind.Void): break;
-            default: throw Fail($"No implicit cast exists for converting '{from.RttiName}' to '{to.RttiName}'");
+            default: throw Fail($"Unable to convert from '{MessageName(from)}' to '{MessageName(to)}'");
         }
         return result;
     }

@@ -204,7 +204,7 @@
   "Settings.Scripts.Compiling": "Компиляция",
   "Settings.Scripts.CompilerAuto": "wcc_lite, если задан, иначе встроенный компилятор",
   "Settings.Scripts.CompilerBuiltIn": "Всегда встроенный компилятор",
-  "Settings.Scripts.CompilerHint": "Встроенный компилятор работает секунду и требует только скриптов игры. wcc_lite работает около минуты и является компилятором самой игры, поэтому используйте его для релиза. Оба записывают одинаковый precompiled.rsblob.",
+  "Settings.Scripts.CompilerHint": "Встроенный компилятор работает секунду и требует только скриптов игры. wcc_lite работает около минуты и является компилятором самой игры: решающей остаётся его проверка, поэтому используйте его для выпуска. Оба записывают один и тот же precompiled.rsblob.",
   "Settings.Scripts.WillUseBuiltIn": "«Компилировать» будет использовать встроенный компилятор.",
   "Settings.Scripts.WillUseNeither": "Ни один компилятор не может работать: скрипты игры не найдены. Укажите папку игры в разделе «Игра и инструменты».",
   "Settings.Scripts.WillUseWcc": "«Компилировать» будет использовать wcc_lite.",
@@ -5334,6 +5334,8 @@
   "SceneTimeline.StandingWhereThey": "(стоят, где стоят)",
 
   "CompilerChoice.BuiltCompiler": "встроенный компилятор",
+  "CompilerChoice.WccLiteCounts": "Встроенный компилятор следует правилам wcc_lite, но решающей остаётся проверка wcc_lite: перед выпуском скомпилируйте им.",
+  "CompilerChoice.WccLiteCountsNoRedkit": "Встроенный компилятор следует правилам wcc_lite, но если у вас есть REDkit, перед выпуском решающей остаётся проверка wcc_lite.",
   "CompilerChoice.NothingToCompileWith": "Для компиляции нужен wcc_lite.exe из REDkit или скрипты игры. Укажите wcc_lite в настройках (Ctrl+, в главном окне) или укажите там папку игры, чтобы встроенный компилятор нашёл скрипты игры",
 
   "ScriptBlob.ScriptBlobDamagedUnknown": "Блоб скриптов повреждён или в неизвестном формате.",

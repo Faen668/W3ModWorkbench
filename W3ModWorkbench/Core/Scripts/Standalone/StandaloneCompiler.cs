@@ -126,7 +126,16 @@ public static class StandaloneCompiler
             try
             {
                 string text = unsaved is not null && unsaved.TryGetValue(relative, out var edited) ? edited : TextDecoding.Decode(File.ReadAllBytes(path));
-                project.Add(new SourceFile(relative, Parser.ParseSource(text, skipBodies: false)));
+                // wcc_lite's own steps, so what it refuses is refused here too, in the same words
+                var found = new List<WccMessage>();
+                var tokens = WccLexer.Tokenize(text, found);
+                var functions = found.Count == 0 ? WccSyntax.CheckFile(tokens, found) : [];
+                if (found.Count > 0)
+                {
+                    messages.AddRange(found.Select(m => new CompileMessage(true, relative, Math.Max(m.Line, 1), m.Text)));
+                    continue;
+                }
+                project.Add(new SourceFile(relative, Parser.ParseChecked(tokens, functions, tokens.Count > 0 ? tokens[^1].Line : 1)));
             }
             catch (ScriptSyntaxException ex)
             {
@@ -150,11 +159,8 @@ public static class StandaloneCompiler
         symbols.AddRttiEnums(rtti);
         symbols.ExtendEnums(installed, null);
         var enumProblems = new List<CompileMessage>();
-        symbols.ExtendEnums(project, (file, line, text) => enumProblems.Add(new CompileMessage(true, file.Path, line, text)));
+        symbols.ExtendEnums(EnumsInWccOrder(project), (file, line, text) => enumProblems.Add(new CompileMessage(true, file.Path, line, text)));
         if (enumProblems.Count > 0) return (null, enumProblems);
-        var duplicates = Duplicates.Check(project);
-        if (duplicates.Count > 0)
-            return (null, [.. duplicates.Select(p => new CompileMessage(true, p.File, Math.Max(p.Line, 1), p.Text))]);
         symbols.AddTypeNames(project);
         symbols.AddTypeNames(vanillaFiles);
         symbols.AddTypeNames(installed);
@@ -167,18 +173,33 @@ public static class StandaloneCompiler
         symbols.AddRttiProperties(rtti);
         symbols.AddRttiFunctions(rtti);
         if (membersProblem.Count > 0) return (null, membersProblem);
-        var typeProblems = UnknownTypes.Check(symbols, project);
+        // wcc_lite's passes in its order, each stopping the compile if it finds anything
+        var declarations = new Declarations(symbols, project, vanillaFiles, rtti);
+        var (duplicates, repeatedFunctions) = Duplicates.Check(project);
+        foreach (var pass in new Func<List<CompileProblem>>[]
+        {
+            declarations.Types,
+            () => [.. duplicates, .. declarations.ClassDefinitions()],
+            declarations.Functions,
+        })
+            if (pass() is { Count: > 0 } found0)
+                return (null, [.. found0.Select(p => new CompileMessage(true, p.File, Math.Max(p.Line, 1), p.Text))]);
+        var typeProblems = declarations.Properties();
+        typeProblems.AddRange(UnknownTypes.Check(symbols, project));
         if (typeProblems.Count > 0)
             return (null, [.. typeProblems.Select(p => new CompileMessage(true, p.File, Math.Max(p.Line, 1), p.Text))]);
         var extensionProblems = Extensions.Check(symbols, project);
         if (extensionProblems.Count > 0)
             return (null, [.. extensionProblems.Select(p => new CompileMessage(true, p.File, Math.Max(p.Line, 1), p.Text))]);
+        var bindingProblems = declarations.Binding();
+        if (bindingProblems.Count > 0)
+            return (null, [.. bindingProblems.Select(p => new CompileMessage(true, p.File, Math.Max(p.Line, 1), p.Text))]);
         var (defaultErrors, defaultWarnings) = DefaultValues.Check(symbols, project);
         if (defaultErrors.Count > 0)
             return (null, [.. defaultErrors.Select(p => new CompileMessage(true, p.File, Math.Max(p.Line, 1), p.Text))]);
         // wcc_lite's warnings, pass by pass: incomplete classes, state machines without an autostate, then what compiling the functions finds
         var found = IncompleteClasses.Check(symbols, project, vanillaFiles.Concat(installed))
-            .Concat(DefaultValues.AutoStates(symbols, project, vanillaFiles.Concat(installed))).Concat(defaultWarnings).ToList();
+            .Concat(DefaultValues.AutoStates(symbols, project, vanillaFiles.Concat(installed))).Concat(defaultWarnings).Concat(repeatedFunctions).Concat(declarations.Warnings()).ToList();
         var warnings = new List<CompileMessage>();
         void AddWarnings() => warnings.AddRange(found.Select(p => new CompileMessage(false, p.File, Math.Max(p.Line, 1), p.Text)));
         cancel.ThrowIfCancellationRequested();
@@ -193,6 +214,17 @@ public static class StandaloneCompiler
             AddWarnings();
             return (null, [.. ex.Problems.Select(p => new CompileMessage(true, p.File, Math.Max(p.Line, 1), p.Text)), .. warnings]);
         }
+    }
+
+    /// <summary>When a project defines an enum twice, the plainer definition is taken first: wcc_lite refuses values given in the one it reads second.</summary>
+    private static IEnumerable<SourceFile> EnumsInWccOrder(List<SourceFile> project)
+    {
+        var declared = project.SelectMany(f => f.Items.OfType<EnumItem>()).GroupBy(e => e.Decl.Name).ToDictionary(g => g.Key, g => g.Count());
+        bool Later(EnumItem e) => declared[e.Decl.Name] > 1 && e.Decl.Members.Any(m => m.Item2 is not null);
+        foreach (var file in project)
+            yield return new SourceFile(file.Path, [.. file.Items.OfType<EnumItem>().Where(e => !Later(e))]);
+        foreach (var file in project)
+            yield return new SourceFile(file.Path, [.. file.Items.OfType<EnumItem>().Where(Later)]);
     }
 
     private static CompileResult Failed(List<CompileMessage> messages, System.Text.StringBuilder log) =>

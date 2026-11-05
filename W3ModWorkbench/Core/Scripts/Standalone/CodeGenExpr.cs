@@ -56,6 +56,9 @@ public sealed partial class FunctionCompiler
         int line = expr.Line;
         switch (expr.Kind)
         {
+            case ExprSequence sequence:
+                foreach (var item in sequence.Items) Gen(item);
+                break;
             case IntLit { Value: 0 }: Add(Op.IntZero); break;
             case IntLit { Value: 1 }: Add(Op.IntOne); break;
             case IntLit i: Add(new Ins(Op.IntConst) { A = (int)i.Value }); break;
@@ -82,6 +85,7 @@ public sealed partial class FunctionCompiler
                     }
                     case EnumConstant ec: GenEnumConstant(ec.Enum, ec.Value); break;
                     case GlobalObject g: Add(g.Op); break;
+                    case ClassName: Add(Op.Nop); break;
                 }
                 break;
             case ThisExpr: Add(Op.This); break;
@@ -94,7 +98,8 @@ public sealed partial class FunctionCompiler
             case Call c: GenCall(c.Callee, c.Args, line); break;
             case Index ix:
             {
-                var arrayType = TypeOf(ix.Array);
+                var arrayType = TypeOf(expr) is var _ ? TypeOf(ix.Array) : null!;
+                if (arrayType.Kind != TyKind.Map) CheckSubscript(ix.Idx);
                 Add(new Ins(arrayType.Kind == TyKind.Map ? MapOp.Element : Op.ArrayElement) { A = _tables.ImportType(arrayType, _symbols) });
                 Gen(ix.Array);
                 GenAs(ix.Idx, arrayType.Kind == TyKind.Map ? arrayType.Key! : Ty.Int);
@@ -110,6 +115,7 @@ public sealed partial class FunctionCompiler
                 int at = Add(Op.Conditional);
                 JumpTo(at, Slot.First, elseLabel);
                 JumpTo(at, Slot.Second, end);
+                CheckCondition(t.Cond);
                 GenAs(t.Cond, Ty.Bool);
                 GenAs(t.Then, ty);
                 Place(elseLabel);
@@ -152,9 +158,11 @@ public sealed partial class FunctionCompiler
         }
 
         var objectType = TypeOf(obj);
-        var field = FieldOf(objectType, name);
+        var field = FieldOf(objectType, name, obj);
+        CheckFieldAccess(field);
         if (objectType.Kind == TyKind.Struct)
         {
+            CheckStructOwner(obj, name);
             var (n, s) = PropertyOf(field);
             Add(new Ins(Op.StructMember) { A = n, B = s });
             Gen(obj);
@@ -181,9 +189,25 @@ public sealed partial class FunctionCompiler
         }
         var parms = info.Params;
         if (args.Count > parms.Count) throw Fail($"Function '{info.Name}' does not take {args.Count} param(s)");
+        for (int i = args.Count; i < parms.Count; i++)
+            if (!parms[i].IsOptional) throw Fail($"To few params in call to function '{info.Name}'");
+        for (int i = 0; i < args.Count; i++)
+            if (args[i] is null && !parms[i].IsOptional) throw Fail($"Obligatory param {i} ({parms[i].Name}) was omitted");
         for (int i = 0; i < parms.Count; i++)
         {
-            if (i < args.Count && args[i] is { } arg) GenAs(arg, parms[i].Type, strictly: true);
+            if (i < args.Count && args[i] is { } arg)
+            {
+                try
+                {
+                    if (parms[i].IsOut) CheckOutArgument(arg, parms[i]);
+                    GenAs(arg, parms[i].Type, strictly: true);
+                }
+                catch (CompileException ex)
+                {
+                    _errors.Add(ex);
+                    throw Fail($"With parameter '{parms[i].Name}'");
+                }
+            }
             else Add(Op.Nop);
         }
     }
@@ -204,8 +228,24 @@ public sealed partial class FunctionCompiler
         Add(Op.Nop);
     }
 
+    private void CheckOutArgument(Expr arg, ParamInfo param)
+    {
+        var type = TypeOf(arg);
+        string target = MessageName(param.Type);
+        if (type.Kind == TyKind.Null) throw Fail("Expected type 'void' to be assignable");
+        if (type != param.Type)
+        {
+            string value = ValueName(arg, type);
+            if (IsExplicitOnly(type, param.Type)) throw Fail($"No implicit cast exists for converting '{value}' to '&{target}'");
+            if (!IsImplicit(type, param.Type)) throw Fail($"Unable to convert from '{value}' to '&{target}'");
+            if (PlaceOf(arg) == Lvalue.Writable) throw Fail($"Imcompatibile types '{value}' and '&{target}'");
+        }
+        if (PlaceOf(arg) != Lvalue.Writable) throw Fail($"Expected type '{target}' to be assignable");
+    }
+
     private void GenCall(Expr callee, List<Expr?> args, int line)
     {
+        if (TryResolveCall(callee) is { } called) CheckCall(called);
         switch (ResolveCall(callee))
         {
             case WrappedCallee w:
@@ -257,6 +297,7 @@ public sealed partial class FunctionCompiler
 
     private void GenArrayCall(ArrayCallee a, List<Expr?> args)
     {
+        if (!ComesFromVariable(a.Array)) throw Fail("Only arrays coming from variables can be modified");
         var element = a.Element;
         int typeRef = _tables.ImportType(TypeOf(a.Array), _symbols);
         (Op Op, Ty[] Params) spec = a.Method switch
@@ -276,9 +317,9 @@ public sealed partial class FunctionCompiler
             "Erase" => (Op.ArrayErase, [Ty.Int]),
             "EraseFast" => (Op.ArrayEraseFast, [Ty.Int]),
             "Last" => (Op.ArrayLast, []),
-            _ => throw Fail($"arrays have no method '{a.Method}'"),
+            _ => throw Fail($"Unknown array function '{a.Method}'"),
         };
-        if (args.Count != spec.Params.Length) throw Fail($"array {a.Method} takes {spec.Params.Length} arguments, not {args.Count}");
+        if (args.Count != spec.Params.Length) throw Fail($"Function '{a.Method}' does not take {args.Count} params");
         // wcc_lite compares a variable's value in place (the Fast operations) and a temporary (a literal, `this`, a call) the long way
         var op = spec.Op;
         if (args.Count > 0 && args[0] is { } firstArg && IsVariable(firstArg))
@@ -293,7 +334,7 @@ public sealed partial class FunctionCompiler
         Add(new Ins(op) { A = typeRef });
         Gen(a.Array);
         for (int i = 0; i < args.Count; i++)
-            GenAs(args[i] ?? throw Fail("an argument is missing"), spec.Params[i]);
+            GenAs(args[i] ?? throw Fail("an argument is missing"), spec.Params[i], strictly: true);
     }
 
     private bool IsWritableMapOutput(Expr expression) => expression.Kind switch
@@ -376,7 +417,10 @@ public sealed partial class FunctionCompiler
     {
         switch (op)
         {
-            case "!": InternalCall("LogicNot_Bool", line, () => GenAs(operand, Ty.Bool)); break;
+            case "!":
+                CheckLogicOperand("LogicNot", operand, TypeOf(operand), null, Ty.Void, first: true);
+                InternalCall("LogicNot_Bool", line, () => GenAs(operand, Ty.Bool));
+                break;
             case "~": InternalCall("BitNot_Int32", line, () => GenAs(operand, Ty.Int)); break;
             default:
             {
@@ -427,15 +471,19 @@ public sealed partial class FunctionCompiler
 
     private void GenAssign(string op, Expr target, Expr value, int line)
     {
+        if (target.Kind is Member { Object: var owner } && owner.Kind is not (SuperExpr or Ident { Name: "default" }) && TypeOf(owner).Kind is TyKind.Array or TyKind.Map)
+            throw Fail("L-value required");
         var targetType = TypeOf(target);
         if (op == "=")
         {
+            CheckAssignTarget(target);
             Add(Op.Assign);
             Gen(target);
             GenAs(value, targetType, strictly: true);
             return;
         }
 
+        CheckOperatorTarget(target, targetType);
         var valueType = Numeric(TypeOf(value));
         string prefix = OperatorPrefix(op);
         string targetTag = TypeTag(targetType) ?? throw Fail($"{op} can't be used on {targetType}");

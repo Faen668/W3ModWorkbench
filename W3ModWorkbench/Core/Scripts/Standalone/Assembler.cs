@@ -319,6 +319,21 @@ public sealed class Assembler
 
     private void Compile(FunctionPlan plan)
     {
+        if (plan.Decl.Code is { } code)
+        {
+            var syntax = WccSyntax.CheckCode(code, name => _symbols.Enums.ContainsKey(name) ? name
+                : _symbols.Classes.TryGetValue(name, out var c) && !c.IsStruct ? $"handle:{name}" : null);
+            if (syntax.Count > 0)
+            {
+                foreach (var message in syntax) Problem(plan.File, message.Line, message.Text);
+                return;
+            }
+        }
+        if (plan.Decl.Unread is { } unread)
+        {
+            Problem(plan.File, unread.Line, unread.Message);
+            return;
+        }
         try
         {
             plan.Compiled = FunctionCompiler.Compile(_symbols, _tables, plan.Decl, plan.ThisClass, plan.Wrap,

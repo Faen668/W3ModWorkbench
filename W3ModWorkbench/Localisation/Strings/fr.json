@@ -204,7 +204,7 @@
   "Settings.Scripts.Compiling": "Compilation",
   "Settings.Scripts.CompilerAuto": "wcc_lite s'il est défini, sinon le compilateur intégré",
   "Settings.Scripts.CompilerBuiltIn": "Toujours le compilateur intégré",
-  "Settings.Scripts.CompilerHint": "Le compilateur intégré prend une seconde et n'a besoin que des scripts du jeu. wcc_lite prend environ une minute et est celui du jeu : utilisez-le pour une version publiée. Les deux écrivent le même precompiled.rsblob.",
+  "Settings.Scripts.CompilerHint": "Le compilateur intégré prend une seconde et n'a besoin que des scripts du jeu. wcc_lite prend environ une minute et est celui du jeu : c'est sa vérification qui fait foi, utilisez-le donc pour une version publiée. Les deux écrivent le même precompiled.rsblob.",
   "Settings.Scripts.WillUseBuiltIn": "« Compiler » utilisera le compilateur intégré.",
   "Settings.Scripts.WillUseNeither": "Aucun compilateur ne peut fonctionner : les scripts du jeu sont introuvables. Définissez le dossier du jeu sous « Jeu et outils ».",
   "Settings.Scripts.WillUseWcc": "« Compiler » utilisera wcc_lite.",
@@ -5334,6 +5334,8 @@
   "SceneTimeline.StandingWhereThey": "(debout là où ils sont)",
 
   "CompilerChoice.BuiltCompiler": "le compilateur intégré",
+  "CompilerChoice.WccLiteCounts": "Le compilateur intégré suit les règles de wcc_lite, mais c'est la vérification de wcc_lite qui fait foi : compilez avec lui avant de publier.",
+  "CompilerChoice.WccLiteCountsNoRedkit": "Le compilateur intégré suit les règles de wcc_lite, mais si vous avez REDkit, c'est la vérification de wcc_lite qui fait foi avant de publier.",
   "CompilerChoice.NothingToCompileWith": "La compilation a besoin soit du wcc_lite.exe de REDkit, soit des scripts du jeu. Définissez wcc_lite dans les Paramètres (Ctrl+, dans la fenêtre principale), ou définissez-y le dossier du jeu pour que le compilateur intégré trouve les scripts du jeu",
 
   "ScriptBlob.ScriptBlobDamagedUnknown": "Le blob de scripts est endommagé ou dans un format inconnu.",

@@ -106,6 +106,7 @@ public static class ModBuilder
                         : L.T("ModBuilder.ScriptsDidntCompile", compiled.Failure));
                 }
                 made.Add(L.T("ModBuilder.ScriptsCompiled", scripts.Count, compiler.Name));
+                if (compiler.Caveat is { } caveat) made.Add(caveat);
             }
 
             // loose, as they are: beside the blob they're the mod's source, for others to read or merge

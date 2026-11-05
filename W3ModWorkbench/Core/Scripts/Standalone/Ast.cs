@@ -6,6 +6,9 @@ namespace W3ModWorkbench.Core.Scripts.Standalone;
 public sealed record TypeRef(string Name, List<TypeRef> Args)
 {
     public TypeRef(string name) : this(name, []) { }
+
+    /// <summary><c>T[n]</c>: the language has it and nothing in the game uses it. The compiler says it can't store one.</summary>
+    public bool IsStaticArray { get; init; }
 }
 
 public enum Visibility { Default, Public, Protected, Private }
@@ -58,6 +61,10 @@ public sealed class FunctionDecl
     public int Line { get; init; }
     /// <summary>Whether its body names <c>wrappedMethod</c>, which a @wrapMethod's must.</summary>
     public bool UsesWrappedMethod { get; init; }
+    /// <summary>In a project's file: its tokens for the syntax check made when it's compiled.</summary>
+    public WccFunctionCode? Code { get; init; }
+    /// <summary>In a project's file: why the compiler's parser couldn't read a body, if it couldn't.</summary>
+    public ScriptSyntaxException? Unread { get; init; }
 }
 
 public sealed record DefaultAssignment(string Field, Expr Value);
@@ -105,6 +112,10 @@ public sealed record ReturnStmt(Expr? Value) : StmtKind;
 public sealed record DeleteStmt(Expr Value) : StmtKind;
 public sealed record BlockStmt(List<Stmt> Statements) : StmtKind;
 public sealed record EmptyStmt : StmtKind;
+public sealed record EnterStmt(Expr Value) : StmtKind;
+public sealed record SavePointStmt(string Name, List<string?> Variables) : StmtKind;
+/// <summary>A <c>case</c> or <c>default</c> label that isn't directly in a switch's block.</summary>
+public sealed record StrayLabelStmt(bool IsCase) : StmtKind;
 
 public abstract record SwitchItem;
 public sealed record CaseItem(Expr Value) : SwitchItem;
@@ -120,6 +131,9 @@ public sealed record StrLit(string Value) : ExprKind;
 public sealed record NameLit(string Value) : ExprKind;
 public sealed record BoolLit(bool Value) : ExprKind;
 public sealed record NullLit : ExprKind;
+public sealed record ExprSequence(List<Expr> Items) : ExprKind;
+/// <summary>A default written <c>{1, 2}</c> or <c>(a = 1)</c>.</summary>
+public sealed record GroupedValue : ExprKind;
 public sealed record Ident(string Name) : ExprKind;
 public sealed record ThisExpr : ExprKind;
 public sealed record SuperExpr : ExprKind;

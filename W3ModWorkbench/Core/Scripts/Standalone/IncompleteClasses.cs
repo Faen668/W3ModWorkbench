@@ -51,8 +51,13 @@ public static class IncompleteClasses
         var bodied = new HashSet<string>();
         var byClass = new List<List<(string, string)>>();
         if (decls.TryGetValue(key, out var own))
+        {
             foreach (var f in own.Methods)
                 if (f.Body is not null || f.Specifiers.IsImport) bodied.Add(f.Name);
+            var ownMissing = own.Methods.Where(f => !own.IsImport && !bodied.Contains(f.Name)).Select(f => (f.Name, own.Name)).ToList();
+            byClass.Add(ownMissing);
+            foreach (var (name, _) in ownMissing) bodied.Add(name);
+        }
         string? current = symbols.Classes.GetValueOrDefault(key)?.Parent;
         for (int depth = 0; current is not null && depth <= 64; depth++)
         {
