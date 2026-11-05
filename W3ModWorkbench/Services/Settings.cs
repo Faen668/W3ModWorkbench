@@ -218,6 +218,9 @@ public sealed class Settings
     /// <summary>Whether the Action Point Finder reads the installed mods' copies of layers, templates and job trees, as the game does with them installed.</summary>
     public bool ActionPointsWithMods { get; set; }
 
+    /// <summary>Which group of views the Action Point Finder's list shows under its built-in views ("" for all of them).</summary>
+    public string ActionPointsGroup { get; set; } = "Job"; // loc-ignore: a group's key
+
     /// <summary>Whether the entity viewer shows what it's drawing (triangles, frame rate…) over the view.</summary>
     public bool ShowEntityInfo { get; set; } = true;
 

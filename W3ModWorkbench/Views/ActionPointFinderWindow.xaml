@@ -67,7 +67,17 @@
                         <TextBlock Style="{StaticResource IconText}" Text="&#xE721;" FontSize="12" Margin="10,0,0,0" Opacity="0.6" HorizontalAlignment="Left" IsHitTestVisible="False" />
                         <TextBlock x:Name="SearchHint" Margin="31,0,0,0" Opacity="0.55" VerticalAlignment="Center" IsHitTestVisible="False" Text="{l:T ActionPoints.Find}" />
                     </Grid>
-                    <TextBlock x:Name="CountText" DockPanel.Dock="Bottom" Margin="4,4,4,2" Style="{StaticResource Small}" />
+                    <ComboBox x:Name="GroupBox" DockPanel.Dock="Top" Margin="0,0,0,6" HorizontalAlignment="Stretch" SelectionChanged="GroupBox_SelectionChanged"
+                              ToolTip="{l:T ActionPoints.GroupTip}" />
+                    <DockPanel DockPanel.Dock="Bottom" Margin="4,4,0,0">
+                        <Button x:Name="UsageButton" DockPanel.Dock="Right" Padding="8,2" Click="ExportUsage_Click" IsEnabled="False" ToolTip="{l:T ActionPoints.ExportUsageTip}">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Style="{StaticResource IconText}" Text="&#xEDE1;" FontSize="12" Margin="0,0,6,0" />
+                                <TextBlock Text="{l:T ActionPoints.ExportUsage}" />
+                            </StackPanel>
+                        </Button>
+                        <TextBlock x:Name="CountText" Style="{StaticResource Small}" VerticalAlignment="Center" />
+                    </DockPanel>
                     <ListBox x:Name="ViewList" BorderThickness="0" Background="Transparent" SelectionChanged="ViewList_SelectionChanged" IsSynchronizedWithCurrentItem="False"
                              VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.IsVirtualizingWhenGrouping="True" VirtualizingPanel.VirtualizationMode="Recycling"
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled">
@@ -150,10 +160,18 @@
                                         <ItemsControl x:Name="LegendList">
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate>
-                                                    <StackPanel Orientation="Horizontal" Margin="0,1">
-                                                        <Ellipse Width="10" Height="10" Fill="{Binding Brush}" Stroke="Black" StrokeThickness="1" VerticalAlignment="Center" />
-                                                        <TextBlock Text="{Binding Text}" FontSize="11.5" Margin="7,0,0,0" VerticalAlignment="Center" />
-                                                    </StackPanel>
+                                                    <CheckBox IsChecked="{Binding Shown, Mode=OneWay}" Click="Legend_Click" MinWidth="0" MinHeight="0" Margin="0,1" Padding="6,0,0,0"
+                                                              VerticalContentAlignment="Center" ToolTip="{l:T ActionPoints.LegendTip}">
+                                                        <StackPanel Orientation="Horizontal">
+                                                            <Grid Width="11" Height="12" VerticalAlignment="Center">
+                                                                <Ellipse Width="10" Height="10" Fill="{Binding Brush}" Stroke="Black" StrokeThickness="1"
+                                                                         Visibility="{Binding Round, Converter={StaticResource BoolToVisibility}}" />
+                                                                <Path Data="M5.5,0 L10.5,6 L5.5,12 L0.5,6 Z" Fill="{Binding Brush}" Stroke="Black" StrokeThickness="1"
+                                                                      Visibility="{Binding Diamond, Converter={StaticResource BoolToVisibility}}" />
+                                                            </Grid>
+                                                            <TextBlock Text="{Binding Text}" FontSize="11.5" Margin="7,0,0,0" VerticalAlignment="Center" />
+                                                        </StackPanel>
+                                                    </CheckBox>
                                                 </DataTemplate>
                                             </ItemsControl.ItemTemplate>
                                         </ItemsControl>
@@ -184,6 +202,7 @@
                             <DataGrid.Columns>
                                 <DataGridTextColumn Header="{l:T ActionPoints.Kind}" Binding="{Binding KindText}" Width="140" />
                                 <DataGridTextColumn Header="{l:T LootLocator.Area}" Binding="{Binding Area}" Width="2*" />
+                                <DataGridTextColumn Header="{l:T ActionPoints.Quest}" Binding="{Binding QuestText}" Width="90" />
                                 <DataGridTextColumn Header="{l:T ActionPoints.Tags}" Binding="{Binding TagsText}" Width="2*" />
                                 <DataGridTextColumn Header="{l:T ActionPoints.JobTree}" Binding="{Binding JobTreeText}" Width="2*" />
                                 <DataGridTextColumn Header="{l:T LootLocator.Position}" Binding="{Binding PositionText}" Width="150" />

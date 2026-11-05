@@ -72,6 +72,9 @@ public sealed class ResourceLocator
     /// <summary>Whether the copy of a file that's read comes from an installed mod (one in mods\, or installed as DLC).</summary>
     public bool IsFromMod(string path) => Find(path) is { } entry && ModFolder(entry.Archive.FilePath) is not null;
 
+    /// <summary>The name of the installed mod the copy of a file that's read comes from (its folder's, modWeatherMatters), or null for the game's own.</summary>
+    public string? ModNameOf(string path) => Find(path) is { } entry && ModFolder(entry.Archive.FilePath) is { } folder ? Path.GetFileName(folder) : null;
+
     /// <summary>The open project's own copy of a game file, when it has one.</summary>
     public string? ProjectFile(string path)
     {
