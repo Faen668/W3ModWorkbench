@@ -340,7 +340,7 @@ public static partial class ResourceCooker
     private static byte[] Write(JsonObject json, IReadOnlyList<string>? tailNames = null)
     {
         var file = (JsonObject)json["file"]!;
-        foreach (string table in new[] { "names", "latin1", "nameHashes", "stringOrder", "tableHeaders" }) file.Remove(table);
+        foreach (string table in new[] { "names", "latin1", "nameHashes", "stringOrder", "tableHeaders", "headerCrc" }) file.Remove(table);
         var order = FirstUse(json, tailNames);
         // imports nothing refers to any more go; numbered references (import#N) keep the list as it is
         if (file["imports"] is JsonArray imports && !json.ToJsonString().Contains("\"import#", StringComparison.Ordinal))

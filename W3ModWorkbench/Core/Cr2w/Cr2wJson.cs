@@ -162,6 +162,9 @@ public static partial class Cr2wJson
             fileBlock["properties"] = Convert.ToBase64String(properties);
         }
         if (TableQuirks(d) is { } quirks) fileBlock["tableHeaders"] = quirks;
+        // a header checksum that isn't of the header (some tools change a file without working it out again)
+        uint headerCrc = (uint)I32(d, 32), headerActual = Cr2wBuilder.HeaderChecksum(d);
+        if (headerCrc != headerActual) fileBlock["headerCrc"] = new JsonArray(headerCrc, headerActual);
         fileBlock["types"] = types;
 
         var root = new JsonObject { ["$format"] = FormatName, ["$formatVersion"] = FormatVersion };
@@ -379,7 +382,8 @@ public static partial class Cr2wJson
             (fileBlock["stringOrder"] as JsonArray)?.Select(n => (int?)n ?? -1).ToList(),
             (fileBlock["tableHeaders"] as JsonObject ?? []).Where(h => int.TryParse(h.Key, out _) && h.Value is JsonArray { Count: 3 })
                 .ToDictionary(h => int.Parse(h.Key, CultureInfo.InvariantCulture),
-                    h => ((int)h.Value![0]!, (uint)h.Value![1]!, (uint)h.Value![2]!)));
+                    h => ((int)h.Value![0]!, (uint)h.Value![1]!, (uint)h.Value![2]!)),
+            fileBlock["headerCrc"] is JsonArray { Count: 2 } header ? ((uint)header[0]!, (uint)header[1]!) : null);
 
         var context = new FileContext(version, names, imports, adding: true) { Builder = builder };
         foreach (var (key, type) in fileBlock["types"] as JsonObject ?? [])

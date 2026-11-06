@@ -39,6 +39,16 @@ public sealed class Cr2wBuilder
     private readonly List<BufferEntry> _buffers = [];
     private readonly byte[] _trailer;
     private IReadOnlyDictionary<int, (int Offset, uint Crc, uint Actual)> _tableHeaders = new Dictionary<int, (int, uint, uint)>();
+    private (uint Crc, uint Actual)? _headerCrc;
+
+    /// <summary>What a file's header checksum should be: the CRC-32 of its header with 0xDEADBEEF where the checksum goes.</summary>
+    public static uint HeaderChecksum(ReadOnlySpan<byte> file)
+    {
+        Span<byte> header = stackalloc byte[HeaderSize];
+        file[..HeaderSize].CopyTo(header);
+        BinaryPrimitives.WriteUInt32LittleEndian(header[32..], 0xDEADBEEF);
+        return Checksums.Crc32(header);
+    }
 
     private Cr2wBuilder(int version, int flags, long timestamp, int build, int chunks, byte[] properties, int propertyCount, byte[] trailer)
     {
@@ -127,14 +137,16 @@ public sealed class Cr2wBuilder
     /// into the import paths (the engine often writes an import's path just before its class's name).
     /// <paramref name="tableHeaders"/> has the table headers the file had that writing it wouldn't give: by the table's
     /// number, its offset and checksum, and the checksum of its bytes, kept only while they're still those bytes.
+    /// <paramref name="headerCrc"/> is the same for the header's own checksum.
     /// </summary>
     public static Cr2wBuilder Create(int version, int flags, long timestamp, int build, int chunks, IEnumerable<string> names,
         IEnumerable<(string Path, string ClassName, int Flags)> imports, byte[] properties, int propertyCount, byte[] trailer,
         IEnumerable<string>? latin1 = null, IReadOnlyDictionary<int, uint>? hashes = null, IEnumerable<int>? order = null,
-        IReadOnlyDictionary<int, (int Offset, uint Crc, uint Actual)>? tableHeaders = null)
+        IReadOnlyDictionary<int, (int Offset, uint Crc, uint Actual)>? tableHeaders = null, (uint Crc, uint Actual)? headerCrc = null)
     {
         var builder = new Cr2wBuilder(version, flags, timestamp, build, chunks, properties, propertyCount, trailer);
         if (tableHeaders is not null) builder._tableHeaders = tableHeaders;
+        builder._headerCrc = headerCrc;
         if (latin1 is not null) builder._latin1.UnionWith(latin1);
         names = names as IReadOnlyList<string> ?? names.ToList();
         imports = imports as IReadOnlyList<(string, string, int)> ?? imports.ToList();
@@ -306,8 +318,10 @@ public sealed class Cr2wBuilder
             Put(output, 44 + i * 12, tables[i].Count);
             Put(output, 48 + i * 12, (int)tables[i].Crc);
         }
-        // the header's checksum is of the header as it is now, with 0xDEADBEEF where the checksum goes
-        Put(output, 32, (int)Checksums.Crc32(output.AsSpan(0, HeaderSize)));
+        // the header's checksum is of the header as it is now, with 0xDEADBEEF where the checksum goes; the one the file
+        // had instead is kept while the header is still the same
+        uint headerCrc = Checksums.Crc32(output.AsSpan(0, HeaderSize));
+        Put(output, 32, (int)(_headerCrc is { } keptHeader && keptHeader.Actual == headerCrc ? keptHeader.Crc : headerCrc));
 
         strings.CopyTo(output, stringsAt);
         names.CopyTo(output, namesAt);
