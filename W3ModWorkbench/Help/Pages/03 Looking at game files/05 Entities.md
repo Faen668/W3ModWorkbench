@@ -3,7 +3,7 @@ title: Entities
 icon: E77B
 order: 6
 summary: See a character, creature or object whole, in each of its looks, playing its animations, with every component it's made of.
-keywords: entity w2ent npc character appearance components animation dye colours inventory voicetags template effects fx particles smoke fire glow cookedeffects
+keywords: entity w2ent npc character appearance components animation dye colours inventory voicetags template effects fx particles smoke fire glow cookedeffects geralt worn wear item mask hood slot equip
 windows: EntityWindow
 ---
 An **entity** (`.w2ent`) is something the game spawns: an NPC, a horse, a door, a chest. It's made of **components** (meshes, a skeleton, sounds, triggers…), has **appearances** (the different looks an NPC can have), and often builds on other entity templates it **includes**.
@@ -20,6 +20,20 @@ On the left the entity is put together from all its meshes, in the **Appearance*
 - **Textures** ({{T}}), **Wireframe** ({{W}}) and **Floor** ({{G}}) as in the mesh viewer; **LOD** picks the level of detail.
 - The panel at the top left ({{I}}) counts what's drawn, and while it moves, how many frames a second.
 - Click a part of the model to pick its component.
+
+## Items on Geralt
+
+The player's own entity is only a neck seam, since the game dresses Geralt in what he has equipped. Open it and **Appearance** has **Geralt, dressed (Workbench)**: his head, starting armour, hair and both swords.
+
+An item's entity (a mask, a hood, a sword, a piece of armour) has **Worn by Geralt (Workbench)** in the same list. It shows the item on Geralt the way the game equips it:
+
+![Emperor Emhyr's mask from Hearts of Stone, worn by Geralt in the entity viewer](entity-worn.jpg)
+
+- it takes the place of what he'd wear of the same kind, or on the same slot;
+- a mask or sword hangs on its slot (the head, his back), and armour fits his body;
+- what he wears changes as the item calls for, such as a shorter haircut under a hood. Mods that add such changes count too.
+
+The item is worn in the appearance you picked last, so pick a dye first to see it worn in that colour. Neither look is saved anywhere.
 
 ## Animations
 

@@ -178,28 +178,32 @@ public static class CutsceneCast
     }
 
     /// <summary>
-    /// Dresses the player, whom the game dresses in what's equipped, in what his default inventory gives him: each
-    /// piece's meshes added to the lists, a sword on its slot. Whether any were added.
+    /// Dresses the player, whom the game dresses in what's equipped, in what his default inventory gives him (or in
+    /// <paramref name="gear"/>): each piece's meshes added to the lists, a sword on its slot. Whether any were added.
     /// </summary>
     public static bool Dress(EntityFile entity, EntityLook look, Skeleton rig, ResourceLocator locator, List<(MeshFile Mesh, Matrix4x4 Place)> parts,
-        List<EntityComponent> drawnBy, List<(EntityFile Entity, string? Appearance)> coloredBy, List<(int Bone, Matrix4x4 Offset)> attachedTo, CancellationToken token)
+        List<EntityComponent> drawnBy, List<(EntityFile Entity, string? Appearance)> coloredBy, List<(int Bone, Matrix4x4 Offset)> attachedTo, CancellationToken token,
+        IReadOnlyList<GearPiece>? gear = null)
     {
         int before = parts.Count;
-        foreach (var piece in PlayerGear.Default(locator))
+        foreach (var piece in gear ?? PlayerGear.Default(locator))
         {
             try
             {
                 if (locator.ReadFile(piece.Template) is not { } itemData) continue;
                 var itemEntity = EntityFile.Read(itemData);
                 // a dyeable piece has an appearance for each dye: undyed, as it starts, is dye_default
-                var itemAppearance = itemEntity.DefaultAppearance;
+                var itemAppearance = itemEntity.Appearances.FirstOrDefault(a => a.Name.Equals(piece.Appearance, StringComparison.OrdinalIgnoreCase))
+                    ?? itemEntity.DefaultAppearance;
                 var itemLook = itemEntity.Look(itemAppearance, locator.ReadFile);
                 var (itemParts, itemDrawnBy, _, _) = EntityWindow.ReadMeshes(itemLook, locator, token);
                 var hung = piece.Slot is { } slot ? SlotPlace(entity, look, slot, rig, locator) : (-1, Matrix4x4.Identity);
                 parts.AddRange(itemParts);
                 drawnBy.AddRange(itemDrawnBy);
                 coloredBy.AddRange(itemParts.Select(_ => (itemEntity, itemAppearance?.Name)));
-                attachedTo.AddRange(itemParts.Select(_ => hung));
+                // what isn't skinned hangs rigidly on the slot, whatever bones its mesh names (a heist mask is modelled on
+                // a head and moved down to the slot); what is skinned (Thaler's monocle) is skinned to the body as worn
+                attachedTo.AddRange(itemDrawnBy.Select(c => c.Skinned ? (-1, Matrix4x4.Identity) : hung));
             }
             catch (InvalidDataException)
             {
@@ -210,19 +214,21 @@ public static class CutsceneCast
     }
 
     /// <summary>
-    /// Where a slot is on the body: the body's bone it moves with and where it is on that bone. A slot on the body's own
-    /// rig is at its bone; one on a component of its own (the player's swords hang on scabbards_skeleton, a small rig
-    /// fastened to the body's torso3) is where its bone stands in that rig, carried by the bone the component hangs on.
-    /// Bone -1 when it can't be found.
+    /// Where a slot is on the body: the body's bone it moves with and where it is on that bone. A slot is turned and
+    /// moved on its bone as the entity's slot says (the head slot is turned a quarter, the hip and shield slots are
+    /// set at an angle). A slot on the body's own rig is on its bone; one on a component of its own (the player's swords
+    /// hang on scabbards_skeleton, a small rig fastened to the body's torso3) is where its bone stands in that rig,
+    /// carried by the bone the component hangs on. Bone -1 when it can't be found.
     /// </summary>
-    private static (int Bone, Matrix4x4 Offset) SlotPlace(EntityFile entity, EntityLook look, string slot, Skeleton rig, ResourceLocator locator)
+    public static (int Bone, Matrix4x4 Offset) SlotPlace(EntityFile entity, EntityLook look, string slot, Skeleton rig, ResourceLocator locator)
     {
-        var found = entity.Template.Array("slots").OfType<RedObject>().FirstOrDefault(s => string.Equals(s["name"] as string, slot, StringComparison.OrdinalIgnoreCase));
-        string bone = found?["boneName"] as string ?? (slot.EndsWith("_slot", StringComparison.OrdinalIgnoreCase) ? slot[..^5] : slot);
+        var found = entity.Slots.FirstOrDefault(s => s.Name.Equals(slot, StringComparison.OrdinalIgnoreCase));
+        var onBone = found?.Transform ?? Matrix4x4.Identity;
+        string bone = found?.Bone ?? (slot.EndsWith("_slot", StringComparison.OrdinalIgnoreCase) ? slot[..^5] : slot);
         int own = Array.FindIndex(rig.Names, n => n.Equals(bone, StringComparison.OrdinalIgnoreCase));
-        if (own >= 0) return (own, Matrix4x4.Identity);
+        if (own >= 0) return (own, onBone);
         // on a component of its own: its rig, and what it hangs on
-        if (found?["componentName"] is not string name || look.Components.FirstOrDefault(c => c.Name == name) is not { } component) return (-1, Matrix4x4.Identity);
+        if (found?.Component is not { } name || look.Components.FirstOrDefault(c => c.Name == name) is not { } component) return (-1, Matrix4x4.Identity);
         var link = look.Links.FirstOrDefault(l => l.Child == component && l.Slot is not null);
         int carrier = link?.Slot is { } on ? Array.FindIndex(rig.Names, n => n.Equals(on, StringComparison.OrdinalIgnoreCase)) : -1;
         string? rigPath = component.Resources.FirstOrDefault(r => r.EndsWith(".w2rig", StringComparison.OrdinalIgnoreCase));
@@ -235,7 +241,7 @@ public static class CutsceneCast
             if (at < 0) return (-1, Matrix4x4.Identity);
             var rest = new Matrix4x4[small.Count];
             small.ToModel(small.Pose, rest);
-            return (carrier, rest[at] * component.Local);
+            return (carrier, onBone * rest[at] * component.Local);
         }
         catch (InvalidDataException)
         {

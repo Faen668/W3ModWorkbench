@@ -39,6 +39,19 @@ public partial class EntityWindow : Window, IMessageHost
     private bool _player;
 
     private static string DressedLook => L.T("EntityWindow.DressedLook");
+    private static string WornLook => L.T("EntityWindow.WornLook");
+
+    /// <summary>The player's entity, that an item is shown worn on.</summary>
+    private const string PlayerEntity = @"gameplay\templates\characters\player\player.w2ent";
+
+    /// <summary>The item the entity is drawn for (its equip_template), which gets a look of Geralt wearing it; null for any other entity.</summary>
+    private string? _wornItem;
+
+    /// <summary>The entity's looks in the box: alone, its appearances, and the looks the app puts together.</summary>
+    private readonly System.Collections.ObjectModel.ObservableCollection<object> _looks = [];
+
+    /// <summary>The appearance shown last, which the item is worn in (a dye picked carries over).</summary>
+    private EntityAppearance? _lastAppearance;
     private List<EntityComponent> _partComponents = [];
     private CancellationTokenSource? _meshLoad;
     private readonly Dictionary<string, Task<BitmapSource?>> _textures = new(StringComparer.OrdinalIgnoreCase);
@@ -132,17 +145,34 @@ public partial class EntityWindow : Window, IMessageHost
         ShowEffects(EntityEffects.Read(e.File, e.Template));
         FileList.ItemsSource = Files(e).Select(l => new CutsceneLinkItem(l)).ToList();
 
-        var looks = new List<object> { L.T("EntityWindow.EntityAlone") };
-        looks.AddRange(e.Appearances.Select(a => a.Name));
+        var looks = _looks;
+        looks.Add(L.T("EntityWindow.EntityAlone"));
+        foreach (var a in e.Appearances) looks.Add(a.Name);
         // the player's entities are only a neck seam: the game dresses him in what's equipped, so offer him dressed, and start so
         _player = CutsceneCast.IsPlayer(_path);
         if (_player) looks.Add(DressedLook);
         AppearanceBox.ItemsSource = looks;
         AppearanceBox.SelectedIndex = _player && _lookWanted is null ? looks.Count - 1
             : (_lookWanted ?? e.DefaultAppearance) is { } shown ? e.Appearances.IndexOf(shown) + 1 : 0;
+        // an item's entity can be shown worn: found once the item definitions are read, so it's offered when they are
+        if (!_player) _ = OfferWornAsync();
         InfoText.Text = L.T("EntityWindow.Info", _path, _source, e.File.Version, L.T("Count.Component", e.Components.Count),
                           L.T("Count.Appearance", e.Appearances.Count), L.T("Count.Include", e.Includes.Count))
                       + (_lookWanted is { } asked && _lookAs is { } from ? L.T("EntityWindow.ShownAs", from.From, asked.Name) : "");
+    }
+
+    /// <summary>Adds the look of Geralt wearing the item, when the entity is an item's.</summary>
+    private async Task OfferWornAsync()
+    {
+        try
+        {
+            _wornItem = await Task.Run(() => PlayerGear.ItemOf(_locator, _path));
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
+        {
+            _wornItem = null;
+        }
+        if (_wornItem is not null) _looks.Add(WornLook);
     }
 
     /// <summary>Every file the entity refers to: its includes, the templates of its appearances, and its components' resources.</summary>
@@ -422,21 +452,31 @@ public partial class EntityWindow : Window, IMessageHost
             _ = ShowMeshesAsync(_entity.DefaultAppearance, dressed: true);
             return;
         }
+        if (_wornItem is not null && AppearanceBox.SelectedIndex == _entity.Appearances.Count + 1)
+        {
+            _ = ShowMeshesAsync(_lastAppearance ?? _entity.DefaultAppearance, worn: true);
+            return;
+        }
         var appearance = AppearanceBox.SelectedIndex == 0 ? null : _entity.Appearances[AppearanceBox.SelectedIndex - 1];
+        if (appearance is not null) _lastAppearance = appearance;
         _ = ShowMeshesAsync(appearance);
     }
 
     /// <summary>
     /// Reads the meshes of an appearance (or the entity alone) and their textures, several at once, and shows them
     /// together. <paramref name="dressed"/> puts Geralt's default gear on the player's entity, as the scene and cutscene
-    /// previews dress him: his head, armour, hair and swords, each coloured from its own item's entity.
+    /// previews dress him: his head, armour, hair and swords, each coloured from its own item's entity. <paramref name="worn"/>
+    /// shows the entity's item on Geralt instead, in <paramref name="appearance"/>, in place of what he'd wear of its
+    /// kind and with the variants it calls for.
     /// </summary>
-    private async Task ShowMeshesAsync(EntityAppearance? appearance, bool dressed = false)
+    private async Task ShowMeshesAsync(EntityAppearance? appearance, bool dressed = false, bool worn = false)
     {
         _meshLoad?.Cancel();
         var cts = _meshLoad = new CancellationTokenSource();
         if (dressed)
             GeneratedNote.ShowText(L.T("EntityWindow.PutTogetherAppNot", DressedLook));
+        else if (worn)
+            GeneratedNote.ShowText(L.T("EntityWindow.WornNote", WornLook, appearance is null ? _wornItem ?? "" : L.T("EntityWindow.WornItemIn", _wornItem ?? "", appearance.Name)));
         else GeneratedNote.Visibility = Visibility.Collapsed;
         var token = cts.Token;
         var e = _entity!;
@@ -452,17 +492,30 @@ public partial class EntityWindow : Window, IMessageHost
             look = await Task.Run(() => e.Look(appearance, _locator.ReadFile), token);
             if (token.IsCancellationRequested) return;
             ShowLook(look);
-            (parts, drawnBy, wanted, missing) = await Task.Run(() => ReadMeshes(look, _locator, token), token);
+            if (worn)
+            {
+                // the item is put on the player's entity, dressed in his default gear around it
+                ViewText.Text = L.T("EntityWindow.DressingGeralt");
+                var body = await Task.Run(() => _locator.ReadFile(PlayerEntity) is { } data ? EntityFile.Read(data) : null, token)
+                    ?? throw new FileNotFoundException(PlayerEntity);
+                e = body;
+                look = await Task.Run(() => body.Look(body.DefaultAppearance, _locator.ReadFile), token);
+            }
+            var shownLook = look;
+            (parts, drawnBy, wanted, missing) = await Task.Run(() => ReadMeshes(shownLook, _locator, token), token);
             if (token.IsCancellationRequested) return;
-            var coloredBy = parts.Select(_ => (e, appearance?.Name)).ToList();
-            if (dressed)
+            var coloredBy = parts.Select(_ => (e, worn ? null : appearance?.Name)).ToList();
+            if (dressed || worn)
             {
                 ViewText.Text = L.T("EntityWindow.DressingGeralt");
-                (parts, drawnBy, coloredBy) = await Task.Run(() => Dress(e, look, parts, drawnBy, coloredBy, token), token);
+                var actor = e;
+                string? item = worn ? _wornItem : null;
+                (parts, drawnBy, coloredBy) = await Task.Run(() => Dress(actor, shownLook, parts, drawnBy, coloredBy, token,
+                    item is null ? null : PlayerGear.Wearing(_locator, item, appearance?.Name)), token);
                 if (token.IsCancellationRequested) return;
             }
             // every material's texture read several at once, then put on with the meshes, rather than popping in one by one
-            var coloured = parts.Select((part, p) => (part.Mesh, dressed
+            var coloured = parts.Select((part, p) => (part.Mesh, dressed || worn
                 ? StageTextures.Coloring(e, coloredBy[p].Item1, coloredBy[p].Item2, drawnBy[p].Name)
                 : LookTextures.Coloring(e, appearance?.Name, drawnBy[p].Name))).ToList();
             var progress = new Progress<(int Done, int Total)>(n =>
@@ -475,6 +528,11 @@ public partial class EntityWindow : Window, IMessageHost
         {
             return;
         }
+        catch (Exception ex) when (worn && ex is IOException or InvalidDataException)
+        {
+            if (!token.IsCancellationRequested) ViewText.Text = L.T("EntityWindow.WornCouldNotShow", ex.Message);
+            return;
+        }
         if (token.IsCancellationRequested) return;
         _partComponents = drawnBy;
         // the animation playing carries on in the new look, from where it was
@@ -482,7 +540,7 @@ public partial class EntityWindow : Window, IMessageHost
         StopAnimation();
         View.ShowParts(parts, textures);
         _meshesNote = L.T("EntityWindow.MeshesShown", L.T("Count.Mesh", parts.Count)) + (missing > 0 ? L.T("EntityWindow.MissingMeshes", missing) : "")
-                    + (appearance is null ? "" : L.T("EntityWindow.TemplatesIn", L.T("Count.Template", appearance.Templates.Count), appearance.Name));
+                    + (appearance is null || worn ? "" : L.T("EntityWindow.TemplatesIn", L.T("Count.Template", appearance.Templates.Count), appearance.Name));
         _syncing = true;
         LodBox.ItemsSource = Enumerable.Range(0, View.LodCount).Select(i => L.T("EntityWindow.LOD2", i)).ToList();
         LodBox.SelectedIndex = 0;
@@ -499,18 +557,19 @@ public partial class EntityWindow : Window, IMessageHost
     /// on a slot (his swords and their scabbards) is placed where its bone stands at rest.
     /// </summary>
     private (List<(MeshFile Mesh, Matrix4x4 Place)>, List<EntityComponent>, List<(EntityFile, string?)>) Dress(EntityFile entity, EntityLook look,
-        List<(MeshFile Mesh, Matrix4x4 Place)> parts, List<EntityComponent> drawnBy, List<(EntityFile, string?)> coloredBy, CancellationToken token)
+        List<(MeshFile Mesh, Matrix4x4 Place)> parts, List<EntityComponent> drawnBy, List<(EntityFile, string?)> coloredBy, CancellationToken token,
+        IReadOnlyList<GearPiece>? gear = null)
     {
         parts = [.. parts];
         drawnBy = [.. drawnBy];
         coloredBy = [.. coloredBy];
         if (SceneStage.BodyRig(look, parts, _locator) is not { } rig) return (parts, drawnBy, coloredBy);
         var attachedTo = parts.Select(_ => (-1, Matrix4x4.Identity)).ToList();
-        CutsceneCast.Dress(entity, look, rig, _locator, parts, drawnBy, coloredBy, attachedTo, token);
+        CutsceneCast.Dress(entity, look, rig, _locator, parts, drawnBy, coloredBy, attachedTo, token, gear);
         var rest = new Matrix4x4[rig.Count];
         rig.ToModel(rig.Pose, rest);
         for (int i = 0; i < parts.Count; i++)
-            if (attachedTo[i] is { Item1: >= 0 } hung) parts[i] = (parts[i].Mesh, hung.Item2 * rest[hung.Item1]);
+            if (attachedTo[i] is { Item1: >= 0 } hung) parts[i] = (parts[i].Mesh, parts[i].Place * hung.Item2 * rest[hung.Item1]);
         return (parts, drawnBy, coloredBy);
     }
 

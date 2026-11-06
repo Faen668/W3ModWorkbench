@@ -800,21 +800,26 @@ public static class SceneStage
             shown = e.Shown;
             if (e.Place is { } place) (world, held) = (place, null);
             else if (e.Actor is { } actor) held = (actor, e.Slot, e.Offset);
-            else if (held is { } letGo && bonesOf(letGo.Actor) is { } holder && Slot(holder.Actor, letGo.Slot) is int bone) (world, held) = (letGo.Offset * holder.Bones[bone], null);
+            else if (held is { } letGo && bonesOf(letGo.Actor) is { } holder && Slot(holder.Actor, letGo.Slot) is { } at) (world, held) = (letGo.Offset * at.OnBone * holder.Bones[at.Bone], null);
         }
         if (!shown) return null;
         if (held is { } h)
-            return bonesOf(h.Actor) is { } on && Slot(on.Actor, h.Slot) is int b ? h.Offset * on.Bones[b] : null;
+            return bonesOf(h.Actor) is { } on && Slot(on.Actor, h.Slot) is { } b ? h.Offset * b.OnBone * on.Bones[b.Bone] : null;
         return world;
     }
 
-    /// <summary>The bone a slot is on: the entity's slot of that name, else the rig's bone of that name (r_weapon, head), else its nearest, without _effect.</summary>
-    private static int? Slot(StageActor actor, string? slot)
+    /// <summary>
+    /// The bone a slot is on, and where the slot is on it: the entity's slot of that name, turned and moved on its bone
+    /// as the slot says (r_weapon_arrow points along the arrow), else the rig's bone of that name (r_weapon, head), else
+    /// its nearest, without _effect.
+    /// </summary>
+    private static (int Bone, Matrix4x4 OnBone)? Slot(StageActor actor, string? slot)
     {
         if (slot is null) return null;
         var named = actor.Entity.Slots.FirstOrDefault(s => s.Name.Equals(slot, StringComparison.OrdinalIgnoreCase));
-        foreach (var name in new[] { named?.Bone, slot, slot.Replace("_effect", ""), slot.EndsWith("_slot", StringComparison.OrdinalIgnoreCase) ? slot[..^5] : null })
-            if (name is { Length: > 0 } && Bone(actor.Rig, name) is int b and >= 0) return b;
+        if (named?.Bone is { Length: > 0 } own && Bone(actor.Rig, own) is int at and >= 0) return (at, named.Transform);
+        foreach (var name in new[] { slot, slot.Replace("_effect", ""), slot.EndsWith("_slot", StringComparison.OrdinalIgnoreCase) ? slot[..^5] : null })
+            if (name is { Length: > 0 } && Bone(actor.Rig, name) is int b and >= 0) return (b, Matrix4x4.Identity);
         return null;
     }
 
