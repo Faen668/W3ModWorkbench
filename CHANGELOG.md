@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.9.0
 
 - **The app updates itself**: **Check for updates** under the ⓘ button (or **Settings > General > Updates > Check now…**) asks GitHub for the latest release and shows its notes. **Download and install** downloads it, checks it against the checksum GitHub lists, puts it in place of the running copy, and **Restart now** starts the new version, which opens again what was open: the project and its scripts, the bundles and folders in the file list, the files in tabs, the viewers and editors on a file, and the Tools windows. It won't update while anything has changes not saved or work still running (scripts, XML, JSON, strings, materials, item edits, a build, an extraction): it lists them to save or close first. **Check for updates when the app starts**, off until you turn it on, checks at most once a day and shows an **Update to …** button when there's a newer version; **Skip this version** stops it pointing that one out. A copy in a folder it can't write to, or a build from source, downloads the zip for you to unpack instead. The privacy notice says what goes online, and the guide has a page, **Updating the app**.
 
