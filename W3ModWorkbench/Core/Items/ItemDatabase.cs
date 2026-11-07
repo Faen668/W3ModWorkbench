@@ -89,9 +89,10 @@ public sealed partial class ItemDatabase
     /// <summary>
     /// Reads the game's definitions from its folder. With <paramref name="withMods"/>, the enabled installed mods' are
     /// read first, in the game's load order: a mod's copy of a file is the one kept, as in the game, and the files a mod
-    /// installed as DLC adds are read beside the game's.
+    /// installed as DLC adds are read beside the game's. <paramref name="modDlc"/> false leaves out the mods installed as
+    /// DLC (any folder in dlc that isn't official DLC), keeping those in mods.
     /// </summary>
-    public static ItemDatabase Load(string gameFolder, IProgress<string>? progress = null, CancellationToken token = default, bool withMods = false)
+    public static ItemDatabase Load(string gameFolder, IProgress<string>? progress = null, CancellationToken token = default, bool withMods = false, bool modDlc = true)
     {
         var db = new ItemDatabase();
         var bundles = new List<string>();
@@ -99,7 +100,7 @@ public sealed partial class ItemDatabase
         {
             var official = OfficialDlc.Names(gameFolder);
             var options = new LoadOrder.LoadOrderOptions(Path.Combine(gameFolder, "mods"), true, LoadOrder.ModScanner.FindSettingsFile(), gameFolder);
-            foreach (var mod in LoadOrder.LoadOrderAnalyzer.DiscoverMods(options).Where(m => m.Enabled && !(m.IsDlc && official.Contains(m.Name))))
+            foreach (var mod in LoadOrder.LoadOrderAnalyzer.DiscoverMods(options).Where(m => m.Enabled && !(m.IsDlc && (official.Contains(m.Name) || !modDlc))))
             {
                 string modContent = Path.Combine(mod.Folder, "content");
                 try

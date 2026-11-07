@@ -3,7 +3,7 @@ title: Loot Locator
 icon: E721
 order: 24
 summary: Where an item or a loot table can be found in the game's worlds, and how likely, on the game's own map.
-keywords: loot locator loot table loot tables where to find item find items containers chests herbs beehives chance odds drop rate respawn player level map spawn points CR4LootParam def_loot_containers xml
+keywords: loot locator loot table loot tables where to find item find items containers chests herbs beehives chance odds drop rate respawn player level map spawn points CR4LootParam def_loot_containers xml command line --loot-find csv script
 windows: LootLocatorWindow
 ---
 **Tools > Loot Locator…** shows where in the game's worlds an item or a loot table can be found, and how likely, on the game's own map: every container, herb and beehive that can give it, and every place that spawns a creature that drops it.
@@ -46,3 +46,25 @@ With a loot table picked, **Items in the table** lists what it gives each time i
 > tip: In a table where every item's weight is **first**, some items can never come at all. **Items in the table** shows them at 0%.
 
 To change where an item is found, edit its loot tables in the [[Items and stats]] editor.
+
+## From the command line
+
+`--loot-find` gives the same answers without the window, as CSV, so a script can check where many items or tables can be found at once:
+
+```cmd
+W3ModWorkbench.exe --loot-find Gynvael _uniqe_weapons_epic_dungeon_skelige --level 30 --out loot.csv
+```
+
+Give items and tables by their name in the files, or an item by its name in the game; `@names.txt` reads one name a line. Each place that can give one is a row, with its world, layer, kind, entity, template, position, chance at the level, **Rolled here** (`yes`, `no`, or `random` where nothing is fixed), respawn time and the tables it uses. After them come the tables that hold it but no place uses (`unused table`: a shop's, a reward's), as **Show tables no place uses** lists them, so "only a shop sells it" can be told from "nothing gives it".
+
+| Option | Does |
+|---|---|
+| `--level <n>` | The player level the chances are for (the window's when not given) |
+| `--world <name>` | Only this world: its folder (`novigrad`, `skellige`, `bob`) or its name here |
+| `--rolled-only` | Only the places whose own roll gives it |
+| `--mods` | Reads installed mods too, as **Installed mods** does |
+| `--vanilla-only` | With `--mods`: leaves out the mods installed in the game's `dlc` folder, such as Brothers In Arms, keeping CD PROJEKT RED's own (`ep1`, `bob`, `dlc1` to `dlc16`) |
+| `--game <folder>` | The game's folder, when it isn't the one in Settings |
+| `--out <file>` | The CSV file; without it, the CSV goes to standard output |
+
+How far it's got goes to the error output while it reads the worlds (about a quarter of a minute, once however many names are given). `--help loot` lists every column, and [[The command line]] says how to run it.

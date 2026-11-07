@@ -8,7 +8,7 @@ namespace W3ModWorkbench;
 
 /// <summary>
 /// The tool run from a command line or a script, with no window: converting CR2W files to JSON and back, bulk
-/// edits, and voice lines, lip syncs and strings (CommandLine.Speech.cs). Anything else on the command line opens the
+/// edits, voice lines, lip syncs and strings (CommandLine.Speech.cs), and where loot is found (CommandLine.Loot.cs). Anything else on the command line opens the
 /// window as usual.
 /// <code>
 /// W3ModWorkbench.exe --to-json   &lt;files or folders…&gt; [--out folder] [--recursive] [--overwrite]
@@ -23,14 +23,16 @@ namespace W3ModWorkbench;
 ///   any of them: --match &lt;regex&gt;, --skip &lt;regex&gt; for the files taken from folders
 /// W3ModWorkbench.exe --speech-unpack &lt;files&gt; | --speech-pack &lt;folders&gt; | --lipsync &lt;files or folders&gt; --to re|raw
 /// W3ModWorkbench.exe --strings-to-csv &lt;files&gt; [--layout radish|redkit] | --csv-to-strings &lt;files&gt;
-/// W3ModWorkbench.exe --help [topic]   (-h, /?; topics: commands, options, filter, edits, recipes, pipes, voice, examples)
+/// W3ModWorkbench.exe --loot-find &lt;item or table names, @file&gt; [--mods] [--vanilla-only] [--level n] [--world name] [--rolled-only] [--out file]
+/// W3ModWorkbench.exe --help [topic]   (-h, /?; topics: commands, options, filter, edits, recipes, pipes, voice, loot, examples)
 /// </code>
 /// </summary>
 public static partial class CommandLine
 {
     private static readonly string[] Commands = ["--to-json", "--from-json", "--resave-164", "--edit", "--recipe", "--help", "-h", "/?", "-?", "--help-json"];
 
-    public static bool Handles(string[] args) => args.Length > 0 && (Commands.Contains(args[0], StringComparer.OrdinalIgnoreCase) || SpeechCommands.Contains(args[0], StringComparer.OrdinalIgnoreCase));
+    public static bool Handles(string[] args) => args.Length > 0 && (Commands.Contains(args[0], StringComparer.OrdinalIgnoreCase)
+        || SpeechCommands.Contains(args[0], StringComparer.OrdinalIgnoreCase) || LootCommands.Contains(args[0], StringComparer.OrdinalIgnoreCase));
 
     [DllImport("kernel32.dll")]
     private static extern bool AttachConsole(int processId);
@@ -63,6 +65,7 @@ public static partial class CommandLine
             string command = args[0].ToLowerInvariant();
             if (command is "--help" or "-h" or "/?" or "-?" or "--help-json") return Help(output, args.Length > 1 ? args[1] : null);
             if (SpeechCommands.Contains(command)) return RunSpeech(command, args, output);
+            if (LootCommands.Contains(command)) return RunLootFind(args, output);
 
             var paths = new List<string>();
             var edits = new List<Cr2wBulkEdit>();
@@ -239,6 +242,12 @@ public static partial class CommandLine
     /// <summary>Whether a file's data will be written to standard output: --out -, or - as the input with no --out.</summary>
     private static bool WritesStandardOutput(string[] args)
     {
+        // --loot-find writes its CSV there unless --out names a file
+        if (args.Length > 0 && LootCommands.Contains(args[0], StringComparer.OrdinalIgnoreCase))
+        {
+            int to = Array.FindIndex(args, a => a.Equals("--out", StringComparison.OrdinalIgnoreCase));
+            return to < 0 || to + 1 >= args.Length || args[to + 1] == StandardStream;
+        }
         if (args.Length == 0 || !args[0].Equals("--to-json", StringComparison.OrdinalIgnoreCase) && !args[0].Equals("--from-json", StringComparison.OrdinalIgnoreCase))
             return false;
         int at = Array.FindIndex(args, a => a.Equals("--out", StringComparison.OrdinalIgnoreCase));
@@ -352,9 +361,9 @@ public static partial class CommandLine
 
     // loc-ignore-start
     private const string Title = """
-        W3 Mod Workbench: CR2W files (.env, .w2mi, .w2ent…) to JSON and back, the same edit to many at once, and voice
-        lines, lip syncs and strings.
-        --help <topic> shows one part: commands, options, filter, edits, recipes, pipes, voice, examples.
+        W3 Mod Workbench: CR2W files (.env, .w2mi, .w2ent…) to JSON and back, the same edit to many at once, voice
+        lines, lip syncs and strings, and where items and loot tables can be found.
+        --help <topic> shows one part: commands, options, filter, edits, recipes, pipes, voice, loot, examples.
 
         """;
 
@@ -371,6 +380,7 @@ public static partial class CommandLine
               --speech-unpack, --speech-pack, --wav-to-wem, --lipsync, --lipsync-from-audio, --learn-lipsync,
               --strings-to-csv, --csv-to-strings
                                                Voice lines, lip syncs and strings (see: --help voice)
+              --loot-find <names…>             Where items and loot tables can be found, as CSV (see: --help loot)
               --help [topic], -h, /?           This help, or one topic of it
 
             """),
@@ -432,6 +442,7 @@ public static partial class CommandLine
 
             """),
         ("voice", VoiceHelp),
+        ("loot", LootHelp),
         ("examples", """
             Examples
               W3ModWorkbench.exe --to-json "D:\envs" -r --out "D:\envs json"
@@ -442,6 +453,7 @@ public static partial class CommandLine
               W3ModWorkbench.exe --speech-unpack "D:\mymod\content\enpc.w3speech" --re
               W3ModWorkbench.exe --lipsync "D:\mymod\workspace\speech" -r --to raw
               W3ModWorkbench.exe --strings-to-csv en.w3strings de.w3strings --layout redkit --out "D:\redkit\strings.csv"
+              W3ModWorkbench.exe --loot-find _unique_silversword_gynvael --level 30 --out "D:\gynvael.csv"
             """),
     ];
     // loc-ignore-end

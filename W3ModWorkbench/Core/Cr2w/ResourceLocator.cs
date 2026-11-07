@@ -17,6 +17,7 @@ public sealed class ResourceLocator
     private readonly string? _game;
     private readonly Func<string?>? _projectFiles;
     private readonly bool _otherMods;
+    private readonly bool _modDlc;
 
     /// <param name="open">The archives open in the tool, which are looked in first.</param>
     /// <param name="near">The file being looked at (its bundle or cache), whose folder is looked in next.</param>
@@ -25,14 +26,30 @@ public sealed class ResourceLocator
     /// False to look in no installed mod but the one the file is from: what it uses comes from its own mod, then the
     /// game (its DLC, then content0), as when a mod is looked at on its own; another mod's copy of a file never wins.
     /// </param>
-    public ResourceLocator(IEnumerable<IArchive> open, IArchive? near, string? gameFolder, Func<string?>? projectFiles = null, bool otherMods = true)
+    /// <param name="modDlc">
+    /// False to leave out every folder in the game's dlc folder that isn't CD PROJEKT RED's own (<see cref="OfficialDlc"/>):
+    /// mods installed as DLC, while those in mods are still read when <paramref name="otherMods"/> is.
+    /// </param>
+    public ResourceLocator(IEnumerable<IArchive> open, IArchive? near, string? gameFolder, Func<string?>? projectFiles = null, bool otherMods = true, bool modDlc = true)
     {
         _projectFiles = projectFiles;
         _near = near is null ? null : Path.GetDirectoryName(near.FilePath);
         _game = gameFolder;
         _otherMods = otherMods;
-        _open = open.Where(a => otherMods || !IsOtherMod(a.FilePath)).ToList();
+        _modDlc = modDlc;
+        _open = open.Where(a => !Skipped(a.FilePath)).ToList();
         if (near is not null && !_open.Contains(near)) _open.Insert(0, near);
+    }
+
+    /// <summary>Whether an archive is left out: another installed mod's without other mods, a mod installed as DLC's without those.</summary>
+    private bool Skipped(string path) => (!_otherMods && IsOtherMod(path)) || (!_modDlc && IsModDlc(path));
+
+    /// <summary>Whether a file is in a folder of the game's dlc folder that isn't official DLC: a mod installed as DLC.</summary>
+    private bool IsModDlc(string path)
+    {
+        if (_game is null || ModFolder(path) is not { } mod) return false;
+        string dlc = Path.GetFullPath(Path.Combine(_game, "dlc")).TrimEnd('\\') + "\\";
+        return mod.StartsWith(dlc, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>Whether a file is in an installed mod other than the one the file looked at is from.</summary>
@@ -196,7 +213,7 @@ public sealed class ResourceLocator
                 try
                 {
                     places.AddRange(Directory.GetDirectories(root).Order(StringComparer.OrdinalIgnoreCase).Select(m => Path.Combine(m, "content", "collision.cache"))
-                        .Where(cache => _otherMods || !IsOtherMod(cache)));
+                        .Where(cache => !Skipped(cache)));
                 }
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
             }
@@ -280,7 +297,7 @@ public sealed class ResourceLocator
         if (_game is null) yield break;
         if (Cache(Path.Combine(_game, "content", "content0", "texture.cache")) is { } content0) yield return content0;
         foreach (string path in GameCachePaths(_game))
-            if ((_otherMods || !IsOtherMod(path)) && Cache(path) is { } cache) yield return cache;
+            if (!Skipped(path) && Cache(path) is { } cache) yield return cache;
     }
 
     /// <summary>Each cache's textures by path, made the first time a cache is looked in, so finding one is quick.</summary>
@@ -406,7 +423,7 @@ public sealed class ResourceLocator
             }
         }
         foreach (string path in paths)
-            if ((_otherMods || !IsOtherMod(path)) && !_open.Any(a => a.FilePath.Equals(path, StringComparison.OrdinalIgnoreCase)) && OpenBundle(path) is { } bundle)
+            if (!Skipped(path) && !_open.Any(a => a.FilePath.Equals(path, StringComparison.OrdinalIgnoreCase)) && OpenBundle(path) is { } bundle)
                 yield return bundle;
     }
 }

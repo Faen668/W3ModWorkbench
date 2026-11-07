@@ -83,7 +83,6 @@ public partial class LootLocatorWindow : Window, IMessageHost
         public override string ToString() => Text;
     }
     private sealed record LegendRow(Brush Brush, string Text);
-    private sealed record Setup(List<LootSpot> Spots, HashSet<string> Tables, HashSet<string> Items);
 
     private ResourceLocator _locator = null!;
     private ItemDatabase? _db;
@@ -91,8 +90,7 @@ public partial class LootLocatorWindow : Window, IMessageHost
     private Dictionary<uint, string> _names = [];
     private LootIndex? _index;
     private LootRoll? _roll;
-    private Dictionary<string, Setup> _setups = [];
-    private Dictionary<string, List<string>> _itemSetups = new(StringComparer.OrdinalIgnoreCase), _tableSetups = new(StringComparer.OrdinalIgnoreCase);
+    private LootSearch? _search;
     private List<LootFoundRow> _itemRows = [], _tableRows = [];
     private readonly Dictionary<string, Task<WorldPicture?>> _pictures = new(StringComparer.OrdinalIgnoreCase);
     private string? _shownWorld;
@@ -188,7 +186,7 @@ public partial class LootLocatorWindow : Window, IMessageHost
                 _names = strings.All.GroupBy(s => s.KeyHash).ToDictionary(g => g.Key, g => g.First().Text);
             }
             var db = _db;
-            (_index, _roll) = await Task.Run(() => (WithMonsters(LootIndex.Build(locator, progress, CancellationToken.None), locator, game, progress), LootRoll.FromDatabase(db)));
+            (_index, _roll) = await Task.Run(() => (LootSearch.WithMonsters(LootIndex.Build(locator, progress, CancellationToken.None), locator, game, progress), LootRoll.FromDatabase(db)));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
         {
@@ -211,53 +209,28 @@ public partial class LootLocatorWindow : Window, IMessageHost
         else ItemSearch.Focus();
     }
 
-    /// <summary>
-    /// The places with the monsters added: every encounter that spawns a creature with drops is a place of its own, its
-    /// loot the creature's, rolled again at each kill.
-    /// </summary>
-    private static LootIndex WithMonsters(LootIndex index, ResourceLocator locator, string game, IProgress<string> progress)
-    {
-        var bestiary = Core.Bestiary.BestiaryIndex.Build(locator, Core.Scripts.ScriptCorpus.GameScriptsFolder(game), progress, CancellationToken.None);
-        var monsters = bestiary.Places.Where(p => bestiary.Creatures.TryGetValue(p.Template, out var c) && c.Loot is { Params.Count: > 0 })
-            .Select(p => bestiary.Creatures[p.Template].Loot! with { World = p.World, Layer = p.Layer, ClassName = "CEncounter", Name = "", Position = p.Position });
-        return new LootIndex { Spots = [.. index.Spots, .. monsters], Worlds = index.Worlds, Problems = index.Problems };
-    }
-
     /// <summary>The places by setup (the same loot whatever the place), and which setups can give each item and use each table.</summary>
     private void BuildLookups()
     {
         var roll = _roll!;
-        _setups = _index!.Spots.GroupBy(s => s.SetupKey).ToDictionary(g => g.Key, g =>
-        {
-            var tables = g.First().Params.SelectMany(p => p.Tables.Select(t => t.Table)).ToHashSet(StringComparer.OrdinalIgnoreCase);
-            var items = tables.SelectMany(t => roll.Tables.TryGetValue(t, out var def) ? def.Items.Select(i => i.Name) : [])
-                .Concat(g.First().Fixed.Where(f => f.Lootable && f.Item.Length > 0).Select(f => f.Item)).ToHashSet(StringComparer.OrdinalIgnoreCase);
-            return new Setup([.. g], tables, items);
-        });
-        _itemSetups = new(StringComparer.OrdinalIgnoreCase);
-        _tableSetups = new(StringComparer.OrdinalIgnoreCase);
-        foreach (var (key, setup) in _setups)
-        {
-            foreach (string item in setup.Items) (_itemSetups.TryGetValue(item, out var list) ? list : _itemSetups[item] = []).Add(key);
-            foreach (string table in setup.Tables) (_tableSetups.TryGetValue(table, out var list) ? list : _tableSetups[table] = []).Add(key);
-        }
-        _itemRows = [.. _itemSetups.Select(p =>
+        var search = _search = new LootSearch(_index!, roll);
+        _itemRows = [.. search.ItemSetups.Select(p =>
         {
             string title = NameOf(p.Key) ?? p.Key;
             // the name in the files when the game shows another; else how many tables give it
             int tables = roll.Tables.Values.Count(d => d.Items.Any(i => i.Name.Equals(p.Key, StringComparison.OrdinalIgnoreCase)));
             string detail = !title.Equals(p.Key, StringComparison.OrdinalIgnoreCase) ? p.Key
                 : NameOf(p.Key) is null ? L.T("LootLocator.ItemDetailPlain") : L.T("LootLocator.InTables", tables);
-            return new LootFoundRow(p.Key, title, detail, p.Value.Sum(k => _setups[k].Spots.Count), false)
+            return new LootFoundRow(p.Key, title, detail, search.CountFor(p.Key, false), false)
             {
                 Category = _db?.Find(DefKind.Item, p.Key)?.Attribute("category")?.Trim() ?? "",
             };
         }).OrderBy(r => r.Title, StringComparer.CurrentCultureIgnoreCase)];
         BuildCategories();
         _tableRows = [.. roll.Tables.Values.Select(t => new LootFoundRow(t.Name, t.Name, L.T("LootLocator.TableDetail", t.Items.Count, Path.GetFileName(t.GamePath)),
-                _tableSetups.TryGetValue(t.Name, out var keys) ? keys.Sum(k => _setups[k].Spots.Count) : 0, true))
-            .Concat(_tableSetups.Keys.Where(t => !roll.Tables.ContainsKey(t)).Select(t => new LootFoundRow(t, t.Length == 0 ? L.T("LootLocator.NoName") : t,
-                L.T("LootLocator.TableUndefined"), _tableSetups[t].Sum(k => _setups[k].Spots.Count), true, L.T("LootLocator.TableUndefinedTip"))))
+                search.CountFor(t.Name, true), true))
+            .Concat(search.TableSetups.Keys.Where(t => !roll.Tables.ContainsKey(t)).Select(t => new LootFoundRow(t, t.Length == 0 ? L.T("LootLocator.NoName") : t,
+                L.T("LootLocator.TableUndefined"), search.CountFor(t, true), true, L.T("LootLocator.TableUndefinedTip"))))
             .OrderBy(r => r.Title, StringComparer.CurrentCultureIgnoreCase)];
     }
 
@@ -379,22 +352,8 @@ public partial class LootLocatorWindow : Window, IMessageHost
         _ = ShowAsync(row);
     }
 
-    /// <summary>The lowest player level an item can be found at: the lowest of its tables' and its own level limits where a place can give it.</summary>
-    private uint? LowestLevel(string item)
-    {
-        if (_roll is not { } roll || !_itemSetups.TryGetValue(item, out var keys)) return null;
-        uint? lowest = null;
-        foreach (string table in keys.SelectMany(k => _setups[k].Tables).Distinct(StringComparer.OrdinalIgnoreCase))
-        {
-            if (!roll.Tables.TryGetValue(table, out var def)) continue;
-            foreach (var i in def.Items.Where(i => i.Name.Equals(item, StringComparison.OrdinalIgnoreCase) && (i.Chance == -1f || i.Chance > 0)))
-            {
-                uint at = Math.Max(1, Math.Max(def.LevelMin, i.LevelMin));
-                if (lowest is null || at < lowest) lowest = at;
-            }
-        }
-        return lowest;
-    }
+    /// <summary>The lowest player level an item can be found at (see <see cref="LootSearch.LowestLevel"/>).</summary>
+    private uint? LowestLevel(string item) => _search?.LowestLevel(item);
 
     // ---------------------------------------------------------------- what was picked
 
@@ -442,33 +401,17 @@ public partial class LootLocatorWindow : Window, IMessageHost
     private async Task ShowAsync(LootFoundRow row)
     {
         _selected = row;
-        if (_roll is not { } roll) return;
+        if (_search is not { } search) return;
         int version = ++_version;
         uint level = Level;
         bool predicted = App.Settings.LootShowPredicted;
-        var lookup = row.IsTable ? _tableSetups : _itemSetups;
-        var keys = lookup.TryGetValue(row.Key, out var k) ? k : [];
-        var spots = keys.SelectMany(key => _setups[key].Spots).Where(s => KindShown(s.Kind)).ToList();
+        var spots = search.SpotsFor(row.Key, row.IsTable).Where(s => KindShown(s.Kind)).ToList();
         MapProgress.Text = L.T("LootLocator.WorkingOut", spots.Count);
         MapProgress.Visibility = Visibility.Visible;
         string name = row.Key;
         bool table = row.IsTable;
-        var rows = await Task.Run(() =>
-        {
-            Parallel.ForEach(spots.DistinctBy(s => s.SetupKey), s => roll.Odds(s, level));
-            return spots.AsParallel().AsOrdered().Select(s =>
-            {
-                var odds = roll.Odds(s, level);
-                double chance = table ? odds.Tables.GetValueOrDefault(name) : odds.Items.GetValueOrDefault(name);
-                // what the game's roll gives this spot: its respawn time is the game's own for it (see LootRoll.Roll)
-                var rolled = roll.Roll(s, level, LootRoll.Seed(s));
-                var hit = rolled.FirstOrDefault(i => table ? i.Table.Equals(name, StringComparison.OrdinalIgnoreCase) : i.Item.Equals(name, StringComparison.OrdinalIgnoreCase));
-                // a seed of 0 is no seed: the game rolls that spot at random each time, so nothing is fixed there
-                // a monster's drops are rolled at each kill, where it falls: nothing is fixed at its encounter
-                bool? given = predicted && s.Kind != LootKind.Monster && LootRoll.Seed(s) != 0 ? hit is not null : null;
-                return new LootPlaceRow(s, Humanise(s.Title), AreaOf(s), chance, given, s.Kind == LootKind.Monster ? null : hit is { Table.Length: > 0 } ? hit.Respawn : RespawnOf(s, name, table));
-            }).ToList();
-        });
+        var rows = await Task.Run(() => search.Places(spots, name, table, level, predicted)
+            .Select(p => new LootPlaceRow(p.Spot, Humanise(p.Spot.Title), AreaOf(p.Spot), p.Chance, p.RolledHere, p.Respawn)).ToList());
         if (version != _version) return;
         MapProgress.Visibility = Visibility.Collapsed;
         var possible = rows.Where(r => r.Chance > 0 || r.Predicted == true).ToList();
@@ -527,21 +470,6 @@ public partial class LootLocatorWindow : Window, IMessageHost
     private void TableItemGrid_MouseDoubleClick(object sender, MouseButtonEventArgs e)
     {
         if (TableItemGrid.SelectedItem is LootTableItemRow row) Select(row.Name, false);
-    }
-
-    /// <summary>The respawn time of what was looked for at a place: the param's own when set, else its table's (the shortest if several give it).</summary>
-    private uint? RespawnOf(LootSpot spot, string name, bool table)
-    {
-        uint? best = null;
-        foreach (var p in spot.Params)
-            foreach (var t in p.Tables)
-            {
-                if (!_roll!.Tables.TryGetValue(t.Table, out var def)) continue;
-                if (table ? !t.Table.Equals(name, StringComparison.OrdinalIgnoreCase) : !def.Items.Any(i => i.Name.Equals(name, StringComparison.OrdinalIgnoreCase))) continue;
-                uint respawn = t.Respawn is { } own && own != 0 ? own : def.Respawn;
-                if (best is null || respawn < best) best = respawn;
-            }
-        return best;
     }
 
     // ---------------------------------------------------------------- the map

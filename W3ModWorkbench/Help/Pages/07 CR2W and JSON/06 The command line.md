@@ -3,7 +3,7 @@ title: The command line
 icon: E756
 order: 6
 summary: Every CR2W and JSON command and option, run from a terminal, a batch file or a script, with what each one prints.
-keywords: command line cli terminal cmd command prompt powershell batch bat script --to-json --from-json --resave-164 --edit --recipe --help --out --recursive --overwrite --as-164 --class --check --match --skip --copy --set --remove --scale --offset --fields --only-class stdin stdout standard input output pipe redirect exit code errorlevel start wait headless automation
+keywords: command line cli terminal cmd command prompt powershell batch bat script --to-json --from-json --resave-164 --edit --recipe --help --out --recursive --overwrite --as-164 --class --check --match --skip --copy --set --remove --scale --offset --fields --only-class stdin stdout standard input output pipe redirect exit code errorlevel start wait headless automation --loot-find loot locator
 ---
 Everything the CR2W and JSON window does runs without a window too, from a terminal, a batch file or a script. The app is the same `W3ModWorkbench.exe`: given one of these commands, it does the work, prints what happened and closes, without opening a window.
 
@@ -48,6 +48,8 @@ start "" /wait W3ModWorkbench.exe --to-json envs --out "envs json"
 Files given one by one are always taken. From a folder, `--to-json` and `--resave-164` take every CR2W file, `--from-json` takes the `.json` files the app made, and `--edit` takes both.
 
 The app does voice lines, lip syncs and strings from the command line too: `--speech-unpack`, `--speech-pack`, `--wav-to-wem`, `--lipsync`, `--lipsync-from-audio`, `--learn-lipsync`, `--strings-to-csv` and `--csv-to-strings`. See [[Voice lines]] and [[Editing strings]], or `--help voice`.
+
+`--loot-find <names…>` says where items and loot tables can be found, as the Loot Locator does, as CSV: see [[Loot Locator]], or `--help loot`. Its exit code is 0 when it ran and 1 when it couldn't, with the reason on the error output.
 
 ## Options
 
@@ -316,7 +318,7 @@ FAILED  standard input: This isn't a CR2W resource file.
 
 ## Help
 
-`--help` prints everything. `--help` and a topic prints one part: `commands`, `options`, `filter`, `edits`, `recipes`, `pipes`, `voice` or `examples`.
+`--help` prints everything. `--help` and a topic prints one part: `commands`, `options`, `filter`, `edits`, `recipes`, `pipes`, `voice`, `loot` or `examples`.
 
 ```cmd
 D:\W3 Mods\Night Sky>W3ModWorkbench.exe --help pipes
