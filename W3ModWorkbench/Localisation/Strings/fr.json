@@ -6327,5 +6327,6 @@
   "QuestLog.Shown": "Événements affichés : {shown:N0} sur {total:N0}",
   "QuestLog.Paused": "En pause",
   "QuestLog.IniCopied": "Lignes ini copiées.",
-  "QuestLog.NotFound": "Aucun fichier de quête du jeu, de ses DLC ou des mods installés n'a le bloc {guid}."
+  "QuestLog.NotFound": "Aucun fichier de quête du jeu, de ses DLC ou des mods installés n'a le bloc {guid}.",
+  "QuestGraph.UsedByCount": "Utilisé par ({count:N0})"
 }

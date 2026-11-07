@@ -6327,5 +6327,6 @@
   "QuestLog.Shown": "Pokazane zdarzenia: {shown:N0} z {total:N0}",
   "QuestLog.Paused": "Wstrzymano",
   "QuestLog.IniCopied": "Skopiowano wiersze ini.",
-  "QuestLog.NotFound": "Żaden plik zadania w grze, jej DLC ani zainstalowanych modach nie ma bloku {guid}."
+  "QuestLog.NotFound": "Żaden plik zadania w grze, jej DLC ani zainstalowanych modach nie ma bloku {guid}.",
+  "QuestGraph.UsedByCount": "Używane przez ({count:N0})"
 }

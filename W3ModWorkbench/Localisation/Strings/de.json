@@ -6327,5 +6327,6 @@
   "QuestLog.Shown": "Gezeigte Ereignisse: {shown:N0} von {total:N0}",
   "QuestLog.Paused": "Pausiert",
   "QuestLog.IniCopied": "Die Ini-Zeilen wurden kopiert.",
-  "QuestLog.NotFound": "Keine Quest-Datei im Spiel, seinen DLCs oder den installierten Mods hat den Block {guid}."
+  "QuestLog.NotFound": "Keine Quest-Datei im Spiel, seinen DLCs oder den installierten Mods hat den Block {guid}.",
+  "QuestGraph.UsedByCount": "Verwendet von ({count:N0})"
 }

@@ -6327,5 +6327,6 @@
   "QuestLog.Shown": "Показано событий: {shown:N0} из {total:N0}",
   "QuestLog.Paused": "Пауза",
   "QuestLog.IniCopied": "Строки ini скопированы.",
-  "QuestLog.NotFound": "Ни в одном файле квеста игры, её DLC или установленных модов нет блока {guid}."
+  "QuestLog.NotFound": "Ни в одном файле квеста игры, её DLC или установленных модов нет блока {guid}.",
+  "QuestGraph.UsedByCount": "Используется в ({count:N0})"
 }

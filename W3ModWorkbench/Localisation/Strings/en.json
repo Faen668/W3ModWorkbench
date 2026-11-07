@@ -6713,5 +6713,6 @@
   "QuestLog.Shown": "Events shown: {shown:N0} of {total:N0}",
   "QuestLog.Paused": "Paused",
   "QuestLog.IniCopied": "Copied the ini lines.",
-  "QuestLog.NotFound": "No quest file in the game, its DLC or the installed mods has block {guid}."
+  "QuestLog.NotFound": "No quest file in the game, its DLC or the installed mods has block {guid}.",
+  "QuestGraph.UsedByCount": "Used by ({count:N0})"
 }

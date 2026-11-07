@@ -48,7 +48,7 @@ Notes and comments have no GUID: the game doesn't run them.
 
 ## Used by
 
-With no block picked, the side panel is about the file. **Used by** lists the phase blocks, in every quest file, that run it, and says whether the game ever reaches it. A file nothing runs is usually a test or a leftover, and a block in it never fires.
+With no block picked, the side panel is about the file. **Used by** says how many phase blocks, in every quest file, run it, lists them, and says whether the game ever reaches it. A file nothing runs is usually a test or a leftover, and a block in it never fires.
 
 ![A small phase many quests use, with the phase blocks that run it](quest-graph-used-by.jpg)
 

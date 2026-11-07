@@ -46,6 +46,8 @@ public partial class QuestGraphWindow : Window, IMessageHost
         public readonly Dictionary<QuestBlock, QuestBlockItem> ItemOf = [];
         public readonly Dictionary<QuestFile, string?> Origins = [];
         public readonly Dictionary<QuestFile, (PropertyOrigin From, Dictionary<Guid, RedObject> ByGuid)> Redkit = [];
+        // REDkit's copies being read, so a second window waits for the same read instead of missing it
+        public readonly Dictionary<QuestFile, Task> RedkitReads = [];
         public readonly ConcurrentDictionary<string, Dictionary<Guid, string>?> Journal = new(StringComparer.OrdinalIgnoreCase);
         public QuestIndex? Index;
     }
@@ -63,19 +65,27 @@ public partial class QuestGraphWindow : Window, IMessageHost
         MakeModBtn.Show(path, origin, readData);
         Title = $"{Path.GetFileName(path)} - {L.T("QuestGraph.Title")}";
         InfoText.Text = $"{path}   ·   {source}";
-        Loaded += async (_, _) =>
+        Loaded += async (_, _) => await StartAsync();
+    }
+
+    /// <summary>Reads the file, or, for a window opened from another, starts where that one went with what it read.</summary>
+    private async Task StartAsync()
+    {
+        if (_startCrumbs is not { } start)
         {
-            if (_startCrumbs is { } start)
-            {
-                // opened from another window: start where it went
-                _crumbs = start;
-                _startCrumbs = null;
-                BusyText.Visibility = Visibility.Collapsed;
-                Body.Visibility = Visibility.Visible;
-                ShowGraph();
-            }
-            else await LoadAsync();
-        };
+            await LoadAsync();
+            return;
+        }
+        _crumbs = start;
+        _startCrumbs = null;
+        Title = $"{Current.Label} - {L.T("QuestGraph.Title")}";
+        InfoText.Text = Current.File.Path;
+        BusyText.Visibility = Visibility.Collapsed;
+        Body.Visibility = Visibility.Visible;
+        ShowGraph();
+        _ = LoadRedkitAsync(Current.File, Current.File.Path, _state.Origins.GetValueOrDefault(Current.File));
+        // the index may still be being built: this window asks for it too, so it hears when it's done
+        await LoadIndexAsync();
     }
 
     public static bool CanShow(string name) =>
@@ -186,7 +196,13 @@ public partial class QuestGraphWindow : Window, IMessageHost
     /// <summary>Reads REDkit's copy of a file, whose properties are shown when it has the block (by its GUID).</summary>
     private async Task LoadRedkitAsync(QuestFile file, string path, string? origin)
     {
-        if (_state.Redkit.ContainsKey(file)) return;
+        if (!_state.RedkitReads.TryGetValue(file, out var read)) _state.RedkitReads[file] = read = ReadRedkitAsync(file, path, origin);
+        await read;
+        if (_crumbs.Count > 0 && Current.File == file) Refresh();
+    }
+
+    private async Task ReadRedkitAsync(QuestFile file, string path, string? origin)
+    {
         var from = await Task.Run(() => RedkitSource.For(path, origin));
         var byGuid = new Dictionary<Guid, RedObject>();
         if (from.Redkit is { } redkit)
@@ -200,7 +216,6 @@ public partial class QuestGraphWindow : Window, IMessageHost
                 catch (InvalidDataException) { }
             });
         _state.Redkit[file] = (from, byGuid);
-        if (Current.File == file) Refresh();
     }
 
     private async Task LoadIndexAsync()
@@ -475,7 +490,8 @@ public partial class QuestGraphWindow : Window, IMessageHost
             if (copies.Count == 0) LinksText.Inlines.Add(new Run(L.T("QuestGraph.GuidNotFound")) { FontStyle = FontStyles.Italic });
             else WriteCopies(LinksText, copies, guid, null);
         }
-        Properties.Show([]);
+        // what's found is no block of the file shown, so the file's properties and where they come from aren't shown
+        PropertiesHeader.Visibility = Properties.Visibility = Visibility.Collapsed;
     }
 
     private QuestFile FileOf(QuestBlockItem item) => _state.Items.First(f => f.Value.Contains(item)).Key;
@@ -663,6 +679,23 @@ public partial class QuestGraphWindow : Window, IMessageHost
     /// <summary>Opens the graph a phase block runs: its embedded one, or the external .w2phase, in place or in a new window as Settings say.</summary>
     private async Task OpenPhaseAsync(QuestBlock block)
     {
+        if (await PhaseOf(block) is not { } next) return;
+        if (App.Settings.QuestGraphPhasesInNewWindow)
+        {
+            PhaseWindow(next).Standalone(this).Show();
+            return;
+        }
+        _crumbs.Add(next);
+        ShowGraph();
+    }
+
+    /// <summary>A window of its own for a phase, sharing what this one has read, with the way back to here over its graph. Not shown yet.</summary>
+    private QuestGraphWindow PhaseWindow(Crumb next) =>
+        new(_path, _source, _readData, _locator, _origin, state: _state) { _startCrumbs = [.. _crumbs, next] };
+
+    /// <summary>The graph a phase block runs, read when it's another file; null (having said why) when it can't be.</summary>
+    private async Task<Crumb?> PhaseOf(QuestBlock block)
+    {
         Crumb next;
         if (block.Embedded is { } inner) next = new Crumb(Current.File, inner, block.Name);
         else if (block.ExternalPhase is { } path)
@@ -678,28 +711,20 @@ public partial class QuestGraphWindow : Window, IMessageHost
                 catch (Exception ex) when (ex is IOException or InvalidDataException or ArgumentException or IndexOutOfRangeException)
                 {
                     await ShowMessage(L.T("QuestGraph.PhaseUnreadable"), L.T("QuestGraph.PhaseUnreadableText", path, ex.Message), MessageKind.Warning);
-                    return;
+                    return null;
                 }
                 if (file is null)
                 {
                     await ShowMessage(L.T("QuestGraph.PhaseMissing"), L.T("QuestGraph.PhaseMissingText", path), MessageKind.Warning);
-                    return;
+                    return null;
                 }
                 _state.Origins[file] = _locator.Find(path)?.Archive.FilePath;
             }
             next = new Crumb(file, file.Graph, Path.GetFileName(path));
             _ = LoadRedkitAsync(file, path, _state.Origins.GetValueOrDefault(file));
         }
-        else return;
-
-        if (App.Settings.QuestGraphPhasesInNewWindow)
-        {
-            var window = new QuestGraphWindow(_path, _source, _readData, _locator, _origin, state: _state) { _startCrumbs = [.. _crumbs, next] };
-            window.Standalone(this).Show();
-            return;
-        }
-        _crumbs.Add(next);
-        ShowGraph();
+        else return null;
+        return next;
     }
 
     // a window opened from another starts where that one went, sharing what it read
@@ -782,7 +807,11 @@ public partial class QuestGraphWindow : Window, IMessageHost
         if (LinksText.Inlines.Count == 0) LinksText.Inlines.Add(new Run(L.T("QuestGraph.NoLinks")) { FontStyle = FontStyles.Italic });
         CopiesTitle.Visibility = CopiesText.Visibility = Visibility.Collapsed;
         ShowCompare(item);
-        if (_compare is { } compare) Properties.Show(PropertyRow.Of(item.Block.Object, compare.OtherFile.Cr2w, ["cachedConnections", "sockets", "embeddedGraph", "position"]));
+        if (_compare is { } compare)
+        {
+            PropertiesHeader.Visibility = Properties.Visibility = Visibility.Visible;
+            Properties.Show(PropertyRow.Of(item.Block.Object, compare.OtherFile.Cr2w, ["cachedConnections", "sockets", "embeddedGraph", "position"]));
+        }
     }
 
     private void BlockList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
@@ -823,6 +852,8 @@ public partial class QuestGraphWindow : Window, IMessageHost
             bool isRoot = index.Roots.Contains(file.Path, StringComparer.OrdinalIgnoreCase);
             LinksText.Inlines.Add(new Run(isRoot ? L.T("QuestGraph.IsRoot") : reached ? L.T("QuestGraph.Reached") : L.T("QuestGraph.NotReached")));
             if (index.UsedBy.TryGetValue(file.Path, out var uses))
+            {
+                LinksTitle.Text = L.T("QuestGraph.UsedByCount", uses.Count);
                 foreach (var use in uses)
                 {
                     LinksText.Inlines.Add(new LineBreak());
@@ -831,6 +862,7 @@ public partial class QuestGraphWindow : Window, IMessageHost
                     link.Click += (_, _) => OpenAt(use.File, use.Guid, _locator, this);
                     LinksText.Inlines.Add(link);
                 }
+            }
             else if (!isRoot)
             {
                 LinksText.Inlines.Add(new LineBreak());
@@ -934,6 +966,7 @@ public partial class QuestGraphWindow : Window, IMessageHost
     /// <summary>An object's properties: from REDkit's copy of its file when that has it (by GUID), else from the file itself.</summary>
     private void ShowProperties(QuestFile file, RedObject o, Guid? guid, string[] leaveOut)
     {
+        PropertiesHeader.Visibility = Properties.Visibility = Visibility.Visible;
         if (_state.Redkit.TryGetValue(file, out var redkit))
         {
             SourceNoteBar.Show(redkit.From.Source, redkit.From.RedkitPath ?? _state.Origins.GetValueOrDefault(file), L.T("QuestGraph.QuestFileWord"));
