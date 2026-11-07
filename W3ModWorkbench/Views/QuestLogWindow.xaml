@@ -1,0 +1,127 @@
+<Window x:Class="W3ModWorkbench.QuestLogWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:l="clr-namespace:W3ModWorkbench.Localisation"
+        xmlns:local="clr-namespace:W3ModWorkbench"
+        Title="{l:T QuestLog.Title}" Icon="pack://application:,,,/W3ModWorkbench;component/Assets/app.ico"
+        Width="1400" Height="860" MinWidth="980" MinHeight="480"
+        WindowStartupLocation="CenterOwner" PreviewKeyDown="Window_PreviewKeyDown">
+
+    <Window.Resources>
+        <Style x:Key="IconText" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="{StaticResource IconFont}" />
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style x:Key="Card" TargetType="Border">
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}" />
+            <Setter Property="Background" Value="{DynamicResource CardBackgroundFillColorDefaultBrush}" />
+        </Style>
+        <Style x:Key="SectionTitle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Margin" Value="0,0,0,4" />
+        </Style>
+        <Style x:Key="Hint" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Opacity" Value="0.65" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Margin="14,12,14,8">
+            <TextBlock Text="{l:T QuestLog.Title}" FontSize="16" FontWeight="SemiBold" />
+            <TextBlock Style="{StaticResource Hint}" Margin="0,2,0,0" Text="{l:T QuestLog.Explain}" />
+        </StackPanel>
+
+        <!-- what's needed for the log to say every block -->
+        <Border x:Name="SetupCard" Grid.Row="1" Margin="14,0,14,8" Padding="14,10" CornerRadius="8" Visibility="Collapsed"
+                Background="{DynamicResource SystemFillColorCautionBackgroundBrush}" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="1">
+            <DockPanel>
+                <TextBlock DockPanel.Dock="Left" Style="{StaticResource IconText}" Text="&#xE7BA;" Foreground="{DynamicResource SystemFillColorCautionBrush}" Margin="0,2,12,0"
+                           VerticalAlignment="Top" />
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Top">
+                    <Button x:Name="CopyIniButton" Padding="10,4" Margin="8,0,0,0" Click="CopyIni_Click" Content="{l:T QuestLog.CopyIni}" />
+                    <Button x:Name="ReleasesButton" Padding="10,4" Margin="8,0,0,0" Click="Releases_Click" Content="{l:T QuestLog.GetHook}" />
+                    <Button Padding="10,4" Margin="8,0,0,0" Click="OpenFolder_Click" Content="{l:T QuestLog.OpenFolder}" />
+                </StackPanel>
+                <StackPanel>
+                    <TextBlock x:Name="SetupTitle" FontWeight="SemiBold" TextWrapping="Wrap" />
+                    <TextBlock x:Name="SetupText" TextWrapping="Wrap" Margin="0,4,0,0" />
+                    <!-- loc-ignore: an ini file's own text -->
+                    <TextBlock x:Name="IniText" FontFamily="Consolas" Margin="0,6,0,0" Text="[Debug]&#10;LogEveryBlock=1" />
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <Border Grid.Row="2" Margin="14,0,14,0" Style="{StaticResource Card}">
+            <DockPanel Margin="10,8,10,6">
+                <WrapPanel DockPanel.Dock="Top" Margin="0,0,0,6">
+                    <Button x:Name="PauseButton" Padding="10,4" Margin="0,0,8,4" Click="Pause_Click" ToolTip="{l:T QuestLog.PauseTip}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock x:Name="PauseIcon" Style="{StaticResource IconText}" Text="&#xE769;" FontSize="13" />
+                            <TextBlock x:Name="PauseText" Margin="6,0,0,0" Text="{l:T QuestLog.Pause}" />
+                        </StackPanel>
+                    </Button>
+                    <Button Padding="10,4" Margin="0,0,8,4" Click="Clear_Click" ToolTip="{l:T QuestLog.ClearTip}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Style="{StaticResource IconText}" Text="&#xE74D;" FontSize="13" />
+                            <TextBlock Margin="6,0,0,0" Text="{l:T QuestLog.Clear}" />
+                        </StackPanel>
+                    </Button>
+                    <Button Padding="10,4" Margin="0,0,16,4" Click="OpenLog_Click" ToolTip="{l:T QuestLog.OpenLogTip}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Style="{StaticResource IconText}" Text="&#xE8E5;" FontSize="13" />
+                            <TextBlock Margin="6,0,0,0" Text="{l:T QuestLog.OpenLog}" />
+                        </StackPanel>
+                    </Button>
+                    <CheckBox x:Name="StartedCheck" Margin="0,0,12,4" VerticalAlignment="Center" IsChecked="True" Content="{l:T QuestLog.Kind.Started}" Click="Filter_Changed" />
+                    <CheckBox x:Name="FinishedCheck" Margin="0,0,12,4" VerticalAlignment="Center" IsChecked="True" Content="{l:T QuestLog.Kind.Finished}" Click="Filter_Changed" />
+                    <CheckBox x:Name="StoppedCheck" Margin="0,0,12,4" VerticalAlignment="Center" Content="{l:T QuestLog.Kind.Stopped}" Click="Filter_Changed" ToolTip="{l:T QuestLog.StoppedTip}" />
+                    <CheckBox x:Name="ReplayedCheck" Margin="0,0,12,4" VerticalAlignment="Center" Content="{l:T QuestLog.Kind.Replayed}" Click="Filter_Changed" ToolTip="{l:T QuestLog.ReplayedTip}" />
+                    <CheckBox x:Name="InputAgainCheck" Margin="0,0,12,4" VerticalAlignment="Center" Content="{l:T QuestLog.Kind.InputAgain}" Click="Filter_Changed" />
+                    <CheckBox x:Name="WatchedCheck" Margin="0,0,16,4" VerticalAlignment="Center" Content="{l:T QuestLog.OnlyWatched}" Click="Filter_Changed" ToolTip="{l:T QuestLog.OnlyWatchedTip}" />
+                    <Grid Width="280" Margin="0,0,12,4">
+                        <TextBox x:Name="SearchBox" Padding="30,5,8,5" VerticalContentAlignment="Center" TextChanged="Search_Changed" />
+                        <TextBlock Style="{StaticResource IconText}" Text="&#xE721;" FontSize="12" Margin="10,0,0,0" Opacity="0.6" HorizontalAlignment="Left" IsHitTestVisible="False" />
+                        <TextBlock x:Name="SearchPlaceholder" Margin="31,0,0,0" Opacity="0.55" VerticalAlignment="Center" IsHitTestVisible="False" Text="{l:T QuestLog.Search}" />
+                    </Grid>
+                    <CheckBox x:Name="FollowCheck" Margin="0,0,0,4" VerticalAlignment="Center" IsChecked="True" Content="{l:T QuestLog.Follow}" />
+                </WrapPanel>
+                <DataGrid x:Name="EventGrid" Style="{StaticResource ViewerGrid}" SelectionMode="Extended" MouseDoubleClick="Grid_MouseDoubleClick" PreviewKeyDown="Grid_PreviewKeyDown">
+                    <DataGrid.ContextMenu>
+                        <ContextMenu>
+                            <MenuItem Header="{l:T QuestLog.OpenInGraph}" Click="OpenInGraph_Click" />
+                            <MenuItem Header="{l:T QuestGraph.CopyGuids}" InputGestureText="Ctrl+C" Click="CopyGuids_Click" />
+                            <MenuItem Header="{l:T QuestLog.CopyLines}" Click="CopyLines_Click" />
+                        </ContextMenu>
+                    </DataGrid.ContextMenu>
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="{l:T QuestLog.Col.Time}" Binding="{Binding Time}" Width="112" FontFamily="Consolas" />
+                        <DataGridTextColumn Header="{l:T QuestLog.Col.Event}" Binding="{Binding What}" Width="110" />
+                        <DataGridTextColumn Header="{l:T QuestGraph.Col.Kind}" Binding="{Binding Kind}" Width="140" />
+                        <DataGridTextColumn Header="{l:T QuestGraph.Col.Name}" Binding="{Binding Name}" Width="240" />
+                        <DataGridTextColumn Header="{l:T QuestLog.Col.Output}" Binding="{Binding Output}" Width="110" />
+                        <DataGridTextColumn Header="{l:T QuestLog.Col.File}" Binding="{Binding File}" Width="*" MinWidth="200" />
+                        <DataGridTextColumn Header="{l:T QuestGraph.Col.Guid}" Binding="{Binding Guid}" Width="280" FontFamily="Consolas" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </DockPanel>
+        </Border>
+
+        <DockPanel Grid.Row="3" Margin="18,6,14,8">
+            <TextBlock x:Name="InfoText" VerticalAlignment="Center" Opacity="0.8" TextTrimming="CharacterEllipsis" />
+        </DockPanel>
+        <local:MessageCard x:Name="Message" Grid.RowSpan="4" IsModal="True" />
+    </Grid>
+</Window>

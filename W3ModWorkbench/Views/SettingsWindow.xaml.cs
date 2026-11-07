@@ -149,6 +149,9 @@ public partial class SettingsWindow : Window, IMessageHost
 
         // Viewers
         RedkitPropsCheck.IsChecked = settings.PreferRedkitProperties;
+        (settings.QuestGraphDownwards ? QuestDown : QuestAcross).IsChecked = true;
+        QuestRedkitPlacesCheck.IsChecked = settings.QuestGraphRedkitPlaces;
+        QuestNewWindowCheck.IsChecked = settings.QuestGraphPhasesInNewWindow;
         SimulateClothCheck.IsChecked = settings.SimulateCloth;
         (settings.Antialiasing switch { 0 => AntialiasOff, 4 => Antialias4, _ => Antialias2 }).IsChecked = true;
         FrameStatsCheck.IsChecked = settings.ShowFrameStats;
@@ -695,6 +698,9 @@ public partial class SettingsWindow : Window, IMessageHost
         _settings.EditorFontSize = FontSizes[Math.Max(0, FontSizeBox.SelectedIndex)];
         _settings.EditorTabWidth = TabWidths[Math.Max(0, TabWidthBox.SelectedIndex)];
         _settings.PreferRedkitProperties = RedkitPropsCheck.IsChecked == true;
+        _settings.QuestGraphDownwards = QuestDown.IsChecked == true;
+        _settings.QuestGraphRedkitPlaces = QuestRedkitPlacesCheck.IsChecked == true;
+        _settings.QuestGraphPhasesInNewWindow = QuestNewWindowCheck.IsChecked == true;
         _settings.SimulateCloth = SimulateClothCheck.IsChecked == true;
         _settings.Antialiasing = AntialiasOff.IsChecked == true ? 0 : Antialias4.IsChecked == true ? 4 : 2;
         _settings.MeshExportAllLods = ExportLodAll.IsChecked == true;

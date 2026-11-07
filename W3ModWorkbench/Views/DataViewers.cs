@@ -28,6 +28,7 @@ public static class DataViewers
         Tree(L.T("DataViewers.JobTree"), JobTreeFile.IsJobTree, JobTreeFile.Read, w => new JobTreePreview(w.Locator)),
         new(L.T("DataViewers.Community"), CommunityWindow.CanShow, CommunityWindow.Open, CommunityWindow.OpenFile),
         new(L.T("DataViewers.Journal"), JournalWindow.CanShow, JournalWindow.Open, JournalWindow.OpenFile),
+        new(L.T("DataViewers.QuestGraph"), QuestGraphWindow.CanShow, QuestGraphWindow.Open, QuestGraphWindow.OpenFile),
         new(L.T("DataViewers.AnimationEvents"), AnimEventsWindow.CanShow, AnimEventsWindow.Open, AnimEventsWindow.OpenFile),
         new(L.T("Common.AnimationSet"), AnimSetWindow.CanShow, AnimSetWindow.Open, AnimSetWindow.OpenFile),
         new(L.T("DataViewers.Rig"), RigWindow.CanShow, RigWindow.Open, RigWindow.OpenFile),

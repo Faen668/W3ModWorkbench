@@ -90,6 +90,12 @@ public sealed class ResourceLocator
     /// <summary>The name of the installed mod the copy of a file that's read comes from (its folder's, modWeatherMatters), or null for the game's own.</summary>
     public string? ModNameOf(string path) => Find(path) is { } entry && ModFolder(entry.Archive.FilePath) is { } folder ? Path.GetFileName(folder) : null;
 
+    /// <summary>The game folder looked in, or null for none.</summary>
+    public string? GameFolder => _game;
+
+    /// <summary>The open project's workspace (its files at their game paths), or null with no project open.</summary>
+    public string? ProjectFolder => _projectFiles?.Invoke();
+
     /// <summary>The open project's own copy of a game file at exactly that path, when it has one.</summary>
     public string? ProjectFile(string path)
     {

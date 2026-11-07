@@ -216,6 +216,9 @@ internal sealed class RedReader
         return list;
     }
 
+    /// <summary>One value of a type, as a tagged value ending at <paramref name="end"/>: a variant's, read from its own bytes.</summary>
+    public object? ReadTagged(string type, int end) => ReadValue(type, end);
+
     /// <summary>One value of a type. <paramref name="end"/> is where a tagged value ends, or -1 inside an array.</summary>
     private object? ReadValue(string type, int end)
     {

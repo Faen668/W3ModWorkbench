@@ -635,6 +635,23 @@
 
                     <Border Style="{StaticResource Card}">
                         <StackPanel>
+                            <TextBlock Style="{StaticResource SectionTitle}" Text="{l:T Settings.Viewers.QuestGraphs}" />
+                            <Border Style="{StaticResource SegmentRow}" Margin="0,4,0,0">
+                                <StackPanel Orientation="Horizontal">
+                                    <RadioButton x:Name="QuestAcross" GroupName="QuestFlow" Style="{StaticResource Segment}" Content="{l:T Settings.Viewers.QuestLeftToRight}" />
+                                    <RadioButton x:Name="QuestDown" GroupName="QuestFlow" Style="{StaticResource Segment}" Content="{l:T Settings.Viewers.QuestTopToBottom}" />
+                                </StackPanel>
+                            </Border>
+                            <TextBlock Style="{StaticResource Hint}" Text="{l:T Settings.Viewers.QuestFlowHint}" />
+                            <CheckBox x:Name="QuestRedkitPlacesCheck" Content="{l:T Settings.Viewers.QuestRedkitPlaces}" Margin="0,10,0,0" />
+                            <TextBlock Style="{StaticResource Hint}" Text="{l:T Settings.Viewers.QuestRedkitPlacesHint}" />
+                            <CheckBox x:Name="QuestNewWindowCheck" Content="{l:T Settings.Viewers.QuestNewWindow}" Margin="0,10,0,0" />
+                            <TextBlock Style="{StaticResource Hint}" Text="{l:T Settings.Viewers.QuestNewWindowHint}" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
                             <TextBlock Style="{StaticResource SectionTitle}" Text="{l:T Settings.Viewers.TextureDetail}" />
                             <Border Style="{StaticResource SegmentRow}" Margin="0,4,0,0">
                                 <StackPanel Orientation="Horizontal">

@@ -1708,6 +1708,7 @@ public partial class MainWindow : Window, IMessageHost
         Add(L.T("MainWindow.ConsoleCommands"), "", () => ConsoleCommandsWindow.Open(this));
         Add(L.T("MainWindow.QuestFacts"), "", () => FactsWindow.Open(this));
         Add(L.T("MainWindow.ScriptsLog"), "", () => LogWindow.Open(this));
+        Add(L.T("QuestLog.MenuItem"), "", () => QuestLogWindow.Open(this));
         Add(L.T("MainWindow.KeyBindingHelper"), "", () => InputBindingsWindow.Open(this));
         Add(L.T("MainWindow.HashesIDs"), "", () => HashToolsWindow.Open(this));
         Add(L.T("MainWindow.CR2WJson"), "", () => Cr2wJsonWindow.Open(this));

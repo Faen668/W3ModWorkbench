@@ -301,6 +301,21 @@ public sealed class Settings
     /// <summary>Show a game file's properties from REDkit's source copy when there is one, as it keeps what cooking leaves out.</summary>
     public bool PreferRedkitProperties { get; set; } = true;
 
+    /// <summary>Lay quest graphs out top to bottom rather than left to right (cooked files, which keep no places).</summary>
+    public bool QuestGraphDownwards { get; set; }
+
+    /// <summary>Draw an uncooked quest file (REDkit's) with its blocks where REDkit keeps them, rather than laid out afresh.</summary>
+    public bool QuestGraphRedkitPlaces { get; set; } = true;
+
+    /// <summary>Open a phase block's phase in a new quest graph window rather than in place, with the way back over it.</summary>
+    public bool QuestGraphPhasesInNewWindow { get; set; }
+
+    /// <summary>The mod name last given to a Native Quest Hook listener, which its class and registration are named after.</summary>
+    public string QuestStubModName { get; set; } = "";
+
+    /// <summary>The Native Quest Hook events last ticked for a listener (NqhEvents flags); 0 for the first time, which ticks OnBlockFinished.</summary>
+    public int QuestStubEvents { get; set; }
+
     /// <summary>The project files opened most recently, newest first.</summary>
     public List<string> RecentProjects { get; set; } = [];
 

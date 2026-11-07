@@ -190,6 +190,21 @@ public sealed class Cr2wFile
         catch (Exception ex) when (ex is InvalidDataException or ArgumentOutOfRangeException or IndexOutOfRangeException) { return []; }
     }
 
+    /// <summary>
+    /// A CVariant's type and the value it holds, read: its type's name, a size that counts itself, then the value, whose
+    /// words are named by this file's name table. Null when it can't be read.
+    /// </summary>
+    public (string Type, object? Value)? Variant(byte[] raw)
+    {
+        if (raw.Length < 6) return null;
+        int nameIndex = U16(raw, 0);
+        if (nameIndex >= Names.Count) return null;
+        string type = Names[nameIndex];
+        if (type.Length == 0) return (type, null);
+        try { return (type, new RedReader(this, raw, 6, raw.Length).ReadTagged(type, raw.Length)); }
+        catch (Exception ex) when (ex is InvalidDataException or ArgumentOutOfRangeException or IndexOutOfRangeException) { return null; }
+    }
+
     /// <summary>A TagList's tags. It's kept as its bytes: a count, then that many names.</summary>
     public List<string> Tags(byte[] raw)
     {
