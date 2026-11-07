@@ -18,10 +18,13 @@ namespace W3ModWorkbench;
 /// listed with their size and middle, the splits with their lines and where each side goes, and the file's properties.
 /// Hovering says which area a point is in; clicking picks it and its lines.
 /// </summary>
-public partial class SimplexTreeWindow : Window, IMessageHost
+public partial class SimplexTreeWindow : Window, IMessageHost, IReopenable
 {
     private readonly string _path;
     private readonly string _source;
+
+    string IReopenable.ReopenPath => _path;
+    string IReopenable.ReopenSource => _source;
     private readonly Func<byte[]> _readData;
     private readonly ResourceLocator _locator;
     private readonly string? _origin;

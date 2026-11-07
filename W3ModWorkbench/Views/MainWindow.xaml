@@ -136,6 +136,14 @@
                 </ToggleButton>
             </StackPanel>
 
+            <!-- a newer release on GitHub, found by the start-up check (Settings > General > Updates) -->
+            <Button x:Name="UpdateButton" DockPanel.Dock="Right" Margin="6,0,0,0" Click="Update_Click" Visibility="Collapsed"
+                    Style="{DynamicResource AccentButtonStyle}">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Style="{StaticResource IconText}" Text="&#xE896;" Margin="0,1,0,0" />
+                    <TextBlock x:Name="UpdateLabel" Margin="8,0,0,0" />
+                </StackPanel>
+            </Button>
             <Button x:Name="AboutButton" DockPanel.Dock="Right" Margin="6,0,0,0" Padding="10,6" Click="About_Click"
                     ToolTip="{l:T MainWindow.AboutW3ModWorkbench}">
                 <TextBlock Style="{StaticResource IconText}" Text="&#xE946;" />
@@ -588,7 +596,11 @@
                                VerticalAlignment="Top" Margin="0,0,16,0" RenderOptions.BitmapScalingMode="HighQuality" />
                         <StackPanel Grid.Column="1">
                             <TextBlock Text="W3 Mod Workbench" FontSize="16" FontWeight="SemiBold" />
-                            <TextBlock x:Name="AboutVersionText" Opacity="0.7" Margin="0,2,0,0" />
+                            <TextBlock Margin="0,2,0,0">
+                                <Run x:Name="AboutVersionText" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                <Run Text="  ·  " />
+                                <Hyperlink Click="AboutUpdates_Click"><Run Text="{l:T MainWindow.CheckForUpdates}" /></Hyperlink>
+                            </TextBlock>
                             <TextBlock TextWrapping="Wrap" Margin="0,8,0,0" Opacity="0.85"
                                        Text="{l:T MainWindow.BrowseExtractWitcherBundle}" />
                             <TextBlock x:Name="AboutCopyrightText" Margin="0,12,0,0" />

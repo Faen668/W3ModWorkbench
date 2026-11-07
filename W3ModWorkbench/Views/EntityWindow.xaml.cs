@@ -22,13 +22,16 @@ namespace W3ModWorkbench;
 /// property of the component picked, the entity and the template, with its appearances, slots, effects and the files
 /// it uses. Files open in their viewers where the tool has one.
 /// </summary>
-public partial class EntityWindow : Window, IMessageHost
+public partial class EntityWindow : Window, IMessageHost, IReopenable
 {
     /// <summary>The largest a texture is read, from Settings.</summary>
     private static int TextureSize => App.TextureDetail;
 
     private readonly string _path;
     private readonly string _source;
+
+    string IReopenable.ReopenPath => _path;
+    string IReopenable.ReopenSource => _source;
     private readonly Func<byte[]> _readData;
     private readonly ResourceLocator _locator;
     private EntityFile? _entity;

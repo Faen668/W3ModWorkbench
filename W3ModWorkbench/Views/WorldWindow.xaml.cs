@@ -26,10 +26,13 @@ namespace W3ModWorkbench;
 /// each group and layer shown or hidden; a click on the map picks an entity, with its layer and template. REDkit's
 /// worlds find their layers by folder; the game's cooked worlds keep the tree inside them.
 /// </summary>
-public partial class WorldWindow : Window, IMessageHost
+public partial class WorldWindow : Window, IMessageHost, IReopenable
 {
     private readonly string _path;
     private readonly string _source;
+
+    string IReopenable.ReopenPath => _path;
+    string IReopenable.ReopenSource => _source;
     private readonly Func<byte[]> _readData;
     private readonly ResourceLocator _locator;
     private readonly string? _origin;

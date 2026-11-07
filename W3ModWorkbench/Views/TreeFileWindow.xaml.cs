@@ -19,10 +19,13 @@ namespace W3ModWorkbench;
 /// itself, with none picked) beside it, and any tables the file keeps beside its tree under it. Nodes can be found by
 /// name, class, comment or setting, and branches folded away.
 /// </summary>
-public partial class TreeFileWindow : Window, IMessageHost
+public partial class TreeFileWindow : Window, IMessageHost, IReopenable
 {
     private readonly string _path;
     private readonly string _source;
+
+    string IReopenable.ReopenPath => _path;
+    string IReopenable.ReopenSource => _source;
     private readonly Func<byte[]> _readData;
     private readonly Func<byte[], TreeDocument> _read;
     private readonly ResourceLocator _locator;

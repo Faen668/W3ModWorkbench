@@ -20,12 +20,16 @@ namespace W3ModWorkbench;
 /// changed, and the changes saved into the open project at the files' game paths, never over the files they came from.
 /// It can be exported as an .obj.
 /// </summary>
-public partial class MeshWindow : Window, IMessageHost
+public partial class MeshWindow : Window, IMessageHost, IReopenable, IPendingChanges
 {
     private const int TextureSize = 2048;
 
     private readonly string _path;
     private readonly string _source;
+
+    string IReopenable.ReopenPath => _path;
+    string IReopenable.ReopenSource => _source;
+    string? IPendingChanges.PendingChange => _materials.Any(m => m.NeedsSave) || ClothNeedsSave || _importUnsaved ? SessionSnapshot.Describe(this) : null;
     private readonly Func<byte[]> _readData;
     private readonly Func<int, byte[]?> _readBuffer;
     private readonly ResourceLocator _locator;

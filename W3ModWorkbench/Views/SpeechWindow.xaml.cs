@@ -14,9 +14,11 @@ namespace W3ModWorkbench;
 /// a folder of sounds and lip syncs, and a folder packed into a speech file, as the game lays them out. Build packs a
 /// project's <c>speech\&lt;language&gt;</c> folders the same way.
 /// </summary>
-public partial class SpeechWindow : Window, IMessageHost
+public partial class SpeechWindow : Window, IMessageHost, IPendingChanges
 {
     private CancellationTokenSource? _running;
+
+    string? IPendingChanges.PendingChange => _running is not null ? SessionSnapshot.Describe(this) : null;
 
     private SpeechWindow(string? file)
     {

@@ -80,6 +80,8 @@ public partial class SettingsWindow : Window, IMessageHost
         KeepStructureCheck.IsChecked = settings.KeepStructure;
         OpenWhenDoneCheck.IsChecked = settings.OpenWhenDone;
         AskCopyCheck.IsChecked = settings.AskWhichCopy;
+        UpdatesCheck.IsChecked = settings.CheckForUpdates;
+        VersionStatus.Text = L.T("Settings.General.VersionNow", Core.AppUpdates.Current.ToString(3));
         RecipesBox.Text = settings.Cr2wRecipesFolder;
         RecipesHint.Text = L.T("Settings.General.RecipesHint", Core.Cr2w.Cr2wRecipe.DefaultFolder);
 
@@ -650,6 +652,13 @@ public partial class SettingsWindow : Window, IMessageHost
     }
 
     private void Privacy_Click(object sender, RoutedEventArgs e) => ShowPrivacy(this);
+
+    private void CheckUpdates_Click(object sender, RoutedEventArgs e)
+    {
+        // the updates window has the same tick, saved as it's clicked: what it's set to there shows here
+        UpdateWindow.Open(this, modal: true);
+        UpdatesCheck.IsChecked = App.Settings.CheckForUpdates;
+    }
     private void Licence_Click(object sender, RoutedEventArgs e) => ShowLicence(this);
     private void Notices_Click(object sender, RoutedEventArgs e) => ShowNotices(this);
 
@@ -667,6 +676,7 @@ public partial class SettingsWindow : Window, IMessageHost
         _settings.KeepStructure = KeepStructureCheck.IsChecked == true;
         _settings.OpenWhenDone = OpenWhenDoneCheck.IsChecked == true;
         _settings.AskWhichCopy = AskCopyCheck.IsChecked == true;
+        _settings.CheckForUpdates = UpdatesCheck.IsChecked == true;
         _settings.Cr2wRecipesFolder = RecipesBox.Text.Trim();
         _settings.GameFolder = GameFolderBox.Text.Trim();
         GameScripts.GameFolder = _settings.GameFolder;

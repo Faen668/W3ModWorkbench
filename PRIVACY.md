@@ -6,7 +6,7 @@ W3 Mod Workbench is a free, open-source tool that runs on your own computer. Its
 
 Everything the tool does with your game, your mods and your projects happens on your computer. It reads and writes files only where you point it.
 
-It goes online in one case only, and only after you have turned it on: **EasyAssetBrowser tags** in the Asset Browser.
+It goes online in two cases only, each only when you have turned it on or asked: **EasyAssetBrowser tags** in the Asset Browser, and **checking for updates** to the tool itself.
 
 ## EasyAssetBrowser tags (off unless you turn them on)
 
@@ -23,6 +23,17 @@ When you turn EasyAssetBrowser tags on, the tool asks you first and says what fo
 ### Suggesting tags
 
 **Suggest on GitHub…** in the EasyAssetBrowser window only opens your web browser at a new issue on EasyAssetBrowser's GitHub repository, filled in with the tags you suggested. Nothing is sent by the tool. If you post the issue, you post it yourself, under your own GitHub account, and it is public, as everything on that repository is.
+
+## Checking for updates (when you ask, or at start-up if you turn it on)
+
+The tool can check whether there's a newer version of itself, and install it.
+
+- **When it checks.** When you click **Check for updates** (under the ⓘ button) or **Check now…** in Settings. If you tick **Check for updates when the app starts**, also when the tool starts, at most once a day. That's off until you turn it on.
+- **What it asks.** GitHub's API (`api.github.com`) for the latest release of the tool's own repository (https://github.com/Faen668/W3ModWorkbench). The request names the program and its version, as GitHub requires, and nothing else.
+- **What it downloads.** Only when you choose **Download and install** or **Download**: the release's zip, from GitHub, checked against the checksum GitHub gives for it.
+- **What GitHub sees.** As with any download, your IP address and that a program asked. GitHub's own privacy statement covers that: https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement. The tool's author doesn't receive it.
+- **What it doesn't send.** Nothing about you, your computer, your files, your mods or what you do in the tool.
+- **What it keeps.** The downloaded zip, in `%LocalAppData%\W3ModWorkbench\Updates`, until that version is installed; the tool then deletes it. When it last checked and what it found are kept in your settings.
 
 ## Links that open files in the tool
 

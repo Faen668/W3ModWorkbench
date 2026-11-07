@@ -16,9 +16,11 @@ public sealed record SoundUpgradeRow(string Name, string Result, string Notes);
 /// Upgrades a mod's sounds for the Remastered, which plays only sound banks of version 150: a whole
 /// <c>soundspc.cache</c> (its banks and streamed sounds) or one bank file, with what was done to each file listed.
 /// </summary>
-public partial class SoundUpgradeWindow : Window, IMessageHost
+public partial class SoundUpgradeWindow : Window, IMessageHost, IPendingChanges
 {
     private CancellationTokenSource? _running;
+
+    string? IPendingChanges.PendingChange => _running is not null ? SessionSnapshot.Describe(this) : null;
 
     private SoundUpgradeWindow(string? path)
     {

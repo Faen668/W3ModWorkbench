@@ -58,10 +58,13 @@ public sealed class PropertiesObjectItem(int index, string className, string det
 /// under the one it belongs to, and the one picked has its properties beside it, the resource first. One of the game's
 /// own files shows them from REDkit's source file when REDkit has it, as cooking leaves most of them out.
 /// </summary>
-public partial class PropertiesWindow : Window, IMessageHost
+public partial class PropertiesWindow : Window, IMessageHost, IReopenable
 {
     private readonly string _path;
     private readonly string _source;
+
+    string IReopenable.ReopenPath => _path;
+    string IReopenable.ReopenSource => _source;
     private readonly Func<byte[]> _readData;
     private readonly ResourceLocator _locator;
     // where the file was opened from (its archive, or the file on disk): it says whether it's one of the game's own

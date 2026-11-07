@@ -18,10 +18,13 @@ namespace W3ModWorkbench;
 /// and marked points, its parts), which banks play it, and a bank's sounds and objects. Save it as a WAV or as the game
 /// keeps it.
 /// </summary>
-public partial class SoundWindow : Window, IMessageHost
+public partial class SoundWindow : Window, IMessageHost, IReopenable
 {
     private readonly string _path;
     private readonly string _source;
+
+    string IReopenable.ReopenPath => _path;
+    string IReopenable.ReopenSource => _source;
     private readonly Func<byte[]> _readData;
     private readonly ResourceLocator _locator;
     private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromMilliseconds(33) };

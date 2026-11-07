@@ -24,7 +24,7 @@ namespace W3ModWorkbench;
 /// Save as CR2W writes the game file from it; a CR2W file opened as JSON saves back as CR2W. Files from inside an
 /// archive open as a copy, which Save puts in the project at its game path.
 /// </summary>
-public partial class JsonWindow : Window, IMessageHost
+public partial class JsonWindow : Window, IMessageHost, IReopenable, IPendingChanges
 {
     private const int MaxFoldedLength = 6_000_000;
     private static readonly JsonDocumentOptions Lenient = new() { AllowTrailingCommas = true, CommentHandling = JsonCommentHandling.Skip };
@@ -37,6 +37,10 @@ public partial class JsonWindow : Window, IMessageHost
 
     /// <summary>The file's game path, for one of the game's (in a bundle or its folders): where a copy goes in a project.</summary>
     private string? _gamePath;
+
+    string IReopenable.ReopenPath => _gamePath ?? "";
+    string IReopenable.ReopenSource => _path ?? "";
+    string? IPendingChanges.PendingChange => _edited ? SessionSnapshot.Describe(this) : null;
 
     /// <summary>
     /// For a CR2W file opened as JSON: its name (player_horse.w2ent), and where it is on disk when it's a file there.

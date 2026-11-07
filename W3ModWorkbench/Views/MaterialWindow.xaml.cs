@@ -24,12 +24,16 @@ namespace W3ModWorkbench;
 /// sliders), drawn live on a sphere, a box or a mesh that uses it as the game draws it, what it's built on, what uses it,
 /// and its properties. Changes go into the open project, at the material's own game path or as a new material.
 /// </summary>
-public partial class MaterialWindow : Window, IMessageHost
+public partial class MaterialWindow : Window, IMessageHost, IReopenable, IPendingChanges
 {
     private const int PreviewTextureSize = 1024, ThumbnailSize = 128;
 
     private readonly string _path;
     private readonly string _source;
+
+    string IReopenable.ReopenPath => _path;
+    string IReopenable.ReopenSource => _source;
+    string? IPendingChanges.PendingChange => IsChanged && !IsGraph ? SessionSnapshot.Describe(this) : null;
     private readonly Func<byte[]> _readData;
     private readonly ResourceLocator _locator;
     private readonly string? _origin;

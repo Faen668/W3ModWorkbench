@@ -16,10 +16,13 @@ namespace W3ModWorkbench;
 /// points each goes to at each time of day and what it does there. Rows can be narrowed to those with some words, and
 /// the one picked shows every property of its entry, entity, story phase and spawn time beside them.
 /// </summary>
-public partial class CommunityWindow : Window, IMessageHost
+public partial class CommunityWindow : Window, IMessageHost, IReopenable
 {
     private readonly string _path;
     private readonly string _source;
+
+    string IReopenable.ReopenPath => _path;
+    string IReopenable.ReopenSource => _source;
     private readonly Func<byte[]> _readData;
     private readonly ResourceLocator _locator;
     private readonly string? _origin;

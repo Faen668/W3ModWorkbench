@@ -1192,6 +1192,15 @@ public partial class PreviewWindow : Window, IMessageHost
         doc.Item.DiskPath is { } disk && ProjectWorkspace.IsMember(disk) ? (Application.Current.MainWindow as MainWindow)?.ProjectArchive : null;
 
     /// <summary>The files open in previews that <paramref name="member"/> accepts, in the order they were opened, and the one in front.</summary>
+    /// <summary>Every file open in a tab, one view of each, and the one in front, for opening them again after an update.</summary>
+    public static (List<PreviewItem> Items, PreviewItem? Active) OpenItems()
+    {
+        var items = new List<PreviewItem>();
+        foreach (var doc in AllOpenDocuments())
+            if (!items.Any(i => i.Key == doc.Item.Key)) items.Add(doc.Item);
+        return (items, OpenWindows.FirstOrDefault()?.Current?.Item);
+    }
+
     public static (List<string> Files, string? Active) OpenFilesIn(Func<string, bool> member)
     {
         var files = AllOpenDocuments().Select(d => d.Item.DiskPath).OfType<string>().Where(member)

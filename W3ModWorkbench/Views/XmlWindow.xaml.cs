@@ -24,7 +24,7 @@ namespace W3ModWorkbench;
 /// Save, and for a mod menu (user_config_matrix) the menu builder beside the XML it writes. Files from inside
 /// an archive open as a copy that Save as writes somewhere else.
 /// </summary>
-public partial class XmlWindow : Window, IMessageHost
+public partial class XmlWindow : Window, IMessageHost, IReopenable, IPendingChanges
 {
     private static readonly Regex Declaration = new(@"^\s*<\?xml[^>]*\?>", RegexOptions.Compiled);
     private static readonly Regex DeclaredEncoding = new("""encoding\s*=\s*["']([^"']+)["']""", RegexOptions.Compiled | RegexOptions.IgnoreCase);
@@ -40,6 +40,10 @@ public partial class XmlWindow : Window, IMessageHost
 
     /// <summary>The file's game path, for one of the game's (in a bundle or its folders): where a copy goes in a project.</summary>
     private string? _gamePath;
+
+    string IReopenable.ReopenPath => _gamePath ?? "";
+    string IReopenable.ReopenSource => _path ?? "";
+    string? IPendingChanges.PendingChange => _edited ? SessionSnapshot.Describe(this) : null;
     private bool _edited;
     private bool _closeConfirmed;
     private bool _syncing;

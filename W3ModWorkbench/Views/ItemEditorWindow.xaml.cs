@@ -41,7 +41,7 @@ public sealed class ItemRow(XmlDef def, string? title) : INotifyPropertyChanged
 /// game's beside it. Saving writes the project's changes as the Remastered's XML overrides in the project's own DLC,
 /// and the schematics' and loot's in copies of their files (<see cref="ItemEdits"/>).
 /// </summary>
-public partial class ItemEditorWindow : Window, IMessageHost
+public partial class ItemEditorWindow : Window, IMessageHost, IPendingChanges
 {
     private static ItemEditorWindow? _open;
 
@@ -52,6 +52,8 @@ public partial class ItemEditorWindow : Window, IMessageHost
     private List<ItemRow> _rows = [];
     private XmlDef? _picked;
     private bool _unsaved, _closing;
+
+    string? IPendingChanges.PendingChange => _unsaved && _edits is not null ? SessionSnapshot.Describe(this) : null;
 
     private ItemEditorWindow()
     {

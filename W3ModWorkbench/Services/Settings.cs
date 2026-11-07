@@ -66,6 +66,24 @@ public sealed class Settings
     /// <summary>When the user agreed to EasyAssetBrowser going online (ISO 8601, local time), or empty when they haven't.</summary>
     public string EasyAssetBrowserAgreed { get; set; } = "";
 
+    /// <summary>
+    /// Whether the app asks GitHub for its latest release when it starts (at most once a day): off until the user turns
+    /// it on, as the tool is offline otherwise. Checking by hand works either way.
+    /// </summary>
+    public bool CheckForUpdates { get; set; }
+
+    /// <summary>When the app last asked GitHub for its latest release (ISO 8601, local time).</summary>
+    public string UpdateLastCheck { get; set; } = "";
+
+    /// <summary>The latest release's tag when the app last asked ("v1.9.0"), so a start within the day shows it without asking again.</summary>
+    public string UpdateLatest { get; set; } = "";
+
+    /// <summary>A release the user chose to skip ("v1.9.0"): the start-up check doesn't point it out.</summary>
+    public string UpdateSkipped { get; set; } = "";
+
+    /// <summary>The version an update was installed over, until the updated copy has said so once.</summary>
+    public string UpdateInstalledOver { get; set; } = "";
+
     /// <summary>Whether opening a file from the asset browser that more than one archive has asks which copy to open.</summary>
     public bool AskWhichCopy { get; set; } = true;
 

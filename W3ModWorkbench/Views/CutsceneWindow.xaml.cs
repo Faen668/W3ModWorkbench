@@ -29,13 +29,16 @@ public sealed record CutsceneDialogRow(string Time, string Actor, string Text, s
 /// scenes that play it and what the camera does. Its events can also be searched in a list, and the files it uses open
 /// in their viewers.
 /// </summary>
-public partial class CutsceneWindow : Window, IMessageHost
+public partial class CutsceneWindow : Window, IMessageHost, IReopenable
 {
     // the zoom slider runs from 4 to 400 pixels a second, evenly in its logarithm
     private const double MinZoom = 4, MaxZoom = 400;
 
     private readonly string _path;
     private readonly string _source;
+
+    string IReopenable.ReopenPath => _path;
+    string IReopenable.ReopenSource => _source;
     private readonly Func<byte[]> _readData;
     private readonly ResourceLocator _locator;
     // where the cutscene was opened from (its archive, or the file on disk): it says whether it's one of the game's own

@@ -17,10 +17,13 @@ namespace W3ModWorkbench;
 /// drawn over it, a bone's path traced, as asked), its properties and motion extraction, and its events along a
 /// timeline, both those the set keeps and those of the events files it names.
 /// </summary>
-public partial class AnimSetWindow : Window, IMessageHost
+public partial class AnimSetWindow : Window, IMessageHost, IReopenable
 {
     private readonly string _path;
     private readonly string _source;
+
+    string IReopenable.ReopenPath => _path;
+    string IReopenable.ReopenSource => _source;
     private readonly Func<byte[]> _readData;
     private readonly ResourceLocator _locator;
     private readonly string? _origin;

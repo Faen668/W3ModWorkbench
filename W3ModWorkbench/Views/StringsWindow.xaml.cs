@@ -164,7 +164,7 @@ public sealed class StringRow : INotifyPropertyChanged
 /// the game reads, or as a CSV. Key names aren't kept in a .w3strings file, only their hashes; a CSV beside the
 /// file gives them back.
 /// </summary>
-public partial class StringsWindow : Window, IMessageHost
+public partial class StringsWindow : Window, IMessageHost, IReopenable, IPendingChanges
 {
     /// <summary>The languages a mod's strings are copied to, so every language shows them.</summary>
     private static readonly string[] CopyLanguages = ["ar", "br", "cz", "de", "en", "es", "esmx", "fr", "hu", "it", "jp", "kr", "pl", "ru", "zh"];
@@ -172,6 +172,10 @@ public partial class StringsWindow : Window, IMessageHost
     private readonly List<StringRow> _rows = [];
     private readonly ICollectionView _view;
     private string? _path;          // the .w3strings file Save writes to, once there is one
+
+    string IReopenable.ReopenPath => "";
+    string IReopenable.ReopenSource => _path ?? "";
+    string? IPendingChanges.PendingChange => _edited ? SessionSnapshot.Describe(this) : null;
     private string? _sourcePath;    // what was opened, for the title and where dialogs start
     private uint _version = W3Strings.DefaultVersion;
     private bool _edited;

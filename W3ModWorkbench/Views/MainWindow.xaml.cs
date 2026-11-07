@@ -77,11 +77,16 @@ public partial class MainWindow : Window, IMessageHost
         // started by a link to a game file: the tool starts as it would, then shows the file in the Asset Browser
         var link = args is [var arg] ? AppLinks.Parse(arg) : null;
         if (link is not null) args = [];
+        // restarted into an update: what was open opens again, in place of the last project alone
+        var session = args.Length == 0 && link is null ? SessionSnapshot.Take() : null;
         if (args.Length > 0)
             Loaded += async (_, _) => await LoadPathsAsync(args);
+        else if (session is not null)
+            Loaded += async (_, _) => await RestoreSessionAsync(session);
         else if (_settings.ReopenLastProject && File.Exists(_settings.LastProject))
             Loaded += async (_, _) => await OpenProjectAsync(_settings.LastProject, quiet: true);
         if (link is not null) Loaded += (_, _) => AssetBrowserWindow.ShowLink(this, link);
+        Loaded += async (_, _) => await UpdateWindow.StartupAsync(this);
     }
 
     /// <summary>Shows a game file a link names (<see cref="AppLinks"/>) in the Asset Browser, handed over by a copy of the tool started with it.</summary>
@@ -2194,6 +2199,28 @@ public partial class MainWindow : Window, IMessageHost
     }
 
     private void Settings_Click(object sender, RoutedEventArgs e) => OpenSettings(this);
+
+    // ---------------------------------------------------------------- updates
+
+    private AppRelease? _update;
+
+    /// <summary>Shows the Update button for a newer release the start-up check found (with its details when it has them), or hides it.</summary>
+    internal void ShowUpdateAvailable(Version? version, AppRelease? release)
+    {
+        _update = release;
+        UpdateButton.Visibility = version is null ? Visibility.Collapsed : Visibility.Visible;
+        if (version is null) return;
+        UpdateLabel.Text = L.T("MainWindow.UpdateTo", version.ToString(3));
+        UpdateButton.ToolTip = L.T("MainWindow.UpdateTip", version.ToString(3));
+    }
+
+    private void Update_Click(object sender, RoutedEventArgs e) => UpdateWindow.Open(this, _update);
+
+    private void AboutUpdates_Click(object sender, RoutedEventArgs e)
+    {
+        AboutPopup.IsOpen = false;
+        UpdateWindow.Open(this);
+    }
 
     /// <summary>Opens Settings over a window (this one, or a tool window such as the asset browser); true when they were saved.</summary>
     internal bool OpenSettings(Window owner)

@@ -23,10 +23,13 @@ namespace W3ModWorkbench;
 /// through as the game frames its shot. Beside it the slots (where, facing, stance, face) and the cameras (shot, from
 /// and to, lens, depth of field, tags), filtered by name or by the slot they film, and the file's properties.
 /// </summary>
-public partial class DialogsetWindow : Window, IMessageHost
+public partial class DialogsetWindow : Window, IMessageHost, IReopenable
 {
     private readonly string _path;
     private readonly string _source;
+
+    string IReopenable.ReopenPath => _path;
+    string IReopenable.ReopenSource => _source;
     private readonly Func<byte[]> _readData;
     private readonly ResourceLocator _locator;
     private readonly string? _origin;

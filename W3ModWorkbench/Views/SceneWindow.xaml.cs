@@ -20,13 +20,16 @@ namespace W3ModWorkbench;
 /// cameras, the animations its timelines play, and a section's versions. Lines can be played, and the whole read
 /// through following the flow.
 /// </summary>
-public partial class SceneWindow : Window, IMessageHost
+public partial class SceneWindow : Window, IMessageHost, IReopenable
 {
     // the language the lines were last shown in, kept for the next scene opened: the one Settings names at first
     private static string _language = App.Settings.GameLanguage;
 
     private readonly string _path;
     private readonly string _source;
+
+    string IReopenable.ReopenPath => _path;
+    string IReopenable.ReopenSource => _source;
     private readonly Func<byte[]> _readData;
     private readonly ResourceLocator _locator;
     private readonly string? _origin;

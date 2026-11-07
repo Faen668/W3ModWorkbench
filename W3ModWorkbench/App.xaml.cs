@@ -93,6 +93,8 @@ public partial class App : Application
             }
         };
         if (Headless) return;
+        // Restart now, after an update: the updated copy starts once this one has gone
+        Exit += (_, _) => UpdateWindow.OnExit();
         var main = new MainWindow(e.Args);
         main.Show();
         AppLinks.Listen(link => Dispatcher.InvokeAsync(() => main.OpenLink(link)));

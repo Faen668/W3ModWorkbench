@@ -23,10 +23,13 @@ namespace W3ModWorkbench;
 /// time, as REDkit's fake day cycle does, and the day can be played through; the sun, sky and fog colours then are
 /// shown beside it.
 /// </summary>
-public partial class EnvironmentWindow : Window, IMessageHost
+public partial class EnvironmentWindow : Window, IMessageHost, IReopenable
 {
     private readonly string _path;
     private readonly string _source;
+
+    string IReopenable.ReopenPath => _path;
+    string IReopenable.ReopenSource => _source;
     private readonly Func<byte[]> _readData;
     private readonly ResourceLocator _locator;
     private readonly string? _origin;

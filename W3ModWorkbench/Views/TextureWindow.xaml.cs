@@ -20,11 +20,14 @@ namespace W3ModWorkbench;
 /// texture's properties, from its resource file (.xbm, .w2cube, .texarray) as REDkit lists them, and what the cache says
 /// about it. It can be saved as a PNG (the level shown) or as a .dds (every level and slice).
 /// </summary>
-public partial class TextureWindow : Window, IMessageHost
+public partial class TextureWindow : Window, IMessageHost, IReopenable
 {
     private static readonly string[] FaceNames = ["+X", "−X", "+Y", "−Y", "+Z", "−Z"];
 
     private readonly string _path;
+
+    string IReopenable.ReopenPath => _path;
+    string IReopenable.ReopenSource => "";
     private readonly TextureInfo? _info;
     private readonly Func<byte[]> _readPixels;
     private readonly DecodedImage? _picture;

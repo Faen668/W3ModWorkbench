@@ -22,10 +22,13 @@ namespace W3ModWorkbench;
 /// each numbered, the one picked shown in the view with where it is from its parent and in the model, its float
 /// tracks, and its properties (speeds, LODs, the control rig).
 /// </summary>
-public partial class RigWindow : Window, IMessageHost
+public partial class RigWindow : Window, IMessageHost, IReopenable
 {
     private readonly string _path;
     private readonly string _source;
+
+    string IReopenable.ReopenPath => _path;
+    string IReopenable.ReopenSource => _source;
     private readonly Func<byte[]> _readData;
     private readonly ResourceLocator _locator;
     private readonly string? _origin;

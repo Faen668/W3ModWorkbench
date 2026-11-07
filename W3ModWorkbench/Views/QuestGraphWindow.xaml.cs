@@ -20,7 +20,7 @@ namespace W3ModWorkbench;
 /// Under the graph every block in the file is listed, to find one by its kind, a fact, a script function, a GUID or
 /// any word in it. With no block picked the side says which phase blocks run the file and whether the game reaches it.
 /// </summary>
-public partial class QuestGraphWindow : Window, IMessageHost
+public partial class QuestGraphWindow : Window, IMessageHost, IReopenable
 {
     /// <summary>A graph shown: a file's own, or a phase's inside it, and what the way back calls it.</summary>
     private sealed record Crumb(QuestFile File, QuestGraph Graph, string Label);
@@ -28,6 +28,9 @@ public partial class QuestGraphWindow : Window, IMessageHost
     private readonly ResourceLocator _locator;
     private readonly string _path;
     private readonly string _source;
+
+    string IReopenable.ReopenPath => _path;
+    string IReopenable.ReopenSource => _source;
     private readonly string? _origin;
     private readonly Func<byte[]> _readData;
     private readonly Guid? _reveal;

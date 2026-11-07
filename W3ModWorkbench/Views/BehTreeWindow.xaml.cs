@@ -16,10 +16,13 @@ namespace W3ModWorkbench;
 /// it does, and every property of the node picked (and of the script task it runs) beside it. Nodes can be found by
 /// name, class, task or the variable they test, and branches folded away.
 /// </summary>
-public partial class BehTreeWindow : Window, IMessageHost
+public partial class BehTreeWindow : Window, IMessageHost, IReopenable
 {
     private readonly string _path;
     private readonly string _source;
+
+    string IReopenable.ReopenPath => _path;
+    string IReopenable.ReopenSource => _source;
     private readonly Func<byte[]> _readData;
     private readonly ResourceLocator _locator;
     private BehTreeFile? _tree;

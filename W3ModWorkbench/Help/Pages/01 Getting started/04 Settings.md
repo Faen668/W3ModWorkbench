@@ -19,6 +19,7 @@ Settings has the choices the app would otherwise make for you. What you switch f
 - **Clear the recent lists**: forgets the recent files, projects and Asset Browser files at once.
 - **Extracting**: the folder files are extracted to unless you pick another, whether to keep the game's folders under it, and whether to open it when done. The extract bar under the file list has these too.
 - **Ask which copy to open**: when a mod or a DLC has its own copy of a game file, the [[The Asset Browser|Asset Browser]] asks which one to open. Off, it opens the copy the game loads. See [[Which copy of a file wins]].
+- **Updates**: **Check for updates when the app starts** asks GitHub for a newer version at most once a day, and shows an **Update to …** button when there is one. **Check now…** checks straight away. See [[Updating the app]].
 
 ## Appearance
 
@@ -89,7 +90,10 @@ Under the list, it says whether your game has that language's text and voices in
 
 ## Privacy and online
 
-The app works offline and collects nothing about you. The one thing that can go online is **EasyAssetBrowser tags**: community categories and tags for the game's files in the Asset Browser, downloaded from GitHub. They're off until you turn them on, which asks first and says what it means. Turn them off here, and choose whether to delete what was downloaded. See [[EasyAssetBrowser]].
+The app works offline and collects nothing about you. Two things can go online, both to GitHub:
+
+- **EasyAssetBrowser tags**: community categories and tags for the game's files in the Asset Browser. They're off until you turn them on, which asks first and says what it means. Turn them off here, and choose whether to delete what was downloaded. See [[EasyAssetBrowser]].
+- **Checking for updates**: only when you ask, or when the app starts if you turned that on under **General**. See [[Updating the app]].
 
 ## Where settings are kept
 

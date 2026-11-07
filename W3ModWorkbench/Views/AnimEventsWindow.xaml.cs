@@ -17,10 +17,13 @@ namespace W3ModWorkbench;
 /// following the animation. The animation set the events are for is found by the file's name, or by which set has
 /// the most of its animations, or picked. Click an event to see its properties.
 /// </summary>
-public partial class AnimEventsWindow : Window, IMessageHost
+public partial class AnimEventsWindow : Window, IMessageHost, IReopenable
 {
     private readonly string _path;
     private readonly string _source;
+
+    string IReopenable.ReopenPath => _path;
+    string IReopenable.ReopenSource => _source;
     private readonly Func<byte[]> _readData;
     private readonly ResourceLocator _locator;
     private readonly string? _origin;

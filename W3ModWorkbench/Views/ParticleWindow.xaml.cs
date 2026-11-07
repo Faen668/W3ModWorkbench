@@ -22,10 +22,13 @@ namespace W3ModWorkbench;
 /// properties of the module, emitter, material and system. The game's cooked effects compile their modules away, so
 /// those come from REDkit's own copy when it has one.
 /// </summary>
-public partial class ParticleWindow : Window, IMessageHost
+public partial class ParticleWindow : Window, IMessageHost, IReopenable
 {
     private readonly string _path;
     private readonly string _source;
+
+    string IReopenable.ReopenPath => _path;
+    string IReopenable.ReopenSource => _source;
     private readonly Func<byte[]> _readData;
     private readonly ResourceLocator _locator;
     private readonly string? _origin;
